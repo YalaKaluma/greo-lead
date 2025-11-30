@@ -2,7 +2,6 @@ from sqlalchemy.orm import Session
 #from app.models.message import Message
 from app.models import Message
 
-
 def save_message(db: Session, sender: str, user_number: str, content: str):
     msg = Message(sender=sender, user_number=user_number, content=content)
     db.add(msg)

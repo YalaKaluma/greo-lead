@@ -13,10 +13,8 @@ from app.services.openai_service import generate_reply
 router = APIRouter()
 
 twilio_client = Client(TWILIO_SID, TWILIO_AUTH_TOKEN)
-
 @router.post("/webhook")
 async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
-
     form = await request.form()
     incoming_msg = form.get("Body")
     sender = form.get("From")
@@ -24,23 +22,41 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
     print("📩 Incoming message:", incoming_msg)
     print("👤 From:", sender)
 
-    # 1. Save user message
+    # Save user message
     save_message(db, sender="user", user_number=sender, content=incoming_msg)
 
-    # 2. Load full conversation history
-    history = load_conversation_history(db, sender)
+    # Load full history (for OpenAI)
+    history = load_conversation_history(db, user_number=sender)
 
-    # 3. Generate AI reply
-    ai_reply = await generate_reply(history)
+    # Generate assistant reply using ALL history
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=history
+    )
 
-    # 4. Save assistant message
-    save_message(db, sender="assistant", user_number=sender, content=ai_reply)
+    bot_reply = response.choices[0].message["content"]
 
-    # 5. Send WhatsApp reply
+    # Save assistant reply
+    save_message(db, sender="assistant", user_number=sender, content=bot_reply)
+
+    # Send reply via Twilio
     twilio_client.messages.create(
+        body=bot_reply,
         from_=TWILIO_WHATSAPP_NUMBER,
-        to=sender,
-        body=ai_reply
+        to=sender
     )
 
     return {"status": "ok"}
+
+@router.get("/send_nudge")
+async def send_daily_nudge(db: Session = Depends(get_db)):
+    users = db.query(Message.user_number).distinct().all()
+
+    for (user,) in users:
+        twilio_client.messages.create(
+            body="👋 Good morning! What’s one insight, feeling, or goal you want to reflect on today?",
+            from_=TWILIO_WHATSAPP_NUMBER,
+            to=user
+        )
+    return {"status": "nudges sent"}
