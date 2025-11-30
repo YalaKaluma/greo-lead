@@ -1,44 +1,30 @@
-from fastapi import APIRouter, Request, Depends
-from app.db import get_db
-from app.models import JournalEntry
-from datetime import datetime
+from fastapi import APIRouter, Request
+from twilio.rest import Client
 import os
-import httpx
 
-router = APIRouter(prefix="/webhook")
+router = APIRouter()
 
-@router.post("/")
-async def receive_whatsapp(request: Request, db=Depends(get_db)):
+# Load Twilio credentials from env
+TWILIO_SID = os.getenv("TWILIO_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
 
-    body = await request.form()
+client = Client(TWILIO_SID, TWILIO_AUTH_TOKEN)
 
-    from_number = body.get("From")
-    message = body.get("Body")
+@router.post("/webhook/")
+async def receive_whatsapp(request: Request):
+    form = await request.form()
+    incoming_msg = form.get("Body", "")
+    sender = form.get("From", "")
 
-    # Save the journal entry
-    new_entry = JournalEntry(
-        user_id=1,  # ← Later this will map phone → user
-        text=message,
-        created_at=datetime.utcnow()
+    print("📩 Incoming message:", incoming_msg)
+    print("👤 From:", sender)
+
+    # Send reply message
+    client.messages.create(
+        from_=TWILIO_WHATSAPP_NUMBER,
+        to=sender,
+        body="Hello! Your message was received: " + incoming_msg
     )
-    db.add(new_entry)
-    db.commit()
-
-    # Temporary echo response
-    reply = f"Thanks for your message: {message}"
-
-    # Respond through Twilio
-    TWILIO_URL = "https://api.twilio.com/2010-04-01/Accounts/" + os.getenv("TWILIO_SID") + "/Messages.json"
-
-    async with httpx.AsyncClient() as client:
-        await client.post(
-            TWILIO_URL,
-            data={
-                "To": from_number,
-                "From": os.getenv("TWILIO_WHATSAPP_NUMBER"),
-                "Body": reply
-            },
-            auth=(os.getenv("TWILIO_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
-        )
 
     return {"status": "ok"}
