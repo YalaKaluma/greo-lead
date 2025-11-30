@@ -9,3 +9,4 @@ openai
 requests
 jinja2
 python-multipart
+twilio
