@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, Depends
 from twilio.rest import Client
 from sqlalchemy.orm import Session
-from app.database import get_db
+from app.db import get_db
 from app.config import (
     TWILIO_SID,
     TWILIO_AUTH_TOKEN,
