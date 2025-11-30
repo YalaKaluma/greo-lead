@@ -34,7 +34,19 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
     client = OpenAI(api_key=OPENAI_API_KEY)
     response = client.chat.completions.create(
         model="gpt-4o-mini",
-        messages=history
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are an AI coach on WhatsApp. "
+                    "Your tone is warm, concise, and supportive. "
+                    "Always keep replies below 1400 characters. "
+                    "Use the full conversation history to understand context. "
+                    "Your role: help the user reflect, think clearly, and move forward."
+                )
+            },
+            *history
+        ]
     )
 
 #    bot_reply = response.choices[0].message["content"]
