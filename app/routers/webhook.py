@@ -38,7 +38,7 @@ async def receive_whatsapp(request: Request, db=Depends(get_db)):
                 "From": os.getenv("TWILIO_WHATSAPP_NUMBER"),
                 "Body": reply
             },
-            auth=(os.getenv("TWILIO_SID"), os.getenv("TWILIO_AUTH"))
+            auth=(os.getenv("TWILIO_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
         )
 
     return {"status": "ok"}
