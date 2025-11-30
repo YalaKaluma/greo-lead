@@ -37,7 +37,8 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
         messages=history
     )
 
-    bot_reply = response.choices[0].message["content"]
+#    bot_reply = response.choices[0].message["content"]
+    bot_reply = response.choices[0].message.content
 
     # Save assistant reply
     save_message(db, sender="assistant", user_number=sender, content=bot_reply)
