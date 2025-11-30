@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Request, Depends
+from openai import OpenAI
 from twilio.rest import Client
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.config import (
     TWILIO_SID,
     TWILIO_AUTH_TOKEN,
+    OPENAI_API_KEY,
     TWILIO_WHATSAPP_NUMBER
 )
 from app.services.message_service import save_message, load_conversation_history
