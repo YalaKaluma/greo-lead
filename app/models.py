@@ -37,3 +37,15 @@ class Message(Base):
     user_number = Column(String, index=True)
     content = Column(Text)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
+
+class Task(Base):
+    __tablename__ = "tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True)   # same as messages table
+    title = Column(String, nullable=False)
+    notes = Column(Text, nullable=True)
+    due_date = Column(DateTime, nullable=True)
+    status = Column(String, default="open")    # open, completed, archived
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)

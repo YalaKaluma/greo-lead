@@ -3,7 +3,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
 from app.db import Base, engine
-from app.routers import journal, webhook
+from app.routers import journal, webhook, tasks
 
 # --------------------------------------
 # Initialize App
@@ -23,6 +23,8 @@ Base.metadata.create_all(bind=engine)
 # --------------------------------------
 app.include_router(journal.router)
 app.include_router(webhook.router)
+app.include_router(tasks.router, prefix="/tasks", tags=["Tasks"])
+
 
 # --------------------------------------
 # Test Endpoints
