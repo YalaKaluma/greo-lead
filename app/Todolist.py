@@ -25,11 +25,12 @@ tasks = load_tasks()
 new_task = st.text_input("Add a new task")
 if st.button("➕ Add"):
     if new_task.strip():
-        requests.post(f"{API_URL}/tasks", json={
+        requests.post(f"{API_URL}/tasks/", json={
             "user_number": USER,
             "title": new_task
         })
-        st.experimental_rerun()
+#        st.experimental_rerun()
+        st.rerun()
 
 # ---------------------------------------
 # List tasks
@@ -47,7 +48,8 @@ for task in tasks:
     if new_status != checked:
         status = "completed" if new_status else "open"
         requests.patch(f"{API_URL}/tasks/{task['id']}", json={"status": status})
-        st.experimental_rerun()
+#        st.experimental_rerun()
+        st.rerun()
 
     # Task title
     col2.write(f"**{task['title']}**")
@@ -59,4 +61,6 @@ st.subheader("Delete a task")
 delete_id = st.number_input("Task ID", min_value=1, step=1)
 if st.button("🗑 Delete"):
     requests.delete(f"{API_URL}/tasks/{delete_id}")
-    st.experimental_rerun()
+#    st.experimental_rerun()
+    st.rerun()
+
