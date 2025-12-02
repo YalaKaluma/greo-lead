@@ -1,7 +1,8 @@
 import streamlit as st
 import requests
 
-API_URL = "greo-lead-production.up.railway.app"   # adjust if needed
+API_URL = "https://greo-lead-production.up.railway.app"
+
 USER = "whatsapp:+1111"             # replace with your number
 
 st.title("📝 GREO To-Do List")

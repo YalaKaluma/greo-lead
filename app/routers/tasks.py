@@ -1,3 +1,25 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from app.db import get_db
+from app.models import Task
+from pydantic import BaseModel
+from datetime import datetime
+
+router = APIRouter()   # ← YOU WERE MISSING THIS LINE
+
+
+class TaskCreate(BaseModel):
+    user_number: str
+    title: str
+    notes: str | None = None
+    due_date: datetime | None = None
+
+
+class TaskUpdate(BaseModel):
+    title: str | None = None
+    notes: str | None = None
+    status: str | None = None
+
 @router.post("/")
 def create_task(task: TaskCreate, db: Session = Depends(get_db)):
     db_task = Task(
