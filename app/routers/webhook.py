@@ -5,7 +5,13 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.utils.message_splitter import split_message
-from app.config import TWILIO_WHATSAPP_NUMBER, TWILIO_SID, TWILIO_AUTH_TOKEN
+from app.config import (
+    TWILIO_SID,
+    TWILIO_AUTH_TOKEN,
+    TWILIO_WHATSAPP_NUMBER,
+    OPENAI_API_KEY,
+    OPENAI_MODEL,
+)
 from app.services.message_service import save_message, load_conversation_history
 from app.services.openai_service import generate_reply
 
@@ -63,7 +69,7 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
         twilio_client.messages.create(
             body=prefix + chunk,
             from_=TWILIO_WHATSAPP_NUMBER,
-            to=user_number
+            to=sender
         )
 
 # Previous version without split
