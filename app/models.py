@@ -49,3 +49,91 @@ class Task(Base):
     status = Column(String, default="open")    # open, completed, archived
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
+
+# ---------------------------------------------------------
+# EXPANDED JOURNEY STRUCTURE
+# ---------------------------------------------------------
+
+class JourneyPerson(Base):
+    __tablename__ = "journey_people"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True)
+
+    name = Column(String, nullable=False)
+    email = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    relation = Column(String, nullable=True)     # colleague, client, partner…
+    context = Column(Text, nullable=True)        # optional notes
+
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class JourneyGoal(Base):
+    __tablename__ = "journey_goals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True)
+
+    goal_text = Column(Text, nullable=False)
+    why = Column(Text, nullable=True)
+    time_horizon = Column(String, nullable=True)  # short, medium, long
+
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class JourneyFailure(Base):
+    __tablename__ = "journey_failures"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True)
+
+    failure_text = Column(Text, nullable=False)
+    scar = Column(Text, nullable=True)       # emotional residue
+    learning = Column(Text, nullable=True)   # lesson learned
+
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class JourneyProject(Base):
+    __tablename__ = "journey_projects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True)
+
+    project_name = Column(String, nullable=False)
+    goal = Column(Text, nullable=True)        # strategic purpose of the project
+    description = Column(Text, nullable=True)
+    status = Column(String, default="active")  # active, paused, completed
+
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class JourneyStrength(Base):
+    __tablename__ = "journey_strengths"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True)
+
+    strength = Column(Text, nullable=False)
+    source = Column(String, nullable=True)     # inference, user input...
+
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class JourneyOpportunity(Base):
+    __tablename__ = "journey_opportunities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True)
+
+    opportunity_text = Column(Text, nullable=False)
+    category = Column(String, nullable=True)    # leadership, delegation, mindset…
+
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
