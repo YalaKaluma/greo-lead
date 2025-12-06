@@ -3,7 +3,7 @@ from openai import OpenAI
 from twilio.rest import Client
 from sqlalchemy.orm import Session
 from app.db import get_db
-from utils.message_splitter import split_message
+from app.utils.message_splitter import split_message
 from app.config import (
     TWILIO_SID,
     TWILIO_AUTH_TOKEN,
