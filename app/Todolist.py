@@ -5,7 +5,7 @@ API_URL = "https://greo-lead-production.up.railway.app"
 
 USER = "whatsapp:+1111"             # replace with your number
 
-st.title("📝 GREO To-Do List")
+st.title("Executive Accelerator To-Do List")
 
 # ---------------------------------------
 # Load tasks
@@ -57,10 +57,10 @@ for task in tasks:
 # ---------------------------------------
 # Delete button (optional)
 # ---------------------------------------
-st.subheader("Delete a task")
-delete_id = st.number_input("Task ID", min_value=1, step=1)
-if st.button("🗑 Delete"):
-    requests.delete(f"{API_URL}/tasks/{delete_id}")
-#    st.experimental_rerun()
-    st.rerun()
+
+#st.subheader("Delete a task")
+#delete_id = st.number_input("Task ID", min_value=1, step=1)
+#if st.button("🗑 Delete"):
+#    requests.delete(f"{API_URL}/tasks/{delete_id}")
+#    st.rerun()
 

@@ -3,6 +3,7 @@ from openai import OpenAI
 from twilio.rest import Client
 from sqlalchemy.orm import Session
 from app.db import get_db
+from utils.message_splitter import split_message
 from app.config import (
     TWILIO_SID,
     TWILIO_AUTH_TOKEN,
@@ -49,18 +50,33 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
         ]
     )
 
-#    bot_reply = response.choices[0].message["content"]
+
     bot_reply = response.choices[0].message.content
 
     # Save assistant reply
     save_message(db, sender="assistant", user_number=sender, content=bot_reply)
 
+    # Now split the message
+    chunks = split_message(bot_reply)
+
+    total = len(chunks)
+
+    for i, chunk in enumerate(chunks, start=1):
+        prefix = f"[{i}/{total}]\n" if total > 1 else ""
+
+        twilio_client.messages.create(
+            body=prefix + chunk,
+            from_=settings.TWILIO_WHATSAPP_NUMBER,
+            to=user_number
+        )
+
+# Previous version without split
     # Send reply via Twilio
-    twilio_client.messages.create(
-        body=bot_reply,
-        from_=TWILIO_WHATSAPP_NUMBER,
-        to=sender
-    )
+#    twilio_client.messages.create(
+#        body=bot_reply,
+#        from_=TWILIO_WHATSAPP_NUMBER,
+#        to=sender
+#    )
 
     return {"status": "ok"}
 
