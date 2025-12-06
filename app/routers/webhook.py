@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request, Depends
 from openai import OpenAI
 from twilio.rest import Client
 from sqlalchemy.orm import Session
+from app.config import settings
 from app.db import get_db
 from app.utils.message_splitter import split_message
 from app.config import (
