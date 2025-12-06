@@ -1,19 +1,20 @@
+# app/db.py
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
-from app.config import settings
-
-# Load the DB URL from your settings (this WAS working before)
-DATABASE_URL = settings.DATABASE_URL
+from app.config import DATABASE_URL  # ← import the variable directly
 
 engine = create_engine(
     DATABASE_URL,
-    pool_pre_ping=True,     # Detect dead DB connections
-    pool_recycle=300,       # Recycle idle connections
-    pool_size=5,
-    max_overflow=10,
+    pool_pre_ping=True,     # fixes SSL disconnects
+    pool_recycle=300,
 )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
 
 Base = declarative_base()
 
