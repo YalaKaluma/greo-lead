@@ -13,6 +13,7 @@ from app.config import (
     OPENAI_MODEL,
 )
 from app.services.journey_context import build_journey_context
+from app.Todolist import get_today_tasks, format_tasks_for_context
 from app.services.message_service import save_message, load_conversation_history
 from app.services.openai_service import generate_reply
 from app.services import journey_service
@@ -210,6 +211,8 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
 
     # Build structured memory context
     journey_context = build_journey_context(db, sender)
+    tasks = get_today_tasks(user_number)
+    tasks_context = format_tasks_for_context(tasks)
 
     SYSTEM_PROMPT_WITH_MEMORY = f"""
     You are Alfred, an AI Chief of Staff and personal coach.
@@ -219,6 +222,10 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
     You have access to the user's long-term Journey Memory:
 
     {journey_context}
+    
+    You also have access to the user's current Ongoing Tasks:
+    
+    {tasks_context}
 
     Use this memory to personalize your coaching.
     — Reference their strengths when motivating them.
