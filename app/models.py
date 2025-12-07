@@ -49,6 +49,8 @@ class Task(Base):
     status = Column(String, default="open")    # open, completed, archived
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
+    deadline = Column(Date, nullable=True)
+    priority = Column(String, nullable=True)  # Can be 'low', 'medium', or 'high'
 
 # ---------------------------------------------------------
 # EXPANDED JOURNEY STRUCTURE

@@ -1,66 +1,63 @@
 import streamlit as st
-import requests
+from app.db import SessionLocal
+from app.models import Todo
 
-API_URL = "https://greo-lead-production.up.railway.app"
-
-USER = "whatsapp:+1111"             # replace with your number
+USER = "whatsapp:+1111"  # Replace with your user_number if needed
 
 st.title("Executive Accelerator To-Do List")
 
 # ---------------------------------------
-# Load tasks
+# Load tasks from DB
 # ---------------------------------------
 def load_tasks():
-    res = requests.get(f"{API_URL}/tasks", params={"user_number": USER})
-    if res.status_code != 200:
-        st.error("Could not load tasks.")
-        return []
-    return res.json()
+    db = SessionLocal()
+    tasks = db.query(Todo).filter(Todo.user_number == USER).all()
+    db.close()
+    return tasks
 
+# ---------------------------------------
+# Update task status
+# ---------------------------------------
+def update_status(task_id, new_status):
+    db = SessionLocal()
+    task = db.query(Todo).get(task_id)
+    if task:
+        task.status = new_status
+        db.commit()
+    db.close()
+
+# ---------------------------------------
+# Add new task
+# ---------------------------------------
+def add_task(title):
+    db = SessionLocal()
+    new = Todo(user_number=USER, title=title, status="open")
+    db.add(new)
+    db.commit()
+    db.close()
+
+# ---------------------------------------
+# Main UI
+# ---------------------------------------
 tasks = load_tasks()
 
-# ---------------------------------------
-# Add Task
-# ---------------------------------------
 new_task = st.text_input("Add a new task")
 if st.button("➕ Add"):
     if new_task.strip():
-        requests.post(f"{API_URL}/tasks/", json={
-            "user_number": USER,
-            "title": new_task
-        })
-#        st.experimental_rerun()
+        add_task(new_task)
         st.rerun()
 
-# ---------------------------------------
-# List tasks
-# ---------------------------------------
 st.subheader("Your Tasks")
 
 for task in tasks:
     col1, col2 = st.columns([0.1, 0.9])
 
-    # Task checkbox
-    checked = task["status"] == "completed"
-    new_status = col1.checkbox("", value=checked, key=f"chk_{task['id']}")
+    checked = task.status == "completed"
+    new_checked = col1.checkbox("", value=checked, key=f"chk_{task.id}")
 
-    # If toggled → update backend
-    if new_status != checked:
-        status = "completed" if new_status else "open"
-        requests.patch(f"{API_URL}/tasks/{task['id']}", json={"status": status})
-#        st.experimental_rerun()
+    if new_checked != checked:
+        new_status = "completed" if new_checked else "open"
+        update_status(task.id, new_status)
         st.rerun()
 
-    # Task title
-    col2.write(f"**{task['title']}**")
-
-# ---------------------------------------
-# Delete button (optional)
-# ---------------------------------------
-
-#st.subheader("Delete a task")
-#delete_id = st.number_input("Task ID", min_value=1, step=1)
-#if st.button("🗑 Delete"):
-#    requests.delete(f"{API_URL}/tasks/{delete_id}")
-#    st.rerun()
-
+    col2.write(f"**{task.title}**")
