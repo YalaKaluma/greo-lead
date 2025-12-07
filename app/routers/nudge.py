@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends
 from app.db import get_db
 from twilio.rest import Client
-from config import settings
 from openai import OpenAI
 from app.services.journey_context import build_journey_context
 from app.services.message_service import load_conversation_history, save_message
+from app.config import settings
 
 router = APIRouter()
 
