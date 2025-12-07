@@ -189,24 +189,6 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
     # Load full history (for OpenAI)
     history = load_conversation_history(db, user_number=sender)
 
-#    # Generate assistant reply using ALL history
-#    client = OpenAI(api_key=OPENAI_API_KEY)
-#    response = client.chat.completions.create(
-#        model="gpt-4o-mini",
-#        messages=[
-#            {
-#                "role": "system",
-#                "content": (
-#                    "You are an AI coach on WhatsApp. "
-#                    "Your tone is warm, concise, and supportive. "
-#                    "Always keep replies below 1400 characters. "
-#                    "Use the full conversation history to understand context. "
-#                    "Your role: help the user reflect, think clearly, and move forward."
-#                )
-#            },
-#            *history
-#        ]
-#    )
 
     # Load full history (for OpenAI)
     history = load_conversation_history(db, user_number=sender)
@@ -231,9 +213,7 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
 
     To help you in your role, You have access to the user's long-term Journey Memory, You can see below a summary:
 
-    {journey_context}
-        
-    
+    {journey_context}  
     
     Use this memory to personalize your coaching.
     — Reference their strengths when motivating them.
@@ -246,7 +226,6 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
     Use this to make yourself helpful and do not hesitate to refer to specific tasks and priorities in your interaction with them. This helps you understand his mondset.
     
     {tasks_context}
-    
     
     You can also see below the detailed message you exchanged so far. The messages most likely includes deep introspective thoughts about his last days you can reuse as context of his internl mindset.
     you need to anszer to the last message in the list.
@@ -267,7 +246,10 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
         ]
     )
 
-    print(" Full Context:", messages)
+    print("🧾 FULL MESSAGES SENT TO GPT:")
+    for msg in messages:
+        print(f"[{msg['role'].upper()}]\n{msg['content']}\n")
+
     bot_reply = response.choices[0].message.content
 
     # Save assistant reply
