@@ -213,7 +213,7 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
 
     # Build structured memory context
     journey_context = build_journey_context(db, sender)
-    tasks = get_today_tasks(user_number)
+    tasks = get_today_tasks(sender)
     tasks_context = format_tasks_for_context(tasks)
     print("📝 Tasks Context:", tasks_context)
     if not tasks_context:
