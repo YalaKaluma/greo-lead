@@ -11,6 +11,7 @@ from app.config import (
     TWILIO_WHATSAPP_NUMBER,
     OPENAI_API_KEY,
     OPENAI_MODEL,
+    DEFAULT_USER_NUMBER,
 )
 
 router = APIRouter()
@@ -26,7 +27,7 @@ def weekly_nudge(db=Depends(get_db)):
     In the future this can loop over all users, but for now it targets one.
     """
 
-    target = settings.DEFAULT_USER_NUMBER  # e.g. "whatsapp:+1770xxxxxxx"
+    target = DEFAULT_USER_NUMBER  # e.g. "whatsapp:+1770xxxxxxx"
 
     message = (
         "🧭 *Your Weekly Reflection*\n"
@@ -54,7 +55,7 @@ def morning_nudge(db=Depends(get_db)):
     7am compliment + motivational message based on journey + history.
     """
 
-    user_number = settings.DEFAULT_USER_NUMBER
+    user_number = DEFAULT_USER_NUMBER
 
     # Load structured memory + recent chat
     journey_context = build_journey_context(db, user_number)
@@ -105,7 +106,7 @@ def evening_nudge(db=Depends(get_db)):
     6pm check-in using journey memory + conversational context.
     """
 
-    user_number = settings.DEFAULT_USER_NUMBER
+    user_number = DEFAULT_USER_NUMBER
 
     journey_context = build_journey_context(db, user_number)
     history = load_conversation_history(db, user_number=user_number)
