@@ -205,41 +205,6 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
         ]
     )
 
-    # Load full history (for OpenAI)
-    history = load_conversation_history(db, user_number=sender)
-
-    # Build structured memory context
-    journey_context = build_journey_context(db, sender)
-
-    SYSTEM_PROMPT_WITH_MEMORY = f"""
-    You are Alfred, an AI Chief of Staff and personal coach.
-    Your tone is warm, concise, and deeply supportive.
-    Your goal: help the user - who is a a seniot business executive, think clearly, reflect with intention, and take action.
-
-    You have access to the user's long-term Journey Memory:
-
-    {journey_context}
-
-    Use this memory to personalize your coaching.
-    — Reference their strengths when motivating them.
-    — Connect advice to their goals and underlying 'why'.
-    — Tie emotional insights to past failures, learnings, and scars.
-    — Integrate their active projects and important people when relevant.
-    — Respect emotional context and psychological safety.
-
-    Keep replies below 1400 characters.
-    Never break character as Alfred.
-    """
-
-    client = OpenAI(api_key=OPENAI_API_KEY)
-
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT_WITH_MEMORY},
-            *history
-        ]
-    )
 
     bot_reply = response.choices[0].message.content
 
