@@ -10,7 +10,7 @@ from datetime import date
 # Make sure tables exist
 Base.metadata.create_all(bind=engine)
 
-USER = "whatsapp:+1111"
+USER = "whatsapp:+17707789240"
 
 def get_db():
     db = SessionLocal()
