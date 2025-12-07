@@ -132,7 +132,7 @@ def get_opportunities(db: Session, user_number: str):
     return db.query(JourneyOpportunity).filter(JourneyOpportunity.user_number == user_number).all()
 
 
-----------------------------------
+#----------------------------------
 # DEVELOPMENT AREAS (JourneyDevelopmentArea)
 # ----------------------------------
 
