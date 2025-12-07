@@ -7,12 +7,12 @@ import app.services.journey_service as journey_service
 def build_journey_context(db, user_number):
     """Returns a multi-line string summarizing the user’s structured memory."""
 
-    strengths = journey_service.list_strengths(db, user_number)
-    projects = journey_service.list_projects(db, user_number)
-    people = journey_service.list_people(db, user_number)
-    goals = journey_service.list_goals(db, user_number)
-    failures = journey_service.list_failures(db, user_number)
-    dev_areas = journey_service.list_development_areas(db, user_number)
+    strengths = journey_service.get_strengths(db, user_number)
+    projects = journey_service.get_projects(db, user_number)
+    people = journey_service.get_people(db, user_number)
+    goals = journey_service.get_goals(db, user_number)
+    failures = journey_service.get_failures(db, user_number)
+    dev_areas = journey_service.get_development_areas(db, user_number)
 
     # Convert to readable text
     strengths_txt = ", ".join([s.strength for s in strengths]) if strengths else "None logged yet."
