@@ -2,9 +2,8 @@ from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from app.db import Base, engine
-from app.routers import journal, webhook, tasks
-from app.routers import nudge     # ADD THIS
-app.include_router(nudge.router)  # AND THIS
+from app.routers import journal, webhook, tasks, nudge
+
 
 # --------------------------------------
 # Initialize App
