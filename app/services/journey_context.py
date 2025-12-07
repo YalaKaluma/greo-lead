@@ -1,6 +1,8 @@
 # app/services/journey_context.py
 
-from app.services import journey_service
+#from app.services import journey_service
+import app.services.journey_service as journey_service
+
 
 def build_journey_context(db, user_number):
     """Returns a multi-line string summarizing the user’s structured memory."""
