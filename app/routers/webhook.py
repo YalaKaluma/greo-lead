@@ -256,17 +256,18 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
     
     """
 
-    print(" Full Context:", SYSTEM_PROMPT_WITH_MEMORY)
+#    print(" Full Context:", SYSTEM_PROMPT_WITH_MEMORY)
     client = OpenAI(api_key=OPENAI_API_KEY)
 
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model= OPENAI_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT_WITH_MEMORY},
             *history
         ]
     )
 
+    print(" Full Context:", messages)
     bot_reply = response.choices[0].message.content
 
     # Save assistant reply
