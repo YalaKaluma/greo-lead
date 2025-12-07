@@ -89,7 +89,7 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
     # ---------------------------------------------------------
     goal = detect_goal(incoming_msg)
     if goal:
-        journey_service.add_goal(db, sender, goal=goal)
+        journey_service.add_goal(db, sender, goal)
         twilio_client.messages.create(
             body=f"Noted — your goal is now: {goal}.",
             from_=TWILIO_WHATSAPP_NUMBER,
