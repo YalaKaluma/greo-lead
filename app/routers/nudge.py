@@ -42,7 +42,7 @@ def weekly_nudge(db=Depends(get_db)):
 
     twilio_client.messages.create(
         body=message,
-        from_=settings.TWILIO_WHATSAPP_NUMBER,
+        from_=TWILIO_WHATSAPP_NUMBER,
         to=target
     )
 
@@ -81,7 +81,7 @@ Your task:
 """
 
     response = client.chat.completions.create(
-        model=settings.OPENAI_MODEL,
+        model=OPENAI_MODEL,
         messages=[
             {"role": "system", "content": system_prompt},
             *short_history
@@ -92,7 +92,7 @@ Your task:
 
     twilio_client.messages.create(
         body=text,
-        from_=settings.TWILIO_WHATSAPP_NUMBER,
+        from_=TWILIO_WHATSAPP_NUMBER,
         to=user_number
     )
 
@@ -129,7 +129,7 @@ Your task:
 """
 
     response = client.chat.completions.create(
-        model=settings.OPENAI_MODEL,
+        model=OPENAI_MODEL,
         messages=[
             {"role": "system", "content": system_prompt},
             *short_history
@@ -140,7 +140,7 @@ Your task:
 
     twilio_client.messages.create(
         body=text,
-        from_=settings.TWILIO_WHATSAPP_NUMBER,
+        from_=TWILIO_WHATSAPP_NUMBER,
         to=user_number
     )
 
