@@ -189,24 +189,24 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
     # Load full history (for OpenAI)
     history = load_conversation_history(db, user_number=sender)
 
-    # Generate assistant reply using ALL history
-    client = OpenAI(api_key=OPENAI_API_KEY)
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are an AI coach on WhatsApp. "
-                    "Your tone is warm, concise, and supportive. "
-                    "Always keep replies below 1400 characters. "
-                    "Use the full conversation history to understand context. "
-                    "Your role: help the user reflect, think clearly, and move forward."
-                )
-            },
-            *history
-        ]
-    )
+#    # Generate assistant reply using ALL history
+#    client = OpenAI(api_key=OPENAI_API_KEY)
+#    response = client.chat.completions.create(
+#        model="gpt-4o-mini",
+#        messages=[
+#            {
+#                "role": "system",
+#                "content": (
+#                    "You are an AI coach on WhatsApp. "
+#                    "Your tone is warm, concise, and supportive. "
+#                    "Always keep replies below 1400 characters. "
+#                    "Use the full conversation history to understand context. "
+#                    "Your role: help the user reflect, think clearly, and move forward."
+#                )
+#            },
+#            *history
+#        ]
+#    )
 
     # Load full history (for OpenAI)
     history = load_conversation_history(db, user_number=sender)
@@ -215,6 +215,9 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
     journey_context = build_journey_context(db, sender)
     tasks = get_today_tasks(user_number)
     tasks_context = format_tasks_for_context(tasks)
+    print("📝 Tasks Context:", tasks_context)
+    if not tasks_context:
+        tasks_context = "No tasks scheduled for today."
 
     SYSTEM_PROMPT_WITH_MEMORY = f"""
     You are Alfred, an AI Chief of Staff and personal coach.
@@ -240,6 +243,7 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
     Never break character as Alfred.
     """
 
+    print(" Full Context:", SYSTEM_PROMPT_WITH_MEMORY)
     client = OpenAI(api_key=OPENAI_API_KEY)
 
     response = client.chat.completions.create(
