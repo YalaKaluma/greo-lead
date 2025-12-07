@@ -32,6 +32,8 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     incoming_msg = form.get("Body")
     sender = form.get("From")
+    #user_number = message["From"]  # typically 'whatsapp:+123456789'
+    user_number = form.get("From") # To be rationalized beause the same as sender
 
     print("📩 Incoming message:", incoming_msg)
     print("👤 From:", sender)
