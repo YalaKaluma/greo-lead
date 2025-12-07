@@ -9,13 +9,15 @@ from app.config import (
     TWILIO_SID,
     TWILIO_AUTH_TOKEN,
     TWILIO_WHATSAPP_NUMBER,
+    OPENAI_API_KEY,
+    OPENAI_MODEL,
 )
 
 router = APIRouter()
 
 twilio_client = Client(TWILIO_SID, TWILIO_AUTH_TOKEN)
 
-client = OpenAI(api_key=settings.OPENAI_API_KEY)
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 @router.get("/weekly_nudge")
 def weekly_nudge(db=Depends(get_db)):
