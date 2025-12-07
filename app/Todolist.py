@@ -104,23 +104,3 @@ for task in tasks:
         update_status(task.id, new_status)
         st.rerun()
 
-def get_today_tasks(user_number=USER):
-    db = next(get_db())
-    today = date.today()
-    tasks = (
-        db.query(Task)
-        .filter(Task.user_number == user_number)
-        .filter(Task.due_date == today)
-        .order_by(Task.priority.desc(), Task.created_at.asc())
-        .all()
-    )
-    return tasks
-
-def format_tasks_for_context(tasks):
-    if not tasks:
-        return "You have no tasks due today."
-
-    lines = []
-    for task in tasks:
-        lines.append(f"- [{task.priority}] {task.title} (due: {task.due_date.strftime('%Y-%m-%d')})")
-    return "Today's To-Do List:\n" + "\n".join(lines)

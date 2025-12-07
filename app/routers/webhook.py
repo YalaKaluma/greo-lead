@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.utils.message_splitter import split_message
+from app.utils.task_context import get_today_tasks, format_tasks_for_context
 from app.config import (
     TWILIO_SID,
     TWILIO_AUTH_TOKEN,
@@ -13,7 +14,6 @@ from app.config import (
     OPENAI_MODEL,
 )
 from app.services.journey_context import build_journey_context
-from app.Todolist import get_today_tasks, format_tasks_for_context
 from app.services.message_service import save_message, load_conversation_history
 from app.services.openai_service import generate_reply
 from app.services import journey_service
