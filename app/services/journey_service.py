@@ -6,8 +6,8 @@ from app.models import (
     JourneyProject,
     JourneyStrength,
     JourneyOpportunity,
+    JourneyDevelopmentArea,
 )
-
 
 # ----------------------------------
 # PEOPLE (JourneyPerson)
@@ -130,3 +130,23 @@ def add_opportunity(db: Session, user_number: str, opportunity_text: str, catego
 
 def get_opportunities(db: Session, user_number: str):
     return db.query(JourneyOpportunity).filter(JourneyOpportunity.user_number == user_number).all()
+
+
+----------------------------------
+# DEVELOPMENT AREAS (JourneyDevelopmentArea)
+# ----------------------------------
+
+def add_development_area(db: Session, user_number: str, skill: str, source: Optional[str] = None):
+    development_area = JourneyDevelopmentArea(
+        user_number=user_number,
+        skill=skill,
+        source=source
+    )
+    db.add(development_area)
+    db.commit()
+    db.refresh(development_area)
+    return development_area
+
+def get_development_areas(db: Session, user_number: str):
+    return db.query(JourneyDevelopmentArea).filter(JourneyDevelopmentArea.user_number == user_number).all()
+

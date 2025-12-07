@@ -137,3 +137,13 @@ class JourneyOpportunity(Base):
 
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class JourneyDevelopmentArea(Base):
+    __tablename__ = "journey_development_areas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True)
+    skill = Column(String, nullable=False)
+    source = Column(String, nullable=True)
+
