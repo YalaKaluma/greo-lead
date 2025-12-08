@@ -244,7 +244,7 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
     ]
 
     print("🧾 FULL MESSAGES SENT TO GPT:")
-    for msg in messages:
+    for msg in full_messages:
         print(f"[{msg['role'].upper()}]\n{msg['content']}\n")
 
     response = client.chat.completions.create(
