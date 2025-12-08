@@ -238,17 +238,19 @@ async def receive_whatsapp(request: Request, db: Session = Depends(get_db)):
 #    print(" Full Context:", SYSTEM_PROMPT_WITH_MEMORY)
     client = OpenAI(api_key=OPENAI_API_KEY)
 
-    response = client.chat.completions.create(
-        model= OPENAI_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT_WITH_MEMORY},
-            *history
-        ]
-    )
+    full_messages = [
+        {"role": "system", "content": SYSTEM_PROMPT_WITH_MEMORY},
+        *history
+    ]
 
     print("🧾 FULL MESSAGES SENT TO GPT:")
     for msg in messages:
         print(f"[{msg['role'].upper()}]\n{msg['content']}\n")
+
+    response = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=full_messages
+    )
 
     bot_reply = response.choices[0].message.content
 
