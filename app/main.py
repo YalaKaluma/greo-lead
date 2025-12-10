@@ -50,8 +50,17 @@ def health():
 static_path = Path(__file__).parent.parent / "static"
 
 if static_path.exists():
-    # Mount static files
-    app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
+    # Mount static files for assets (CSS, JS, images)
+    # This MUST come before the catch-all route
+    app.mount("/assets", StaticFiles(directory=str(static_path / "assets")), name="assets")
+
+
+    # Serve other static files (like vite.svg)
+    @app.get("/vite.svg")
+    async def serve_vite_svg():
+        svg_file = static_path / "vite.svg"
+        if svg_file.exists():
+            return FileResponse(str(svg_file))
 
 
     # Serve React app at root
@@ -63,13 +72,16 @@ if static_path.exists():
         return {"message": "React app not built yet. Run: cd frontend && npm run build"}
 
 
-    # Catch-all for React Router (serves index.html for all non-API routes)
+    # Catch-all for React Router (serves index.html for all non-API, non-asset routes)
     @app.get("/{full_path:path}")
     async def catch_all(full_path: str):
-        # Don't catch API routes or static files
-        if full_path.startswith(("api/", "static/")):
-            return {"error": "Not found"}
+        # Don't catch API routes or asset files
+        if full_path.startswith(("api/", "assets/")):
+            # Let FastAPI handle 404 for these
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Not found")
 
+        # For all other routes, serve React app (for client-side routing)
         index_file = static_path / "index.html"
         if index_file.exists():
             return FileResponse(str(index_file))
