@@ -15,8 +15,6 @@ class TaskCreate(BaseModel):
     notes: Optional[str] = ""
     due_date: Optional[date] = None
     priority: str = "Medium"
-    project: Optional[str] = None
-    delegated_to: Optional[str] = None
 
 
 class TaskUpdate(BaseModel):
@@ -25,8 +23,6 @@ class TaskUpdate(BaseModel):
     due_date: Optional[date] = None
     priority: Optional[str] = None
     status: Optional[str] = None
-    project: Optional[str] = None
-    delegated_to: Optional[str] = None
 
 
 class TaskResponse(BaseModel):
@@ -38,8 +34,6 @@ class TaskResponse(BaseModel):
     deadline: Optional[date]
     priority: Optional[str]
     status: str
-    project: Optional[str]
-    delegated_to: Optional[str]
     created_at: datetime
     updated_at: datetime
 
@@ -55,20 +49,15 @@ PRIORITY_ORDER = {"High": 1, "Medium": 2, "Low": 3}
 def get_tasks(
         user_number: str,
         filter_type: str = "all",
-        project: Optional[str] = None,
-        delegated_to: Optional[str] = None,
         db: Session = Depends(get_db)
 ):
     """
     Get all tasks with optional filtering
     filter_type: "all", "due_today", "next_7_days"
-    project: filter by project name
-    delegated_to: filter by delegate name
     """
     query = db.query(Task).filter(Task.user_number == user_number)
     today = date.today()
 
-    # Date filters
     if filter_type == "due_today":
         query = query.filter(Task.due_date <= today)
     elif filter_type == "next_7_days":
@@ -77,48 +66,16 @@ def get_tasks(
             Task.due_date <= today + timedelta(days=7)
         )
 
-    # Project filter
-    if project:
-        query = query.filter(Task.project == project)
-
-    # Delegate filter
-    if delegated_to:
-        query = query.filter(Task.delegated_to == delegated_to)
-
     tasks = query.all()
 
-    # Sort: completed today at top with strikethrough (handled in frontend)
-    # then incomplete tasks by priority and due date
-    # then older completed tasks hidden
+    # Sort: completed at bottom, then priority, then due date
     sorted_tasks = sorted(tasks, key=lambda t: (
-        # Completed tasks go to bottom UNLESS completed today
-        1 if (t.status == "completed" and t.updated_at.date() < today) else 0,
-        # Then by priority
+        1 if t.status == "completed" else 0,
         PRIORITY_ORDER.get(t.priority or "Medium", 2),
-        # Then by due date
         t.due_date or date.max
     ))
 
     return sorted_tasks
-
-
-@router.get("/filters")
-def get_filters(
-        user_number: str,
-        db: Session = Depends(get_db)
-):
-    """
-    Get unique projects and delegates for filtering
-    """
-    tasks = db.query(Task).filter(Task.user_number == user_number).all()
-
-    projects = list(set(t.project for t in tasks if t.project))
-    delegates = list(set(t.delegated_to for t in tasks if t.delegated_to))
-
-    return {
-        "projects": sorted(projects),
-        "delegates": sorted(delegates)
-    }
 
 
 @router.post("/", response_model=TaskResponse)
@@ -134,8 +91,6 @@ def create_task(
         notes=task.notes,
         due_date=task.due_date,
         priority=task.priority,
-        project=task.project,
-        delegated_to=task.delegated_to,
         status="open",
         created_at=datetime.now(),
         updated_at=datetime.now()
@@ -173,10 +128,6 @@ def update_task(
         task.priority = updates.priority
     if updates.status is not None:
         task.status = updates.status
-    if updates.project is not None:
-        task.project = updates.project
-    if updates.delegated_to is not None:
-        task.delegated_to = updates.delegated_to
 
     task.updated_at = datetime.now()
     db.commit()

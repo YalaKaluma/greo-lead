@@ -45,6 +45,8 @@ class Task(Base):
     user_number = Column(String, index=True)   # same as messages table
     title = Column(String, nullable=False)
     notes = Column(Text, nullable=True)
+    project = Column(String, nullable=True)
+    delegated_to = Column(String, nullable=True)
     due_date = Column(DateTime, nullable=True)
     status = Column(String, default="open")    # open, completed, archived
     created_at = Column(DateTime, default=datetime.utcnow)
