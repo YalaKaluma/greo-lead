@@ -70,9 +70,15 @@ def get_tasks(
 
     # Date filters
     if filter_type == "due_today":
-        query = query.filter(Task.due_date <= today)
-    elif filter_type == "next_7_days":
+        # Only tasks due today or overdue (has a due date AND due date <= today)
         query = query.filter(
+            Task.due_date.isnot(None),
+            Task.due_date <= today
+        )
+    elif filter_type == "next_7_days":
+        # Tasks due in the next 7 days (has a due date AND between tomorrow and 7 days out)
+        query = query.filter(
+            Task.due_date.isnot(None),
             Task.due_date > today,
             Task.due_date <= today + timedelta(days=7)
         )
@@ -87,13 +93,12 @@ def get_tasks(
 
     tasks = query.all()
 
-    # Sort: completed today at top with strikethrough (handled in frontend)
-    # then incomplete tasks by priority and due date
-    # then older completed tasks hidden
+    # Sort: incomplete tasks first by priority and due date
+    # then completed tasks at bottom (even if completed today)
     sorted_tasks = sorted(tasks, key=lambda t: (
-        # Completed tasks go to bottom UNLESS completed today
-        1 if (t.status == "completed" and t.updated_at.date() < today) else 0,
-        # Then by priority
+        # All completed tasks go to bottom
+        1 if t.status == "completed" else 0,
+        # Then by priority (for incomplete tasks)
         PRIORITY_ORDER.get(t.priority or "Medium", 2),
         # Then by due date
         t.due_date or date.max
