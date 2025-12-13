@@ -2,6 +2,8 @@ from fastapi import APIRouter, Request, Depends
 from sqlalchemy.orm import Session
 from openai import OpenAI
 from twilio.rest import Client
+import requests
+from app.config import MAILGUN_API_KEY, MAILGUN_DOMAIN, MAILGUN_FROM
 
 from app.db import get_db
 from app.config import (
@@ -199,6 +201,28 @@ async def email_webhook(
     )
 
     # For now: just log (sending email reply is next step)
-    print("📧 Alfred email reply:\n", bot_reply)
+#    print("📧 Alfred email reply:\n", bot_reply)
+
+    send_email(
+        to=sender,
+        subject=f"Re: {subject}" if subject else "Re:",
+        text=bot_reply,
+    )
 
     return {"status": "ok"}
+
+
+
+
+def send_email(to: str, subject: str, text: str):
+    return requests.post(
+        f"https://api.mailgun.net/v3/{MAILGUN_DOMAIN}/messages",
+        auth=("api", MAILGUN_API_KEY),
+        data={
+            "from": MAILGUN_FROM,
+            "to": [to],
+            "subject": subject,
+            "text": text,
+        },
+    )
+
