@@ -35,6 +35,7 @@ class TaskResponse(BaseModel):
     title: str
     notes: Optional[str]
     due_date: Optional[date]
+    deadline: Optional[date]
     priority: Optional[str]
     status: str
     project: Optional[str]
@@ -69,15 +70,9 @@ def get_tasks(
 
     # Date filters
     if filter_type == "due_today":
-        # Only tasks due today or overdue
-        query = query.filter(
-            Task.due_date.isnot(None),
-            Task.due_date <= today
-        )
+        query = query.filter(Task.due_date <= today)
     elif filter_type == "next_7_days":
-        # Tasks due in the next 7 days
         query = query.filter(
-            Task.due_date.isnot(None),
             Task.due_date > today,
             Task.due_date <= today + timedelta(days=7)
         )
@@ -92,12 +87,13 @@ def get_tasks(
 
     tasks = query.all()
 
-    # Sort: incomplete tasks first by priority and due date
-    # then completed tasks at bottom (even if completed today)
+    # Sort: completed today at top with strikethrough (handled in frontend)
+    # then incomplete tasks by priority and due date
+    # then older completed tasks hidden
     sorted_tasks = sorted(tasks, key=lambda t: (
-        # All completed tasks go to bottom
-        1 if t.status == "completed" else 0,
-        # Then by priority (for incomplete tasks)
+        # Completed tasks go to bottom UNLESS completed today
+        1 if (t.status == "completed" and t.updated_at.date() < today) else 0,
+        # Then by priority
         PRIORITY_ORDER.get(t.priority or "Medium", 2),
         # Then by due date
         t.due_date or date.max
