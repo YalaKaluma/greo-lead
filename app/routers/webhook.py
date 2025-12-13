@@ -292,3 +292,22 @@ async def send_daily_nudge(db: Session = Depends(get_db)):
             to=user
         )
     return {"status": "nudges sent"}
+
+@router.post("/email/webhook")
+async def email_webhook(request: Request):
+    form = await request.form()
+
+    sender = form.get("sender")
+    subject = form.get("subject")
+    body = form.get("stripped-text") or ""
+
+    content = f"Subject: {subject}\n\n{body}"
+
+    # Reuse your existing pipeline
+    handle_message(
+        channel="email",
+        sender=sender,
+        content=content
+    )
+
+    return {"status": "ok"}
