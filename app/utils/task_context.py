@@ -21,6 +21,6 @@ def format_tasks_for_context(tasks):
     lines = []
     for task in tasks:
         status = "✓" if task.status == "completed" else "❑"
-        lines.append(f"{status} {task.title} (Priority: {task.priority or 'N/A'}, Deadline: {task.deadline or 'N/A'})")
+        lines.append(f"{status} {task.title} (Priority: {task.priority or 'N/A'}")
 
     return "\n".join(lines)
