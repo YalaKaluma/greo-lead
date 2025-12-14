@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from app.db import Base, engine
-from app.routers import journal, webhook, tasks, nudge
+from app.routers import journal, webhook, tasks, nudge, webhook_brain
 
 # --------------------------------------
 # Create DB tables automatically
@@ -32,6 +32,7 @@ app.add_middleware(
 # --------------------------------------
 app.include_router(journal.router, prefix="/api/journal", tags=["Journal"])
 app.include_router(webhook.router, prefix="/api", tags=["Webhook"])
+app.include_router(webhook_brain.router, prefix="/api/brain", tags=["Webhook-Brain"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["Tasks"])
 app.include_router(nudge.router, prefix="/api", tags=["Nudge"])
 

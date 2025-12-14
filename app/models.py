@@ -5,6 +5,8 @@ from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, D
 from sqlalchemy.sql import func
 from app.db import Base
 from .db import Base   # use your existing Base
+from sqlalchemy.dialects.postgresql import JSONB
+
 
 
 class User(Base):
@@ -151,3 +153,56 @@ class JourneyDevelopmentArea(Base):
     skill = Column(String, nullable=False)
     source = Column(String, nullable=True)
 
+
+class ConversationState(Base):
+    """
+    Stores Alfred's Brain state per user for orchestration.
+
+    This table enables the Brain to track:
+    - Current conversational state (IDLE, COACHING, etc.)
+    - Detected intents with confidence scores
+    - Pending actions awaiting approval
+    - Context needed to resume interrupted flows
+    """
+    __tablename__ = "conversation_state"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String(255), unique=True, nullable=False, index=True)
+
+    # State machine
+    current_state = Column(String(50), nullable=False, default='IDLE', index=True)
+
+    # Intent detection results
+    active_intents = Column(JSONB, nullable=True)
+    # Example: [{"name": "COACH", "confidence": 0.88}, {"name": "EXECUTE", "confidence": 0.42}]
+
+    # Pending actions
+    pending_action = Column(String(100), nullable=True)
+    # Example: "PROPOSE_TASK", "PROPOSE_EMAIL", "ASK_CLARIFICATION"
+
+    pending_payload = Column(JSONB, nullable=True)
+    # Example: {"title": "Follow up with John", "due_date": "2025-12-14"}
+
+    # State context (for resuming)
+    state_context = Column(JSONB, nullable=True)
+    # Example: {"coaching_topic": "delegation", "question_count": 2}
+
+    # Timestamps
+    last_transition_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    def __repr__(self):
+        return f"<ConversationState(user={self.user_number}, state={self.current_state})>"
+
+    def to_dict(self):
+        """Convert to dictionary for logging/debugging"""
+        return {
+            "user_number": self.user_number,
+            "current_state": self.current_state,
+            "active_intents": self.active_intents,
+            "pending_action": self.pending_action,
+            "pending_payload": self.pending_payload,
+            "state_context": self.state_context,
+            "last_transition_at": self.last_transition_at.isoformat() if self.last_transition_at else None,
+        }
