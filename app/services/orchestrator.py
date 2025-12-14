@@ -17,6 +17,8 @@ from app.services.message_service import load_conversation_history
 from app.utils.task_context import get_today_tasks, format_tasks_for_context
 from openai import OpenAI
 from app.config import OPENAI_API_KEY, OPENAI_MODEL
+from app.models import Task
+from datetime import datetime
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -264,28 +266,73 @@ Generate response:
     )
 
 
+# Add this import at the top
+from app.models import Task
+from datetime import datetime
+
+
+# Replace handle_clarifying function:
 def handle_clarifying(
-    db: Session,
-    user_number: str,
-    user_message: str,
-    intents: List[Dict],
-    explicit_execution: bool,
-    current_state: Any,
-    reason: str
+        db: Session,
+        user_number: str,
+        user_message: str,
+        intents: List[Dict],
+        explicit_execution: bool,
+        current_state: Any,
+        reason: str
 ) -> OrchestrationResult:
     """
     Handle CLARIFYING state - asking for missing information.
+
+    For now, create the task directly with what we have.
+    Later: check for missing fields and ask for them.
     """
-    
-    # For now, assume user provided info and move to executing
-    # In full implementation, check what fields are still missing
-    
-    return OrchestrationResult(
-        response=f"Got it. Creating task: {user_message}",
-        state=States.EXECUTING,
-        actions=['create_task']
+
+    # Extract task title from message
+    # Remove common action words
+    title = user_message
+    for word in ["add task", "create task", "remind me to", "todo:", "task:"]:
+        title = title.replace(word, "").strip()
+
+    # Create the task
+    new_task = Task(
+        user_number=user_number,
+        title=title[:200],  # Limit to 200 chars
+        status="open",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
     )
 
+    db.add(new_task)
+    db.commit()
+    db.refresh(new_task)
+
+    return OrchestrationResult(
+        response=f"✅ Task created: {title}",
+        state=States.EXECUTING,
+        actions=['task_created'],
+        data={'task_id': new_task.id}
+    )
+
+
+# Replace handle_executing function:
+def handle_executing(
+        db: Session,
+        user_number: str,
+        user_message: str,
+        intents: List[Dict],
+        explicit_execution: bool,
+        current_state: Any,
+        reason: str
+) -> OrchestrationResult:
+    """
+    Handle EXECUTING state - action completed, return to IDLE.
+    """
+
+    return OrchestrationResult(
+        response="Done! Anything else?",
+        state=States.IDLE
+    )
 
 def handle_drafting(
     db: Session,
@@ -352,26 +399,6 @@ def handle_awaiting_approval(
             response="I'm not sure - should I create this task? (Yes/No)",
             state=States.AWAITING_APPROVAL
         )
-
-
-def handle_executing(
-    db: Session,
-    user_number: str,
-    user_message: str,
-    intents: List[Dict],
-    explicit_execution: bool,
-    current_state: Any,
-    reason: str
-) -> OrchestrationResult:
-    """
-    Handle EXECUTING state - performing the action.
-    """
-    
-    # Action already executed, return to IDLE
-    return OrchestrationResult(
-        response="Done! Anything else?",
-        state=States.IDLE
-    )
 
 
 def handle_reviewing(
