@@ -71,17 +71,27 @@ def get_or_create_state(db: Session, user_number: str) -> ConversationState:
 def check_timeout(state: ConversationState) -> bool:
     """
     Check if current state has timed out.
-    
+
     Returns:
         True if state should be reset to IDLE
     """
     if state.current_state not in STATE_TIMEOUTS:
         return False
-    
+
     timeout_minutes = STATE_TIMEOUTS[state.current_state]
-    timeout_threshold = datetime.now() - timedelta(minutes=timeout_minutes)
-    
-    return state.last_transition_at < timeout_threshold
+
+    # Make datetime timezone-aware
+    from datetime import timezone
+    now = datetime.now(timezone.utc)
+
+    # Ensure last_transition_at is timezone-aware
+    last_transition = state.last_transition_at
+    if last_transition.tzinfo is None:
+        last_transition = last_transition.replace(tzinfo=timezone.utc)
+
+    timeout_threshold = now - timedelta(minutes=timeout_minutes)
+
+    return last_transition < timeout_threshold
 
 
 def transition_state(
