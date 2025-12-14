@@ -92,15 +92,22 @@ def get_tasks(
 
     tasks = query.all()
 
+    # Helper function for safe date comparison
+    def safe_date_key(task_date):
+        if task_date is None:
+            return date.max
+        if isinstance(task_date, datetime):
+            return task_date.date()
+        return task_date
+
     # Sort: incomplete tasks first by priority and due date
-    # then completed tasks at bottom (even if completed today)
     sorted_tasks = sorted(tasks, key=lambda t: (
         # All completed tasks go to bottom
         1 if t.status == "completed" else 0,
         # Then by priority (for incomplete tasks)
         PRIORITY_ORDER.get(t.priority or "Medium", 2),
         # Then by due date
-        t.due_date or date.max
+        safe_date_key(t.due_date)
     ))
 
     return sorted_tasks

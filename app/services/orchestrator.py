@@ -270,8 +270,6 @@ Generate response:
 from app.models import Task
 from datetime import datetime
 
-
-# Replace handle_clarifying function:
 def handle_clarifying(
         db: Session,
         user_number: str,
@@ -282,37 +280,37 @@ def handle_clarifying(
         reason: str
 ) -> OrchestrationResult:
     """
-    Handle CLARIFYING state - asking for missing information.
-
-    For now, create the task directly with what we have.
-    Later: check for missing fields and ask for them.
+    Handle CLARIFYING state - create task with what we have.
     """
 
     # Extract task title from message
-    # Remove common action words
     title = user_message
-    for word in ["add task", "create task", "remind me to", "todo:", "task:"]:
-        title = title.replace(word, "").strip()
+    for word in ["add task", "create task", "remind me to", "todo:", "task:", "please"]:
+        title = title.replace(word, "").replace(word.capitalize(), "").strip()
 
-    # Create the task
+    # Create the task (FIX: use datetime.now() not utcnow(), no due_date yet)
     new_task = Task(
         user_number=user_number,
-        title=title[:200],  # Limit to 200 chars
+        title=title[:200],
         status="open",
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow()
+        due_date=None,  # Don't set due_date unless specified
+        created_at=datetime.now(),  # Changed from utcnow()
+        updated_at=datetime.now()  # Changed from utcnow()
     )
 
     db.add(new_task)
     db.commit()
     db.refresh(new_task)
 
+    print(f"✅ Task created: ID={new_task.id}, Title={title}")
+
     return OrchestrationResult(
         response=f"✅ Task created: {title}",
         state=States.EXECUTING,
         actions=['task_created'],
-        data={'task_id': new_task.id}
+        data={'task_id': new_task.id, 'task_title': title}
     )
+
 
 
 # Replace handle_executing function:
