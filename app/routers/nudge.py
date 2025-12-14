@@ -4,7 +4,6 @@ from twilio.rest import Client
 from openai import OpenAI
 from app.services.journey_context import build_journey_context
 from app.services.message_service import load_conversation_history, save_message
-from app.config import settings
 from app.config import DATABASE_URL, OPENAI_API_KEY
 from app.config import (
     TWILIO_SID,
