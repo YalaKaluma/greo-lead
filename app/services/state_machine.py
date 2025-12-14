@@ -28,11 +28,11 @@ class States:
 
 # State timeout configuration (in minutes)
 STATE_TIMEOUTS = {
-    States.CLARIFYING: 2,
-    States.AWAITING_APPROVAL: 5,
-    States.COACHING: 5,
-    States.DRAFTING: 3,
-    States.REVIEWING: 10,
+    States.CLARIFYING: 10,
+    States.AWAITING_APPROVAL: 10,
+    States.COACHING: 10,
+    States.DRAFTING: 10,
+    States.REVIEWING: 30,
 }
 
 

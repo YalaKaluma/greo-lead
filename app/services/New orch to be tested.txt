@@ -1,0 +1,606 @@
+# appservicesorchestrator.py
+
+Orchestration Service for Alfred's Brain
+
+Fully integrated with all existing services
+- Task creation
+- Journey extraction
+- Email drafting
+- META learning
+
+
+from sqlalchemy.orm import Session
+from typing import Dict, List, Any, Optional
+from app.services.intent_service import detect_intents, format_recent_context, get_top_intent
+from app.services.state_machine import (
+    get_or_create_state, transition_state, save_state_transition, States
+)
+from app.services.journey_context import build_journey_context
+from app.services.message_service import load_conversation_history
+from app.utils.task_context import get_today_tasks, format_tasks_for_context
+from openai import OpenAI
+from app.config import OPENAI_API_KEY, OPENAI_MODEL
+from app.models import Task
+from datetime import datetime
+
+# Journey NLP imports
+from app.services.journey_nlp import (
+    detect_strengths,
+    detect_project,
+    detect_person,
+    detect_goal,
+    detect_goal_why,
+    detect_failure,
+    detect_learning,
+    detect_scar,
+    detect_development_area,
+)
+from app.services import journey_service
+
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+
+class OrchestrationResult
+    Result from orchestration with response and metadata.
+    
+    def __init__(
+        self,
+        response str,
+        state str,
+        actions List[str] = None,
+        data Dict = None
+    )
+        self.response = response
+        self.state = state
+        self.actions = actions or []
+        self.data = data or {}
+
+
+def orchestrate(
+    db Session,
+    user_number str,
+    user_message str,
+    channel str = whatsapp
+) - OrchestrationResult
+    
+    Main orchestration entry point.
+    
+    
+    print(fn{'='60})
+    print(f🧠 BRAIN ORCHESTRATION)
+    print(fUser {user_number})
+    print(fMessage {user_message[100]}...)
+    print(f{'='60})
+    
+    # Step 1 Load conversation state
+    state = get_or_create_state(db, user_number)
+    print(f📍 Current state {state.current_state})
+    
+    # Step 2 Detect intents
+    history = load_conversation_history(db, user_number)
+    recent_context = format_recent_context(history, limit=3)
+    
+    intent_result = detect_intents(
+        user_message=user_message,
+        recent_context=recent_context,
+        current_state=state.current_state
+    )
+    
+    intents = intent_result[intents]
+    explicit_execution = intent_result[explicit_execution]
+    
+    print(f🎯 Intents detected)
+    for intent in intents[2]
+        print(f   - {intent['name']} {intent['confidence'].2f})
+    print(f   Explicit execution {explicit_execution})
+    
+    # Step 3 Determine state transition
+    new_state, reason = transition_state(
+        db=db,
+        state=state,
+        intents=intents,
+        explicit_execution=explicit_execution,
+        user_message=user_message
+    )
+    
+    # Step 4 Route to appropriate handler
+    handlers = {
+        States.IDLE handle_idle,
+        States.COACHING handle_coaching,
+        States.CLARIFYING handle_clarifying,
+        States.DRAFTING handle_drafting,
+        States.AWAITING_APPROVAL handle_awaiting_approval,
+        States.EXECUTING handle_executing,
+        States.REVIEWING handle_reviewing,
+        States.LEARNING handle_learning,
+        States.PROACTIVE handle_proactive,
+    }
+    
+    handler = handlers.get(new_state, handle_idle)
+    result = handler(
+        db=db,
+        user_number=user_number,
+        user_message=user_message,
+        intents=intents,
+        explicit_execution=explicit_execution,
+        current_state=state,
+        reason=reason
+    )
+    
+    # Step 5 Save state transition
+    save_state_transition(
+        db=db,
+        state=state,
+        new_state=new_state,
+        reason=reason,
+        intents=intents,
+        pending_action=result.data.get('pending_action'),
+        pending_payload=result.data.get('pending_payload'),
+        state_context=result.data.get('state_context')
+    )
+    
+    print(f✅ Response generated ({len(result.response)} chars))
+    print(f{'='60}n)
+    
+    return result
+
+
+# ============================================================
+# HANDLER FUNCTIONS
+# ============================================================
+
+def handle_idle(
+    db Session,
+    user_number str,
+    user_message str,
+    intents List[Dict],
+    explicit_execution bool,
+    current_state Any,
+    reason str
+) - OrchestrationResult
+    Handle IDLE state - default listening mode.
+    
+    top_intent = get_top_intent(intents)
+    
+    if not top_intent or top_intent['confidence']  0.3
+        return OrchestrationResult(
+            response=I'm not sure I understand. Could you clarify,
+            state=States.IDLE
+        )
+    
+    # Generate contextual response
+    response = _generate_gpt_response(
+        db=db,
+        user_number=user_number,
+        user_message=user_message,
+        state=States.IDLE,
+        system_context=You are in listening mode. Respond naturally and helpfully.
+    )
+    
+    return OrchestrationResult(
+        response=response,
+        state=States.IDLE
+    )
+
+
+def handle_coaching(
+    db Session,
+    user_number str,
+    user_message str,
+    intents List[Dict],
+    explicit_execution bool,
+    current_state Any,
+    reason str
+) - OrchestrationResult
+    
+    Handle COACHING state - reflective mode with journey extraction.
+    
+    CRITICAL Extract journey signals automatically during coaching.
+    
+    
+    print(f💭 COACHING MODE ACTIVE)
+    
+    # EXTRACT JOURNEY SIGNALS AUTOMATICALLY
+    journey_signals_extracted = []
+    
+    # Check for strengths
+    strengths = detect_strengths(user_message)
+    if strengths
+        for s in strengths
+            journey_service.add_strength(db, user_number, s)
+            journey_signals_extracted.append(fstrength {s})
+        print(f📝 Extracted strengths {strengths})
+    
+    # Check for projects
+    project = detect_project(user_message)
+    if project
+        journey_service.add_project(db, user_number, name=project)
+        journey_signals_extracted.append(fproject {project})
+        print(f📝 Extracted project {project})
+    
+    # Check for people
+    person = detect_person(user_message)
+    if person
+        journey_service.add_person(
+            db, user_number,
+            name=person[name],
+            email=person.get(email),
+            phone=person.get(phone)
+        )
+        journey_signals_extracted.append(fperson {person['name']})
+        print(f📝 Extracted person {person['name']})
+    
+    # Check for goals
+    goal = detect_goal(user_message)
+    if goal
+        journey_service.add_goal(db, user_number, goal)
+        journey_signals_extracted.append(fgoal {goal})
+        print(f📝 Extracted goal {goal})
+    
+    # Check for failures
+    failure = detect_failure(user_message)
+    if failure
+        journey_service.add_failure(db, user_number, failure, learning=, scar=)
+        journey_signals_extracted.append(ffailure {failure})
+        print(f📝 Extracted failure {failure})
+    
+    # Check for development areas
+    dev = detect_development_area(user_message)
+    if dev
+        journey_service.add_development_area(db, user_number, dev)
+        journey_signals_extracted.append(fdevelopment {dev})
+        print(f📝 Extracted development area {dev})
+    
+    # Check if user explicitly requests action FROM coaching
+    if explicit_execution and any(i['name'] == 'EXECUTE' for i in intents if i['confidence']  0.7)
+        return OrchestrationResult(
+            response=Would you like me to capture this as a task,
+            state=States.AWAITING_APPROVAL,
+            data={'pending_action' 'PROPOSE_TASK', 'pending_payload' {'title' user_message}}
+        )
+    
+    # Generate coaching response
+    journey_context = build_journey_context(db, user_number)
+    
+    coaching_prompt = fYou are Alfred in COACHING mode.
+
+User said {user_message}
+
+Journey context
+{journey_context}
+
+Your role (CRITICAL RULES)
+1. MIRROR their emotionexperience first
+2. ASK one reflective question (max)
+3. NO solutions, NO task creation, NO optimization
+4. Keep response under 280 characters
+5. Use their exact language, not business jargon
+
+Examples
+
+User I felt overwhelmed in that board meeting
+Alfred Board meetings can be intense, especially when you're carrying a lot. What specifically felt overwhelming
+
+User I'm struggling to delegate to my team
+Alfred It sounds like letting go is hard right now. What would need to be true for you to feel comfortable delegating
+
+Generate response
+
+    
+    response = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {role system, content coaching_prompt},
+            {role user, content user_message}
+        ],
+        temperature=0.7,
+        max_tokens=150
+    )
+    
+    coaching_response = response.choices[0].message.content.strip()
+    
+    return OrchestrationResult(
+        response=coaching_response,
+        state=States.COACHING,
+        actions=['journey_signals_extracted'] if journey_signals_extracted else [],
+        data={'signals' journey_signals_extracted}
+    )
+
+
+def handle_clarifying(
+    db Session,
+    user_number str,
+    user_message str,
+    intents List[Dict],
+    explicit_execution bool,
+    current_state Any,
+    reason str
+) - OrchestrationResult
+    
+    Handle CLARIFYING state - create task with what we have.
+    
+    
+    # Extract task title from message
+    title = user_message
+    for word in [add task, create task, remind me to, todo, task, please]
+        title = title.replace(word, ).replace(word.capitalize(), ).strip()
+    
+    # Create the task
+    new_task = Task(
+        user_number=user_number,
+        title=title[200],
+        status=open,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+    
+    db.add(new_task)
+    db.commit()
+    db.refresh(new_task)
+    
+    print(f✅ Task created ID={new_task.id}, Title={title})
+    
+    return OrchestrationResult(
+        response=f✅ Task created {title},
+        state=States.EXECUTING,
+        actions=['task_created'],
+        data={'task_id' new_task.id, 'task_title' title}
+    )
+
+
+def handle_drafting(
+    db Session,
+    user_number str,
+    user_message str,
+    intents List[Dict],
+    explicit_execution bool,
+    current_state Any,
+    reason str
+) - OrchestrationResult
+    
+    Handle DRAFTING state - proposing action before executing.
+    
+    
+    top_intent = get_top_intent(intents)
+    
+    if top_intent and top_intent['name'] == 'COMMUNICATE'
+        # User wants help drafting something
+        draft = _generate_draft(db, user_number, user_message)
+        return OrchestrationResult(
+            response=fHere's a draftnn{draft}nnShould I send this,
+            state=States.AWAITING_APPROVAL,
+            data={
+                'pending_action' 'SEND_MESSAGE',
+                'pending_payload' {'draft' draft}
+            }
+        )
+    
+    # Default propose task creation
+    proposal = fI can help with that. Would you like me to create a task for '{user_message}'
+    
+    return OrchestrationResult(
+        response=proposal,
+        state=States.AWAITING_APPROVAL,
+        data={
+            'pending_action' 'CREATE_TASK',
+            'pending_payload' {'title' user_message}
+        }
+    )
+
+
+def handle_awaiting_approval(
+    db Session,
+    user_number str,
+    user_message str,
+    intents List[Dict],
+    explicit_execution bool,
+    current_state Any,
+    reason str
+) - OrchestrationResult
+    
+    Handle AWAITING_APPROVAL state - user confirmingrejecting.
+    
+    
+    message_lower = user_message.lower()
+    
+    if any(word in message_lower for word in [yes, correct, go ahead, do it, sure, please])
+        # User approved - execute the pending action
+        pending_action = current_state.pending_action
+        pending_payload = current_state.pending_payload
+        
+        if pending_action == 'PROPOSE_TASK' or pending_action == 'CREATE_TASK'
+            # Create the task
+            title = pending_payload.get('title', user_message)
+            
+            new_task = Task(
+                user_number=user_number,
+                title=title[200],
+                status=open,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            
+            db.add(new_task)
+            db.commit()
+            db.refresh(new_task)
+            
+            return OrchestrationResult(
+                response=f✅ Task created {title},
+                state=States.EXECUTING,
+                actions=['task_created'],
+                data={'task_id' new_task.id}
+            )
+        
+        else
+            # Generic approval
+            return OrchestrationResult(
+                response=Done! ✅,
+                state=States.EXECUTING,
+                actions=['execute_pending_action']
+            )
+    
+    elif any(word in message_lower for word in [no, don't, cancel, nevermind])
+        return OrchestrationResult(
+            response=No problem, I won't do that.,
+            state=States.IDLE
+        )
+    
+    else
+        return OrchestrationResult(
+            response=I'm not sure - should I go ahead (YesNo),
+            state=States.AWAITING_APPROVAL
+        )
+
+
+def handle_executing(
+    db Session,
+    user_number str,
+    user_message str,
+    intents List[Dict],
+    explicit_execution bool,
+    current_state Any,
+    reason str
+) - OrchestrationResult
+    Handle EXECUTING state - action completed.
+    
+    return OrchestrationResult(
+        response=Done! Anything else,
+        state=States.IDLE
+    )
+
+
+def handle_reviewing(
+    db Session,
+    user_number str,
+    user_message str,
+    intents List[Dict],
+    explicit_execution bool,
+    current_state Any,
+    reason str
+) - OrchestrationResult
+    Handle REVIEWING state - treat like coaching.
+    
+    return handle_coaching(
+        db, user_number, user_message, intents, 
+        explicit_execution, current_state, reason
+    )
+
+
+def handle_learning(
+    db Session,
+    user_number str,
+    user_message str,
+    intents List[Dict],
+    explicit_execution bool,
+    current_state Any,
+    reason str
+) - OrchestrationResult
+    
+    Handle LEARNING state - user is correcting Alfred.
+    
+    Store the correction for future reference.
+    
+    
+    # TODO Store user preference in a preferences table
+    print(f📚 META correction {user_message})
+    
+    # For now, acknowledge
+    return OrchestrationResult(
+        response=Got it. I'll remember that.,
+        state=States.IDLE,
+        actions=['store_user_preference']
+    )
+
+
+def handle_proactive(
+    db Session,
+    user_number str,
+    user_message str,
+    intents List[Dict],
+    explicit_execution bool,
+    current_state Any,
+    reason str
+) - OrchestrationResult
+    Handle PROACTIVE state - system-initiated nudge.
+    
+    return handle_coaching(
+        db, user_number, user_message, intents,
+        explicit_execution, current_state, reason
+    )
+
+
+# ============================================================
+# HELPER FUNCTIONS
+# ============================================================
+
+def _generate_gpt_response(
+    db Session,
+    user_number str,
+    user_message str,
+    state str,
+    system_context str
+) - str
+    Generate GPT response with full context.
+    
+    journey_context = build_journey_context(db, user_number)
+    tasks = get_today_tasks(user_number)
+    tasks_context = format_tasks_for_context(tasks) or No tasks scheduled for today.
+    history = load_conversation_history(db, user_number)
+    
+    system_prompt = fYou are Alfred, an AI Chief of Staff.
+
+Current mode {state}
+{system_context}
+
+Journey Memory
+{journey_context}
+
+Today's Tasks
+{tasks_context}
+
+Reply concisely and warmly.
+
+    
+    messages = [{role system, content system_prompt}, history[-10]]
+    
+    response = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=messages,
+        temperature=0.7,
+        max_tokens=200
+    )
+    
+    return response.choices[0].message.content.strip()
+
+
+def _generate_draft(
+    db Session,
+    user_number str,
+    user_message str
+) - str
+    Generate a draft emailmessage based on user request.
+    
+    journey_context = build_journey_context(db, user_number)
+    
+    draft_prompt = fYou are Alfred, helping draft a message.
+
+User request {user_message}
+
+Journey context
+{journey_context}
+
+Generate a professional, concise draft based on their request.
+Keep it under 200 words.
+
+    
+    response = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {role system, content draft_prompt},
+            {role user, content user_message}
+        ],
+        temperature=0.7,
+        max_tokens=250
+    )
+    
+    return response.choices[0].message.content.strip()
