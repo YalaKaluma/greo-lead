@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from app.db import Base, engine
-from app.routers import journal, webhook, tasks, nudge, webhook_brain
+from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey
 
 # --------------------------------------
 # Create DB tables automatically
@@ -35,7 +35,7 @@ app.include_router(webhook.router, prefix="/api", tags=["Webhook"])
 app.include_router(webhook_brain.router, prefix="/api/brain", tags=["Webhook-Brain"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["Tasks"])
 app.include_router(nudge.router, prefix="/api", tags=["Nudge"])
-
+app.include_router(journey.router, prefix="/api/journey", tags=["Journey"])
 
 # --------------------------------------
 # Health check
@@ -63,6 +63,12 @@ if static_path.exists():
         if svg_file.exists():
             return FileResponse(str(svg_file))
 
+
+    @app.get("/batman.svg")  # ← ADD this for Batman favicon
+    async def serve_batman_svg():
+        svg_file = static_path / "batman.svg"
+        if svg_file.exists():
+            return FileResponse(str(svg_file))
 
     # Serve React app at root
     @app.get("/")
