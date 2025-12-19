@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import (
@@ -217,3 +217,77 @@ def get_goals(
     ).order_by(JourneyGoal.first_seen_at.desc()).all()
 
     return goals
+
+
+@router.post("/goals", response_model=GoalResponse)
+def create_goal(
+        goal_text: str,
+        user_number: str,
+        why: Optional[str] = None,
+        time_horizon: Optional[str] = None,
+        db: Session = Depends(get_db)
+):
+    """Create a new goal"""
+    new_goal = JourneyGoal(
+        user_number=user_number,
+        goal_text=goal_text,
+        why=why,
+        time_horizon=time_horizon,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(new_goal)
+    db.commit()
+    db.refresh(new_goal)
+    return new_goal
+
+
+@router.put("/goals/{goal_id}", response_model=GoalResponse)
+def update_goal(
+        goal_id: int,
+        user_number: str,
+        goal_text: Optional[str] = None,
+        why: Optional[str] = None,
+        time_horizon: Optional[str] = None,
+        db: Session = Depends(get_db)
+):
+    """Update a goal"""
+    goal = db.query(JourneyGoal).filter(
+        JourneyGoal.id == goal_id,
+        JourneyGoal.user_number == user_number
+    ).first()
+
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+
+    if goal_text is not None:
+        goal.goal_text = goal_text
+    if why is not None:
+        goal.why = why
+    if time_horizon is not None:
+        goal.time_horizon = time_horizon
+
+    goal.updated_at = datetime.now()
+    db.commit()
+    db.refresh(goal)
+    return goal
+
+
+@router.delete("/goals/{goal_id}")
+def delete_goal(
+        goal_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete a goal"""
+    goal = db.query(JourneyGoal).filter(
+        JourneyGoal.id == goal_id,
+        JourneyGoal.user_number == user_number
+    ).first()
+
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+
+    db.delete(goal)
+    db.commit()
+    return {"success": True, "message": "Goal deleted"}
