@@ -17,7 +17,7 @@ class TaskCreate(BaseModel):
     priority: str = "Medium"
     project: Optional[str] = None
     delegated_to: Optional[str] = None
-
+    goal_id: Optional[int] = None  # ← ADD THIS LINE
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -27,6 +27,7 @@ class TaskUpdate(BaseModel):
     status: Optional[str] = None
     project: Optional[str] = None
     delegated_to: Optional[str] = None
+    goal_id: Optional[int] = None
 
 
 class TaskResponse(BaseModel):
@@ -41,6 +42,7 @@ class TaskResponse(BaseModel):
     delegated_to: Optional[str]
     created_at: datetime
     updated_at: datetime
+    goal_id: Optional[int]
 
     class Config:
         from_attributes = True
@@ -147,6 +149,7 @@ def create_task(
         priority=task.priority,
         project=task.project,
         delegated_to=task.delegated_to,
+        goal_id=task.goal_id,
         status="open",
         created_at=datetime.now(),
         updated_at=datetime.now()
@@ -188,6 +191,9 @@ def update_task(
         task.project = updates.project
     if updates.delegated_to is not None:
         task.delegated_to = updates.delegated_to
+    if updates.goal_id is not None:  # ← ADD THESE 2 LINES
+        task.goal_id = updates.goal_id
+        
 
     task.updated_at = datetime.now()
     db.commit()
