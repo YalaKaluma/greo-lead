@@ -8,7 +8,9 @@ from app.models import (
     JourneyProject,
     JourneyPerson,
     JourneyFailure,
-    JourneyOpportunity
+    JourneyOpportunity,
+    JourneyValue,
+    JourneyAchievement
 )
 from pydantic import BaseModel
 from datetime import datetime
@@ -818,3 +820,225 @@ def delete_opportunity(
     db.delete(opportunity)
     db.commit()
     return {"success": True, "message": "Opportunity deleted"}
+
+
+# ============================================
+# VALUES - FULL CRUD
+# ============================================
+
+class ValueCreate(BaseModel):
+    title: str
+    value_text: str
+    why: Optional[str] = None
+
+
+class ValueUpdate(BaseModel):
+    title: Optional[str] = None
+    value_text: Optional[str] = None
+    why: Optional[str] = None
+
+
+class ValueResponse(BaseModel):
+    id: int
+    user_number: str
+    title: str
+    value_text: str
+    why: Optional[str]
+    first_seen_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/values", response_model=list[ValueResponse])
+def get_values(
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Get all values for a user"""
+    values = db.query(JourneyValue).filter(
+        JourneyValue.user_number == user_number
+    ).order_by(JourneyValue.first_seen_at.desc()).all()
+    return values
+
+
+@router.post("/values", response_model=ValueResponse)
+def create_value(
+        value_data: ValueCreate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Create a new value"""
+    new_value = JourneyValue(
+        user_number=user_number,
+        title=value_data.title,
+        value_text=value_data.value_text,
+        why=value_data.why,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(new_value)
+    db.commit()
+    db.refresh(new_value)
+    return new_value
+
+
+@router.put("/values/{value_id}", response_model=ValueResponse)
+def update_value(
+        value_id: int,
+        value_data: ValueUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update a value"""
+    value = db.query(JourneyValue).filter(
+        JourneyValue.id == value_id,
+        JourneyValue.user_number == user_number
+    ).first()
+
+    if not value:
+        raise HTTPException(status_code=404, detail="Value not found")
+
+    if value_data.title is not None:
+        value.title = value_data.title
+    if value_data.value_text is not None:
+        value.value_text = value_data.value_text
+    if value_data.why is not None:
+        value.why = value_data.why
+
+    value.updated_at = datetime.now()
+    db.commit()
+    db.refresh(value)
+    return value
+
+
+@router.delete("/values/{value_id}")
+def delete_value(
+        value_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete a value"""
+    value = db.query(JourneyValue).filter(
+        JourneyValue.id == value_id,
+        JourneyValue.user_number == user_number
+    ).first()
+
+    if not value:
+        raise HTTPException(status_code=404, detail="Value not found")
+
+    db.delete(value)
+    db.commit()
+    return {"success": True, "message": "Value deleted"}
+
+
+# ============================================
+# ACHIEVEMENTS - FULL CRUD
+# ============================================
+
+class AchievementCreate(BaseModel):
+    title: str
+    achievement_text: str
+    impact: Optional[str] = None
+
+
+class AchievementUpdate(BaseModel):
+    title: Optional[str] = None
+    achievement_text: Optional[str] = None
+    impact: Optional[str] = None
+
+
+class AchievementResponse(BaseModel):
+    id: int
+    user_number: str
+    title: str
+    achievement_text: str
+    impact: Optional[str]
+    first_seen_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/achievements", response_model=list[AchievementResponse])
+def get_achievements(
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Get all achievements for a user"""
+    achievements = db.query(JourneyAchievement).filter(
+        JourneyAchievement.user_number == user_number
+    ).order_by(JourneyAchievement.first_seen_at.desc()).all()
+    return achievements
+
+
+@router.post("/achievements", response_model=AchievementResponse)
+def create_achievement(
+        achievement_data: AchievementCreate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Create a new achievement"""
+    new_achievement = JourneyAchievement(
+        user_number=user_number,
+        title=achievement_data.title,
+        achievement_text=achievement_data.achievement_text,
+        impact=achievement_data.impact,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(new_achievement)
+    db.commit()
+    db.refresh(new_achievement)
+    return new_achievement
+
+
+@router.put("/achievements/{achievement_id}", response_model=AchievementResponse)
+def update_achievement(
+        achievement_id: int,
+        achievement_data: AchievementUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update an achievement"""
+    achievement = db.query(JourneyAchievement).filter(
+        JourneyAchievement.id == achievement_id,
+        JourneyAchievement.user_number == user_number
+    ).first()
+
+    if not achievement:
+        raise HTTPException(status_code=404, detail="Achievement not found")
+
+    if achievement_data.title is not None:
+        achievement.title = achievement_data.title
+    if achievement_data.achievement_text is not None:
+        achievement.achievement_text = achievement_data.achievement_text
+    if achievement_data.impact is not None:
+        achievement.impact = achievement_data.impact
+
+    achievement.updated_at = datetime.now()
+    db.commit()
+    db.refresh(achievement)
+    return achievement
+
+
+@router.delete("/achievements/{achievement_id}")
+def delete_achievement(
+        achievement_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete an achievement"""
+    achievement = db.query(JourneyAchievement).filter(
+        JourneyAchievement.id == achievement_id,
+        JourneyAchievement.user_number == user_number
+    ).first()
+
+    if not achievement:
+        raise HTTPException(status_code=404, detail="Achievement not found")
+
+    db.delete(achievement)
+    db.commit()
+    return {"success": True, "message": "Achievement deleted"}

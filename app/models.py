@@ -213,3 +213,27 @@ class ConversationState(Base):
             "state_context": self.state_context,
             "last_transition_at": self.last_transition_at.isoformat() if self.last_transition_at else None,
         }
+
+
+class JourneyValue(Base):
+    __tablename__ = "journey_values"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True)
+    title = Column(String(200), nullable=False)
+    value_text = Column(Text, nullable=False)
+    why = Column(Text, nullable=True)
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class JourneyAchievement(Base):
+    __tablename__ = "journey_achievements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True)
+    title = Column(String(200), nullable=False)
+    achievement_text = Column(Text, nullable=False)
+    impact = Column(Text, nullable=True)
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
