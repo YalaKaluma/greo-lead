@@ -84,7 +84,8 @@ class JourneyGoal(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_number = Column(String, index=True)
 
-    goal_text = Column(Text, nullable=False)
+    title = Column(String(200), nullable=True)  # Short title for sidebar
+    goal_text = Column(Text, nullable=False)     # Full description
     why = Column(Text, nullable=True)
     time_horizon = Column(String, nullable=True)  # short, medium, long
 

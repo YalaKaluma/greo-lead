@@ -17,12 +17,14 @@ from typing import Optional
 
 # Pydantic request models for Goals
 class GoalCreate(BaseModel):
+    title: Optional[str] = None
     goal_text: str
     why: Optional[str] = None
     time_horizon: Optional[str] = "medium"
 
 
 class GoalUpdate(BaseModel):
+    title: Optional[str] = None
     goal_text: Optional[str] = None
     why: Optional[str] = None
     time_horizon: Optional[str] = None
@@ -128,6 +130,7 @@ class OpportunityResponse(BaseModel):
 class GoalResponse(BaseModel):
     id: int
     user_number: str
+    title: Optional[str]
     goal_text: str
     why: Optional[str]
     time_horizon: Optional[str]
@@ -335,6 +338,7 @@ def create_goal(
     """Create a new goal"""
     new_goal = JourneyGoal(
         user_number=user_number,
+        title=goal_data.title,
         goal_text=goal_data.goal_text,
         why=goal_data.why,
         time_horizon=goal_data.time_horizon,
@@ -363,6 +367,8 @@ def update_goal(
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
+    if goal_data.title is not None:
+        goal.title = goal_data.title
     if goal_data.goal_text is not None:
         goal.goal_text = goal_data.goal_text
     if goal_data.why is not None:
