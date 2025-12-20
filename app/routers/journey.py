@@ -14,6 +14,20 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
 
+
+# Pydantic request models for Goals
+class GoalCreate(BaseModel):
+    goal_text: str
+    why: Optional[str] = None
+    time_horizon: Optional[str] = "medium"
+
+
+class GoalUpdate(BaseModel):
+    goal_text: Optional[str] = None
+    why: Optional[str] = None
+    time_horizon: Optional[str] = None
+
+
 router = APIRouter()
 
 
@@ -204,7 +218,7 @@ def get_opportunities(
 
 
 # ========================================
-# GOALS
+# GOALS - FULL CRUD
 # ========================================
 @router.get("/goals", response_model=list[GoalResponse])
 def get_goals(
@@ -221,18 +235,16 @@ def get_goals(
 
 @router.post("/goals", response_model=GoalResponse)
 def create_goal(
-        goal_text: str,
+        goal_data: GoalCreate,
         user_number: str,
-        why: Optional[str] = None,
-        time_horizon: Optional[str] = None,
         db: Session = Depends(get_db)
 ):
     """Create a new goal"""
     new_goal = JourneyGoal(
         user_number=user_number,
-        goal_text=goal_text,
-        why=why,
-        time_horizon=time_horizon,
+        goal_text=goal_data.goal_text,
+        why=goal_data.why,
+        time_horizon=goal_data.time_horizon,
         first_seen_at=datetime.now(),
         updated_at=datetime.now()
     )
@@ -245,10 +257,8 @@ def create_goal(
 @router.put("/goals/{goal_id}", response_model=GoalResponse)
 def update_goal(
         goal_id: int,
+        goal_data: GoalUpdate,
         user_number: str,
-        goal_text: Optional[str] = None,
-        why: Optional[str] = None,
-        time_horizon: Optional[str] = None,
         db: Session = Depends(get_db)
 ):
     """Update a goal"""
@@ -260,12 +270,12 @@ def update_goal(
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
-    if goal_text is not None:
-        goal.goal_text = goal_text
-    if why is not None:
-        goal.why = why
-    if time_horizon is not None:
-        goal.time_horizon = time_horizon
+    if goal_data.goal_text is not None:
+        goal.goal_text = goal_data.goal_text
+    if goal_data.why is not None:
+        goal.why = goal_data.why
+    if goal_data.time_horizon is not None:
+        goal.time_horizon = goal_data.time_horizon
 
     goal.updated_at = datetime.now()
     db.commit()
