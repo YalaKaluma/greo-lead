@@ -103,6 +103,7 @@ class JourneyFailure(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_number = Column(String, index=True)
 
+    title = Column(String(200), nullable=True)     # Optional title
     failure_text = Column(Text, nullable=False)
     scar = Column(Text, nullable=True)       # emotional residue
     learning = Column(Text, nullable=True)   # lesson learned
@@ -132,6 +133,7 @@ class JourneyStrength(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_number = Column(String, index=True)
 
+    title = Column(String(200), nullable=True)     # Optional title
     strength = Column(Text, nullable=False)
     source = Column(String, nullable=True)     # inference, user input...
 
@@ -157,8 +159,11 @@ class JourneyDevelopmentArea(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_number = Column(String, index=True)
+    title = Column(String(200), nullable=True)     # Optional title
     skill = Column(String, nullable=False)
     source = Column(String, nullable=True)
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class ConversationState(Base):

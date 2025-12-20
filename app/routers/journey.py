@@ -58,6 +58,7 @@ router = APIRouter()
 class StrengthResponse(BaseModel):
     id: int
     user_number: str
+    title: Optional[str]
     strength: str
     source: Optional[str]
     first_seen_at: datetime
@@ -70,6 +71,7 @@ class StrengthResponse(BaseModel):
 class DevelopmentAreaResponse(BaseModel):
     id: int
     user_number: str
+    title: Optional[str]
     skill: str
     source: Optional[str]
 
@@ -109,6 +111,7 @@ class PersonResponse(BaseModel):
 class FailureResponse(BaseModel):
     id: int
     user_number: str
+    title: Optional[str]
     failure_text: str
     learning: Optional[str]
     scar: Optional[str]
@@ -163,6 +166,7 @@ def get_strengths(
 
 
 class StrengthCreate(BaseModel):
+    title: Optional[str] = None
     strength: str
     source: Optional[str] = None
 
@@ -176,6 +180,7 @@ def create_strength(
     """Create a new strength"""
     new_strength = JourneyStrength(
         user_number=user_number,
+        title=strength_data.title,
         strength=strength_data.strength,
         source=strength_data.source,
         first_seen_at=datetime.now(),
@@ -204,6 +209,7 @@ def get_development_areas(
 
 
 class DevelopmentAreaCreate(BaseModel):
+    title: Optional[str] = None
     skill: str
     source: Optional[str] = None
 
@@ -217,8 +223,11 @@ def create_development_area(
     """Create a new development area"""
     new_area = JourneyDevelopmentArea(
         user_number=user_number,
+        title=area_data.title,
         skill=area_data.skill,
-        source=area_data.source
+        source=area_data.source,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
     )
     db.add(new_area)
     db.commit()
@@ -380,6 +389,7 @@ def get_failures(
 
 
 class FailureCreate(BaseModel):
+    title: Optional[str] = None
     failure_text: str
     learning: Optional[str] = None
     scar: Optional[str] = None
@@ -394,6 +404,7 @@ def create_failure(
     """Create a new failure/learning"""
     new_failure = JourneyFailure(
         user_number=user_number,
+        title=failure_data.title,
         failure_text=failure_data.failure_text,
         learning=failure_data.learning,
         scar=failure_data.scar,
@@ -543,6 +554,7 @@ def delete_goal(
 # STRENGTHS - UPDATE & DELETE
 # ========================================
 class StrengthUpdate(BaseModel):
+    title: Optional[str] = None
     strength: Optional[str] = None
     source: Optional[str] = None
 
@@ -563,6 +575,8 @@ def update_strength(
     if not strength:
         raise HTTPException(status_code=404, detail="Strength not found")
 
+    if updates.title is not None:
+        strength.title = updates.title
     if updates.strength is not None:
         strength.strength = updates.strength
     if updates.source is not None:
@@ -598,6 +612,7 @@ def delete_strength(
 # DEVELOPMENT AREAS - UPDATE & DELETE
 # ========================================
 class DevelopmentAreaUpdate(BaseModel):
+    title: Optional[str] = None
     skill: Optional[str] = None
     source: Optional[str] = None
 
@@ -618,11 +633,14 @@ def update_development_area(
     if not area:
         raise HTTPException(status_code=404, detail="Development area not found")
 
+    if updates.title is not None:
+        area.title = updates.title
     if updates.skill is not None:
         area.skill = updates.skill
     if updates.source is not None:
         area.source = updates.source
 
+    area.updated_at = datetime.now()
     db.commit()
     db.refresh(area)
     return area
@@ -713,6 +731,7 @@ def delete_project(
 # FAILURES - UPDATE & DELETE
 # ========================================
 class FailureUpdate(BaseModel):
+    title: Optional[str] = None
     failure_text: Optional[str] = None
     learning: Optional[str] = None
     scar: Optional[str] = None
@@ -734,6 +753,8 @@ def update_failure(
     if not failure:
         raise HTTPException(status_code=404, detail="Failure not found")
 
+    if updates.title is not None:
+        failure.title = updates.title
     if updates.failure_text is not None:
         failure.failure_text = updates.failure_text
     if updates.learning is not None:
