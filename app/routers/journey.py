@@ -225,9 +225,7 @@ def create_development_area(
         user_number=user_number,
         title=area_data.title,
         skill=area_data.skill,
-        source=area_data.source,
-        first_seen_at=datetime.now(),
-        updated_at=datetime.now()
+        source=area_data.source
     )
     db.add(new_area)
     db.commit()
@@ -640,7 +638,12 @@ def update_development_area(
     if updates.source is not None:
         area.source = updates.source
 
-    area.updated_at = datetime.now()
+    # Only set updated_at if the column exists
+    try:
+        area.updated_at = datetime.now()
+    except:
+        pass
+
     db.commit()
     db.refresh(area)
     return area

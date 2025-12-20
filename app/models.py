@@ -162,8 +162,8 @@ class JourneyDevelopmentArea(Base):
     title = Column(String(200), nullable=True)     # Optional title
     skill = Column(String, nullable=False)
     source = Column(String, nullable=True)
-    first_seen_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    first_seen_at = Column(DateTime, default=datetime.utcnow, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=True)
 
 
 class ConversationState(Base):
