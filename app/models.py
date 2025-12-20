@@ -88,9 +88,13 @@ class JourneyGoal(Base):
     goal_text = Column(Text, nullable=False)     # Full description
     why = Column(Text, nullable=True)
     time_horizon = Column(String, nullable=True)  # short, medium, long
+    parent_goal_id = Column(Integer, ForeignKey('journey_goals.id'), nullable=True)  # Hierarchical goals
 
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationship for parent/child goals
+    children = relationship("JourneyGoal", backref="parent", remote_side=[id])
 
 
 class JourneyFailure(Base):

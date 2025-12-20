@@ -21,7 +21,6 @@ class GoalCreate(BaseModel):
     goal_text: str
     why: Optional[str] = None
     time_horizon: Optional[str] = "medium"
-    parent_goal_id: Optional[int] = None
 
 
 class GoalUpdate(BaseModel):
@@ -29,7 +28,6 @@ class GoalUpdate(BaseModel):
     goal_text: Optional[str] = None
     why: Optional[str] = None
     time_horizon: Optional[str] = None
-    parent_goal_id: Optional[int] = None
 
 
 # Pydantic request models for People
@@ -136,7 +134,6 @@ class GoalResponse(BaseModel):
     goal_text: str
     why: Optional[str]
     time_horizon: Optional[str]
-    parent_goal_id: Optional[int]
     first_seen_at: datetime
     updated_at: datetime
 
@@ -474,7 +471,6 @@ def create_goal(
         goal_text=goal_data.goal_text,
         why=goal_data.why,
         time_horizon=goal_data.time_horizon,
-        parent_goal_id=goal_data.parent_goal_id,
         first_seen_at=datetime.now(),
         updated_at=datetime.now()
     )
@@ -508,8 +504,6 @@ def update_goal(
         goal.why = goal_data.why
     if goal_data.time_horizon is not None:
         goal.time_horizon = goal_data.time_horizon
-    if goal_data.parent_goal_id is not None:
-        goal.parent_goal_id = goal_data.parent_goal_id
 
     goal.updated_at = datetime.now()
     db.commit()
