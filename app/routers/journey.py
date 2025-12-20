@@ -157,6 +157,31 @@ def get_strengths(
     return strengths
 
 
+class StrengthCreate(BaseModel):
+    strength: str
+    source: Optional[str] = None
+
+
+@router.post("/strengths", response_model=StrengthResponse)
+def create_strength(
+        strength_data: StrengthCreate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Create a new strength"""
+    new_strength = JourneyStrength(
+        user_number=user_number,
+        strength=strength_data.strength,
+        source=strength_data.source,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(new_strength)
+    db.commit()
+    db.refresh(new_strength)
+    return new_strength
+
+
 # ========================================
 # DEVELOPMENT AREAS
 # ========================================
@@ -173,6 +198,29 @@ def get_development_areas(
     return areas
 
 
+class DevelopmentAreaCreate(BaseModel):
+    skill: str
+    source: Optional[str] = None
+
+
+@router.post("/development-areas", response_model=DevelopmentAreaResponse)
+def create_development_area(
+        area_data: DevelopmentAreaCreate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Create a new development area"""
+    new_area = JourneyDevelopmentArea(
+        user_number=user_number,
+        skill=area_data.skill,
+        source=area_data.source
+    )
+    db.add(new_area)
+    db.commit()
+    db.refresh(new_area)
+    return new_area
+
+
 # ========================================
 # PROJECTS
 # ========================================
@@ -187,6 +235,35 @@ def get_projects(
     ).order_by(JourneyProject.first_seen_at.desc()).all()
 
     return projects
+
+
+class ProjectCreate(BaseModel):
+    project_name: str
+    goal: Optional[str] = None
+    description: Optional[str] = None
+    status: str = "active"
+
+
+@router.post("/projects", response_model=ProjectResponse)
+def create_project(
+        project_data: ProjectCreate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Create a new project"""
+    new_project = JourneyProject(
+        user_number=user_number,
+        project_name=project_data.project_name,
+        goal=project_data.goal,
+        description=project_data.description,
+        status=project_data.status,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(new_project)
+    db.commit()
+    db.refresh(new_project)
+    return new_project
 
 
 # ========================================
@@ -297,6 +374,33 @@ def get_failures(
     return failures
 
 
+class FailureCreate(BaseModel):
+    failure_text: str
+    learning: Optional[str] = None
+    scar: Optional[str] = None
+
+
+@router.post("/failures", response_model=FailureResponse)
+def create_failure(
+        failure_data: FailureCreate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Create a new failure/learning"""
+    new_failure = JourneyFailure(
+        user_number=user_number,
+        failure_text=failure_data.failure_text,
+        learning=failure_data.learning,
+        scar=failure_data.scar,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(new_failure)
+    db.commit()
+    db.refresh(new_failure)
+    return new_failure
+
+
 # ========================================
 # OPPORTUNITIES
 # ========================================
@@ -311,6 +415,31 @@ def get_opportunities(
     ).order_by(JourneyOpportunity.first_seen_at.desc()).all()
 
     return opportunities
+
+
+class OpportunityCreate(BaseModel):
+    opportunity_text: str
+    category: Optional[str] = None
+
+
+@router.post("/opportunities", response_model=OpportunityResponse)
+def create_opportunity(
+        opportunity_data: OpportunityCreate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Create a new opportunity"""
+    new_opportunity = JourneyOpportunity(
+        user_number=user_number,
+        opportunity_text=opportunity_data.opportunity_text,
+        category=opportunity_data.category,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(new_opportunity)
+    db.commit()
+    db.refresh(new_opportunity)
+    return new_opportunity
 
 
 # ========================================
