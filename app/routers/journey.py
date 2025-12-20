@@ -400,3 +400,286 @@ def delete_goal(
     db.delete(goal)
     db.commit()
     return {"success": True, "message": "Goal deleted"}
+
+
+# ========================================
+# STRENGTHS - UPDATE & DELETE
+# ========================================
+class StrengthUpdate(BaseModel):
+    strength: Optional[str] = None
+    source: Optional[str] = None
+
+
+@router.put("/strengths/{strength_id}", response_model=StrengthResponse)
+def update_strength(
+        strength_id: int,
+        updates: StrengthUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update a strength"""
+    strength = db.query(JourneyStrength).filter(
+        JourneyStrength.id == strength_id,
+        JourneyStrength.user_number == user_number
+    ).first()
+
+    if not strength:
+        raise HTTPException(status_code=404, detail="Strength not found")
+
+    if updates.strength is not None:
+        strength.strength = updates.strength
+    if updates.source is not None:
+        strength.source = updates.source
+
+    strength.updated_at = datetime.now()
+    db.commit()
+    db.refresh(strength)
+    return strength
+
+
+@router.delete("/strengths/{strength_id}")
+def delete_strength(
+        strength_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete a strength"""
+    strength = db.query(JourneyStrength).filter(
+        JourneyStrength.id == strength_id,
+        JourneyStrength.user_number == user_number
+    ).first()
+
+    if not strength:
+        raise HTTPException(status_code=404, detail="Strength not found")
+
+    db.delete(strength)
+    db.commit()
+    return {"success": True, "message": "Strength deleted"}
+
+
+# ========================================
+# DEVELOPMENT AREAS - UPDATE & DELETE
+# ========================================
+class DevelopmentAreaUpdate(BaseModel):
+    skill: Optional[str] = None
+    source: Optional[str] = None
+
+
+@router.put("/development-areas/{area_id}", response_model=DevelopmentAreaResponse)
+def update_development_area(
+        area_id: int,
+        updates: DevelopmentAreaUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update a development area"""
+    area = db.query(JourneyDevelopmentArea).filter(
+        JourneyDevelopmentArea.id == area_id,
+        JourneyDevelopmentArea.user_number == user_number
+    ).first()
+
+    if not area:
+        raise HTTPException(status_code=404, detail="Development area not found")
+
+    if updates.skill is not None:
+        area.skill = updates.skill
+    if updates.source is not None:
+        area.source = updates.source
+
+    db.commit()
+    db.refresh(area)
+    return area
+
+
+@router.delete("/development-areas/{area_id}")
+def delete_development_area(
+        area_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete a development area"""
+    area = db.query(JourneyDevelopmentArea).filter(
+        JourneyDevelopmentArea.id == area_id,
+        JourneyDevelopmentArea.user_number == user_number
+    ).first()
+
+    if not area:
+        raise HTTPException(status_code=404, detail="Development area not found")
+
+    db.delete(area)
+    db.commit()
+    return {"success": True, "message": "Development area deleted"}
+
+
+# ========================================
+# PROJECTS - UPDATE & DELETE
+# ========================================
+class ProjectUpdate(BaseModel):
+    project_name: Optional[str] = None
+    goal: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+
+
+@router.put("/projects/{project_id}", response_model=ProjectResponse)
+def update_project(
+        project_id: int,
+        updates: ProjectUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update a project"""
+    project = db.query(JourneyProject).filter(
+        JourneyProject.id == project_id,
+        JourneyProject.user_number == user_number
+    ).first()
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if updates.project_name is not None:
+        project.project_name = updates.project_name
+    if updates.goal is not None:
+        project.goal = updates.goal
+    if updates.description is not None:
+        project.description = updates.description
+    if updates.status is not None:
+        project.status = updates.status
+
+    project.updated_at = datetime.now()
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@router.delete("/projects/{project_id}")
+def delete_project(
+        project_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete a project"""
+    project = db.query(JourneyProject).filter(
+        JourneyProject.id == project_id,
+        JourneyProject.user_number == user_number
+    ).first()
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    db.delete(project)
+    db.commit()
+    return {"success": True, "message": "Project deleted"}
+
+
+# ========================================
+# FAILURES - UPDATE & DELETE
+# ========================================
+class FailureUpdate(BaseModel):
+    failure_text: Optional[str] = None
+    learning: Optional[str] = None
+    scar: Optional[str] = None
+
+
+@router.put("/failures/{failure_id}", response_model=FailureResponse)
+def update_failure(
+        failure_id: int,
+        updates: FailureUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update a failure"""
+    failure = db.query(JourneyFailure).filter(
+        JourneyFailure.id == failure_id,
+        JourneyFailure.user_number == user_number
+    ).first()
+
+    if not failure:
+        raise HTTPException(status_code=404, detail="Failure not found")
+
+    if updates.failure_text is not None:
+        failure.failure_text = updates.failure_text
+    if updates.learning is not None:
+        failure.learning = updates.learning
+    if updates.scar is not None:
+        failure.scar = updates.scar
+
+    failure.updated_at = datetime.now()
+    db.commit()
+    db.refresh(failure)
+    return failure
+
+
+@router.delete("/failures/{failure_id}")
+def delete_failure(
+        failure_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete a failure"""
+    failure = db.query(JourneyFailure).filter(
+        JourneyFailure.id == failure_id,
+        JourneyFailure.user_number == user_number
+    ).first()
+
+    if not failure:
+        raise HTTPException(status_code=404, detail="Failure not found")
+
+    db.delete(failure)
+    db.commit()
+    return {"success": True, "message": "Failure deleted"}
+
+
+# ========================================
+# OPPORTUNITIES - UPDATE & DELETE
+# ========================================
+class OpportunityUpdate(BaseModel):
+    opportunity_text: Optional[str] = None
+    category: Optional[str] = None
+
+
+@router.put("/opportunities/{opportunity_id}", response_model=OpportunityResponse)
+def update_opportunity(
+        opportunity_id: int,
+        updates: OpportunityUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update an opportunity"""
+    opportunity = db.query(JourneyOpportunity).filter(
+        JourneyOpportunity.id == opportunity_id,
+        JourneyOpportunity.user_number == user_number
+    ).first()
+
+    if not opportunity:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+
+    if updates.opportunity_text is not None:
+        opportunity.opportunity_text = updates.opportunity_text
+    if updates.category is not None:
+        opportunity.category = updates.category
+
+    opportunity.updated_at = datetime.now()
+    db.commit()
+    db.refresh(opportunity)
+    return opportunity
+
+
+@router.delete("/opportunities/{opportunity_id}")
+def delete_opportunity(
+        opportunity_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete an opportunity"""
+    opportunity = db.query(JourneyOpportunity).filter(
+        JourneyOpportunity.id == opportunity_id,
+        JourneyOpportunity.user_number == user_number
+    ).first()
+
+    if not opportunity:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+
+    db.delete(opportunity)
+    db.commit()
+    return {"success": True, "message": "Opportunity deleted"}
