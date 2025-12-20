@@ -28,6 +28,23 @@ class GoalUpdate(BaseModel):
     time_horizon: Optional[str] = None
 
 
+# Pydantic request models for People
+class PersonCreate(BaseModel):
+    name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    relation: Optional[str] = None
+    context: Optional[str] = None
+
+
+class PersonUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    relation: Optional[str] = None
+    context: Optional[str] = None
+
+
 router = APIRouter()
 
 
@@ -170,7 +187,7 @@ def get_projects(
 
 
 # ========================================
-# PEOPLE
+# PEOPLE - FULL CRUD
 # ========================================
 @router.get("/people", response_model=list[PersonResponse])
 def get_people(
@@ -183,6 +200,82 @@ def get_people(
     ).order_by(JourneyPerson.first_seen_at.desc()).all()
 
     return people
+
+
+@router.post("/people", response_model=PersonResponse)
+def create_person(
+        person_data: PersonCreate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Create a new person"""
+    new_person = JourneyPerson(
+        user_number=user_number,
+        name=person_data.name,
+        email=person_data.email,
+        phone=person_data.phone,
+        relation=person_data.relation,
+        context=person_data.context,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(new_person)
+    db.commit()
+    db.refresh(new_person)
+    return new_person
+
+
+@router.put("/people/{person_id}", response_model=PersonResponse)
+def update_person(
+        person_id: int,
+        person_data: PersonUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update a person"""
+    person = db.query(JourneyPerson).filter(
+        JourneyPerson.id == person_id,
+        JourneyPerson.user_number == user_number
+    ).first()
+
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    if person_data.name is not None:
+        person.name = person_data.name
+    if person_data.email is not None:
+        person.email = person_data.email
+    if person_data.phone is not None:
+        person.phone = person_data.phone
+    if person_data.relation is not None:
+        person.relation = person_data.relation
+    if person_data.context is not None:
+        person.context = person_data.context
+
+    person.updated_at = datetime.now()
+    db.commit()
+    db.refresh(person)
+    return person
+
+
+@router.delete("/people/{person_id}")
+def delete_person(
+        person_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete a person"""
+    person = db.query(JourneyPerson).filter(
+        JourneyPerson.id == person_id,
+        JourneyPerson.user_number == user_number
+    ).first()
+
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    db.delete(person)
+    db.commit()
+    return {"success": True, "message": "Person deleted"}
 
 
 # ========================================
