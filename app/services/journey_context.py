@@ -16,7 +16,7 @@ def build_journey_context(db, user_number):
 
     # Convert to readable text
     strengths_txt = ", ".join([s.strength for s in strengths]) if strengths else "None logged yet."
-    projects_txt = "\n".join([f"- {p.name} (goal: {p.goal or 'not defined'})" for p in projects]) if projects else "None."
+    projects_txt = "\n".join([f"- {p.project_name} (goal: {p.goal or 'not defined'})" for p in projects]) if projects else "None."
     people_txt = "\n".join([f"- {p.name} (email: {p.email}, phone: {p.phone})" for p in people]) if people else "None."
 #    goals_txt = "\n".join([f"- {g.goal} (why: {g.why or 'not provided'})" for g in goals]) if goals else "None."
     goals_txt = "\n".join([f"- {g.goal_text} (why: {g.why or 'not provided'})" for g in goals]) if goals else "None."
