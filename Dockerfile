@@ -1,34 +1,31 @@
-# Use an official Python base image
 FROM python:3.11-slim
 
-# Install Node.js (for building React)
+# Install system deps + Node
 RUN apt-get update && \
     apt-get install -y curl gnupg && \
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
     apt-get install -y nodejs && \
     apt-get clean
 
-# Set working directory
 WORKDIR /app
 
-# Copy all source code
+# Copy entire repo
 COPY . .
 
-# Install Python dependencies
+# Install Python deps
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Build the React frontend
-WORKDIR /app/frontend
+# Build React frontend
+WORKDIR /app/app/frontend
 RUN npm install && npm run build
 
-# Copy build output to FastAPI static folder
-RUN mkdir -p /app/static && cp -r dist/* /app/static/
+# Copy built frontend into FastAPI static folder
+RUN rm -rf /app/static && \
+    mkdir -p /app/static && \
+    cp -r dist/* /app/static/
 
-# Go back to app root
+# Back to backend
 WORKDIR /app
 
-# Expose the port
 EXPOSE 8080
-
-# Start FastAPI using uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
