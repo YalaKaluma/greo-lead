@@ -7,27 +7,32 @@ RUN apt-get update && \
     apt-get install -y nodejs && \
     apt-get clean
 
+# Set working directory
 WORKDIR /app
 
-# Copy everything
+# Copy everything from your project root
 COPY . .
 
 # Install Python dependencies
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Build frontend
+# Frontend is at /app/frontend
+# Vite.config.js outputs to ../static (which becomes /app/static)
 WORKDIR /app/frontend
-RUN npm install && npm run build
+RUN npm install && \
+    npm run build
 
-# Build output goes to /app/static (configured in vite.config.js)
-# Verify it exists
-RUN ls -la /app/static || echo "WARNING: Static files not found!"
+# Verify build output exists
+RUN ls -la /app/static/index.html && \
+    echo "✓ Frontend built successfully"
 
 # Return to app root
 WORKDIR /app
 
-# Expose port (Railway uses PORT env var, but 8080 is default)
+# Expose port (Railway will set PORT env var)
 EXPOSE 8080
 
-# Start FastAPI server
+# Start server
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
