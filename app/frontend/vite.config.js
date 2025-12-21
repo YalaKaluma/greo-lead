@@ -18,7 +18,7 @@ export default defineConfig({
     manifest: true,
     
     // Optimize bundle
-    minify: 'terser',
+    minify: 'esbuild',  
     
     rollupOptions: {
       output: {
