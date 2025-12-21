@@ -8,8 +8,10 @@ export default defineConfig({
   
   // Build output configuration
   build: {
-    // Output to /app/static (one level up from frontend/)
-    outDir: '../static',
+    // Frontend is at: /app/app/frontend/
+    // We want output at: /app/static/
+    // So we need to go up TWO levels: ../../static
+    outDir: '../../static',
     
     // Clear output directory before build
     emptyOutDir: true,
@@ -17,8 +19,8 @@ export default defineConfig({
     // Generate manifest for asset tracking
     manifest: true,
     
-    // Optimize bundle
-    minify: 'esbuild',  
+    // Optimize bundle (esbuild is faster and included with Vite)
+    minify: 'esbuild',
     
     rollupOptions: {
       output: {
