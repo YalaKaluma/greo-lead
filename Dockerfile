@@ -24,7 +24,7 @@ RUN rm -rf /app/static && \
     mkdir -p /app/static && \
     cp -r dist/* /app/static/
 
-# Back to backend
+# Back to backend is this coming through?
 WORKDIR /app
 
 EXPOSE 8080
