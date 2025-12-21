@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Install system deps + Node
+# Install Node.js
 RUN apt-get update && \
     apt-get install -y curl gnupg && \
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
@@ -9,20 +9,25 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# Copy entire repo
+# Copy everything
 COPY . .
 
-# Install Python deps
+# Install Python dependencies
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Build React frontend
-WORKDIR /app/app/frontend
+# Build frontend
+WORKDIR /app/frontend
 RUN npm install && npm run build
 
-# ✅ NO NEED to copy dist/ → static/ because vite already builds into ../static
+# Build output goes to /app/static (configured in vite.config.js)
+# Verify it exists
+RUN ls -la /app/static || echo "WARNING: Static files not found!"
 
-# Back to backend
+# Return to app root
 WORKDIR /app
 
+# Expose port (Railway uses PORT env var, but 8080 is default)
 EXPOSE 8080
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+
+# Start FastAPI server
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
