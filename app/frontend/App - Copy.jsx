@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
-import Sidebar from './components/Sidebar.jsx';
-import TodoList from './components/TodoList.jsx';
-import MyGoals from './components/MyGoals.jsx';
-import MyLeadershipJourney from './components/MyLeadershipJourney.jsx';
-import MyTeam from './components/MyTeam.jsx';
-import MyJournal from './components/MyJournal.jsx';
-
+import Sidebar from './components/Sidebar';
+import TodoList from './components/TodoList';
+import MyGoals from './components/MyGoals';
+import MyLeadershipJourney from './components/MyLeadershipJourney';
+import MyTeam from './components/MyTeam';
+import MyJournal from './components/MyJournal';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const USER_NUMBER = import.meta.env.VITE_USER_NUMBER || 'whatsapp:+17707789240';
