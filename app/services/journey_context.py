@@ -24,7 +24,8 @@ def build_journey_context(db, user_number):
 
     if failures:
         failures_txt = "\n".join([
-            f"- {f.event} | learning: {f.learning or 'none'} | scar: {f.scar or 'none'}"
+#            f"- {f.event} | learning: {f.learning or 'none'} | scar: {f.scar or 'none'}"
+            f"- {f.failure_text} | learning: {f.learning or 'none'} | scar: {f.scar or 'none'}"
             for f in failures
         ])
     else:
