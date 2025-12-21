@@ -17,12 +17,11 @@ RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Build frontend
-# Your structure: /app/app/frontend/ (frontend is inside app/ directory)
 WORKDIR /app/app/frontend
 RUN npm install && \
     npm run build
 
-# Verify build output exists at /app/static/
+# Verify build output
 RUN ls -la /app/static/index.html && \
     echo "✓ Frontend built successfully"
 
@@ -32,5 +31,4 @@ WORKDIR /app
 # Expose port
 EXPOSE 8080
 
-# Start server
-CMD ["/bin/sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+# No CMD - let Procfile handle it
