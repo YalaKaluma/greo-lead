@@ -19,12 +19,9 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 WORKDIR /app/app/frontend
 RUN npm install && npm run build
 
-# Copy built frontend into FastAPI static folder
-RUN rm -rf /app/static && \
-    mkdir -p /app/static && \
-    cp -r dist/* /app/static/
+# ✅ NO NEED to copy dist/ → static/ because vite already builds into ../static
 
-# Back to backend is this coming through?
+# Back to backend
 WORKDIR /app
 
 EXPOSE 8080
