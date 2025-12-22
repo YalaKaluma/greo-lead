@@ -171,6 +171,24 @@ def health():
     return response
 
 
+@app.get("/")
+async def root_health():
+    """Root endpoint - quick status check"""
+    static_path = Path(__file__).parent.parent / "static"
+
+    response = {
+        "status": "ok",
+        "message": "Leadership OS API is running",
+        "version": "3.0",
+        "frontend": "available" if static_path.exists() else "not built",
+        "api_docs": "/docs",
+        "health_check": "/api/health"
+    }
+
+    logger.info(f"🏠 Root endpoint called - Frontend: {response['frontend']}")
+    return response
+
+
 logger.info("✓ Health check endpoints configured")
 
 # --------------------------------------
@@ -232,7 +250,7 @@ if static_path.exists():
         return JSONResponse({"error": "vite.svg not found"}, status_code=404)
 
 
-    # Catch-all for React Router - MUST BE LAST!
+    # Catch-all for React Router
     @app.get("/{full_path:path}")
     async def serve_react_or_404(full_path: str):
         # Don't catch API routes
@@ -240,10 +258,9 @@ if static_path.exists():
             from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Not found")
 
-        # Serve React app for everything else (including root "/")
+        # Serve React app
         index_file = static_path / "index.html"
         if index_file.exists():
-            logger.info(f"🎨 Serving React app for: /{full_path}")
             return FileResponse(str(index_file))
 
         logger.error(f"React app requested but index.html not found at {index_file}")
@@ -268,7 +285,7 @@ logger.info("=" * 70)
 logger.info("✅ LEADERSHIP OS - STARTUP COMPLETE")
 logger.info("=" * 70)
 logger.info("📍 Available endpoints:")
-logger.info("   • Root:        / (serves React app)")
+logger.info("   • Root:        /")
 logger.info("   • Health:      /api/health")
 logger.info("   • API Docs:    /docs")
 logger.info("   • Tasks:       /api/tasks")
