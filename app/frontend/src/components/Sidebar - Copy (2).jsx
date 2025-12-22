@@ -16,7 +16,7 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onC
       className={`
         ${isMobile ? 'fixed' : 'relative'}
         top-0 left-0 h-full
-        bg-slate-900 text-white
+        bg-blue-700 text-white
         transition-transform duration-300 ease-in-out
         ${isMobile && !isOpen ? '-translate-x-full' : 'translate-x-0'}
         ${isMobile ? 'z-40' : 'z-10'}
@@ -26,34 +26,24 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onC
     >
       <div className="flex flex-col h-full">
         {/* Header */}
-        <div className="p-6 border-b border-slate-800">
+        <div className="p-6 border-b border-blue-800">
           <div className="flex items-start justify-between">
             <div>
-              <h1 className="text-lg font-bold leading-tight text-white">
+              <h1 className="text-lg font-bold leading-tight">
                 Your Executive Operating System
               </h1>
-              <p className="text-sm text-slate-400 mt-1 ml-2">
+              <p className="text-sm text-blue-300 mt-1 ml-2">
                 Powered by Alfred
               </p>
             </div>
             {isMobile && (
               <button
                 onClick={onClose}
-                className="p-1 hover:bg-slate-800 rounded ml-2"
+                className="p-1 hover:bg-blue-800 rounded ml-2"
                 aria-label="Close menu"
               >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             )}
@@ -71,12 +61,11 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onC
                 className={`
                   w-full text-left px-4 py-3 rounded-lg
                   transition-all duration-200
-                  ${
-                    item.disabled
-                      ? 'text-slate-500 opacity-60 cursor-not-allowed'
-                      : currentPage === item.id
-                        ? 'bg-slate-800 text-white shadow-md'
-                        : 'text-slate-200 hover:bg-slate-800 hover:text-white'
+                  ${item.disabled 
+                    ? 'text-blue-300 opacity-60 cursor-not-allowed' 
+                    : currentPage === item.id
+                      ? 'bg-blue-600 text-white shadow-lg'
+                      : 'text-blue-100 hover:bg-blue-800 hover:text-white'
                   }
                 `}
               >
