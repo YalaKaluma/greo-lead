@@ -2,12 +2,41 @@ import { useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import axios from 'axios';
 
+// Eastern Time timezone helper
+const getETDate = () => {
+  const now = new Date();
+  // Convert to ET (UTC-5)
+  const etDate = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  return etDate;
+};
+
+const getTodayET = () => {
+  const etDate = getETDate();
+  return etDate.toISOString().split('T')[0];
+};
+
+const isOverdueET = (dateString) => {
+  if (!dateString) return false;
+  const taskDate = new Date(dateString);
+  const todayET = getETDate();
+  todayET.setHours(0, 0, 0, 0);
+  taskDate.setHours(0, 0, 0, 0);
+  return taskDate < todayET;
+};
+
+const isTodayET = (dateString) => {
+  if (!dateString) return false;
+  const taskDate = new Date(dateString).toISOString().split('T')[0];
+  const todayET = getTodayET();
+  return taskDate === todayET;
+};
+
 export default function TodoList({ apiUrl, userNumber }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // Filters
+  // Filters - DEFAULT to 'due_today'
   const [filterType, setFilterType] = useState('due_today');
   const [selectedProject, setSelectedProject] = useState('');
   const [selectedDelegate, setSelectedDelegate] = useState('');
@@ -22,25 +51,22 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [sortOrder, setSortOrder] = useState([]);
   const [completingTasks, setCompletingTasks] = useState([]);
 
+  // IMPORTANT: Reset filters when component unmounts (leaving page)
+  useEffect(() => {
+    return () => {
+      // Cleanup function - resets filters when leaving page
+      setFilterType('due_today');
+      setSelectedProject('');
+      setSelectedDelegate('');
+      setSelectedGoal('');
+    };
+  }, []);
+
   // Load sort order from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('taskSortOrder');
     if (saved) {
       setSortOrder(JSON.parse(saved));
-    }
-
-    // Handle URL parameters for filtering
-    const params = new URLSearchParams(window.location.search);
-    const delegate = params.get('delegate');
-    const goalId = params.get('goal');
-    
-    if (delegate) {
-      setSelectedDelegate(delegate);
-      setFilterType(''); // Clear default filter when using delegate filter
-    }
-    if (goalId) {
-      setSelectedGoal(goalId);
-      setFilterType(''); // Clear default filter when using goal filter
     }
   }, []);
 
@@ -211,479 +237,334 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const clearFilters = () => {
-    setFilterType('all');
+    setFilterType('due_today');
     setSelectedProject('');
     setSelectedDelegate('');
     setSelectedGoal('');
   };
 
-  const hasActiveFilters = selectedProject || selectedDelegate || selectedGoal || filterType !== 'all';
+  const hasActiveFilters = selectedProject || selectedDelegate || selectedGoal || filterType !== 'due_today';
 
   const sortedTasks = getSortedTasks();
 
-  return (
-    <div className="flex h-full">
-      {/* Filter Sidebar */}
-      <FilterSidebar
-        filterType={filterType}
-        setFilterType={setFilterType}
-        selectedProject={selectedProject}
-        setSelectedProject={setSelectedProject}
-        selectedDelegate={selectedDelegate}
-        setSelectedDelegate={setSelectedDelegate}
-        selectedGoal={selectedGoal}
-        setSelectedGoal={setSelectedGoal}
-        projects={projects}
-        delegates={delegates}
-        goals={goals}
-        hasActiveFilters={hasActiveFilters}
-        clearFilters={clearFilters}
-      />
-
-      {/* Main Content */}
-      <div className="flex-1 overflow-auto">
-        <div className="max-w-7xl mx-auto p-6">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-slate-800 hidden lg:block">
-                Your To-Do List
-              </h1>
-              <p className="text-slate-600 mt-1">
-                {filterType === 'due_today' && 'Tasks due today or overdue'}
-                {filterType === 'next_7_days' && 'Tasks due in the next 7 days'}
-                {filterType === 'all' && 'All tasks'}
-                {selectedProject && ` • Project: ${selectedProject}`}
-                {selectedDelegate && ` • Delegated to: ${selectedDelegate}`}
-                {selectedGoal && ` • Goal: ${goals.find(g => g.id === parseInt(selectedGoal))?.title || goals.find(g => g.id === parseInt(selectedGoal))?.goal_text}`}
-              </p>
-            </div>
-            <button
-              onClick={() => setShowAddForm(!showAddForm)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
-            >
-              <span className="text-xl">+</span>
-              <span className="hidden lg:inline">Add Task</span>
-            </button>
-          </div>
-
-          {/* Add Task Form */}
-          {showAddForm && (
-            <AddTaskForm
-              onAdd={addTask}
-              onCancel={() => setShowAddForm(false)}
-              projects={projects}
-              delegates={delegates}
-              goals={goals}
-            />
-          )}
-
-          {/* Error State */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4">
-              {error}
-            </div>
-          )}
-
-          {/* Loading State */}
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            </div>
-          ) : sortedTasks.length === 0 ? (
-            <div className="text-center py-12 text-slate-500">
-              No tasks found
-            </div>
-          ) : (
-            /* Task List */
-            <DragDropContext onDragEnd={handleDragEnd}>
-              <Droppable droppableId="tasks">
-                {(provided) => (
-                  <div
-                    {...provided.droppableProps}
-                    ref={provided.innerRef}
-                    className="space-y-1"
-                  >
-                    {sortedTasks.map((task, index) => (
-                      <Draggable
-                        key={task.id}
-                        draggableId={task.id.toString()}
-                        index={index}
-                      >
-                        {(provided, snapshot) => (
-                          <TaskRow
-                            task={task}
-                            index={index}
-                            isEditing={editingTaskId === task.id}
-                            isCompleting={completingTasks.includes(task.id)}
-                            onStartEdit={() => setEditingTaskId(task.id)}
-                            onCancelEdit={() => setEditingTaskId(null)}
-                            onUpdate={(updates) => updateTask(task.id, updates)}
-                            onToggle={() => toggleTaskComplete(task.id)}
-                            onDelete={() => deleteTask(task.id)}
-                            projects={projects}
-                            delegates={delegates}
-                            goals={goals}
-                            provided={provided}
-                            snapshot={snapshot}
-                          />
-                        )}
-                      </Draggable>
-                    ))}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
-            </DragDropContext>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Filter Sidebar Component
-function FilterSidebar({
-  filterType,
-  setFilterType,
-  selectedProject,
-  setSelectedProject,
-  selectedDelegate,
-  setSelectedDelegate,
-  selectedGoal,
-  setSelectedGoal,
-  projects,
-  delegates,
-  goals,
-  hasActiveFilters,
-  clearFilters
-}) {
-  return (
-    <div className="w-72 border-r border-gray-200 bg-gradient-to-b from-slate-50 to-white p-5 overflow-y-auto hidden lg:block shadow-sm">
-      {/* Header */}
-      <div className="mb-6 pb-4 border-b border-gray-200">
-        <h2 className="text-lg font-bold text-slate-800">Filters</h2>
-        <p className="text-xs text-slate-500 mt-1">Organize your tasks</p>
-      </div>
-
-      {/* Due Date Section */}
-      <div className="mb-6">
-        <h3 className="text-xs font-bold text-slate-600 mb-3 uppercase tracking-wide flex items-center">
-          <span className="mr-2">📅</span> Due Date
-        </h3>
-        <div className="space-y-1.5">
-          {[
-            { value: 'due_today', label: 'Due Today', emoji: '⚡' },
-            { value: 'next_7_days', label: 'Next 7 Days', emoji: '📆' },
-            { value: 'all', label: 'All Tasks', emoji: '📋' }
-          ].map((filter) => (
-            <button
-              key={filter.value}
-              onClick={() => setFilterType(filter.value)}
-              className={`
-                w-full text-left px-3 py-2.5 rounded-lg transition-all duration-200
-                flex items-center gap-2
-                ${filterType === filter.value
-                  ? 'bg-blue-600 text-white font-medium shadow-md transform scale-[1.02]'
-                  : 'text-slate-700 hover:bg-white hover:shadow-sm'
-                }
-              `}
-            >
-              <span className="text-base">{filter.emoji}</span>
-              <span className="text-sm">{filter.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Goals Section */}
-      <div className="mb-6">
-        <h3 className="text-xs font-bold text-slate-600 mb-3 uppercase tracking-wide flex items-center">
-          <span className="mr-2">🎯</span> Goals
-        </h3>
-        <div className="space-y-1.5">
-          {goals.length === 0 ? (
-            <p className="text-xs text-slate-400 px-3 py-2 italic">No goals yet</p>
-          ) : (
-            goals.map((goal) => {
-              const displayText = goal.title || goal.goal_text;
-              const truncatedText = displayText.length > 35 ? displayText.substring(0, 32) + '...' : displayText;
-              return (
-                <button
-                  key={goal.id}
-                  onClick={() => setSelectedGoal(selectedGoal === goal.id ? '' : goal.id.toString())}
-                  className={`
-                    w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all duration-200
-                    ${selectedGoal === goal.id.toString()
-                      ? 'bg-green-600 text-white font-medium shadow-md transform scale-[1.02]'
-                      : 'text-slate-700 hover:bg-white hover:shadow-sm'
-                    }
-                  `}
-                  title={displayText}
-                >
-                  {truncatedText}
-                </button>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      {/* Projects Section */}
-      {projects.length > 0 && (
-        <div className="mb-6">
-          <h3 className="text-xs font-bold text-slate-600 mb-3 uppercase tracking-wide flex items-center">
-            <span className="mr-2">📁</span> Projects
-          </h3>
-          <div className="space-y-1.5">
-            {projects.map((project) => (
-              <button
-                key={project}
-                onClick={() => setSelectedProject(selectedProject === project ? '' : project)}
-                className={`
-                  w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all duration-200
-                  ${selectedProject === project
-                    ? 'bg-amber-600 text-white font-medium shadow-md transform scale-[1.02]'
-                    : 'text-slate-700 hover:bg-white hover:shadow-sm'
-                  }
-                `}
-              >
-                {project}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Delegated To Section */}
-      {delegates.length > 0 && (
-        <div className="mb-6">
-          <h3 className="text-xs font-bold text-slate-600 mb-3 uppercase tracking-wide flex items-center">
-            <span className="mr-2">👤</span> Delegated To
-          </h3>
-          <div className="space-y-1.5">
-            {delegates.map((delegate) => (
-              <button
-                key={delegate}
-                onClick={() => setSelectedDelegate(selectedDelegate === delegate ? '' : delegate)}
-                className={`
-                  w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all duration-200
-                  ${selectedDelegate === delegate
-                    ? 'bg-purple-600 text-white font-medium shadow-md transform scale-[1.02]'
-                    : 'text-slate-700 hover:bg-white hover:shadow-sm'
-                  }
-                `}
-              >
-                {delegate}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Clear Filters */}
-      {hasActiveFilters && (
-        <div className="mt-8 pt-4 border-t border-gray-200">
-          <button
-            onClick={clearFilters}
-            className="w-full bg-white hover:bg-red-50 text-red-600 border border-red-200 px-4 py-2.5 rounded-lg font-medium transition-all duration-200 hover:shadow-md flex items-center justify-center gap-2"
-          >
-            <span>✕</span>
-            <span>Clear All Filters</span>
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Task Row Component
-function TaskRow({
-  task,
-  index,
-  isEditing,
-  isCompleting,
-  onStartEdit,
-  onCancelEdit,
-  onUpdate,
-  onToggle,
-  onDelete,
-  projects,
-  delegates,
-  goals,
-  provided,
-  snapshot
-}) {
-  const [editData, setEditData] = useState({
-    title: task.title,
-    project: task.project || '',
-    due_date: task.due_date || '',
-    notes: task.notes || '',
-    priority: task.priority || 'medium',
-    goal_id: task.goal_id || null
-  });
-
-  const [touchStart, setTouchStart] = useState(null);
-  const [touchEnd, setTouchEnd] = useState(null);
-  const [swipeDistance, setSwipeDistance] = useState(0);
-
-  const minSwipeDistance = 100;
-
-  const onTouchStart = (e) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
-  };
-
-  const onTouchMove = (e) => {
-    setTouchEnd(e.targetTouches[0].clientX);
-    if (touchStart) {
-      const distance = touchStart - e.targetTouches[0].clientX;
-      setSwipeDistance(Math.max(0, distance));
-    }
-  };
-
-  const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    const distance = touchStart - touchEnd;
-    const isLeftSwipe = distance > minSwipeDistance;
-    
-    if (isLeftSwipe) {
-      onDelete();
-    }
-    
-    setSwipeDistance(0);
-    setTouchStart(null);
-    setTouchEnd(null);
-  };
-
-  const getPriorityIcon = (priority) => {
-    switch(priority?.toLowerCase()) {
-      case 'high': return '🔴';
-      case 'medium': return '🟠';
-      case 'low': return '🟢';
-      default: return '🟡';
-    }
-  };
-
-  const getDueDateColor = (dueDate) => {
-    if (!dueDate) return '';
-    const date = new Date(dueDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const due = new Date(date);
-    due.setHours(0, 0, 0, 0);
-    const diff = Math.floor((due - today) / (1000 * 60 * 60 * 24));
-
-    if (diff < 0) return 'bg-red-500 text-white';
-    if (diff === 0) return 'bg-orange-500 text-white';
-    if (diff <= 3) return 'bg-amber-500 text-white';
-    return 'bg-green-500 text-white';
-  };
-
-  const formatDueDate = (dueDate) => {
-    if (!dueDate) return '';
-    const date = new Date(dueDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const due = new Date(date);
-    due.setHours(0, 0, 0, 0);
-    const diff = Math.floor((due - today) / (1000 * 60 * 60 * 24));
-
-    if (diff < 0) return `Overdue ${Math.abs(diff)}d`;
-    if (diff === 0) return 'Today';
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
-
-  if (isEditing) {
+  if (loading) {
     return (
-      <div
-        ref={provided.innerRef}
-        {...provided.draggableProps}
-        className="bg-white border-2 border-blue-500 rounded p-4 space-y-3"
-      >
-        <input
-          type="text"
-          value={editData.title}
-          onChange={(e) => setEditData({ ...editData, title: e.target.value })}
-          className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Task title"
-          autoFocus
-        />
-
-        <div className="grid grid-cols-4 gap-2">
-          <select
-            value={editData.priority}
-            onChange={(e) => setEditData({ ...editData, priority: e.target.value })}
-            className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="high">🔴 High</option>
-            <option value="medium">🟠 Medium</option>
-            <option value="low">🟢 Low</option>
-          </select>
-
-          <input
-            type="text"
-            value={editData.project}
-            onChange={(e) => setEditData({ ...editData, project: e.target.value })}
-            list="project-list"
-            className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Project"
-          />
-          <datalist id="project-list">
-            {projects.map(p => <option key={p} value={p} />)}
-          </datalist>
-
-          <input
-            type="date"
-            value={editData.due_date}
-            onChange={(e) => setEditData({ ...editData, due_date: e.target.value })}
-            className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-
-          <select
-            value={editData.goal_id || ''}
-            onChange={(e) => setEditData({ ...editData, goal_id: e.target.value ? parseInt(e.target.value) : null })}
-            className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">No goal</option>
-            {goals.map(g => (
-              <option key={g.id} value={g.id}>{g.title || g.goal_text}</option>
-            ))}
-          </select>
-        </div>
-
-        <textarea
-          value={editData.notes}
-          onChange={(e) => setEditData({ ...editData, notes: e.target.value })}
-          rows={2}
-          className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Notes"
-        />
-
-        <div className="flex gap-2">
-          <button
-            onClick={() => onUpdate(editData)}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium"
-          >
-            Save
-          </button>
-          <button
-            onClick={onCancelEdit}
-            className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded font-medium"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onDelete}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium"
-          >
-            Delete
-          </button>
-        </div>
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
+  return (
+    <div className="h-full overflow-auto">
+      <div className="max-w-7xl mx-auto p-6">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-800 hidden lg:block">
+              Your To-Do List
+            </h1>
+            <p className="text-slate-600 mt-1">
+              {filterType === 'due_today' && 'Tasks due today'}
+              {filterType === 'next_7_days' && 'Tasks due in the next 7 days'}
+              {filterType === 'all' && 'All active tasks'}
+              {selectedProject && ` • Project: ${selectedProject}`}
+              {selectedDelegate && ` • Delegated to: ${selectedDelegate}`}
+              {selectedGoal && ` • Goal: ${goals.find(g => g.id === parseInt(selectedGoal))?.title || 'Selected'}`}
+            </p>
+          </div>
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+          >
+            <span className="hidden sm:inline">+ Add Task</span>
+            <span className="sm:hidden">+</span>
+          </button>
+        </div>
+
+        {/* Filter Bar - NOW AT TOP */}
+        <div className="bg-white border border-gray-200 rounded-lg p-4 mb-6">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Due Date Filter */}
+            <div className="flex-shrink-0">
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Due Date</label>
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="due_today">Due Today</option>
+                <option value="next_7_days">Next 7 Days</option>
+                <option value="all">All Tasks</option>
+              </select>
+            </div>
+
+            {/* Project Filter */}
+            {projects.length > 0 && (
+              <div className="flex-shrink-0">
+                <label className="text-xs font-medium text-slate-600 mb-1 block">Project</label>
+                <select
+                  value={selectedProject}
+                  onChange={(e) => setSelectedProject(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">All Projects</option>
+                  {projects.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Delegate Filter */}
+            {delegates.length > 0 && (
+              <div className="flex-shrink-0">
+                <label className="text-xs font-medium text-slate-600 mb-1 block">Delegated To</label>
+                <select
+                  value={selectedDelegate}
+                  onChange={(e) => setSelectedDelegate(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">All Delegates</option>
+                  {delegates.map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Goal Filter */}
+            {goals.length > 0 && (
+              <div className="flex-shrink-0">
+                <label className="text-xs font-medium text-slate-600 mb-1 block">Goal</label>
+                <select
+                  value={selectedGoal}
+                  onChange={(e) => setSelectedGoal(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">All Goals</option>
+                  {goals.map(g => {
+                    const displayText = g.title || g.goal_text;
+                    const truncatedText = displayText.length > 30 ? displayText.substring(0, 30) + '...' : displayText;
+                    return <option key={g.id} value={g.id}>{truncatedText}</option>;
+                  })}
+                </select>
+              </div>
+            )}
+
+            {/* Clear Filters Button */}
+            {hasActiveFilters && (
+              <div className="flex-shrink-0 mt-auto">
+                <button
+                  onClick={clearFilters}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
+                >
+                  ✕ Clear Filters
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Add Task Form */}
+        {showAddForm && (
+          <AddTaskForm
+            onAdd={addTask}
+            onCancel={() => setShowAddForm(false)}
+            projects={projects}
+            delegates={delegates}
+            goals={goals}
+          />
+        )}
+
+        {/* Error State */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4">
+            {error}
+          </div>
+        )}
+
+        {/* Tasks List */}
+        {sortedTasks.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-slate-600 text-lg">No tasks found</p>
+            <p className="text-slate-500 text-sm mt-2">
+              {hasActiveFilters ? 'Try adjusting your filters' : 'Add a new task to get started!'}
+            </p>
+          </div>
+        ) : (
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <Droppable droppableId="tasks">
+              {(provided) => (
+                <div
+                  {...provided.droppableProps}
+                  ref={provided.innerRef}
+                  className="space-y-2"
+                >
+                  {sortedTasks.map((task, index) => (
+                    <TaskItem
+                      key={task.id}
+                      task={task}
+                      index={index}
+                      isEditing={editingTaskId === task.id}
+                      isCompleting={completingTasks.includes(task.id)}
+                      onToggle={() => toggleTaskComplete(task.id)}
+                      onDelete={() => deleteTask(task.id)}
+                      onStartEdit={() => setEditingTaskId(task.id)}
+                      onCancelEdit={() => setEditingTaskId(null)}
+                      onUpdate={(updates) => updateTask(task.id, updates)}
+                      projects={projects}
+                      delegates={delegates}
+                      goals={goals}
+                    />
+                  ))}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          </DragDropContext>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Helper Functions
+function getPriorityIcon(priority) {
+  if (priority === 'high') return '🔴';
+  if (priority === 'medium') return '🟠';
+  return '🟢';
+}
+
+function formatDueDate(dateString) {
+  if (!dateString) return '';
+  
+  const taskDate = new Date(dateString);
+  const todayET = getETDate();
+  todayET.setHours(0, 0, 0, 0);
+  taskDate.setHours(0, 0, 0, 0);
+  
+  const diffTime = taskDate - todayET;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays < 0) return `Overdue ${Math.abs(diffDays)}d`;
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Tomorrow';
+  if (diffDays <= 7) return `In ${diffDays}d`;
+  
+  return taskDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function getDueDateColor(dateString) {
+  if (!dateString) return 'bg-gray-100 text-gray-700';
+  
+  if (isOverdueET(dateString)) {
+    return 'bg-red-100 text-red-700 font-semibold';
+  }
+  if (isTodayET(dateString)) {
+    return 'bg-orange-100 text-orange-700 font-semibold';
+  }
+  
+  const taskDate = new Date(dateString);
+  const todayET = getETDate();
+  todayET.setHours(0, 0, 0, 0);
+  taskDate.setHours(0, 0, 0, 0);
+  
+  const diffTime = taskDate - todayET;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays <= 3) {
+    return 'bg-amber-100 text-amber-700';
+  }
+  
+  return 'bg-green-100 text-green-700';
+}
+
+// Task Item Component
+function TaskItem({
+  task,
+  index,
+  isEditing,
+  isCompleting,
+  onToggle,
+  onDelete,
+  onStartEdit,
+  onCancelEdit,
+  onUpdate,
+  projects,
+  delegates,
+  goals
+}) {
+  const [swipeDistance, setSwipeDistance] = useState(0);
+  const [touchStartX, setTouchStartX] = useState(0);
+
+  const onTouchStart = (e) => {
+    setTouchStartX(e.touches[0].clientX);
+  };
+
+  const onTouchMove = (e) => {
+    const currentX = e.touches[0].clientX;
+    const distance = Math.max(0, touchStartX - currentX);
+    setSwipeDistance(Math.min(distance, 100));
+  };
+
+  const onTouchEnd = () => {
+    if (swipeDistance > 50) {
+      onDelete();
+    }
+    setSwipeDistance(0);
+  };
+
+  return (
+    <Draggable draggableId={String(task.id)} index={index}>
+      {(provided, snapshot) => (
+        isEditing ? (
+          <EditTaskForm
+            task={task}
+            provided={provided}
+            onUpdate={onUpdate}
+            onCancelEdit={onCancelEdit}
+            onDelete={onDelete}
+            projects={projects}
+            delegates={delegates}
+            goals={goals}
+          />
+        ) : (
+          <TaskCard
+            task={task}
+            index={index}
+            provided={provided}
+            snapshot={snapshot}
+            isCompleting={isCompleting}
+            swipeDistance={swipeDistance}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+            onToggle={onToggle}
+            onStartEdit={onStartEdit}
+            goals={goals}
+          />
+        )
+      )}
+    </Draggable>
+  );
+}
+
+// Task Card Component - REDESIGNED LAYOUT
+function TaskCard({
+  task,
+  index,
+  provided,
+  snapshot,
+  isCompleting,
+  swipeDistance,
+  onTouchStart,
+  onTouchMove,
+  onTouchEnd,
+  onToggle,
+  onStartEdit,
+  goals
+}) {
   return (
     <div
       ref={provided.innerRef}
@@ -705,6 +586,7 @@ function TaskRow({
       onClick={onStartEdit}
     >
       <div className={`flex items-start gap-2 ${isCompleting ? 'line-through' : ''}`}>
+        {/* Drag Handle */}
         <div
           {...provided.dragHandleProps}
           className="text-slate-300 cursor-grab active:cursor-grabbing mt-1"
@@ -713,6 +595,7 @@ function TaskRow({
           ⋮⋮
         </div>
 
+        {/* Priority Checkbox */}
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -724,45 +607,172 @@ function TaskRow({
           {getPriorityIcon(task.priority)}
         </button>
 
+        {/* Task Content */}
         <div className="flex-1 min-w-0">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 flex-wrap">
+          {/* Title and Due Date - UNDERNEATH */}
+          <div className="space-y-1">
+            <div className="flex items-start justify-between gap-2">
               <span className="font-medium text-slate-800 text-base">{task.title}</span>
               
-              {task.due_date && (
-                <span className={`px-2 py-0.5 rounded text-xs font-medium ${getDueDateColor(task.due_date)}`}>
-                  {formatDueDate(task.due_date)}
-                </span>
-              )}
-            </div>
-            
-            {task.notes && (
-              <p className="text-sm text-slate-600 leading-relaxed">{task.notes}</p>
-            )}
-            
-            {(task.goal_id || task.project || task.delegated_to) && (
-              <div className="flex items-center gap-2 flex-wrap">
+              {/* Project/Goal Badges - RIGHT SIDE, NO GREEN */}
+              <div className="flex items-center gap-2 flex-shrink-0">
                 {task.goal_id && (
-                  <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
+                  <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-medium flex items-center gap-1">
                     🎯 {goals.find(g => g.id === task.goal_id)?.title || goals.find(g => g.id === task.goal_id)?.goal_text || 'Goal'}
                   </span>
                 )}
                 
                 {task.project && (
-                  <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs">
+                  <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs flex items-center gap-1">
                     📁 {task.project}
                   </span>
                 )}
-                
-                {task.delegated_to && (
-                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
-                    👤 {task.delegated_to}
-                  </span>
-                )}
+              </div>
+            </div>
+            
+            {/* Due Date - ALWAYS UNDERNEATH AT SAME PLACE */}
+            {task.due_date && (
+              <div className="flex items-center">
+                <span className={`px-2 py-0.5 rounded text-xs font-medium inline-block ${getDueDateColor(task.due_date)}`}>
+                  {formatDueDate(task.due_date)}
+                </span>
               </div>
             )}
           </div>
+          
+          {/* Notes */}
+          {task.notes && (
+            <p className="text-sm text-slate-600 leading-relaxed mt-2">{task.notes}</p>
+          )}
+          
+          {/* Delegated To - IF EXISTS */}
+          {task.delegated_to && (
+            <div className="mt-2">
+              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
+                👤 {task.delegated_to}
+              </span>
+            </div>
+          )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Edit Task Form Component
+function EditTaskForm({ task, provided, onUpdate, onCancelEdit, onDelete, projects, delegates, goals }) {
+  const [editData, setEditData] = useState({
+    title: task.title,
+    project: task.project || '',
+    delegated_to: task.delegated_to || '',
+    due_date: task.due_date || '',
+    priority: task.priority,
+    notes: task.notes || '',
+    goal_id: task.goal_id || null
+  });
+
+  return (
+    <div
+      ref={provided.innerRef}
+      {...provided.draggableProps}
+      className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4 space-y-3"
+    >
+      <h3 className="font-semibold text-slate-800">Edit Task</h3>
+      
+      <input
+        type="text"
+        value={editData.title}
+        onChange={(e) => setEditData({ ...editData, title: e.target.value })}
+        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        placeholder="Task title"
+        autoFocus
+      />
+
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          type="text"
+          value={editData.project}
+          onChange={(e) => setEditData({ ...editData, project: e.target.value })}
+          list="edit-project-list"
+          placeholder="Project"
+          className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <datalist id="edit-project-list">
+          {projects.map(p => <option key={p} value={p} />)}
+        </datalist>
+
+        <input
+          type="date"
+          value={editData.due_date}
+          onChange={(e) => setEditData({ ...editData, due_date: e.target.value })}
+          className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          type="text"
+          value={editData.delegated_to}
+          onChange={(e) => setEditData({ ...editData, delegated_to: e.target.value })}
+          list="edit-delegate-list"
+          placeholder="Delegate to"
+          className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <datalist id="edit-delegate-list">
+          {delegates.map(d => <option key={d} value={d} />)}
+        </datalist>
+
+        <select
+          value={editData.priority}
+          onChange={(e) => setEditData({ ...editData, priority: e.target.value })}
+          className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="high">🔴 High</option>
+          <option value="medium">🟠 Medium</option>
+          <option value="low">🟢 Low</option>
+        </select>
+      </div>
+
+      <select
+        value={editData.goal_id || ''}
+        onChange={(e) => setEditData({ ...editData, goal_id: e.target.value ? parseInt(e.target.value) : null })}
+        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <option value="">No goal</option>
+        {goals.map(g => {
+          const displayText = g.title || g.goal_text;
+          const truncatedText = displayText.length > 40 ? displayText.substring(0, 40) + '...' : displayText;
+          return <option key={g.id} value={g.id}>{truncatedText}</option>;
+        })}
+      </select>
+
+      <textarea
+        value={editData.notes}
+        onChange={(e) => setEditData({ ...editData, notes: e.target.value })}
+        rows={2}
+        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        placeholder="Notes"
+      />
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => onUpdate(editData)}
+          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium"
+        >
+          Save
+        </button>
+        <button
+          onClick={onCancelEdit}
+          className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded font-medium"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onDelete}
+          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium"
+        >
+          Delete
+        </button>
       </div>
     </div>
   );
@@ -770,16 +780,11 @@ function TaskRow({
 
 // Add Task Form Component
 function AddTaskForm({ onAdd, onCancel, projects, delegates, goals }) {
-  const getTodayDate = () => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  };
-
   const [formData, setFormData] = useState({
     title: '',
     project: '',
     delegated_to: '',
-    due_date: getTodayDate(),
+    due_date: getTodayET(),
     priority: 'medium',
     notes: '',
     goal_id: null
@@ -796,7 +801,7 @@ function AddTaskForm({ onAdd, onCancel, projects, delegates, goals }) {
       title: '',
       project: '',
       delegated_to: '',
-      due_date: getTodayDate(),
+      due_date: getTodayET(),
       priority: 'medium',
       notes: '',
       goal_id: null
