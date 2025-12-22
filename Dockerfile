@@ -8,11 +8,6 @@ RUN apt-get update && \
     apt-get clean
 
 WORKDIR /app
-
-# Add this line near the top to force rebuild
-ARG CACHEBUST=1
-
-# Copy everything
 COPY . .
 
 # Install Python dependencies
@@ -22,40 +17,33 @@ RUN pip install --upgrade pip && \
 # Build frontend
 WORKDIR /app/app/frontend
 
-# DEBUG: Show what files exist
-RUN echo "=== Files in frontend directory ===" && \
-    ls -la
+# Show EVERYTHING for debugging
+RUN echo "=== PWD ===" && pwd
+RUN echo "=== ALL FILES ===" && ls -laR
+RUN echo "=== CHECKING SRC ===" && ls -la src/ || echo "NO SRC DIR"
+RUN echo "=== CHECKING SRC/MAIN.JSX ===" && cat src/main.jsx || echo "NO MAIN.JSX"
+RUN echo "=== PACKAGE.JSON ===" && cat package.json
+RUN echo "=== VITE.CONFIG.JS ===" && cat vite.config.js
+RUN echo "=== INDEX.HTML ===" && cat index.html
 
-# DEBUG: Show what's in index.html
-RUN echo "=== Contents of index.html ===" && \
-    cat index.html
+# Install npm packages
+RUN echo "=== INSTALLING NPM PACKAGES ===" && \
+    npm install
 
-# DEBUG: Show what's in main.jsx
-RUN echo "=== First 10 lines of main.jsx ===" && \
-    head -10 main.jsx || echo "main.jsx not found"
+# Build with maximum verbosity
+RUN echo "=== STARTING VITE BUILD ===" && \
+    npm run build -- --logLevel verbose 2>&1 | tee /tmp/build.log || \
+    (echo "=== BUILD FAILED ===" && cat /tmp/build.log && exit 1)
 
-# Install and build with verbose output
-RUN npm install && \
-    echo "=== Running npm run build ===" && \
-    npm run build --verbose
+# Show what was built
+RUN echo "=== BUILD OUTPUT ===" && \
+    ls -laR ../../static/
 
-# DEBUG: Show what was built
-RUN echo "=== Contents of ../../static/ ===" && \
-    ls -la ../../static/
-
-# DEBUG: Show the built index.html
-RUN echo "=== Built index.html ===" && \
-    cat ../../static/index.html
-
-# Verify build output
+# Verify critical files
 RUN ls -la /app/static/index.html && \
-    echo "✓ Frontend built successfully"
+    wc -c /app/static/index.html && \
+    echo "=== BUILT INDEX.HTML CONTENT ===" && \
+    cat /app/static/index.html
 
-# Return to app root
 WORKDIR /app
-
-# Expose port
 EXPOSE 8080
-
-# No CMD - let Procfile handle it
-
