@@ -9,6 +9,9 @@ RUN apt-get update && \
 
 WORKDIR /app
 
+# Add this line near the top to force rebuild
+ARG CACHEBUST=1
+
 # Copy everything
 COPY . .
 
@@ -55,3 +58,4 @@ WORKDIR /app
 EXPOSE 8080
 
 # No CMD - let Procfile handle it
+
