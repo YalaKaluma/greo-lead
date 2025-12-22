@@ -1,6 +1,5 @@
 FROM python:3.11-slim
 
-# Install Node.js
 RUN apt-get update && \
     apt-get install -y curl gnupg && \
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
@@ -10,46 +9,36 @@ RUN apt-get update && \
 WORKDIR /app
 COPY . .
 
-# Install Python dependencies
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Build frontend
 WORKDIR /app/app/frontend
+
+# Show directory structure BEFORE build
+RUN echo "=== BEFORE BUILD ===" && \
+    echo "Current dir:" && pwd && \
+    echo "Parent dir:" && ls -la ../ && \
+    echo "Grandparent dir:" && ls -la ../../
+
 RUN npm install
-RUN npm run build
 
-# DEBUG: Show what Vite actually built
-RUN echo "=== VITE BUILD OUTPUT ===" && \
-    find /app -name "index.html" -type f -exec ls -lh {} \; && \
-    echo "=== CHECKING ../../static ===" && \
-    ls -lah ../../static/ && \
-    echo "=== CHECKING /app/static ===" && \
-    ls -lah /app/static/
+# Run build and capture ALL output
+RUN npm run build 2>&1 | tee /tmp/build.log
 
-# CRITICAL: Make absolutely sure the built files are in /app/static/
-RUN if [ ! -f "/app/static/index.html" ]; then \
-        echo "ERROR: index.html not found in /app/static!"; \
-        echo "Searching for built files..."; \
-        find /app -name "*.js" -o -name "*.css" | grep -E "(assets|dist|build)" | head -20; \
-        exit 1; \
-    fi
-
-# Verify the built index.html is not the template
-RUN SIZE=$(wc -c < /app/static/index.html) && \
-    echo "index.html size: $SIZE bytes" && \
-    if [ "$SIZE" -lt 1000 ]; then \
-        echo "ERROR: index.html is too small ($SIZE bytes)!"; \
-        echo "Content:"; \
-        cat /app/static/index.html; \
-        exit 1; \
-    fi
-
-# Show success
-RUN echo "✓ Frontend built successfully" && \
-    echo "✓ index.html size: $(wc -c < /app/static/index.html) bytes" && \
-    echo "✓ Assets:" && \
-    ls -lh /app/static/assets/
+# Show directory structure AFTER build  
+RUN echo "=== AFTER BUILD ===" && \
+    echo "=== ALL index.html files ===" && \
+    find /app -name "index.html" -exec echo "Found: {}" \; -exec ls -lh {} \; -exec head -5 {} \; && \
+    echo "=== ALL .js files in assets ===" && \
+    find /app -path "*/assets/*.js" -exec ls -lh {} \; && \
+    echo "=== ALL .css files ===" && \
+    find /app -name "*.css" -exec ls -lh {} \; && \
+    echo "=== /app/static contents ===" && \
+    ls -laR /app/static/ || echo "NO /app/static directory!" && \
+    echo "=== /app/app/static contents ===" && \
+    ls -laR /app/app/static/ || echo "NO /app/app/static directory!" && \
+    echo "=== Vite build log ===" && \
+    cat /tmp/build.log
 
 WORKDIR /app
 EXPOSE 8080
