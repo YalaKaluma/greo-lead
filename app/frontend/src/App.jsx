@@ -5,6 +5,8 @@ import MyGoals from './components/MyGoals';
 import MyLeadershipJourney from './components/MyLeadershipJourney';
 import MyTeam from './components/MyTeam';
 import MyJournal from './components/MyJournal';
+import MyHabits from './MyHabits';
+
 
 // FIXED: Use empty string in production for relative URLs
 // In production, the frontend is served from the same domain as the API
