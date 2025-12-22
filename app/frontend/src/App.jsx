@@ -5,7 +5,7 @@ import MyGoals from './components/MyGoals';
 import MyLeadershipJourney from './components/MyLeadershipJourney';
 import MyTeam from './components/MyTeam';
 import MyJournal from './components/MyJournal';
-import MyHabits from './MyHabits';
+import MyHabits from './components/MyHabits';
 
 
 // FIXED: Use empty string in production for relative URLs
