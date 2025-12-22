@@ -16,34 +16,40 @@ RUN pip install --upgrade pip && \
 
 # Build frontend
 WORKDIR /app/app/frontend
+RUN npm install
+RUN npm run build
 
-# Show EVERYTHING for debugging
-RUN echo "=== PWD ===" && pwd
-RUN echo "=== ALL FILES ===" && ls -laR
-RUN echo "=== CHECKING SRC ===" && ls -la src/ || echo "NO SRC DIR"
-RUN echo "=== CHECKING SRC/MAIN.JSX ===" && cat src/main.jsx || echo "NO MAIN.JSX"
-RUN echo "=== PACKAGE.JSON ===" && cat package.json
-RUN echo "=== VITE.CONFIG.JS ===" && cat vite.config.js
-RUN echo "=== INDEX.HTML ===" && cat index.html
+# DEBUG: Show what Vite actually built
+RUN echo "=== VITE BUILD OUTPUT ===" && \
+    find /app -name "index.html" -type f -exec ls -lh {} \; && \
+    echo "=== CHECKING ../../static ===" && \
+    ls -lah ../../static/ && \
+    echo "=== CHECKING /app/static ===" && \
+    ls -lah /app/static/
 
-# Install npm packages
-RUN echo "=== INSTALLING NPM PACKAGES ===" && \
-    npm install
+# CRITICAL: Make absolutely sure the built files are in /app/static/
+RUN if [ ! -f "/app/static/index.html" ]; then \
+        echo "ERROR: index.html not found in /app/static!"; \
+        echo "Searching for built files..."; \
+        find /app -name "*.js" -o -name "*.css" | grep -E "(assets|dist|build)" | head -20; \
+        exit 1; \
+    fi
 
-# Build with maximum verbosity
-RUN echo "=== STARTING VITE BUILD ===" && \
-    npm run build -- --logLevel verbose 2>&1 | tee /tmp/build.log || \
-    (echo "=== BUILD FAILED ===" && cat /tmp/build.log && exit 1)
+# Verify the built index.html is not the template
+RUN SIZE=$(wc -c < /app/static/index.html) && \
+    echo "index.html size: $SIZE bytes" && \
+    if [ "$SIZE" -lt 1000 ]; then \
+        echo "ERROR: index.html is too small ($SIZE bytes)!"; \
+        echo "Content:"; \
+        cat /app/static/index.html; \
+        exit 1; \
+    fi
 
-# Show what was built
-RUN echo "=== BUILD OUTPUT ===" && \
-    ls -laR ../../static/
-
-# Verify critical files
-RUN ls -la /app/static/index.html && \
-    wc -c /app/static/index.html && \
-    echo "=== BUILT INDEX.HTML CONTENT ===" && \
-    cat /app/static/index.html
+# Show success
+RUN echo "✓ Frontend built successfully" && \
+    echo "✓ index.html size: $(wc -c < /app/static/index.html) bytes" && \
+    echo "✓ Assets:" && \
+    ls -lh /app/static/assets/
 
 WORKDIR /app
 EXPOSE 8080
