@@ -249,7 +249,7 @@ export default function TodoList({ apiUrl, userNumber }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
     );
@@ -565,6 +565,11 @@ function TaskCard({
   onStartEdit,
   goals
 }) {
+  const goalLabel =
+    goals.find(g => g.id === task.goal_id)?.title ||
+    goals.find(g => g.id === task.goal_id)?.goal_text ||
+    'Goal';
+
   return (
     <div
       ref={provided.innerRef}
@@ -595,57 +600,57 @@ function TaskCard({
           ⋮⋮
         </div>
 
-        {/* Priority Checkbox */}
+        {/* Priority */}
         <button
           onClick={(e) => {
             e.stopPropagation();
             onToggle();
           }}
           className="flex-shrink-0 text-2xl hover:scale-110 transition-transform"
-          title="Click to mark complete"
         >
           {getPriorityIcon(task.priority)}
         </button>
 
-        {/* Task Content */}
+        {/* CONTENT */}
         <div className="flex-1 min-w-0">
-          {/* Title and Due Date - UNDERNEATH */}
-          <div className="space-y-1">
-            <div className="flex items-start justify-between gap-2">
-              <span className="font-medium text-slate-800 text-base">{task.title}</span>
-              
-              {/* Project/Goal Badges - RIGHT SIDE, NO GREEN */}
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {task.goal_id && (
-                  <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-medium flex items-center gap-1">
-                    🎯 {goals.find(g => g.id === task.goal_id)?.title || goals.find(g => g.id === task.goal_id)?.goal_text || 'Goal'}
-                  </span>
-                )}
-                
-                {task.project && (
-                  <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs flex items-center gap-1">
-                    📁 {task.project}
-                  </span>
-                )}
-              </div>
-            </div>
-            
-            {/* Due Date - ALWAYS UNDERNEATH AT SAME PLACE */}
+          {/* TITLE */}
+          <div className="font-medium text-slate-800 text-base break-words">
+            {task.title}
+          </div>
+
+          {/* META ROW (due date + goal) */}
+          <div className="flex flex-wrap items-center gap-2 mt-1">
             {task.due_date && (
-              <div className="flex items-center">
-                <span className={`px-2 py-0.5 rounded text-xs font-medium inline-block ${getDueDateColor(task.due_date)}`}>
-                  {formatDueDate(task.due_date)}
-                </span>
-              </div>
+              <span
+                className={`px-2 py-0.5 rounded text-xs font-medium ${getDueDateColor(
+                  task.due_date
+                )}`}
+              >
+                {formatDueDate(task.due_date)}
+              </span>
+            )}
+
+            {task.goal_id && (
+              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-medium">
+                🎯 {goalLabel}
+              </span>
+            )}
+
+            {task.project && (
+              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs">
+                📁 {task.project}
+              </span>
             )}
           </div>
-          
-          {/* Notes */}
+
+          {/* NOTES */}
           {task.notes && (
-            <p className="text-sm text-slate-600 leading-relaxed mt-2">{task.notes}</p>
+            <p className="text-sm text-slate-600 leading-relaxed mt-2">
+              {task.notes}
+            </p>
           )}
-          
-          {/* Delegated To - IF EXISTS */}
+
+          {/* DELEGATE */}
           {task.delegated_to && (
             <div className="mt-2">
               <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
@@ -658,6 +663,7 @@ function TaskCard({
     </div>
   );
 }
+
 
 // Edit Task Form Component
 function EditTaskForm({ task, provided, onUpdate, onCancelEdit, onDelete, projects, delegates, goals }) {

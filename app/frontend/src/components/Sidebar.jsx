@@ -16,7 +16,7 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onC
       className={`
         ${isMobile ? 'fixed' : 'relative'}
         top-0 left-0 h-full
-        bg-blue-900 text-white
+        bg-blue-700 text-white
         transition-transform duration-300 ease-in-out
         ${isMobile && !isOpen ? '-translate-x-full' : 'translate-x-0'}
         ${isMobile ? 'z-40' : 'z-10'}
