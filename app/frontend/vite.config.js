@@ -4,13 +4,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   
-  // Tell Vite that files are at root, not in src fixed/
-  root: './',
-  
   build: {
     outDir: '../../static',
     emptyOutDir: true,
-    manifest: true,
     minify: 'esbuild',
     
     rollupOptions: {

@@ -18,8 +18,31 @@ RUN pip install --upgrade pip && \
 
 # Build frontend
 WORKDIR /app/app/frontend
+
+# DEBUG: Show what files exist
+RUN echo "=== Files in frontend directory ===" && \
+    ls -la
+
+# DEBUG: Show what's in index.html
+RUN echo "=== Contents of index.html ===" && \
+    cat index.html
+
+# DEBUG: Show what's in main.jsx
+RUN echo "=== First 10 lines of main.jsx ===" && \
+    head -10 main.jsx || echo "main.jsx not found"
+
+# Install and build with verbose output
 RUN npm install && \
-    npm run build
+    echo "=== Running npm run build ===" && \
+    npm run build --verbose
+
+# DEBUG: Show what was built
+RUN echo "=== Contents of ../../static/ ===" && \
+    ls -la ../../static/
+
+# DEBUG: Show the built index.html
+RUN echo "=== Built index.html ===" && \
+    cat ../../static/index.html
 
 # Verify build output
 RUN ls -la /app/static/index.html && \
