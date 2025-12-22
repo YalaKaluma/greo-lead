@@ -4,6 +4,8 @@ import axios from 'axios';
 export default function MyHabits({ apiUrl, userNumber }) {
   const [habits, setHabits] = useState([]);
   const [newHabit, setNewHabit] = useState('');
+  const [editingHabitId, setEditingHabitId] = useState(null);
+  const [editingValue, setEditingValue] = useState('');
 
   const fetchHabits = async () => {
     const res = await axios.get(`${apiUrl}/api/habits`, {
@@ -37,6 +39,23 @@ export default function MyHabits({ apiUrl, userNumber }) {
     fetchHabits();
   };
 
+  const updateHabit = async (id, newTitle) => {
+    if (!newTitle.trim()) {
+      setEditingHabitId(null);
+      return;
+    }
+
+    await axios.put(
+      `${apiUrl}/api/habits/${id}`,
+      { title: newTitle },
+      { params: { user_number: userNumber } }
+    );
+
+    setEditingHabitId(null);
+    setEditingValue('');
+    fetchHabits();
+  };
+
   return (
     <div className="max-w-4xl mx-auto p-6">
       <h1 className="text-3xl font-bold text-slate-800 mb-6">
@@ -66,7 +85,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
             key={h.id}
             className="flex items-center justify-between bg-white border rounded-lg px-4 py-3"
           >
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-1">
               <button
                 onClick={() => toggleToday(h.id)}
                 className="text-2xl"
@@ -74,9 +93,39 @@ export default function MyHabits({ apiUrl, userNumber }) {
                 {h.completed_today ? '✅' : '⭕'}
               </button>
 
-              <span className={`text-lg ${h.completed_today ? 'line-through text-slate-400' : ''}`}>
-                {h.title}
-              </span>
+              {editingHabitId === h.id ? (
+                <input
+                  value={editingValue}
+                  autoFocus
+                  onChange={(e) => setEditingValue(e.target.value)}
+                  onBlur={() => updateHabit(h.id, editingValue)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      updateHabit(h.id, editingValue);
+                    }
+                    if (e.key === 'Escape') {
+                      setEditingHabitId(null);
+                      setEditingValue('');
+                    }
+                  }}
+                  className="text-lg px-2 py-1 border rounded-md w-full"
+                />
+              ) : (
+                <span
+                  onClick={() => {
+                    if (h.completed_today) return;
+                    setEditingHabitId(h.id);
+                    setEditingValue(h.title);
+                  }}
+                  className={`text-lg cursor-pointer ${
+                    h.completed_today
+                      ? 'line-through text-slate-400'
+                      : 'hover:underline'
+                  }`}
+                >
+                  {h.title}
+                </span>
+              )}
             </div>
 
             {!h.completed_today && (
