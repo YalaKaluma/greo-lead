@@ -1,27 +1,14 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 
-// Create axios instance with proper base URL
-const createApiClient = (apiUrl) => {
-  return axios.create({
-    baseURL: apiUrl || '', // Empty string = relative URLs
-    headers: {
-      'Content-Type': 'application/json'
-    }
-  });
-};
-
-export default function MyGoals({ apiUrl = '', userNumber }) {
+export default function MyGoals({ apiUrl, userNumber }) {
   const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingGoalId, setEditingGoalId] = useState(null);
-  const [timeFilter, setTimeFilter] = useState('long');
-  const [hierarchicalView, setHierarchicalView] = useState(null);
-
-  // Create API client
-  const api = createApiClient(apiUrl);
+  const [timeFilter, setTimeFilter] = useState('long'); // Default to long term
+  const [hierarchicalView, setHierarchicalView] = useState(null); // null or parent_goal_id
 
   useEffect(() => {
     fetchGoals();
@@ -31,10 +18,11 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.get('/api/journey/goals', {
+      const response = await axios.get(`${apiUrl}/api/journey/goals`, {
         params: { user_number: userNumber }
       });
       if (response.data && Array.isArray(response.data)) {
+        // Sort: Long -> Medium -> Short
         const sorted = response.data.sort((a, b) => {
           const order = { long: 1, medium: 2, short: 3 };
           return (order[a.time_horizon] || 2) - (order[b.time_horizon] || 2);
@@ -55,9 +43,11 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
 
   const addGoal = async (goalData) => {
     try {
-      await api.post('/api/journey/goals', goalData, {
-        params: { user_number: userNumber }
-      });
+      await axios.post(
+        `${apiUrl}/api/journey/goals`,
+        goalData,
+        { params: { user_number: userNumber } }
+      );
       await fetchGoals();
       setShowAddForm(false);
     } catch (err) {
@@ -68,9 +58,11 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
 
   const updateGoal = async (goalId, updates) => {
     try {
-      await api.put(`/api/journey/goals/${goalId}`, updates, {
-        params: { user_number: userNumber }
-      });
+      await axios.put(
+        `${apiUrl}/api/journey/goals/${goalId}`,
+        updates,
+        { params: { user_number: userNumber } }
+      );
       await fetchGoals();
       setEditingGoalId(null);
     } catch (err) {
@@ -83,7 +75,7 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
     if (!confirm('Delete this goal?')) return;
     
     try {
-      await api.delete(`/api/journey/goals/${goalId}`, {
+      await axios.delete(`${apiUrl}/api/journey/goals/${goalId}`, {
         params: { user_number: userNumber }
       });
       setGoals(goals.filter(g => g.id !== goalId));
@@ -210,18 +202,22 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
 
       {/* Goals Grid */}
       {(() => {
+        // Filter logic
         let filteredGoals;
         let parentGoal = null;
         let childGoals = [];
         
         if (hierarchicalView) {
+          // Show hierarchical tree view
           parentGoal = goals.find(g => g.id === hierarchicalView);
           childGoals = goals.filter(g => g.parent_goal_id === hierarchicalView);
-          filteredGoals = [];
+          filteredGoals = []; // We'll render tree view separately
         } else {
+          // Normal time horizon filter
           filteredGoals = goals.filter(g => g.time_horizon === timeFilter);
         }
 
+        // Hierarchical Tree View
         if (hierarchicalView && parentGoal) {
           return (
             <div className="space-y-4">
@@ -229,11 +225,16 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
               <div className="bg-white border-2 border-green-500 rounded-lg p-5 shadow-md">
                 <div className="flex items-start justify-between">
                   <div className="flex-1" onClick={() => setEditingGoalId(parentGoal.id)} style={{ cursor: 'pointer' }}>
-                    <h3 className="text-2xl font-bold text-slate-800 mb-2">
-                      🎯 {parentGoal.title || parentGoal.goal_text}
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-green-600 font-semibold text-sm">PARENT GOAL</span>
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-800 mb-2">
+                      {parentGoal.title || parentGoal.goal_text}
                     </h3>
                     {parentGoal.title && parentGoal.goal_text !== parentGoal.title && (
-                      <p className="text-slate-600 mb-2">{parentGoal.goal_text}</p>
+                      <p className="text-slate-600 text-sm mb-2">
+                        {parentGoal.goal_text}
+                      </p>
                     )}
                     {parentGoal.why && (
                       <div className="mb-2">
@@ -242,43 +243,90 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
                       </div>
                     )}
                   </div>
+                  <div className="flex gap-4 items-center text-slate-400">
+                    <a
+                      href={`/?page=todo-list&goal=${parentGoal.id}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        window.location.href = `/?page=todo-list&goal=${parentGoal.id}`;
+                      }}
+                      className="hover:text-blue-600 transition-colors text-2xl"
+                      title="View tasks"
+                    >
+                      📋
+                    </a>
+                  </div>
                 </div>
               </div>
 
-              {/* Child Goals */}
-              {childGoals.length > 0 && (
-                <div className="ml-8 space-y-3">
-                  <h4 className="text-lg font-semibold text-slate-700">Sub-goals:</h4>
+              {/* Child Goals - Indented Tree Structure */}
+              {childGoals.length > 0 ? (
+                <div className="ml-8 border-l-4 border-green-300 pl-6 space-y-3">
+                  <div className="text-sm font-semibold text-green-700 mb-3">SUB-GOALS ({childGoals.length})</div>
                   {childGoals.map((goal) => (
-                    <div key={goal.id} className="bg-white border-l-4 border-green-400 rounded-lg p-4 shadow-sm">
-                      <div onClick={() => setEditingGoalId(goal.id)} className="cursor-pointer">
-                        <h5 className="text-lg font-semibold text-slate-800">
-                          {goal.title || goal.goal_text}
-                        </h5>
-                        {goal.title && goal.goal_text !== goal.title && (
-                          <p className="text-slate-600 text-sm mt-1">{goal.goal_text}</p>
-                        )}
-                        {goal.why && (
-                          <div className="mt-2">
-                            <span className="text-xs font-medium text-slate-600">Why: </span>
-                            <span className="text-xs text-slate-600">{goal.why}</span>
-                          </div>
-                        )}
+                    editingGoalId === goal.id ? (
+                      <GoalForm
+                        key={goal.id}
+                        goal={goal}
+                        goals={goals}
+                        onSubmit={(data) => updateGoal(goal.id, data)}
+                        onCancel={() => setEditingGoalId(null)}
+                        onDelete={() => deleteGoal(goal.id)}
+                      />
+                    ) : (
+                      <div
+                        key={goal.id}
+                        className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow relative"
+                      >
+                        {/* Tree connector line */}
+                        <div className="absolute -left-6 top-5 w-6 h-0.5 bg-green-300"></div>
+                        
+                        <div onClick={() => setEditingGoalId(goal.id)} className="cursor-pointer flex-1">
+                          <h3 className="text-lg font-bold text-slate-800 mb-2">
+                            {goal.title || goal.goal_text}
+                          </h3>
+                          {goal.title && goal.goal_text !== goal.title && (
+                            <p className="text-slate-600 text-sm mb-2">
+                              {goal.goal_text}
+                            </p>
+                          )}
+                          {goal.why && (
+                            <div className="mb-2">
+                              <span className="text-xs font-medium text-slate-600">Why: </span>
+                              <span className="text-xs text-slate-600">{goal.why}</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="flex gap-4 items-center justify-end text-slate-400 mt-2">
+                          <a
+                            href={`/?page=todo-list&goal=${goal.id}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              window.location.href = `/?page=todo-list&goal=${goal.id}`;
+                            }}
+                            className="hover:text-blue-600 transition-colors text-xl"
+                            title="View tasks"
+                          >
+                            📋
+                          </a>
+                        </div>
                       </div>
-                    </div>
+                    )
                   ))}
                 </div>
-              )}
-
-              {childGoals.length === 0 && (
-                <div className="ml-8 text-slate-500 italic">
-                  No sub-goals yet. Break this goal into smaller steps!
+              ) : (
+                <div className="ml-8 text-slate-500 text-sm italic">
+                  No sub-goals yet. Break this goal down into smaller steps!
                 </div>
               )}
             </div>
           );
         }
 
+        // Normal Grid View
         return filteredGoals.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-slate-600 text-lg">
@@ -303,10 +351,12 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
                 className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm hover:shadow-md transition-shadow"
               >
                 <div onClick={() => setEditingGoalId(goal.id)} className="cursor-pointer">
+                  {/* Title - Large and prominent */}
                   <h3 className="text-xl font-bold text-slate-800 mb-3">
                     {goal.title || goal.goal_text}
                   </h3>
                   
+                  {/* Full description (only show if different from title) */}
                   {goal.title && goal.goal_text !== goal.title && (
                     <p className="text-slate-600 mb-3 text-sm">
                       {goal.goal_text}
@@ -321,7 +371,9 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
                   )}
                 </div>
 
+                {/* Action Buttons */}
                 <div className="mt-3 flex gap-4 items-center justify-end text-slate-400">
+                  {/* View Tasks Link */}
                   <a
                     href={`/?page=todo-list&goal=${goal.id}`}
                     onClick={(e) => {
@@ -335,6 +387,7 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
                     📋
                   </a>
 
+                  {/* Sub-Goals Button - Show count if has children */}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -344,7 +397,7 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
                     title="View sub-goals"
                   >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 013.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                     </svg>
                     {goals.filter(g => g.parent_goal_id === goal.id).length > 0 && (
                       <span className="absolute -top-1 -right-1 bg-green-600 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center" style={{ fontSize: '10px' }}>
@@ -386,6 +439,7 @@ function GoalForm({ goal, goals, onSubmit, onCancel, onDelete }) {
     <form onSubmit={handleSubmit} className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 space-y-3">
       <h3 className="font-semibold text-slate-800">{goal ? 'Edit Goal' : 'Add New Goal'}</h3>
       
+      {/* Title Field */}
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">
           Title (short, for sidebar)
@@ -401,6 +455,7 @@ function GoalForm({ goal, goals, onSubmit, onCancel, onDelete }) {
         <p className="text-xs text-slate-500 mt-1">Optional - appears in sidebar (max 50 chars)</p>
       </div>
 
+      {/* Full Description */}
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">
           Full Description *
@@ -415,6 +470,7 @@ function GoalForm({ goal, goals, onSubmit, onCancel, onDelete }) {
         />
       </div>
 
+      {/* Why */}
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">
           Why is this important?
@@ -428,6 +484,7 @@ function GoalForm({ goal, goals, onSubmit, onCancel, onDelete }) {
         />
       </div>
 
+      {/* Time Horizon */}
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">
           Time Horizon
@@ -443,6 +500,7 @@ function GoalForm({ goal, goals, onSubmit, onCancel, onDelete }) {
         </select>
       </div>
 
+      {/* Parent Goal */}
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">
           Parent Goal (optional)
@@ -486,7 +544,7 @@ function GoalForm({ goal, goals, onSubmit, onCancel, onDelete }) {
           >
             Delete
           </button>
-          )}
+        )}
       </div>
     </form>
   );

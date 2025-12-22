@@ -6,8 +6,22 @@ import MyLeadershipJourney from './components/MyLeadershipJourney';
 import MyTeam from './components/MyTeam';
 import MyJournal from './components/MyJournal';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// FIXED: Use empty string in production for relative URLs
+// In production, the frontend is served from the same domain as the API
+// So we can use relative URLs like /api/tasks instead of http://localhost:8000/api/tasks
+const API_URL = import.meta.env.PROD 
+  ? '' // Production: use relative URLs
+  : (import.meta.env.VITE_API_URL || 'http://localhost:8000'); // Development: use env var or localhost
+
 const USER_NUMBER = import.meta.env.VITE_USER_NUMBER || 'whatsapp:+17707789240';
+
+// Log the config for debugging
+console.log('App Config:', {
+  mode: import.meta.env.MODE,
+  prod: import.meta.env.PROD,
+  apiUrl: API_URL,
+  userNumber: USER_NUMBER
+});
 
 function App() {
   const [currentPage, setCurrentPage] = useState('todo-list');
