@@ -193,7 +193,7 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
         <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
           <div>
             <h3 className="font-semibold text-blue-900">
-              🌳 Hierarchical View: {goals.find(g => g.id === hierarchicalView)?.title || goals.find(g => g.id === hierarchicalView)?.goal_text}
+               Hierarchical View: {goals.find(g => g.id === hierarchicalView)?.title || goals.find(g => g.id === hierarchicalView)?.goal_text}
             </h3>
             <p className="text-sm text-blue-800">
               Showing parent goal and its sub-goals only

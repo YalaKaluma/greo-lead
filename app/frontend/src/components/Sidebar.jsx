@@ -3,11 +3,12 @@ import React from 'react';
 export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onClose }) {
   const menuItems = [
     { id: 'my-goals', label: 'My Goals', disabled: false },
-    { id: 'todo-list', label: 'Todo-list', disabled: false },
+    { id: 'todo-list', label: 'My Tasks', disabled: false },
     { id: 'my-team', label: 'My Team', disabled: false },
     { id: 'my-journey', label: 'My Leadership Journey', disabled: false },
     { id: 'my-journal', label: 'My Journal', disabled: false },
     { id: 'my-feedback', label: 'My Feedback', disabled: true },
+    { id: 'my-habits', label: 'My Executive Habits', disabled: false },
     { id: 'my-calendar', label: 'My Calendar', disabled: true },
   ];
 

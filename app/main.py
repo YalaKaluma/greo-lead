@@ -8,7 +8,7 @@ import sys
 import os
 from datetime import datetime
 from app.db import Base, engine
-from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages
+from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits
 
 # Configure logging with timestamp
 logging.basicConfig(
@@ -120,6 +120,7 @@ routers_to_register = [
     (nudge.router, "/api", "Nudge"),
     (journey.router, "/api/journey", "Journey"),
     (messages.router, "/api", "Messages"),
+    (habits.router, "/api/habits", "Habits"),
 ]
 
 for router, prefix, tag in routers_to_register:

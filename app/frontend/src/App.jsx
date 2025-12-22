@@ -109,6 +109,9 @@ function App() {
         {currentPage === 'my-journey' && (
           <MyLeadershipJourney apiUrl={API_URL} userNumber={USER_NUMBER} />
         )}
+        {currentPage === 'my-habits' && (
+          <MyHabits apiUrl={API_URL} userNumber={USER_NUMBER} />
+        )}
         {currentPage === 'my-journal' && (
           <MyJournal apiUrl={API_URL} userNumber={USER_NUMBER} />
         )}

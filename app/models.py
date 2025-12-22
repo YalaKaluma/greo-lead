@@ -242,3 +242,29 @@ class JourneyAchievement(Base):
     impact = Column(Text, nullable=True)
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # -------------------------------
+    # EXECUTIVE HABITS
+    # -------------------------------
+
+class Habit(Base):
+    __tablename__ = "habits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True, nullable=False)
+    title = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class HabitCompletion(Base):
+    __tablename__ = "habit_completions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    habit_id = Column(Integer, ForeignKey("habits.id", ondelete="CASCADE"))
+    date = Column(Date, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    habit = relationship("Habit", backref="completions")
