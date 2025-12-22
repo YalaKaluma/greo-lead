@@ -37,7 +37,7 @@ def compute_streak(habit: Habit) -> int:
 # Endpoints
 # ---------------------------------------------------------
 
-@router.get("/")
+@router.get("")
 def get_habits(user_number: str, db: Session = Depends(get_db)):
     habits = (
         db.query(Habit)
@@ -61,7 +61,7 @@ def get_habits(user_number: str, db: Session = Depends(get_db)):
     return response
 
 
-@router.post("/")
+@router.post("")
 def create_habit(payload: dict, user_number: str, db: Session = Depends(get_db)):
     title = payload.get("title")
     if not title:

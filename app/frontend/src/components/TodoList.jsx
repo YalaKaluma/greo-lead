@@ -617,31 +617,31 @@ function TaskCard({
           <div className="font-medium text-slate-800 text-base break-words">
             {task.title}
           </div>
+                    
 
-          {/* META ROW (due date + goal) */}
-          <div className="flex flex-wrap items-center gap-2 mt-1">
-            {task.due_date && (
-              <span
-                className={`px-2 py-0.5 rounded text-xs font-medium ${getDueDateColor(
-                  task.due_date
-                )}`}
-              >
-                {formatDueDate(task.due_date)}
-              </span>
-            )}
-
-            {task.goal_id && (
-              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-medium">
-                🎯 {goalLabel}
-              </span>
-            )}
-
-            {task.project && (
-              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs">
-                📁 {task.project}
-              </span>
-            )}
+                {/* META ROW (structured like Google Tasks) */}
+          <div className="flex items-center justify-between mt-2">
+          {/* Due date — LEFT */}
+          <div>
+          {task.due_date && (
+            <span
+              className={`px-2 py-0.5 rounded text-xs font-medium ${getDueDateColor(
+                task.due_date
+              )}`}
+            >
+              {formatDueDate(task.due_date)}
+            </span>
+          )}
           </div>
+
+          {/* Goal — RIGHT */}
+          {task.goal_id && (
+          <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-medium">
+            🎯 {goalLabel}
+          </span>
+          )}
+          </div>
+          
 
           {/* NOTES */}
           {task.notes && (
