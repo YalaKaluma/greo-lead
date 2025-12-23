@@ -70,8 +70,11 @@ function App() {
     return (
       <Login
         onLogin={(userNumber) => {
-          setUserNumber(userNumber);   // ✅ FIXED LINE
+       
+          localStorage.setItem("user_number", userNumber);  // ✅ Save
+          setUserNumber(userNumber);                        // ✅ Use directly
           setIsLoggedIn(true);
+
         }}
       />
     );
