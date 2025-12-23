@@ -2,6 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import User
+from pydantic import BaseModel
+
+
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
@@ -20,6 +23,10 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)):
         }
     }
                       
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
 
 @router.post("/register")
 def register(username: str, password: str, db: Session = Depends(get_db)):
