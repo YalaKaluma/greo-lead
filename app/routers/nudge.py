@@ -207,3 +207,95 @@ Your task:
 
     logger.info("✅ Evening nudge sent successfully")
     return {"status": "evening_nudge_sent"}
+
+
+
+# -------------------------------------------------
+# Sunday Evening Weekly Review Nudge
+# -------------------------------------------------
+@router.get("/nudge/sunday_review")
+def sunday_review_nudge(db=Depends(get_db)):
+    """
+    Weekly strategic reflection and planning nudge.
+    Intended for Sunday evening.
+    """
+
+    logger.info("🗓️ SUNDAY REVIEW NUDGE ENDPOINT HIT")
+
+    user_number = DEFAULT_USER_NUMBER
+    if not user_number:
+        logger.error("DEFAULT_USER_NUMBER is not set")
+        return {"status": "error", "reason": "DEFAULT_USER_NUMBER missing"}
+
+    # -------------------------------------------------
+    # Journey context (safe, deterministic)
+    # -------------------------------------------------
+    try:
+        journey_context = build_journey_context(db, user_number)
+    except Exception as e:
+        logger.exception("Failed to build journey context")
+        return {"status": "error", "step": "journey_context", "detail": str(e)}
+
+    # -------------------------------------------------
+    # System prompt (weekly planning mindset)
+    # -------------------------------------------------
+    system_prompt = f"""
+You are Alfred, an AI Chief of Staff and executive coach.
+
+It is Sunday evening.
+The user is transitioning from execution to reflection and planning.
+
+Use the user’s Journey Memory below to guide the reflection:
+
+{journey_context}
+
+Your task:
+- Ask 3–5 thoughtful questions.
+- Focus on:
+  • Progress toward goals this week
+  • What worked vs what didn’t
+  • What could be refined or simplified
+  • The top 2–3 priorities for the coming week
+- Be structured, calm, and strategic.
+- No long explanations.
+- Max 550 characters total.
+"""
+
+    # -------------------------------------------------
+    # OpenAI call (system-only for cron safety)
+    # -------------------------------------------------
+    try:
+        response = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt}
+            ],
+        )
+        text = response.choices[0].message.content.strip()
+    except Exception as e:
+        logger.exception("OpenAI call failed")
+        return {"status": "error", "step": "openai", "detail": str(e)}
+
+    # -------------------------------------------------
+    # Send WhatsApp message
+    # -------------------------------------------------
+    try:
+        twilio_client.messages.create(
+            body=text,
+            from_=TWILIO_WHATSAPP_NUMBER,
+            to=user_number,
+        )
+    except Exception as e:
+        logger.exception("Twilio send failed")
+        return {"status": "error", "step": "twilio", "detail": str(e)}
+
+    # -------------------------------------------------
+    # Save message (non-blocking)
+    # -------------------------------------------------
+    try:
+        save_message(db, sender="assistant", user_number=user_number, content=text)
+    except Exception:
+        logger.warning("Failed to save message (non-blocking)")
+
+    logger.info("✅ Sunday review nudge sent successfully")
+    return {"status": "sunday_review_nudge_sent"}
