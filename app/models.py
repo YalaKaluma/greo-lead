@@ -264,10 +264,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True)
-    username = Column(String, unique=True, nullable=False)
-    password = Column(String, nullable=False)
-
-    # This is the KEY bridge to your existing system
-    user_number = Column(String, unique=True, nullable=False)
-
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime)
+    phone_number = Column(String)
+    name = Column(String, unique=True)      # 👈 this is username
+    password = Column(String)
