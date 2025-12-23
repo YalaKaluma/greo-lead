@@ -5,15 +5,11 @@ from app.models import User
 from pydantic import BaseModel
 
 
-
-
 router = APIRouter(tags=["Auth"])
-
 
 class LoginRequest(BaseModel):
     username: str
     password: str
-
 
 @router.post("/login")
 def login(credentials: LoginRequest, db: Session = Depends(get_db)):
@@ -31,18 +27,20 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)):
     }
                       
 
-
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
 
 @router.post("/register")
-def register(username: str, password: str, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.name == username).first()
+def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+    existing = db.query(User).filter(User.name == payload.username).first()
     if existing:
         raise HTTPException(status_code=400, detail="Username already exists")
 
     user = User(
-        username=username,
-        password=password,           # ⚠️ plaintext for now (OK for Phase 0)
-        user_number=f"user:{username}"
+        name=payload.username,
+        password=payload.password,  # plaintext OK for now
+        phone_number=None
     )
 
     db.add(user)
@@ -50,6 +48,9 @@ def register(username: str, password: str, db: Session = Depends(get_db)):
     db.refresh(user)
 
     return {
-        "username": user.name,
-        "user_number": user.user_number
+        "success": True,
+        "user": {
+            "id": user.id,
+            "name": user.name
+        }
     }
