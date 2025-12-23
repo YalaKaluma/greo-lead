@@ -28,7 +28,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 # -------------------------------------------------
 # Weekly Nudge
 # -------------------------------------------------
-@router.get("/weekly_nudge")
+@router.get("/nudge/weekly")
 def weekly_nudge(db=Depends(get_db)):
     """
     Sends a weekly coaching nudge to the user.
