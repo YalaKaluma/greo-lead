@@ -69,14 +69,14 @@ function App() {
   if (!isLoggedIn) {
     return (
       <Login
-        onLogin={() => {
-          const storedUser = localStorage.getItem("user_number");
+        onLogin={(userNumber) => {
           setUserNumber(storedUser);
           setIsLoggedIn(true);
         }}
       />
     );
   }
+
 
   return (
     <div className="flex h-screen bg-gray-50">

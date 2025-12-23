@@ -26,7 +26,7 @@ export default function Login({ onLogin }) {
       //localStorage.setItem("user_number", "whatsapp:+17707789240");
       
 
-      onLogin();
+      onLogin(data.user.user_number);
     } catch (err) {
       setError("Authentication failed");
     }
