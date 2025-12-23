@@ -9,6 +9,10 @@ import os
 from datetime import datetime
 from app.db import Base, engine
 from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits
+from app.routers import auth
+
+
+
 
 # Configure logging with timestamp
 logging.basicConfig(
@@ -114,6 +118,7 @@ logger.info("✓ Request logging middleware configured")
 logger.info("🔌 Registering API routers...")
 routers_to_register = [
     (journal.router, "/api/journal", "Journal"),
+    (auth.router, "/api/auth", "Auth"),
     (webhook.router, "/api", "Webhook"),
     (webhook_brain.router, "/api/brain", "Webhook-Brain"),
     (tasks.router, "/api/tasks", "Tasks"),

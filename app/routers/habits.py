@@ -120,10 +120,16 @@ def toggle_today(habit_id: int, user_number: str, db: Session = Depends(get_db))
 
     today = date.today()
 
-    existing = db.query(HabitCompletion).filter(
-        HabitCompletion.habit_id == habit_id,
-        HabitCompletion.date == today
-    ).first()
+    existing = (
+        db.query(HabitCompletion)
+        .join(Habit)
+        .filter(
+            HabitCompletion.habit_id == habit_id,
+            HabitCompletion.date == today,
+            Habit.user_number == user_number
+        )
+        .first()
+    )
 
     if existing:
         db.delete(existing)

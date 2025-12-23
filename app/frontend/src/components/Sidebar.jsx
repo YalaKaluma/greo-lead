@@ -2,12 +2,12 @@ import React from 'react';
 
 export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onClose }) {
   const menuItems = [
-    { id: 'my-goals', label: 'My Goals', disabled: false },
+    { id: 'my-goals', label: 'My Vision & Goals', disabled: false },
     { id: 'todo-list', label: 'My Tasks', disabled: false },
     { id: 'my-team', label: 'My Team', disabled: false },
-    { id: 'my-journey', label: 'My Leadership Journey', disabled: false },
+    { id: 'my-journey', label: 'My Journey', disabled: false },
     { id: 'my-journal', label: 'My Journal', disabled: false },
-    { id: 'my-habits', label: 'My Executive Habits', disabled: false },
+    { id: 'my-habits', label: 'My Habits', disabled: false },
     { id: 'my-feedback', label: 'My Feedback', disabled: true },
     { id: 'my-calendar', label: 'My Calendar', disabled: true },
   ];
@@ -31,7 +31,7 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onC
           <div className="flex items-start justify-between">
             <div>
               <h1 className="text-lg font-bold leading-tight text-white">
-                Your Executive Operating System
+                My Executive Operating System
               </h1>
               <p className="text-sm text-slate-400 mt-1 ml-2">
                 Powered by Alfred

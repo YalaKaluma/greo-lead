@@ -20,29 +20,53 @@ def create_entry(user_id: int, text: str, db: Session = Depends(get_db)):
 # ----------------------------
 # LIST ALL ENTRIES
 # ----------------------------
+
 @router.get("/")
-def list_entries(db: Session = Depends(get_db)):
-    entries = db.query(JournalEntry).all()
+def list_entries(user_id: int, db: Session = Depends(get_db)):
+    entries = (
+        db.query(JournalEntry)
+        .filter(JournalEntry.user_id == user_id)
+        .all()
+    )
     return {"entries": entries}
 
+# ----------------------------
+# GET ONE ENTRY
+# ----------------------------
 
 # ----------------------------
 # GET ONE ENTRY
 # ----------------------------
 @router.get("/{entry_id}")
-def get_entry(entry_id: int, db: Session = Depends(get_db)):
-    entry = db.query(JournalEntry).filter(JournalEntry.id == entry_id).first()
+def get_entry(entry_id: int, user_id: int, db: Session = Depends(get_db)):
+    entry = (
+        db.query(JournalEntry)
+        .filter(
+            JournalEntry.id == entry_id,
+            JournalEntry.user_id == user_id
+        )
+        .first()
+    )
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
     return entry
 
 
+
 # ----------------------------
 # UPDATE ENTRY
 # ----------------------------
+
 @router.put("/{entry_id}")
-def update_entry(entry_id: int, text: str, db: Session = Depends(get_db)):
-    entry = db.query(JournalEntry).filter(JournalEntry.id == entry_id).first()
+def update_entry(entry_id: int, user_id: int, text: str, db: Session = Depends(get_db)):
+    entry = (
+        db.query(JournalEntry)
+        .filter(
+            JournalEntry.id == entry_id,
+            JournalEntry.user_id == user_id
+        )
+        .first()
+    )
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
 
@@ -56,8 +80,15 @@ def update_entry(entry_id: int, text: str, db: Session = Depends(get_db)):
 # DELETE ENTRY
 # ----------------------------
 @router.delete("/{entry_id}")
-def delete_entry(entry_id: int, db: Session = Depends(get_db)):
-    entry = db.query(JournalEntry).filter(JournalEntry.id == entry_id).first()
+def delete_entry(entry_id: int, user_id: int, db: Session = Depends(get_db)):
+    entry = (
+        db.query(JournalEntry)
+        .filter(
+            JournalEntry.id == entry_id,
+            JournalEntry.user_id == user_id
+        )
+        .first()
+    )
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
 
