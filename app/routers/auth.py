@@ -22,7 +22,8 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)):
         "success": True,
         "user": {
             "id": user.id,
-            "name": user.name
+            "name": user.name,
+            "user_number": user.phone_number
         }
     }
                       

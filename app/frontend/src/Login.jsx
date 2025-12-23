@@ -22,8 +22,8 @@ export default function Login({ onLogin }) {
       const data = await res.json();
 
       // 🔑 Store user identity (Phase-0 auth)
-//      localStorage.setItem("user_number", data.user_number);
-      localStorage.setItem("user_number", "whatsapp:+17707789240");
+      localStorage.setItem("user_number", data.user_number);
+      //localStorage.setItem("user_number", "whatsapp:+17707789240");
       
 
       onLogin();
