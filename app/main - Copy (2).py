@@ -8,7 +8,11 @@ import sys
 import os
 from datetime import datetime
 from app.db import Base, engine
-from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages
+from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits
+from app.routers import auth
+
+
+
 
 # Configure logging with timestamp
 logging.basicConfig(
@@ -114,12 +118,14 @@ logger.info("✓ Request logging middleware configured")
 logger.info("🔌 Registering API routers...")
 routers_to_register = [
     (journal.router, "/api/journal", "Journal"),
+    (auth.router, "/api/auth", "Auth"),
     (webhook.router, "/api", "Webhook"),
     (webhook_brain.router, "/api/brain", "Webhook-Brain"),
     (tasks.router, "/api/tasks", "Tasks"),
     (nudge.router, "/api", "Nudge"),
     (journey.router, "/api/journey", "Journey"),
     (messages.router, "/api", "Messages"),
+    (habits.router, "/api/habits", "Habits"),
 ]
 
 for router, prefix, tag in routers_to_register:
@@ -168,24 +174,6 @@ def health():
     }
 
     logger.info(f"🏥 Health check called - Status: {response['status']}, DB: {db_status}")
-    return response
-
-
-@app.get("/")
-async def root_health():
-    """Root endpoint - quick status check"""
-    static_path = Path(__file__).parent.parent / "static"
-
-    response = {
-        "status": "ok",
-        "message": "Leadership OS API is running",
-        "version": "3.0",
-        "frontend": "available" if static_path.exists() else "not built",
-        "api_docs": "/docs",
-        "health_check": "/api/health"
-    }
-
-    logger.info(f"🏠 Root endpoint called - Frontend: {response['frontend']}")
     return response
 
 
@@ -250,7 +238,7 @@ if static_path.exists():
         return JSONResponse({"error": "vite.svg not found"}, status_code=404)
 
 
-    # Catch-all for React Router
+    # Catch-all for React Router - MUST BE LAST!
     @app.get("/{full_path:path}")
     async def serve_react_or_404(full_path: str):
         # Don't catch API routes
@@ -258,9 +246,10 @@ if static_path.exists():
             from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Not found")
 
-        # Serve React app
+        # Serve React app for everything else (including root "/")
         index_file = static_path / "index.html"
         if index_file.exists():
+            logger.info(f"🎨 Serving React app for: /{full_path}")
             return FileResponse(str(index_file))
 
         logger.error(f"React app requested but index.html not found at {index_file}")
@@ -285,7 +274,7 @@ logger.info("=" * 70)
 logger.info("✅ LEADERSHIP OS - STARTUP COMPLETE")
 logger.info("=" * 70)
 logger.info("📍 Available endpoints:")
-logger.info("   • Root:        /")
+logger.info("   • Root:        / (serves React app)")
 logger.info("   • Health:      /api/health")
 logger.info("   • API Docs:    /docs")
 logger.info("   • Tasks:       /api/tasks")

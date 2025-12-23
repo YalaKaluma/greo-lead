@@ -246,6 +246,12 @@ if static_path.exists():
             from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Not found")
 
+        # Try to serve static files first (images, etc.)
+        file_path = static_path / full_path
+        if file_path.is_file():
+            logger.info(f"📄 Serving static file: /{full_path}")
+            return FileResponse(str(file_path))
+
         # Serve React app for everything else (including root "/")
         index_file = static_path / "index.html"
         if index_file.exists():
