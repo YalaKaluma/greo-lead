@@ -6,7 +6,7 @@ import MyTeam from './components/MyTeam';
 import MyJournal from './components/MyJournal';
 import MyHabits from './components/MyHabits';
 import { useEffect, useState } from "react";
-import Login from "./pages/Login";
+import Login from "./Login";
 
 // API URL handling
 const API_URL = import.meta.env.PROD
