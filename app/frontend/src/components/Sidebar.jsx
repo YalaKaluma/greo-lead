@@ -86,6 +86,19 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onC
             ))}
           </div>
         </nav>
+
+        {/* Logout Button */}
+        <div className="p-4 border-t border-slate-800">
+          <button
+            onClick={() => {
+              localStorage.removeItem('user_number');
+              window.location.reload();
+            }}
+            className="w-full px-4 py-3 text-left text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all duration-200"
+          >
+            🚪 Logout
+          </button>
+        </div>
       </div>
     </aside>
   );
