@@ -6,19 +6,20 @@ from app.models import User
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
 @router.post("/login")
-def login(username: str, password: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.name == username).first()
+def login(credentials: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.name == credentials.username).first()
 
-    if not user or user.password != password:
+    if not user or user.password != credentials.password:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # VERY IMPORTANT:
-    # We return user_number, not a token
     return {
-        "username": user.username,
-        "user_number": user.user_number
+        "success": True,
+        "user": {
+            "id": user.id,
+            "name": user.name
+        }
     }
-
+                      
 
 @router.post("/register")
 def register(username: str, password: str, db: Session = Depends(get_db)):
