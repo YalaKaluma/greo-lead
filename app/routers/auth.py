@@ -8,6 +8,11 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
 @router.post("/login")
 def login(credentials: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.name == credentials.username).first()
@@ -23,14 +28,12 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)):
         }
     }
                       
-class LoginRequest(BaseModel):
-    username: str
-    password: str
+
 
 
 @router.post("/register")
 def register(username: str, password: str, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.username == username).first()
+    existing = db.query(User).filter(User.name == username).first()
     if existing:
         raise HTTPException(status_code=400, detail="Username already exists")
 
@@ -45,6 +48,6 @@ def register(username: str, password: str, db: Session = Depends(get_db)):
     db.refresh(user)
 
     return {
-        "username": user.username,
+        "username": user.name,
         "user_number": user.user_number
     }
