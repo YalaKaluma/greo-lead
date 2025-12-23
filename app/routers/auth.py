@@ -19,12 +19,17 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)):
     if not user or user.password != credentials.password:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    # Generate user_number if not set (for backward compatibility)
+    # Generate user_number in WhatsApp format to match existing data
     user_number = user.phone_number
     if not user_number:
-        user_number = f"user_{user.id}"
-        user.phone_number = user_number
-        db.commit()
+        # Use WhatsApp format: whatsapp:+<phone> or whatsapp:+<id>
+        if user.phone_number and user.phone_number.startswith('whatsapp:'):
+            user_number = user.phone_number
+        else:
+            # Generate in WhatsApp format for consistency
+            user_number = f"whatsapp:+{user.id}"
+            user.phone_number = user_number
+            db.commit()
 
     return {
         "success": True,
@@ -49,16 +54,16 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
     user = User(
         name=payload.username,
-        password=payload.password,  # plaintext OK for now
-        phone_number=None  # Will be set on first login
+        password=payload.password,
+        phone_number=None  # Will be set immediately after
     )
 
     db.add(user)
     db.commit()
     db.refresh(user)
 
-    # Generate user_number after user is created
-    user_number = f"user_{user.id}"
+    # Generate user_number in WhatsApp format for consistency
+    user_number = f"whatsapp:+{user.id}"
     user.phone_number = user_number
     db.commit()
 
