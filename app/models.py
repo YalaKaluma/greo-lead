@@ -268,3 +268,6 @@ class User(Base):
     phone_number = Column(String)
     name = Column(String, unique=True)      # 👈 this is username
     password = Column(String)
+
+# ✅ ADD THIS LINE:
+    entries = relationship("JournalEntry", back_populates="user", cascade="all, delete-orphan")
