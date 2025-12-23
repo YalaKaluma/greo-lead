@@ -70,13 +70,12 @@ function App() {
     return (
       <Login
         onLogin={(userNumber) => {
-          setUserNumber(storedUser);
+          setUserNumber(userNumber);   // ✅ FIXED LINE
           setIsLoggedIn(true);
         }}
       />
     );
   }
-
 
   return (
     <div className="flex h-screen bg-gray-50">
