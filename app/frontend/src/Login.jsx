@@ -6,7 +6,6 @@ export default function Login({ onLogin }) {
   const [mode, setMode] = useState("login");
   const [error, setError] = useState("");
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [imageErrors, setImageErrors] = useState({});
 
   // Carousel auto-advance
   useEffect(() => {
@@ -15,17 +14,6 @@ export default function Login({ onLogin }) {
     }, 6000);
     return () => clearInterval(interval);
   }, []);
-
-  // Log image load status
-  const handleImageLoad = (imageName) => {
-    console.log(`✅ Image loaded successfully: ${imageName}`);
-    setImageErrors(prev => ({ ...prev, [imageName]: false }));
-  };
-
-  const handleImageError = (imageName, src) => {
-    console.error(`❌ Image failed to load: ${imageName} from ${src}`);
-    setImageErrors(prev => ({ ...prev, [imageName]: true }));
-  };
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -48,37 +36,10 @@ export default function Login({ onLogin }) {
     }
   }
 
-  // Test different image paths
-  const imagePaths = {
-    alfred1: "/alfred-logo.png",
-    alfred2: "./alfred-logo.png",
-    alfred3: "/static/alfred-logo.png",
-    alfred4: "/assets/alfred-logo.png",
-    cycle1: "/leadership-cycle.png",
-    cycle2: "./leadership-cycle.png",
-  };
-
   return (
     <div className="flex h-screen bg-slate-50">
       {/* Left Side - Carousel */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 relative overflow-hidden">
-        {/* Debug Info */}
-        <div className="absolute top-4 left-4 bg-black/80 text-white p-4 rounded text-xs max-w-md z-50">
-          <div className="font-bold mb-2">🔍 Image Debug Info:</div>
-          <div className="space-y-1">
-            <div>Current URL: {window.location.href}</div>
-            <div className="mt-2 font-bold">Testing paths:</div>
-            {Object.entries(imagePaths).map(([key, path]) => (
-              <div key={key} className="flex items-center gap-2">
-                <span className={imageErrors[key] ? "text-red-400" : "text-green-400"}>
-                  {imageErrors[key] === false ? "✓" : imageErrors[key] === true ? "✗" : "?"}
-                </span>
-                <span>{key}: {path}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* Decorative gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-br from-amber-900/10 via-transparent to-blue-900/10 pointer-events-none" />
         
@@ -87,30 +48,17 @@ export default function Login({ onLogin }) {
           {/* Slide 1: Leadership Cycle */}
           <div
             className={`absolute inset-0 flex flex-col items-center justify-center p-16 transition-all duration-1000 ${
-              currentSlide === 0 ? 'opacity-100' : 'opacity-0'
+              currentSlide === 0 
+                ? 'opacity-100 translate-x-0' 
+                : 'opacity-0 translate-x-12'
             }`}
           >
-            <div className="mb-12 w-full max-w-2xl">
+            <div className="mb-12 w-full max-w-2xl transform hover:scale-105 transition-transform duration-500">
               <img 
                 src="/leadership-cycle.png" 
                 alt="Leadership Cycle"
                 className="w-full h-auto drop-shadow-2xl"
-                onLoad={() => handleImageLoad('cycle1')}
-                onError={(e) => handleImageError('cycle1', e.target.src)}
               />
-              {imageErrors.cycle1 && (
-                <div className="text-red-400 text-center mt-4">
-                  ❌ Failed to load /leadership-cycle.png
-                  <div className="text-sm mt-2">Trying alternate paths...</div>
-                  <img 
-                    src="./leadership-cycle.png" 
-                    alt="Leadership Cycle Fallback"
-                    className="hidden"
-                    onLoad={() => handleImageLoad('cycle2')}
-                    onError={(e) => handleImageError('cycle2', e.target.src)}
-                  />
-                </div>
-              )}
             </div>
             <h2 className="text-5xl font-serif font-light text-amber-100 mb-6 text-center">
               The Leadership Cycle
@@ -123,42 +71,28 @@ export default function Login({ onLogin }) {
           {/* Slide 2: Alfred Logo */}
           <div
             className={`absolute inset-0 flex flex-col items-center justify-center p-16 transition-all duration-1000 ${
-              currentSlide === 1 ? 'opacity-100' : 'opacity-0'
+              currentSlide === 1 
+                ? 'opacity-100 translate-x-0' 
+                : 'opacity-0 -translate-x-12'
             }`}
           >
-            <div className="mb-12">
+            <div className="mb-12 transform hover:scale-105 transition-transform duration-500">
               <div className="relative">
+                {/* Glow effect */}
                 <div className="absolute inset-0 bg-amber-500/20 blur-3xl rounded-full scale-150" />
                 <img 
                   src="/alfred-logo.png" 
                   alt="Alfred"
                   className="w-80 h-80 relative z-10"
-                  onLoad={() => handleImageLoad('alfred1')}
-                  onError={(e) => handleImageError('alfred1', e.target.src)}
                 />
-                {imageErrors.alfred1 && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-slate-800/90 rounded-lg">
-                    <div className="text-red-400 text-center p-4">
-                      ❌ Failed to load /alfred-logo.png
-                      <div className="text-sm mt-2">Testing alternates...</div>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
             <h2 className="text-5xl font-serif font-light text-amber-100 mb-6 text-center">
               Meet Alfred
             </h2>
             <p className="text-xl text-slate-300 text-center max-w-xl leading-relaxed">
-              Your AI-powered Chief of Staff, available 24/7
+              Your AI-powered Chief of Staff, available 24/7 to coach, organize, and elevate your leadership
             </p>
-          </div>
-
-          {/* Hidden test images */}
-          <div className="hidden">
-            <img src="./alfred-logo.png" onLoad={() => handleImageLoad('alfred2')} onError={(e) => handleImageError('alfred2', e.target.src)} />
-            <img src="/static/alfred-logo.png" onLoad={() => handleImageLoad('alfred3')} onError={(e) => handleImageError('alfred3', e.target.src)} />
-            <img src="/assets/alfred-logo.png" onLoad={() => handleImageLoad('alfred4')} onError={(e) => handleImageError('alfred4', e.target.src)} />
           </div>
         </div>
 
@@ -169,36 +103,33 @@ export default function Login({ onLogin }) {
               key={index}
               onClick={() => setCurrentSlide(index)}
               className={`h-2 rounded-full transition-all duration-300 ${
-                currentSlide === index ? 'bg-amber-400 w-12' : 'bg-slate-600 w-2'
+                currentSlide === index
+                  ? 'bg-amber-400 w-12'
+                  : 'bg-slate-600 hover:bg-slate-500 w-2'
               }`}
+              aria-label={`Go to slide ${index + 1}`}
             />
           ))}
         </div>
       </div>
 
-      {/* Right Side - Auth Form (unchanged) */}
+      {/* Right Side - Auth Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-white">
         <div className="w-full max-w-md">
-          <div className="hidden lg:block mb-12">
-            <div className="flex items-center mb-8">
-              <div className="p-3 bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl shadow-xl">
-                <img 
-                  src="/alfred-logo.png" 
-                  alt="Alfred"
-                  className="w-12 h-12"
-                  onError={(e) => {
-                    console.error("Logo failed in header too");
-                    e.target.style.display = 'none';
-                  }}
-                />
-              </div>
-              <div className="ml-4">
-                <h1 className="text-2xl font-bold text-slate-900">Alfred</h1>
-                <p className="text-slate-600">Leadership OS</p>
-              </div>
+          {/* Mobile Logo */}
+          <div className="lg:hidden mb-10 text-center">
+            <div className="inline-block p-6 bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl mb-6 shadow-2xl">
+              <img 
+                src="/alfred-logo.png" 
+                alt="Alfred"
+                className="w-20 h-20"
+              />
             </div>
+            <h1 className="text-3xl font-bold text-slate-900 mb-2">Alfred</h1>
+            <p className="text-slate-600 text-lg">Your Executive Operating System</p>
           </div>
 
+          {/* Welcome Text */}
           <div className="mb-8">
             <h2 className="text-3xl font-bold text-slate-900 mb-3">
               {mode === "login" ? "Welcome back" : "Get started"}
@@ -210,6 +141,7 @@ export default function Login({ onLogin }) {
             </p>
           </div>
 
+          {/* Auth Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
@@ -220,7 +152,7 @@ export default function Login({ onLogin }) {
                 placeholder="Enter your username"
                 value={username}
                 onChange={e => setUsername(e.target.value)}
-                className="w-full px-4 py-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition shadow-sm"
+                className="w-full px-4 py-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-slate-500 focus:border-slate-500 outline-none transition shadow-sm"
                 required
               />
             </div>
@@ -234,25 +166,29 @@ export default function Login({ onLogin }) {
                 placeholder="Enter your password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                className="w-full px-4 py-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition shadow-sm"
+                className="w-full px-4 py-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-slate-500 focus:border-slate-500 outline-none transition shadow-sm"
                 required
               />
             </div>
 
             {error && (
-              <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded-lg text-sm">
+              <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start">
+                <svg className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
                 {error}
               </div>
             )}
 
             <button
               type="submit"
-              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-4 px-4 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl"
+              className="w-full bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-900 hover:to-black text-white font-semibold py-4 px-4 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
             >
               {mode === "login" ? "Sign In" : "Create Account"}
             </button>
           </form>
 
+          {/* Toggle Mode */}
           <div className="mt-8 text-center">
             <p className="text-slate-600">
               {mode === "login" ? "Don't have an account?" : "Already have an account?"}{" "}
@@ -261,10 +197,17 @@ export default function Login({ onLogin }) {
                   setMode(mode === "login" ? "register" : "login");
                   setError("");
                 }}
-                className="text-blue-600 hover:text-blue-700 font-semibold"
+                className="text-slate-800 hover:text-slate-900 font-semibold hover:underline"
               >
                 {mode === "login" ? "Sign up" : "Sign in"}
               </button>
+            </p>
+          </div>
+
+          {/* Divider */}
+          <div className="mt-10 pt-6 border-t border-slate-200">
+            <p className="text-xs text-slate-500 text-center">
+              By continuing, you agree to Alfred's Terms of Service and Privacy Policy
             </p>
           </div>
         </div>
