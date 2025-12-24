@@ -1,20 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta
 from typing import List
-from zoneinfo import ZoneInfo
 
 from app.db import get_db
 from app.models import Habit, HabitCompletion
 
 router = APIRouter()
-
-# Eastern Time timezone
-EASTERN_TZ = ZoneInfo("America/New_York")
-
-def get_today_eastern() -> date:
-    """Get current date in Eastern Time"""
-    return datetime.now(EASTERN_TZ).date()
 
 # ---------------------------------------------------------
 # Helpers
@@ -29,7 +21,7 @@ def compute_streak(habit: Habit) -> int:
         return 0
 
     streak = 0
-    current_day = get_today_eastern()
+    current_day = date.today()
 
     for d in dates:
         if d == current_day or d == current_day - timedelta(days=1):
@@ -53,7 +45,7 @@ def get_habits(user_number: str, db: Session = Depends(get_db)):
         .all()
     )
 
-    today = get_today_eastern()
+    today = date.today()
     response = []
 
     for h in habits:
@@ -126,7 +118,7 @@ def toggle_today(habit_id: int, user_number: str, db: Session = Depends(get_db))
     if not habit:
         raise HTTPException(status_code=404, detail="Habit not found")
 
-    today = get_today_eastern()
+    today = date.today()
 
     existing = (
         db.query(HabitCompletion)
