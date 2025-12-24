@@ -19,12 +19,15 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
   const [editingGoalId, setEditingGoalId] = useState(null);
   const [timeFilter, setTimeFilter] = useState('long');
   const [hierarchicalView, setHierarchicalView] = useState(null);
+  const [draggedGoal, setDraggedGoal] = useState(null);
+  const [taskCounts, setTaskCounts] = useState({});
 
   // Create API client
   const api = createApiClient(apiUrl);
 
   useEffect(() => {
     fetchGoals();
+    fetchTaskCounts();
   }, []);
 
   const fetchGoals = async () => {
@@ -50,6 +53,25 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTaskCounts = async () => {
+    try {
+      const response = await api.get('/api/tasks', {
+        params: { user_number: userNumber }
+      });
+      if (response.data && Array.isArray(response.data)) {
+        const counts = {};
+        response.data.forEach(task => {
+          if (task.goal_id) {
+            counts[task.goal_id] = (counts[task.goal_id] || 0) + 1;
+          }
+        });
+        setTaskCounts(counts);
+      }
+    } catch (err) {
+      console.error('Error fetching task counts:', err);
     }
   };
 
@@ -91,6 +113,77 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
       console.error('Error deleting goal:', err);
       alert('Failed to delete goal');
     }
+  };
+
+  const updateGoalOrder = async (goalId, newSortOrder) => {
+    try {
+      await api.put(`/api/journey/goals/${goalId}`, { sort_order: newSortOrder }, {
+        params: { user_number: userNumber }
+      });
+    } catch (err) {
+      console.error('Error updating goal order:', err);
+    }
+  };
+
+  // Handle drag and drop
+  const handleDragStart = (e, goal) => {
+    setDraggedGoal(goal);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = async (e, targetGoal) => {
+    e.preventDefault();
+    
+    if (!draggedGoal || draggedGoal.id === targetGoal.id) {
+      setDraggedGoal(null);
+      return;
+    }
+
+    // Only allow reordering within the same parent and time horizon
+    if (draggedGoal.parent_goal_id !== targetGoal.parent_goal_id || 
+        draggedGoal.time_horizon !== targetGoal.time_horizon) {
+      setDraggedGoal(null);
+      return;
+    }
+
+    // Get goals in the same group
+    const sameGroupGoals = goals.filter(g => 
+      g.time_horizon === draggedGoal.time_horizon &&
+      g.parent_goal_id === draggedGoal.parent_goal_id
+    );
+
+    // Reorder the array
+    const draggedIndex = sameGroupGoals.findIndex(g => g.id === draggedGoal.id);
+    const targetIndex = sameGroupGoals.findIndex(g => g.id === targetGoal.id);
+    
+    const reordered = [...sameGroupGoals];
+    const [movedItem] = reordered.splice(draggedIndex, 1);
+    reordered.splice(targetIndex, 0, movedItem);
+
+    // Update sort_order for all affected goals
+    const updates = reordered.map((goal, index) => ({
+      id: goal.id,
+      sort_order: index
+    }));
+
+    // Optimistically update UI
+    const newGoals = goals.map(g => {
+      const update = updates.find(u => u.id === g.id);
+      return update ? { ...g, sort_order: update.sort_order } : g;
+    });
+    setGoals(newGoals);
+
+    // Send updates to backend
+    for (const update of updates) {
+      await updateGoalOrder(update.id, update.sort_order);
+    }
+
+    setDraggedGoal(null);
   };
 
   const formatDate = (dateString) => {
@@ -216,7 +309,8 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
         
         if (hierarchicalView) {
           parentGoal = goals.find(g => g.id === hierarchicalView);
-          childGoals = goals.filter(g => g.parent_goal_id === hierarchicalView);
+          childGoals = goals.filter(g => g.parent_goal_id === hierarchicalView)
+            .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
           filteredGoals = [];
         } else {
           filteredGoals = goals.filter(g => g.time_horizon === timeFilter);
@@ -229,49 +323,54 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
               let safety = 0;
 
               while (current?.parent_goal_id && safety < 25) {
-                const parent = goals.find(x => x.id === current.parent_goal_id);
+                safety++;
+                const parent = goals.find(p => p.id === current.parent_goal_id);
                 if (!parent) break;
-                if (parent.time_horizon === 'long') {
-                  return parent.title || parent.goal_text || '';
-                }
                 current = parent;
-                safety += 1;
+                if (current.time_horizon === 'long') return current.title || current.goal_text;
               }
-              return '';
+              return null;
             };
 
-            filteredGoals = [...filteredGoals].sort((a, b) => {
-              const aLabel = getLongTermParentLabel(a);
-              const bLabel = getLongTermParentLabel(b);
+            filteredGoals = filteredGoals.slice().sort((a, b) => {
+              const aLongTerm = getLongTermParentLabel(a);
+              const bLongTerm = getLongTermParentLabel(b);
 
-              // Empty labels last
-              if (!aLabel && bLabel) return 1;
-              if (aLabel && !bLabel) return -1;
+              if (aLongTerm && !bLongTerm) return -1;
+              if (!aLongTerm && bLongTerm) return 1;
+              if (!aLongTerm && !bLongTerm) return (a.sort_order || 0) - (b.sort_order || 0);
 
-              // Primary: long-term parent label
-              const primary = (aLabel || 'zzz').localeCompare(bLabel || 'zzz');
-              if (primary !== 0) return primary;
-
-              // Secondary: goal title/text for stable ordering
-              const aText = (a.title || a.goal_text || '').toLowerCase();
-              const bText = (b.title || b.goal_text || '').toLowerCase();
-              return aText.localeCompare(bText);
+              const cmp = (aLongTerm || '').localeCompare(bLongTerm || '');
+              return cmp !== 0 ? cmp : (a.sort_order || 0) - (b.sort_order || 0);
             });
+          } else {
+            // For long/short term, just sort by sort_order
+            filteredGoals.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
           }
         }
 
         if (hierarchicalView && parentGoal) {
           return (
             <div className="space-y-4">
-              {/* Parent Goal */}
-              <div className="bg-white border-2 border-blue-900 rounded-lg p-5 shadow-md">
+              {/* Parent Goal Card */}
+              <div className="bg-blue-100 border-2 border-blue-300 rounded-lg p-5 shadow-md">
                 <div className="flex items-start justify-between">
-                  <div className="flex-1" onClick={() => setEditingGoalId(parentGoal.id)} style={{ cursor: 'pointer' }}>
-                    <h3 className="text-2xl font-bold text-slate-800 mb-2">
-                      🎯 {parentGoal.title || parentGoal.goal_text}
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-sm font-semibold text-blue-900 bg-blue-200 px-2 py-1 rounded">
+                        Parent Goal
+                      </span>
+                      <span className={`text-sm px-3 py-1 rounded-full ${getTimeHorizonBadge(parentGoal.time_horizon)}`}>
+                        {parentGoal.time_horizon}
+                      </span>
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-800 mb-2">
+                      {parentGoal.title || parentGoal.goal_text}
                     </h3>
                     {parentGoal.title && parentGoal.goal_text !== parentGoal.title && (
-                      <p className="text-slate-600 mb-2">{parentGoal.goal_text}</p>
+                      <p className="text-slate-600 mb-2 text-sm">
+                        {parentGoal.goal_text}
+                      </p>
                     )}
                     {parentGoal.why && (
                       <div className="mb-2">
@@ -280,28 +379,110 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
                       </div>
                     )}
                   </div>
+                  
+                  <div className="flex gap-2 items-center text-slate-400">
+                    <a
+                      href={`/?page=todo-list&goal=${parentGoal.id}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        window.location.href = `/?page=todo-list&goal=${parentGoal.id}`;
+                      }}
+                      className="hover:text-blue-600 transition-colors cursor-pointer text-2xl relative"
+                      title="View tasks"
+                    >
+                      📋
+                      {taskCounts[parentGoal.id] > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-blue-900 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center" style={{ fontSize: '10px' }}>
+                          {taskCounts[parentGoal.id]}
+                        </span>
+                      )}
+                    </a>
+                  </div>
                 </div>
               </div>
 
-              {/* Child Goals */}
+              {/* Sub-goals */}
               {childGoals.length > 0 && (
-                <div className="ml-8 space-y-3 border-l-2 border-blue-900 pl-6">
-                  <h4 className="text-lg font-semibold text-slate-700">Sub-goals:</h4>
+                <div className="ml-8 space-y-3">
+                  <h4 className="text-lg font-semibold text-slate-700 mb-3">Sub-goals</h4>
                   {childGoals.map((goal) => (
-                    <div key={goal.id} className="bg-white border-l-4 border-blue-800 rounded-lg p-4 shadow-sm">
-                      <div onClick={() => setEditingGoalId(goal.id)} className="cursor-pointer">
-                        <h5 className="text-lg font-semibold text-slate-800">
-                          {goal.title || goal.goal_text}
-                        </h5>
-                        {goal.title && goal.goal_text !== goal.title && (
-                          <p className="text-slate-600 text-sm mt-1">{goal.goal_text}</p>
-                        )}
-                        {goal.why && (
-                          <div className="mt-2">
-                            <span className="text-xs font-medium text-slate-600">Why: </span>
-                            <span className="text-xs text-slate-600">{goal.why}</span>
+                    <div
+                      key={goal.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, goal)}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, goal)}
+                      className={`bg-white border-l-4 border-blue-400 rounded-lg p-4 shadow-sm hover:shadow-md transition-all cursor-move ${
+                        draggedGoal?.id === goal.id ? 'opacity-50 scale-98' : ''
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div 
+                          className="flex-1 cursor-pointer"
+                          onClick={() => {
+                            const hasSubGoals = goals.filter(g => g.parent_goal_id === goal.id).length > 0;
+                            if (hasSubGoals) {
+                              setHierarchicalView(goal.id);
+                            } else {
+                              setEditingGoalId(goal.id);
+                            }
+                          }}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs text-slate-500">⋮⋮</span>
+                            <h4 className="font-semibold text-slate-800">
+                              {goal.title || goal.goal_text}
+                            </h4>
                           </div>
-                        )}
+                          {goal.title && goal.goal_text !== goal.title && (
+                            <p className="text-slate-600 text-sm mb-1 ml-5">
+                              {goal.goal_text}
+                            </p>
+                          )}
+                          {goal.why && (
+                            <div className="ml-5">
+                              <span className="text-xs text-slate-600">{goal.why}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex gap-3 items-center text-slate-400 ml-4">
+                          <a
+                            href={`/?page=todo-list&goal=${goal.id}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              window.location.href = `/?page=todo-list&goal=${goal.id}`;
+                            }}
+                            className="hover:text-blue-600 transition-colors cursor-pointer text-xl relative"
+                            title="View tasks"
+                          >
+                            📋
+                            {taskCounts[goal.id] > 0 && (
+                              <span className="absolute -top-1 -right-1 bg-blue-900 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center" style={{ fontSize: '10px' }}>
+                                {taskCounts[goal.id]}
+                              </span>
+                            )}
+                          </a>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setHierarchicalView(goal.id);
+                            }}
+                            className="hover:text-blue-700 transition-colors relative text-xl"
+                            title="View sub-goals"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 013.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                            </svg>
+                            {goals.filter(g => g.parent_goal_id === goal.id).length > 0 && (
+                              <span className="absolute -top-1 -right-1 bg-blue-900 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center" style={{ fontSize: '10px' }}>
+                                {goals.filter(g => g.parent_goal_id === goal.id).length}
+                              </span>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -338,21 +519,30 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
             ) : (
               <div
                 key={goal.id}
-                className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm hover:shadow-md transition-shadow"
+                draggable
+                onDragStart={(e) => handleDragStart(e, goal)}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, goal)}
+                className={`bg-white border border-gray-200 rounded-lg p-5 shadow-sm hover:shadow-md transition-all cursor-move ${
+                  draggedGoal?.id === goal.id ? 'opacity-50 scale-98' : ''
+                }`}
               >
                 <div onClick={() => setEditingGoalId(goal.id)} className="cursor-pointer">
-                  <h3 className="text-xl font-bold text-slate-800 mb-3">
-                    {goal.title || goal.goal_text}
-                  </h3>
+                  <div className="flex items-start gap-2 mb-2">
+                    <span className="text-slate-400 text-sm mt-1">⋮⋮</span>
+                    <h3 className="text-xl font-bold text-slate-800 flex-1">
+                      {goal.title || goal.goal_text}
+                    </h3>
+                  </div>
                   
                   {goal.title && goal.goal_text !== goal.title && (
-                    <p className="text-slate-600 mb-3 text-sm">
+                    <p className="text-slate-600 mb-3 text-sm ml-6">
                       {goal.goal_text}
                     </p>
                   )}
 
                   {goal.why && (
-                    <div className="mb-3">
+                    <div className="mb-3 ml-6">
                       <span className="text-sm font-medium text-slate-600">Why: </span>
                       <span className="text-sm text-slate-600">{goal.why}</span>
                     </div>
@@ -367,10 +557,15 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
                       e.stopPropagation();
                       window.location.href = `/?page=todo-list&goal=${goal.id}`;
                     }}
-                    className="hover:text-blue-600 transition-colors cursor-pointer text-2xl"
+                    className="hover:text-blue-600 transition-colors cursor-pointer text-2xl relative"
                     title="View tasks"
                   >
                     📋
+                    {taskCounts[goal.id] > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-blue-900 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center" style={{ fontSize: '10px' }}>
+                        {taskCounts[goal.id]}
+                      </span>
+                    )}
                   </a>
 
                   <button

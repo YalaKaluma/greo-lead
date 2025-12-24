@@ -24,7 +24,6 @@ class GoalCreate(BaseModel):
     why: Optional[str] = None
     time_horizon: Optional[str] = "medium"
     parent_goal_id: Optional[int] = None
-    sort_order: Optional[int] = 0
 
 
 class GoalUpdate(BaseModel):
@@ -33,7 +32,6 @@ class GoalUpdate(BaseModel):
     why: Optional[str] = None
     time_horizon: Optional[str] = None
     parent_goal_id: Optional[int] = None
-    sort_order: Optional[int] = None
 
 
 # Pydantic request models for People
@@ -144,7 +142,6 @@ class GoalResponse(BaseModel):
     why: Optional[str]
     time_horizon: Optional[str]
     parent_goal_id: Optional[int]
-    sort_order: Optional[int]
     first_seen_at: datetime
     updated_at: datetime
 
@@ -470,7 +467,7 @@ def get_goals(
     """Get all goals for a user"""
     goals = db.query(JourneyGoal).filter(
         JourneyGoal.user_number == user_number
-    ).order_by(JourneyGoal.sort_order, JourneyGoal.first_seen_at.desc()).all()
+    ).order_by(JourneyGoal.first_seen_at.desc()).all()
 
     return goals
 
@@ -489,7 +486,6 @@ def create_goal(
         why=goal_data.why,
         time_horizon=goal_data.time_horizon,
         parent_goal_id=goal_data.parent_goal_id,
-        sort_order=goal_data.sort_order if goal_data.sort_order is not None else 0,
         first_seen_at=datetime.now(),
         updated_at=datetime.now()
     )
@@ -525,8 +521,6 @@ def update_goal(
         goal.time_horizon = goal_data.time_horizon
     if goal_data.parent_goal_id is not None:
         goal.parent_goal_id = goal_data.parent_goal_id
-    if goal_data.sort_order is not None:
-        goal.sort_order = goal_data.sort_order
 
     goal.updated_at = datetime.now()
     db.commit()

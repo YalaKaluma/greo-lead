@@ -80,7 +80,6 @@ class JourneyGoal(Base):
     why = Column(Text, nullable=True)
     time_horizon = Column(String, nullable=True)  # short, medium, long
     parent_goal_id = Column(Integer, ForeignKey('journey_goals.id'), nullable=True)  # Hierarchical goals
-    sort_order = Column(Integer, default=0, nullable=True)  # ← NEW FIELD FOR DRAG-AND-DROP ORDERING
 
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
