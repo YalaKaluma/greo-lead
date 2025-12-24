@@ -316,6 +316,7 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
           filteredGoals = goals.filter(g => g.time_horizon === timeFilter);
 
           // If viewing Medium Term goals, group/sort them by the Long Term goal they roll up to.
+          // (Medium goals with no Long Term parent appear last.)
           if (timeFilter === 'medium') {
             const getLongTermParentLabel = (g) => {
               let current = g;
@@ -342,35 +343,8 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
               const cmp = (aLongTerm || '').localeCompare(bLongTerm || '');
               return cmp !== 0 ? cmp : (a.sort_order || 0) - (b.sort_order || 0);
             });
-          } else if (timeFilter === 'short') {
-            // For short-term goals, sort them by their Medium Term parent (if any)
-            const getMediumTermParentLabel = (g) => {
-              let current = g;
-              let safety = 0;
-
-              while (current?.parent_goal_id && safety < 25) {
-                safety++;
-                const parent = goals.find(p => p.id === current.parent_goal_id);
-                if (!parent) break;
-                current = parent;
-                if (current.time_horizon === 'medium') return current.title || current.goal_text;
-              }
-              return null;
-            };
-
-            filteredGoals = filteredGoals.slice().sort((a, b) => {
-              const aMediumTerm = getMediumTermParentLabel(a);
-              const bMediumTerm = getMediumTermParentLabel(b);
-
-              if (aMediumTerm && !bMediumTerm) return -1;
-              if (!aMediumTerm && bMediumTerm) return 1;
-              if (!aMediumTerm && !bMediumTerm) return (a.sort_order || 0) - (b.sort_order || 0);
-
-              const cmp = (aMediumTerm || '').localeCompare(bMediumTerm || '');
-              return cmp !== 0 ? cmp : (a.sort_order || 0) - (b.sort_order || 0);
-            });
           } else {
-            // For long term, just sort by sort_order
+            // For long/short term, just sort by sort_order
             filteredGoals.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
           }
         }
@@ -531,175 +505,6 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
               <p className="text-slate-600 text-lg">
                 No {timeFilter} term goals yet. Add one to get started!
               </p>
-            </div>
-          );
-        }
-
-        // For Short Term: Group by Medium Term parent
-        if (timeFilter === 'short') {
-          const getMediumTermParent = (g) => {
-            let current = g;
-            let safety = 0;
-            while (current?.parent_goal_id && safety < 25) {
-              safety++;
-              const parent = goals.find(p => p.id === current.parent_goal_id);
-              if (!parent) break;
-              current = parent;
-              if (current.time_horizon === 'medium') return current;
-            }
-            return null;
-          };
-
-          // Group goals by their medium-term parent
-          const grouped = {};
-          filteredGoals.forEach(goal => {
-            const parent = getMediumTermParent(goal);
-            const key = parent ? parent.id : 'no-parent';
-            if (!grouped[key]) {
-              grouped[key] = {
-                parent: parent,
-                goals: []
-              };
-            }
-            grouped[key].goals.push(goal);
-          });
-
-          // Sort groups: goals with parents first, then no-parent goals
-          const sortedGroups = Object.entries(grouped).sort(([keyA, groupA], [keyB, groupB]) => {
-            if (groupA.parent && !groupB.parent) return -1;
-            if (!groupA.parent && groupB.parent) return 1;
-            if (groupA.parent && groupB.parent) {
-              return (groupA.parent.title || groupA.parent.goal_text).localeCompare(
-                groupB.parent.title || groupB.parent.goal_text
-              );
-            }
-            return 0;
-          });
-
-          return (
-            <div className="space-y-8">
-              {sortedGroups.map(([key, group]) => (
-                <div key={key}>
-                  {/* Group Header */}
-                  {group.parent && (
-                    <div className="mb-4 pb-3 border-b-2 border-slate-300">
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1">
-                          <h3 className="text-lg font-bold text-slate-700">
-                            🎯 {group.parent.title || group.parent.goal_text}
-                          </h3>
-                          <p className="text-sm text-slate-500 mt-1">
-                            Medium-term goal • {group.goals.length} short-term {group.goals.length === 1 ? 'goal' : 'goals'}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => setHierarchicalView(group.parent.id)}
-                          className="text-blue-600 hover:text-blue-700 text-sm font-medium px-3 py-1 rounded border border-blue-300 hover:bg-blue-50 transition-colors"
-                        >
-                          View Tree →
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  {!group.parent && group.goals.length > 0 && (
-                    <div className="mb-4 pb-3 border-b-2 border-slate-300">
-                      <h3 className="text-lg font-bold text-slate-700">
-                        📌 Independent Goals
-                      </h3>
-                      <p className="text-sm text-slate-500 mt-1">
-                        Not linked to a medium-term goal
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Goals Grid */}
-                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {group.goals.map((goal) => (
-                      editingGoalId === goal.id ? (
-                        <GoalForm
-                          key={goal.id}
-                          goal={goal}
-                          goals={goals}
-                          onSubmit={(data) => updateGoal(goal.id, data)}
-                          onCancel={() => setEditingGoalId(null)}
-                          onDelete={() => deleteGoal(goal.id)}
-                        />
-                      ) : (
-                        <div
-                          key={goal.id}
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, goal)}
-                          onDragOver={handleDragOver}
-                          onDrop={(e) => handleDrop(e, goal)}
-                          className={`bg-white border border-gray-200 rounded-lg p-5 shadow-sm hover:shadow-md transition-all cursor-move ${
-                            draggedGoal?.id === goal.id ? 'opacity-50 scale-98' : ''
-                          }`}
-                        >
-                          <div onClick={() => setEditingGoalId(goal.id)} className="cursor-pointer">
-                            <div className="flex items-start gap-2 mb-2">
-                              <span className="text-slate-400 text-sm mt-1">⋮⋮</span>
-                              <h3 className="text-xl font-bold text-slate-800 flex-1">
-                                {goal.title || goal.goal_text}
-                              </h3>
-                            </div>
-                            
-                            {goal.title && goal.goal_text !== goal.title && (
-                              <p className="text-slate-600 mb-3 text-sm ml-6">
-                                {goal.goal_text}
-                              </p>
-                            )}
-
-                            {goal.why && (
-                              <div className="mb-3 ml-6">
-                                <span className="text-sm font-medium text-slate-600">Why: </span>
-                                <span className="text-sm text-slate-600">{goal.why}</span>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="mt-3 flex gap-4 items-center justify-end text-slate-400">
-                            <a
-                              href={`/?page=todo-list&goal=${goal.id}`}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                window.location.href = `/?page=todo-list&goal=${goal.id}`;
-                              }}
-                              className="hover:text-blue-600 transition-colors cursor-pointer text-2xl relative"
-                              title="View tasks"
-                            >
-                              📋
-                              {taskCounts[goal.id] > 0 && (
-                                <span className="absolute -top-1 -right-1 bg-blue-900 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center" style={{ fontSize: '10px' }}>
-                                  {taskCounts[goal.id]}
-                                </span>
-                              )}
-                            </a>
-
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setHierarchicalView(goal.id);
-                              }}
-                              className="hover:text-blue-700 transition-colors relative text-2xl"
-                              title="View sub-goals"
-                            >
-                              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 013.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                              </svg>
-                              {goals.filter(g => g.parent_goal_id === goal.id).length > 0 && (
-                                <span className="absolute -top-1 -right-1 bg-blue-900 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center" style={{ fontSize: '10px' }}>
-                                  {goals.filter(g => g.parent_goal_id === goal.id).length}
-                                </span>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    ))}
-                  </div>
-                </div>
-              ))}
             </div>
           );
         }
@@ -873,7 +678,7 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
           );
         }
 
-        // For Long Term: Regular grid
+        // For Long/Short Term: Regular grid
         return (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {filteredGoals.map((goal) => (
