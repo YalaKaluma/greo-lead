@@ -499,11 +499,9 @@ export default function TodoList({ apiUrl, userNumber }) {
 
 // Helper Functions
 function getPriorityIcon(priority) {
-  const p = priority?.toLowerCase();
-  if (p === 'high') return '🔴';
-  if (p === 'medium') return '🟠';
-  if (p === 'low') return '🟢';
-  return '🟢'; // default to low
+  if (priority === 'high') return '🔴';
+  if (priority === 'medium') return '🟠';
+  return '🟢';
 }
 
 function formatDueDate(dateString) {
@@ -743,7 +741,7 @@ function EditTaskForm({ task, provided, onUpdate, onCancelEdit, onDelete, projec
     project: task.project || '',
     delegated_to: task.delegated_to || '',
     due_date: task.due_date || '',
-    priority: task.priority?.toLowerCase() || 'medium',
+    priority: task.priority,
     notes: task.notes || '',
     goal_id: task.goal_id || null
   });
