@@ -298,6 +298,11 @@ export default function TodoList({ apiUrl, userNumber }) {
     setSelectedGoal('');
   };
 
+  const resetSortOrder = () => {
+    localStorage.removeItem('taskSortOrder');
+    setSortOrder([]);
+  };
+
   const hasActiveFilters = selectedProject || selectedDelegate || selectedGoal || filterType !== 'due_today';
 
   const sortedTasks = getSortedTasks();
@@ -328,13 +333,24 @@ export default function TodoList({ apiUrl, userNumber }) {
               {selectedGoal && ` • Goal: ${goals.find(g => g.id === parseInt(selectedGoal))?.title || 'Selected'}`}
             </p>
           </div>
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-          >
-            <span className="hidden sm:inline">+ Add Task</span>
-            <span className="sm:hidden">+</span>
-          </button>
+          <div className="flex gap-2">
+            {sortOrder.length > 0 && (
+              <button
+                onClick={resetSortOrder}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-lg font-medium transition-colors text-sm"
+                title="Reset to priority sorting"
+              >
+                ↻ Reset Sort
+              </button>
+            )}
+            <button
+              onClick={() => setShowAddForm(!showAddForm)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+            >
+              <span className="hidden sm:inline">+ Add Task</span>
+              <span className="sm:hidden">+</span>
+            </button>
+          </div>
         </div>
 
         {/* Filter Bar - COLLAPSIBLE */}
