@@ -353,7 +353,7 @@ export default function TodoList({ apiUrl, userNumber }) {
           </div>
         </div>
 
-        {/* Collapsible Filters Section */}
+        {/* Filter Bar - COLLAPSIBLE */}
         <div className="bg-white border border-gray-200 rounded-lg mb-6">
           <button
             onClick={() => setFiltersCollapsed(!filtersCollapsed)}
@@ -509,19 +509,6 @@ export default function TodoList({ apiUrl, userNumber }) {
           </DragDropContext>
         )}
       </div>
-
-      {/* Modal for Editing Task */}
-      {editingTaskId && (
-        <EditTaskModal
-          task={sortedTasks.find(t => t.id === editingTaskId)}
-          onUpdate={(updates) => updateTask(editingTaskId, updates)}
-          onCancel={() => setEditingTaskId(null)}
-          onDelete={() => deleteTask(editingTaskId)}
-          projects={projects}
-          delegates={delegates}
-          goals={getSortedGoals(goals)}
-        />
-      )}
     </div>
   );
 }
@@ -583,9 +570,15 @@ function getDueDateColor(dateString) {
 function TaskItem({
   task,
   index,
+  isEditing,
   isCompleting,
   onToggle,
+  onDelete,
   onStartEdit,
+  onCancelEdit,
+  onUpdate,
+  projects,
+  delegates,
   goals
 }) {
   const [swipeDistance, setSwipeDistance] = useState(0);
@@ -602,26 +595,42 @@ function TaskItem({
   };
 
   const onTouchEnd = () => {
+    if (swipeDistance > 50) {
+      onDelete();
+    }
     setSwipeDistance(0);
   };
 
   return (
     <Draggable draggableId={String(task.id)} index={index}>
       {(provided, snapshot) => (
-        <TaskCard
-          task={task}
-          index={index}
-          provided={provided}
-          snapshot={snapshot}
-          isCompleting={isCompleting}
-          swipeDistance={swipeDistance}
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-          onToggle={onToggle}
-          onStartEdit={onStartEdit}
-          goals={goals}
-        />
+        isEditing ? (
+          <EditTaskForm
+            task={task}
+            provided={provided}
+            onUpdate={onUpdate}
+            onCancelEdit={onCancelEdit}
+            onDelete={onDelete}
+            projects={projects}
+            delegates={delegates}
+            goals={goals}
+          />
+        ) : (
+          <TaskCard
+            task={task}
+            index={index}
+            provided={provided}
+            snapshot={snapshot}
+            isCompleting={isCompleting}
+            swipeDistance={swipeDistance}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+            onToggle={onToggle}
+            onStartEdit={onStartEdit}
+            goals={goals}
+          />
+        )
       )}
     </Draggable>
   );
@@ -743,8 +752,8 @@ function TaskCard({
 }
 
 
-// Edit Task Modal Component - Todoist-style
-function EditTaskModal({ task, onUpdate, onCancel, onDelete, projects, delegates, goals }) {
+// Edit Task Form Component
+function EditTaskForm({ task, provided, onUpdate, onCancelEdit, onDelete, projects, delegates, goals }) {
   const [editData, setEditData] = useState({
     title: task.title,
     project: task.project || '',
@@ -755,243 +764,111 @@ function EditTaskModal({ task, onUpdate, onCancel, onDelete, projects, delegates
     goal_id: task.goal_id || null
   });
 
-  const [showDatePicker, setShowDatePicker] = useState(false);
-
-  // Quick date functions
-  const setTomorrow = () => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    setEditData({ ...editData, due_date: tomorrow.toISOString().split('T')[0] });
-    setShowDatePicker(false);
-  };
-
-  const setNextWeek = () => {
-    const nextWeek = new Date();
-    nextWeek.setDate(nextWeek.getDate() + 7);
-    setEditData({ ...editData, due_date: nextWeek.toISOString().split('T')[0] });
-    setShowDatePicker(false);
-  };
-
-  const setNextMonth = () => {
-    const nextMonth = new Date();
-    nextMonth.setMonth(nextMonth.getMonth() + 1);
-    setEditData({ ...editData, due_date: nextMonth.toISOString().split('T')[0] });
-    setShowDatePicker(false);
-  };
-
-  const handleSave = () => {
-    onUpdate(editData);
-  };
-
-  const handleDelete = () => {
-    if (confirm('Delete this task?')) {
-      onDelete();
-      onCancel();
-    }
-  };
-
   return (
-    <>
-      {/* Modal Overlay */}
-      <div 
-        className="fixed inset-0 bg-black bg-opacity-50 z-40"
-        onClick={onCancel}
-      />
+    <div
+      ref={provided.innerRef}
+      {...provided.draggableProps}
+      className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4 space-y-3"
+    >
+      <h3 className="font-semibold text-slate-800">Edit Task</h3>
       
-      {/* Modal Content */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-          {/* Modal Header */}
-          <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-slate-800">Edit Task</h2>
-            <button
-              onClick={onCancel}
-              className="text-slate-400 hover:text-slate-600 text-2xl leading-none"
-            >
-              ×
-            </button>
-          </div>
+      <input
+        type="text"
+        value={editData.title}
+        onChange={(e) => setEditData({ ...editData, title: e.target.value })}
+        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        placeholder="Task title"
+        autoFocus
+      />
 
-          {/* Modal Body */}
-          <div className="p-6 space-y-4">
-            {/* Task Title */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Task Title</label>
-              <input
-                type="text"
-                value={editData.title}
-                onChange={(e) => setEditData({ ...editData, title: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
-                placeholder="What needs to be done?"
-                autoFocus
-              />
-            </div>
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          type="text"
+          value={editData.project}
+          onChange={(e) => setEditData({ ...editData, project: e.target.value })}
+          list="edit-project-list"
+          placeholder="Project"
+          className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <datalist id="edit-project-list">
+          {projects.map(p => <option key={p} value={p} />)}
+        </datalist>
 
-            {/* Due Date Section */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Due Date</label>
-              <div 
-                className="relative"
-                onClick={() => setShowDatePicker(!showDatePicker)}
-              >
-                <div className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white cursor-pointer hover:border-blue-400 transition-colors flex items-center justify-between">
-                  <span className={editData.due_date ? 'text-slate-800' : 'text-slate-400'}>
-                    {editData.due_date ? new Date(editData.due_date).toLocaleDateString('en-US', { 
-                      weekday: 'short', 
-                      month: 'short', 
-                      day: 'numeric',
-                      year: 'numeric'
-                    }) : 'No due date'}
-                  </span>
-                  <span className="text-slate-400">📅</span>
-                </div>
-
-                {/* Date Picker Dropdown */}
-                {showDatePicker && (
-                  <div className="absolute z-10 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg">
-                    {/* Quick Buttons */}
-                    <div className="p-2 space-y-1">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setTomorrow(); }}
-                        className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded text-sm text-slate-700"
-                      >
-                        🗓️ Tomorrow
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setNextWeek(); }}
-                        className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded text-sm text-slate-700"
-                      >
-                        📆 Next Week
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setNextMonth(); }}
-                        className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded text-sm text-slate-700"
-                      >
-                        🗓️ Next Month
-                      </button>
-                    </div>
-
-                    <div className="border-t border-gray-200 p-2">
-                      <input
-                        type="date"
-                        value={editData.due_date}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          setEditData({ ...editData, due_date: e.target.value });
-                          setShowDatePicker(false);
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Priority */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Priority</label>
-              <select
-                value={editData.priority}
-                onChange={(e) => setEditData({ ...editData, priority: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                <option value="high">🔴 High Priority</option>
-                <option value="medium">🟠 Medium Priority</option>
-                <option value="low">🟢 Low Priority</option>
-              </select>
-            </div>
-
-            {/* Project */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Project</label>
-              <input
-                type="text"
-                value={editData.project}
-                onChange={(e) => setEditData({ ...editData, project: e.target.value })}
-                list="modal-project-list"
-                placeholder="No project"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <datalist id="modal-project-list">
-                {projects.map(p => <option key={p} value={p} />)}
-              </datalist>
-            </div>
-
-            {/* Goal */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Goal</label>
-              <select
-                value={editData.goal_id || ''}
-                onChange={(e) => setEditData({ ...editData, goal_id: e.target.value ? parseInt(e.target.value) : null })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                <option value="">No goal</option>
-                {goals.map(g => {
-                  const displayText = g.title || g.goal_text;
-                  const truncatedText = displayText.length > 50 ? displayText.substring(0, 50) + '...' : displayText;
-                  const indentation = getGoalIndentation(g.time_horizon);
-                  return <option key={g.id} value={g.id}>{indentation}{truncatedText}</option>;
-                })}
-              </select>
-            </div>
-
-            {/* Delegate */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Delegate To</label>
-              <input
-                type="text"
-                value={editData.delegated_to}
-                onChange={(e) => setEditData({ ...editData, delegated_to: e.target.value })}
-                list="modal-delegate-list"
-                placeholder="No one"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <datalist id="modal-delegate-list">
-                {delegates.map(d => <option key={d} value={d} />)}
-              </datalist>
-            </div>
-
-            {/* Notes */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Notes</label>
-              <textarea
-                value={editData.notes}
-                onChange={(e) => setEditData({ ...editData, notes: e.target.value })}
-                rows={3}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                placeholder="Add any additional details..."
-              />
-            </div>
-          </div>
-
-          {/* Modal Footer */}
-          <div className="sticky bottom-0 bg-slate-50 border-t border-gray-200 px-6 py-4 flex items-center justify-between">
-            <button
-              onClick={handleDelete}
-              className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors"
-            >
-              🗑️ Delete
-            </button>
-            <div className="flex gap-2">
-              <button
-                onClick={onCancel}
-                className="px-6 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg font-medium transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
+        <input
+          type="date"
+          value={editData.due_date}
+          onChange={(e) => setEditData({ ...editData, due_date: e.target.value })}
+          className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
       </div>
-    </>
+
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          type="text"
+          value={editData.delegated_to}
+          onChange={(e) => setEditData({ ...editData, delegated_to: e.target.value })}
+          list="edit-delegate-list"
+          placeholder="Delegate to"
+          className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <datalist id="edit-delegate-list">
+          {delegates.map(d => <option key={d} value={d} />)}
+        </datalist>
+
+        <select
+          value={editData.priority}
+          onChange={(e) => setEditData({ ...editData, priority: e.target.value })}
+          className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="high">🔴 High</option>
+          <option value="medium">🟠 Medium</option>
+          <option value="low">🟢 Low</option>
+        </select>
+      </div>
+
+      <select
+        value={editData.goal_id || ''}
+        onChange={(e) => setEditData({ ...editData, goal_id: e.target.value ? parseInt(e.target.value) : null })}
+        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <option value="">No goal</option>
+        {getSortedGoals(goals).map(g => {
+          const displayText = g.title || g.goal_text;
+          const truncatedText = displayText.length > 40 ? displayText.substring(0, 40) + '...' : displayText;
+          const indentation = getGoalIndentation(g.time_horizon);
+          return <option key={g.id} value={g.id}>{indentation}{truncatedText}</option>;
+        })}
+      </select>
+
+      <textarea
+        value={editData.notes}
+        onChange={(e) => setEditData({ ...editData, notes: e.target.value })}
+        rows={2}
+        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        placeholder="Notes"
+      />
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => onUpdate(editData)}
+          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium"
+        >
+          Save
+        </button>
+        <button
+          onClick={onCancelEdit}
+          className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded font-medium"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onDelete}
+          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
   );
 }
 
