@@ -830,11 +830,11 @@ function EditTaskModal({ task, onUpdate, onCancel, onDelete, projects, delegates
             {/* Due Date Section */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Due Date</label>
-              <div 
-                className="relative"
-                onClick={() => setShowDatePicker(!showDatePicker)}
-              >
-                <div className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white cursor-pointer hover:border-blue-400 transition-colors flex items-center justify-between">
+              <div className="relative">
+                <div 
+                  onClick={() => setShowDatePicker(!showDatePicker)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white cursor-pointer hover:border-blue-400 transition-colors flex items-center justify-between"
+                >
                   <span className={editData.due_date ? 'text-slate-800' : 'text-slate-400'}>
                     {editData.due_date ? new Date(editData.due_date).toLocaleDateString('en-US', { 
                       weekday: 'short', 
@@ -848,39 +848,41 @@ function EditTaskModal({ task, onUpdate, onCancel, onDelete, projects, delegates
 
                 {/* Date Picker Dropdown */}
                 {showDatePicker && (
-                  <div className="absolute z-10 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg">
+                  <div 
+                    className="absolute z-10 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     {/* Quick Buttons */}
                     <div className="p-2 space-y-1">
                       <button
-                        onClick={(e) => { e.stopPropagation(); setTomorrow(); }}
+                        onClick={setTomorrow}
                         className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded text-sm text-slate-700"
                       >
                         🗓️ Tomorrow
                       </button>
                       <button
-                        onClick={(e) => { e.stopPropagation(); setNextWeek(); }}
+                        onClick={setNextWeek}
                         className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded text-sm text-slate-700"
                       >
                         📆 Next Week
                       </button>
                       <button
-                        onClick={(e) => { e.stopPropagation(); setNextMonth(); }}
+                        onClick={setNextMonth}
                         className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded text-sm text-slate-700"
                       >
                         🗓️ Next Month
                       </button>
                     </div>
 
+                    {/* Calendar Picker - Always Visible */}
                     <div className="border-t border-gray-200 p-2">
                       <input
                         type="date"
                         value={editData.due_date}
                         onChange={(e) => {
-                          e.stopPropagation();
                           setEditData({ ...editData, due_date: e.target.value });
                           setShowDatePicker(false);
                         }}
-                        onClick={(e) => e.stopPropagation()}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
