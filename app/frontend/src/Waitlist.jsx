@@ -10,7 +10,6 @@ export default function Waitlist() {
     e.preventDefault();
     setError("");
 
-    // Optional: capture source from URL (?src=video, ?src=friend, etc.)
     const params = new URLSearchParams(window.location.search);
     const source = params.get("src") || "landing_page";
 
@@ -21,68 +20,94 @@ export default function Waitlist() {
         body: JSON.stringify({ email, source })
       });
 
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error("Request failed");
 
       const data = await res.json();
       setAlreadyRegistered(!!data.already_registered);
       setSuccess(true);
-    } catch {
+    } catch (err) {
+      console.error("Waitlist error:", err);
       setError("Something went wrong. Please try again.");
     }
   }
 
-  // ✅ SUCCESS STATE
-  if (success) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-white">
-        <div className="text-center max-w-md px-6">
-          <h1 className="text-3xl font-bold mb-4">
-            {alreadyRegistered
-              ? "You're already on the list 🙌"
-              : "You're on the list 🎉"}
-          </h1>
-          <p className="text-slate-600">
-            Alfred will reach out when early access opens.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // ✅ FORM STATE
   return (
-    <div className="flex h-screen items-center justify-center bg-white">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-md px-6 text-center"
-      >
-        <h1 className="text-3xl font-bold mb-4">Join the Alfred waitlist</h1>
-        <p className="text-slate-600 mb-8">
-          Be among the first executives to experience Alfred.
-        </p>
+    <div className="grid grid-cols-1 lg:grid-cols-2 h-screen">
 
-        <input
-          type="email"
-          required
-          placeholder="you@company.com"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          className="w-full px-4 py-3 mb-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-slate-500 focus:outline-none"
+      {/* ================= LEFT VISUAL PANEL ================= */}
+      <div className="hidden lg:flex flex-col items-center justify-center bg-slate-900 text-white px-8">
+        <img
+          src="/alfred-logo.png"
+          alt="Alfred"
+          className="w-40 mb-10"
         />
 
-        <button
-          type="submit"
-          className="w-full bg-slate-900 text-white font-semibold py-3 rounded-xl hover:bg-black transition"
-        >
-          Join the waitlist
-        </button>
+        <img
+          src="/leadership-cycle.png"
+          alt="Leadership Cycle"
+          className="w-[420px] opacity-90"
+        />
 
-        {error && (
-          <p className="text-red-600 text-sm mt-4">
-            {error}
-          </p>
-        )}
-      </form>
+        <p className="mt-10 text-slate-300 text-center max-w-md text-sm">
+          Vision · Execution · People · Routines
+        </p>
+      </div>
+
+      {/* ================= RIGHT FORM PANEL ================= */}
+      <div className="flex items-center justify-center bg-white px-6">
+        <div className="w-full max-w-md text-center">
+
+          {!success ? (
+            <>
+              <h1 className="text-3xl font-bold mb-4">
+                Join the Alfred waitlist
+              </h1>
+
+              <p className="text-slate-600 mb-8">
+                Be among the first executives to experience Alfred.
+              </p>
+
+              <form onSubmit={handleSubmit}>
+                <input
+                  type="email"
+                  required
+                  placeholder="you@company.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="w-full px-4 py-3 mb-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                />
+
+                <button
+                  type="submit"
+                  className="w-full bg-slate-900 text-white font-semibold py-3 rounded-xl hover:bg-black transition"
+                >
+                  Join the waitlist
+                </button>
+              </form>
+
+              {error && (
+                <p className="text-red-600 text-sm mt-4">
+                  {error}
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <h1 className="text-3xl font-bold mb-4">
+                {alreadyRegistered
+                  ? "You're already on the list 🙌"
+                  : "You're on the list 🎉"}
+              </h1>
+
+              <p className="text-slate-600">
+                Alfred will reach out when early access opens.
+              </p>
+            </>
+          )}
+
+        </div>
+      </div>
+
     </div>
   );
 }

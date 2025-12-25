@@ -10,7 +10,7 @@ from datetime import datetime
 from app.db import Base, engine
 from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits, waitlist
 from app.routers import auth
-
+from sqlalchemy import text
 
 
 
@@ -155,7 +155,7 @@ def health():
     # Test database connection
     try:
         with engine.connect() as conn:
-            conn.execute("SELECT 1")
+            conn.execute(text("SELECT 1"))
         db_status = "connected"
         db_test = "✓"
     except Exception as e:
