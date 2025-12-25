@@ -7,8 +7,10 @@ from app.models import WaitlistEntry
 
 router = APIRouter(prefix="/api/waitlist", tags=["waitlist"])
 
+from pydantic import BaseModel
+
 class WaitlistRequest(BaseModel):
-    email: EmailStr
+    email: str
     source: str | None = None
 
 @router.post("")
