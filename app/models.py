@@ -224,6 +224,15 @@ class JourneyValue(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class WaitlistEntry(Base):
+    __tablename__ = "waitlist"
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    source = Column(String, nullable=True)  # e.g. 'video', 'linkedin', 'friend'
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class JourneyAchievement(Base):
     __tablename__ = "journey_achievements"
 

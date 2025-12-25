@@ -69,6 +69,7 @@ def morning_nudge(db=Depends(get_db)):
     """
 
     logger.info("⏰ MORNING NUDGE ENDPOINT HIT")
+    logger.info(f"🌅 MORNING NUDGE | user_number={user_number}")
 
     user_number = DEFAULT_USER_NUMBER
     if not user_number:

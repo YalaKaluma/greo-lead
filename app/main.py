@@ -8,7 +8,7 @@ import sys
 import os
 from datetime import datetime
 from app.db import Base, engine
-from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits
+from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits, waitlist
 from app.routers import auth
 
 
@@ -125,8 +125,11 @@ routers_to_register = [
     (nudge.router, "/api", "Nudge"),
     (journey.router, "/api/journey", "Journey"),
     (messages.router, "/api", "Messages"),
+    (waitlist.router, "/api", "Waitlist"),
     (habits.router, "/api/habits", "Habits"),
 ]
+
+
 
 for router, prefix, tag in routers_to_register:
     try:
@@ -272,6 +275,9 @@ else:
     logger.warning(f"⚠️  Static directory not found at {static_path.absolute()}")
     logger.warning("  Frontend will not be available!")
     logger.warning("  API endpoints will still work.")
+
+
+
 
 # --------------------------------------
 # Startup Complete

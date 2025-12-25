@@ -7,6 +7,7 @@ import MyJournal from './components/MyJournal';
 import MyHabits from './components/MyHabits';
 import { useEffect, useState } from "react";
 import Login from "./Login";
+import Waitlist from "./Waitlist";
 
 // API URL handling
 const API_URL = import.meta.env.PROD
@@ -64,6 +65,10 @@ function App() {
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
   };
+
+  if (window.location.pathname === "/waitlist") {
+  return <Waitlist />;
+  }
 
   // 🔒 AUTH GATE
   if (!isLoggedIn) {
