@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from app.database import get_db
-from app.models import Waitlist
+from app.db import get_db
+from app.models import WaitlistEntry
 from sqlalchemy import select
 
 router = APIRouter()
@@ -17,15 +17,15 @@ def add_to_waitlist(
     payload: WaitlistRequest,
     db: Session = Depends(get_db)
 ):
-    # Check if already exists
+    # Check if already exists what the fuck?
     existing = db.execute(
-        select(Waitlist).where(Waitlist.email == payload.email)
+        select(WaitlistEntry).where(WaitlistEntry.email == payload.email)
     ).scalar_one_or_none()
 
     if existing:
         return {"already_registered": True}
 
-    entry = Waitlist(
+    entry = WaitlistEntry(
         email=payload.email,
         source=payload.source or "unknown"
     )
@@ -33,4 +33,4 @@ def add_to_waitlist(
     db.add(entry)
     db.commit()
 
-    return {"already_registered": False}
+    return {"already_registered": False}     
