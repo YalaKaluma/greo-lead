@@ -1,23 +1,40 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+const slides = [
+  {
+    image: "/leadership-cycle.png",
+    caption: "Vision · Execution · People · Routines"
+  },
+  {
+    image: "/alfred-logo.png",
+    caption: "Your AI Chief of Staff"
+  }
+];
 
 export default function Waitlist() {
   const [email, setEmail] = useState("");
   const [success, setSuccess] = useState(false);
   const [alreadyRegistered, setAlreadyRegistered] = useState(false);
   const [error, setError] = useState("");
+  const [slideIndex, setSlideIndex] = useState(0);
+
+  // Auto-rotate carousel
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSlideIndex((i) => (i + 1) % slides.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
 
-    const params = new URLSearchParams(window.location.search);
-    const source = params.get("src") || "landing_page";
-
     try {
       const res = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, source })
+        body: JSON.stringify({ email, source: "waitlist_page" })
       });
 
       if (!res.ok) throw new Error("Request failed");
@@ -25,8 +42,7 @@ export default function Waitlist() {
       const data = await res.json();
       setAlreadyRegistered(!!data.already_registered);
       setSuccess(true);
-    } catch (err) {
-      console.error("Waitlist error:", err);
+    } catch {
       setError("Something went wrong. Please try again.");
     }
   }
@@ -34,26 +50,19 @@ export default function Waitlist() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 h-screen">
 
-      {/* ================= LEFT VISUAL PANEL ================= */}
-      <div className="hidden lg:flex flex-col items-center justify-center bg-slate-900 text-white px-8">
+      {/* LEFT — CAROUSEL */}
+      <div className="hidden lg:flex flex-col items-center justify-center bg-slate-900 text-white px-10">
         <img
-          src="/alfred-logo.png"
-          alt="Alfred"
-          className="w-40 mb-10"
+          src={slides[slideIndex].image}
+          className="w-[420px] mb-6 transition-opacity duration-500"
+          alt="Slide"
         />
-
-        <img
-          src="/leadership-cycle.png"
-          alt="Leadership Cycle"
-          className="w-[420px] opacity-90"
-        />
-
-        <p className="mt-10 text-slate-300 text-center max-w-md text-sm">
-          Vision · Execution · People · Routines
+        <p className="text-slate-300 text-sm">
+          {slides[slideIndex].caption}
         </p>
       </div>
 
-      {/* ================= RIGHT FORM PANEL ================= */}
+      {/* RIGHT — FORM */}
       <div className="flex items-center justify-center bg-white px-6">
         <div className="w-full max-w-md text-center">
 
@@ -73,22 +82,20 @@ export default function Waitlist() {
                   required
                   placeholder="you@company.com"
                   value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 mb-4 border border-slate-300 rounded-xl focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-3 mb-4 border rounded-xl"
                 />
 
                 <button
                   type="submit"
-                  className="w-full bg-slate-900 text-white font-semibold py-3 rounded-xl hover:bg-black transition"
+                  className="w-full bg-black text-white py-3 rounded-xl"
                 >
                   Join the waitlist
                 </button>
               </form>
 
               {error && (
-                <p className="text-red-600 text-sm mt-4">
-                  {error}
-                </p>
+                <p className="text-red-600 text-sm mt-4">{error}</p>
               )}
             </>
           ) : (
@@ -100,14 +107,12 @@ export default function Waitlist() {
               </h1>
 
               <p className="text-slate-600">
-                Alfred will reach out when early access opens.
+                Alfred will reach out soon.
               </p>
             </>
           )}
-
         </div>
       </div>
-
     </div>
   );
 }

@@ -1,29 +1,36 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from app.database import get_db
+from app.models import Waitlist
+from sqlalchemy import select
 
-from app.db import get_db
-from app.models import WaitlistEntry
-
-router = APIRouter(prefix="/api/waitlist", tags=["waitlist"])
-
-from pydantic import BaseModel
+router = APIRouter()
 
 class WaitlistRequest(BaseModel):
     email: str
     source: str | None = None
 
-@router.post("")
-def add_to_waitlist(payload: WaitlistRequest, db: Session = Depends(get_db)):
-    existing = db.query(WaitlistEntry).filter_by(email=payload.email).first()
-    if existing:
-        return {"success": True, "already_registered": True}
 
-    entry = WaitlistEntry(
+@router.post("/waitlist")
+def add_to_waitlist(
+    payload: WaitlistRequest,
+    db: Session = Depends(get_db)
+):
+    # Check if already exists
+    existing = db.execute(
+        select(Waitlist).where(Waitlist.email == payload.email)
+    ).scalar_one_or_none()
+
+    if existing:
+        return {"already_registered": True}
+
+    entry = Waitlist(
         email=payload.email,
-        source=payload.source
+        source=payload.source or "unknown"
     )
+
     db.add(entry)
     db.commit()
 
-    return {"success": True, "already_registered": False}
+    return {"already_registered": False}
