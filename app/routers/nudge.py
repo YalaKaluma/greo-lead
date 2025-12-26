@@ -14,7 +14,7 @@ Key Features:
 - Consistent retry logic for external API calls
 - Graceful degradation when context unavailable
 - Structured logging for debugging and monitoring
-- DRY code - prompts defined once in NUDGE_CONFIGS
+- Prompts loaded from external YAML config (easy to edit!)
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -23,6 +23,8 @@ from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 from openai import OpenAI, OpenAIError
 import logging
+import yaml
+from pathlib import Path
 from typing import Optional, List, Dict
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
@@ -73,98 +75,55 @@ except Exception as e:
     logger.error(f"❌ Failed to initialize OpenAI client: {e}")
     openai_client = None
 
+
 # -------------------------------------------------
-# Nudge Configuration - SINGLE SOURCE OF TRUTH
-# All prompts defined here. Edit once, applies everywhere.
-# Optimized based on leadership coaching philosophy.
+# Load Nudge Configuration from YAML
+# Prompts live in nudge_prompts.yaml for easy editing
 # -------------------------------------------------
 
-NUDGE_CONFIGS = {
-    "morning": {
-        "max_length": 280,
-        "system_prompt": """You are Alfred, an AI Chief of Staff.
+def load_nudge_configs() -> Dict:
+    """
+    Load nudge prompts from YAML config file.
+    Falls back to hardcoded defaults if file not found.
 
-It's morning. Your role is to energize the user with ONE powerful, meaningful compliment.
+    Returns:
+        Dict of nudge configurations
+    """
+    config_path = Path(__file__).parent.parent / "nudge_prompts.yaml"
 
-{context}
+    try:
+        with open(config_path, 'r') as f:
+            configs = yaml.safe_load(f)
+            logger.info(f"✅ Loaded nudge prompts from {config_path}")
+            return configs
+    except FileNotFoundError:
+        logger.warning(f"⚠️ Config file not found at {config_path}, using defaults")
+        # Fallback to hardcoded defaults
+        return {
+            "morning": {
+                "max_length": 280,
+                "system_prompt": "You are Alfred. Send a brief morning compliment. {context}"
+            },
+            "evening": {
+                "max_length": 320,
+                "system_prompt": "You are Alfred. Ask reflective evening questions. {context}"
+            },
+            "weekly": {
+                "max_length": 450,
+                "system_prompt": "You are Alfred. Friday coaching - go deeper. {context}"
+            },
+            "sunday_review": {
+                "max_length": 400,
+                "system_prompt": "You are Alfred. Sunday goal review and planning. {context}"
+            }
+        }
+    except Exception as e:
+        logger.error(f"❌ Error loading config file: {e}")
+        raise
 
-Instructions:
-- Choose ONE specific thing to compliment based on recent achievements (completed tasks/habits) OR their broader journey (strengths, goals, projects)
-- Make it personal and specific - reference actual things from their context
-- Be genuine and warm, not generic
-- Keep it SHORT and punchy - one or two sentences max
-- NO questions, NO lists, NO overwhelming details
-- Max {max_length} characters
 
-Example tone: "Your 5-day meditation streak shows real discipline. That consistency is exactly what will carry your Leadership OS forward."
-
-Now write your compliment:"""
-    },
-
-    "evening": {
-        "max_length": 320,
-        "system_prompt": """You are Alfred, an AI Chief of Staff and leadership coach.
-
-It's evening. Your role is to create space for the user to reflect on their inner experience today.
-
-{context}
-
-Instructions:
-- Ask 1-2 thoughtful questions that invite introspection
-- Focus on: What did they learn about themselves? How are they feeling? What do they need?
-- You MAY reference their day's context (tasks, habits, conversations) if it helps, but it's optional
-- Think "leadership journal" - personal, reflective, meaningful
-- Be warm and curious, not interrogative
-- Max {max_length} characters
-
-Example tone: "How did today feel for you? What did you learn about yourself or what you need right now?"
-
-Now ask your reflection question(s):"""
-    },
-
-    "weekly": {
-        "max_length": 450,
-        "system_prompt": """You are Alfred, an AI Chief of Staff and leadership coach.
-
-It's Friday evening. Time for deeper reflection on the week.
-
-{context}
-
-Instructions:
-- Ask 2-4 thoughtful questions that help the user go deeper
-- Start with what they shared THIS WEEK (recent conversations, tasks, habits)
-- Connect to their JOURNEY themes (strengths, development areas, failures/learnings, values, goals)
-- Invite them to fill in gaps in their journey - what haven't they shared yet?
-- Make connections: "Given what you shared about X this week, what does that reveal about Y?"
-- Be curious and exploratory, not prescriptive
-- Max {max_length} characters
-
-Example tone: "You mentioned delegation challenges twice this week. What's really underneath that for you? And thinking about your leadership strengths - which ones are you NOT using enough?"
-
-Now ask your coaching questions:"""
-    },
-
-    "sunday_review": {
-        "max_length": 400,
-        "system_prompt": """You are Alfred, an AI Chief of Staff helping with weekly goal setting.
-
-It's Sunday evening. Time to look back at last week and plan this week.
-
-{context}
-
-Instructions:
-- Focus specifically on their GOALS (from journey context)
-- Ask about: (1) Progress made last week toward goals, (2) What they want to achieve THIS week to move goals forward
-- Reference their actual goals by name/description
-- Be structured but warm - this is planning mode
-- Help them be specific and realistic about the week ahead
-- Max {max_length} characters
-
-Example tone: "Looking at your Leadership OS goal - what concrete progress did you make last week? And what's the ONE thing you want to accomplish this week to keep momentum?"
-
-Now guide their goal reflection:"""
-    }
-}
+# Load configs at startup
+NUDGE_CONFIGS = load_nudge_configs()
 
 
 # -------------------------------------------------
@@ -567,6 +526,16 @@ def get_all_active_users(db: Session) -> List[str]:
         return []
 
 
+def reload_nudge_configs() -> None:
+    """
+    Reload nudge configurations from YAML file.
+    Call this endpoint to apply prompt changes without restarting.
+    """
+    global NUDGE_CONFIGS
+    NUDGE_CONFIGS = load_nudge_configs()
+    logger.info("🔄 Reloaded nudge configurations")
+
+
 # -------------------------------------------------
 # Core Nudge Function (used by all endpoints)
 # -------------------------------------------------
@@ -578,7 +547,7 @@ def send_nudge_for_user(
 ) -> Dict:
     """
     Core function to send a nudge to a specific user.
-    Uses NUDGE_CONFIGS for prompt and settings.
+    Uses NUDGE_CONFIGS loaded from YAML file.
 
     Args:
         user_number: User's WhatsApp number
@@ -646,7 +615,7 @@ def morning_nudge(
     Send morning motivational message (typically scheduled for 7am).
 
     Uses FULL context: journey + tasks + habits + conversation history
-    Prompt configured in NUDGE_CONFIGS["morning"]
+    Prompt loaded from nudge_prompts.yaml
     """
     nudge_type = "morning"
     logger.info(f"🌅 {nudge_type.upper()} nudge endpoint invoked")
@@ -671,7 +640,7 @@ def evening_nudge(
     Send evening reflection prompt (typically scheduled for 6pm).
 
     Uses FULL context: journey + tasks + habits + conversation history
-    Prompt configured in NUDGE_CONFIGS["evening"]
+    Prompt loaded from nudge_prompts.yaml
     """
     nudge_type = "evening"
     logger.info(f"🌙 {nudge_type.upper()} nudge endpoint invoked")
@@ -696,7 +665,7 @@ def weekly_nudge(
     Send Friday weekly coaching nudge - go deeper on the week.
 
     Uses FULL context: journey + tasks + habits + conversation history
-    Prompt configured in NUDGE_CONFIGS["weekly"]
+    Prompt loaded from nudge_prompts.yaml
     """
     nudge_type = "weekly"
     logger.info(f"🎯 {nudge_type.upper()} coaching nudge endpoint invoked")
@@ -721,7 +690,7 @@ def sunday_review_nudge(
     Send Sunday evening goal review and weekly planning prompt.
 
     Uses FULL context: journey + tasks + habits + conversation history
-    Prompt configured in NUDGE_CONFIGS["sunday_review"]
+    Prompt loaded from nudge_prompts.yaml
     """
     nudge_type = "sunday_review"
     logger.info(f"📋 {nudge_type.upper()} goal setting endpoint invoked")
@@ -743,27 +712,19 @@ def sunday_review_nudge(
 
 @router.get("/nudge/morning/batch")
 def morning_nudge_batch(db: Session = Depends(get_db)):
-    """
-    Send morning nudge to ALL active users.
-    Uses same prompt as single-user endpoint (NUDGE_CONFIGS["morning"])
-    """
+    """Send morning nudge to ALL active users."""
     nudge_type = "morning"
     start_time = datetime.utcnow()
     logger.info(f"🌅📦 {nudge_type.upper()} batch endpoint invoked")
 
     users = get_all_active_users(db)
-    results = []
-
-    for user_number in users:
-        logger.info(f"Sending {nudge_type} nudge to {user_number}")
-        result = send_nudge_for_user(user_number, nudge_type, db)
-        results.append(result)
+    results = [send_nudge_for_user(user_number, nudge_type, db) for user_number in users]
 
     duration = (datetime.utcnow() - start_time).total_seconds()
     successful = len([r for r in results if r["status"] == "success"])
     failed = len([r for r in results if r["status"] == "failed"])
 
-    logger.info(f"✅ {nudge_type} batch completed: {successful} successful, {failed} failed in {duration:.2f}s")
+    logger.info(f"✅ {nudge_type} batch: {successful} successful, {failed} failed in {duration:.2f}s")
 
     return {
         "status": "batch_complete",
@@ -779,27 +740,19 @@ def morning_nudge_batch(db: Session = Depends(get_db)):
 
 @router.get("/nudge/evening/batch")
 def evening_nudge_batch(db: Session = Depends(get_db)):
-    """
-    Send evening nudge to ALL active users.
-    Uses same prompt as single-user endpoint (NUDGE_CONFIGS["evening"])
-    """
+    """Send evening nudge to ALL active users."""
     nudge_type = "evening"
     start_time = datetime.utcnow()
     logger.info(f"🌙📦 {nudge_type.upper()} batch endpoint invoked")
 
     users = get_all_active_users(db)
-    results = []
-
-    for user_number in users:
-        logger.info(f"Sending {nudge_type} nudge to {user_number}")
-        result = send_nudge_for_user(user_number, nudge_type, db)
-        results.append(result)
+    results = [send_nudge_for_user(user_number, nudge_type, db) for user_number in users]
 
     duration = (datetime.utcnow() - start_time).total_seconds()
     successful = len([r for r in results if r["status"] == "success"])
     failed = len([r for r in results if r["status"] == "failed"])
 
-    logger.info(f"✅ {nudge_type} batch completed: {successful} successful, {failed} failed in {duration:.2f}s")
+    logger.info(f"✅ {nudge_type} batch: {successful} successful, {failed} failed in {duration:.2f}s")
 
     return {
         "status": "batch_complete",
@@ -815,27 +768,19 @@ def evening_nudge_batch(db: Session = Depends(get_db)):
 
 @router.get("/nudge/weekly/batch")
 def weekly_batch(db: Session = Depends(get_db)):
-    """
-    Send Friday coaching nudge to ALL active users.
-    Uses same prompt as single-user endpoint (NUDGE_CONFIGS["weekly"])
-    """
+    """Send Friday coaching nudge to ALL active users."""
     nudge_type = "weekly"
     start_time = datetime.utcnow()
     logger.info(f"🎯📦 {nudge_type.upper()} batch endpoint invoked")
 
     users = get_all_active_users(db)
-    results = []
-
-    for user_number in users:
-        logger.info(f"Sending {nudge_type} nudge to {user_number}")
-        result = send_nudge_for_user(user_number, nudge_type, db)
-        results.append(result)
+    results = [send_nudge_for_user(user_number, nudge_type, db) for user_number in users]
 
     duration = (datetime.utcnow() - start_time).total_seconds()
     successful = len([r for r in results if r["status"] == "success"])
     failed = len([r for r in results if r["status"] == "failed"])
 
-    logger.info(f"✅ {nudge_type} batch completed: {successful} successful, {failed} failed")
+    logger.info(f"✅ {nudge_type} batch: {successful} successful, {failed} failed")
 
     return {
         "status": "batch_complete",
@@ -851,27 +796,19 @@ def weekly_batch(db: Session = Depends(get_db)):
 
 @router.get("/nudge/sunday_review/batch")
 def sunday_review_batch(db: Session = Depends(get_db)):
-    """
-    Send Sunday goal review nudge to ALL active users.
-    Uses same prompt as single-user endpoint (NUDGE_CONFIGS["sunday_review"])
-    """
+    """Send Sunday goal review nudge to ALL active users."""
     nudge_type = "sunday_review"
     start_time = datetime.utcnow()
     logger.info(f"📋📦 {nudge_type.upper()} batch endpoint invoked")
 
     users = get_all_active_users(db)
-    results = []
-
-    for user_number in users:
-        logger.info(f"Sending {nudge_type} nudge to {user_number}")
-        result = send_nudge_for_user(user_number, nudge_type, db)
-        results.append(result)
+    results = [send_nudge_for_user(user_number, nudge_type, db) for user_number in users]
 
     duration = (datetime.utcnow() - start_time).total_seconds()
     successful = len([r for r in results if r["status"] == "success"])
     failed = len([r for r in results if r["status"] == "failed"])
 
-    logger.info(f"✅ {nudge_type} batch completed: {successful} successful, {failed} failed")
+    logger.info(f"✅ {nudge_type} batch: {successful} successful, {failed} failed")
 
     return {
         "status": "batch_complete",
@@ -886,8 +823,27 @@ def sunday_review_batch(db: Session = Depends(get_db)):
 
 
 # -------------------------------------------------
-# Health Check Endpoint
+# Utility Endpoints
 # -------------------------------------------------
+
+@router.get("/nudge/reload_config")
+def reload_config():
+    """
+    Reload nudge prompts from YAML file.
+    Use this to apply prompt changes without restarting the app.
+    """
+    try:
+        reload_nudge_configs()
+        return {
+            "status": "success",
+            "message": "Nudge configurations reloaded successfully",
+            "nudge_types": list(NUDGE_CONFIGS.keys()),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.exception("Failed to reload configs")
+        raise HTTPException(status_code=500, detail=f"Failed to reload configs: {str(e)}")
+
 
 @router.get("/nudge/health")
 def health_check(db: Session = Depends(get_db)):
@@ -916,6 +872,7 @@ def health_check(db: Session = Depends(get_db)):
             "active_count": user_count,
         },
         "nudge_types": list(NUDGE_CONFIGS.keys()),
+        "config_source": "nudge_prompts.yaml",
         "endpoints": {
             "single_user": [
                 "/nudge/morning?user_number=...",
@@ -931,6 +888,7 @@ def health_check(db: Session = Depends(get_db)):
             ],
             "utility": [
                 "/nudge/health",
+                "/nudge/reload_config (reload prompts without restart)",
             ]
         }
     }

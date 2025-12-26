@@ -10,3 +10,4 @@ requests
 jinja2
 python-multipart
 twilio
+PyYAML==6.0.1
