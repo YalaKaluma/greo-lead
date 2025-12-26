@@ -275,14 +275,14 @@ def build_habit_context(db: Session, user_number: str) -> str:
         return "Unable to load habits."
 
 
-def build_full_context(db: Session, user_number: str, include_history: bool = True) -> tuple:
+def build_full_context(db: Session, user_number: str, include_history: bool = False) -> tuple:
     """
     Build complete context for AI including journey, tasks, habits, and conversation.
 
     Args:
         db: Database session
         user_number: User's WhatsApp number
-        include_history: Whether to include conversation history
+        include_history: Whether to include conversation history (default: False for nudges)
 
     Returns:
         Tuple of (context_text, conversation_history)
@@ -302,13 +302,15 @@ def build_full_context(db: Session, user_number: str, include_history: bool = Tr
     # Habit context
     habit_context = build_habit_context(db, user_number)
 
-    # Conversation history
+    # Conversation history - DISABLED BY DEFAULT FOR NUDGES
+    # Nudges work better with just journey/tasks/habits context
+    # Too much history overwhelms the directive prompt instructions
     conversation_history = []
     if include_history:
         try:
             full_history = load_conversation_history(db, user_number)
-            # Last 8 messages for context without overwhelming the prompt
-            conversation_history = full_history[-8:] if full_history else []
+            # Reduced from 8 to 2 - only most recent exchange for continuity
+            conversation_history = full_history[-2:] if full_history else []
             logger.debug(f"Loaded {len(conversation_history)} recent messages for context")
         except Exception as e:
             logger.warning(f"Failed to load conversation history: {e}")
@@ -573,6 +575,11 @@ def send_nudge_for_user(
             context=context_text,
             max_length=config["max_length"]
         )
+
+        # DEBUG: Log the actual prompt being sent
+        logger.info(f"🔍 System prompt for {nudge_type} (first 500 chars):")
+        logger.info(f"   {system_prompt[:500]}...")
+        logger.info(f"🔍 Conversation history: {len(conversation_history)} messages")
 
         # Generate AI message
         message_text = generate_ai_message(system_prompt, conversation_history, nudge_type, user_number)

@@ -85,6 +85,6 @@ sunday_review:
     - UNDER {max_length} characters
     
     BAD: "Consider how you might intentionally incorporate..."
-    GOOD: "Your Leadership goal - what progress last week? What's THE ONE thing you'll tackle this week?"
+    GOOD: "Your Leadership OS goal - what progress last week? What's THE ONE thing you'll tackle this week?"
     
     Ask ONLY the questions (no preamble):
