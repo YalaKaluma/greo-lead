@@ -14,6 +14,7 @@ Key Features:
 - Consistent retry logic for external API calls
 - Graceful degradation when context unavailable
 - Structured logging for debugging and monitoring
+- DRY code - prompts defined once in NUDGE_CONFIGS
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -71,6 +72,99 @@ try:
 except Exception as e:
     logger.error(f"❌ Failed to initialize OpenAI client: {e}")
     openai_client = None
+
+# -------------------------------------------------
+# Nudge Configuration - SINGLE SOURCE OF TRUTH
+# All prompts defined here. Edit once, applies everywhere.
+# Optimized based on leadership coaching philosophy.
+# -------------------------------------------------
+
+NUDGE_CONFIGS = {
+    "morning": {
+        "max_length": 280,
+        "system_prompt": """You are Alfred, an AI Chief of Staff.
+
+It's morning. Your role is to energize the user with ONE powerful, meaningful compliment.
+
+{context}
+
+Instructions:
+- Choose ONE specific thing to compliment based on recent achievements (completed tasks/habits) OR their broader journey (strengths, goals, projects)
+- Make it personal and specific - reference actual things from their context
+- Be genuine and warm, not generic
+- Keep it SHORT and punchy - one or two sentences max
+- NO questions, NO lists, NO overwhelming details
+- Max {max_length} characters
+
+Example tone: "Your 5-day meditation streak shows real discipline. That consistency is exactly what will carry your Leadership OS forward."
+
+Now write your compliment:"""
+    },
+
+    "evening": {
+        "max_length": 320,
+        "system_prompt": """You are Alfred, an AI Chief of Staff and leadership coach.
+
+It's evening. Your role is to create space for the user to reflect on their inner experience today.
+
+{context}
+
+Instructions:
+- Ask 1-2 thoughtful questions that invite introspection
+- Focus on: What did they learn about themselves? How are they feeling? What do they need?
+- You MAY reference their day's context (tasks, habits, conversations) if it helps, but it's optional
+- Think "leadership journal" - personal, reflective, meaningful
+- Be warm and curious, not interrogative
+- Max {max_length} characters
+
+Example tone: "How did today feel for you? What did you learn about yourself or what you need right now?"
+
+Now ask your reflection question(s):"""
+    },
+
+    "weekly": {
+        "max_length": 450,
+        "system_prompt": """You are Alfred, an AI Chief of Staff and leadership coach.
+
+It's Friday evening. Time for deeper reflection on the week.
+
+{context}
+
+Instructions:
+- Ask 2-4 thoughtful questions that help the user go deeper
+- Start with what they shared THIS WEEK (recent conversations, tasks, habits)
+- Connect to their JOURNEY themes (strengths, development areas, failures/learnings, values, goals)
+- Invite them to fill in gaps in their journey - what haven't they shared yet?
+- Make connections: "Given what you shared about X this week, what does that reveal about Y?"
+- Be curious and exploratory, not prescriptive
+- Max {max_length} characters
+
+Example tone: "You mentioned delegation challenges twice this week. What's really underneath that for you? And thinking about your leadership strengths - which ones are you NOT using enough?"
+
+Now ask your coaching questions:"""
+    },
+
+    "sunday_review": {
+        "max_length": 400,
+        "system_prompt": """You are Alfred, an AI Chief of Staff helping with weekly goal setting.
+
+It's Sunday evening. Time to look back at last week and plan this week.
+
+{context}
+
+Instructions:
+- Focus specifically on their GOALS (from journey context)
+- Ask about: (1) Progress made last week toward goals, (2) What they want to achieve THIS week to move goals forward
+- Reference their actual goals by name/description
+- Be structured but warm - this is planning mode
+- Help them be specific and realistic about the week ahead
+- Max {max_length} characters
+
+Example tone: "Looking at your Leadership OS goal - what concrete progress did you make last week? And what's the ONE thing you want to accomplish this week to keep momentum?"
+
+Now guide their goal reflection:"""
+    }
+}
 
 
 # -------------------------------------------------
@@ -480,19 +574,16 @@ def get_all_active_users(db: Session) -> List[str]:
 def send_nudge_for_user(
         user_number: str,
         nudge_type: str,
-        system_prompt_template: str,
         db: Session,
-        max_length: int = 450
 ) -> Dict:
     """
     Core function to send a nudge to a specific user.
+    Uses NUDGE_CONFIGS for prompt and settings.
 
     Args:
         user_number: User's WhatsApp number
         nudge_type: Type of nudge (morning/evening/weekly/sunday_review)
-        system_prompt_template: Template for system prompt with {context} placeholder
         db: Database session
-        max_length: Maximum character length for message
 
     Returns:
         Dict with status and metadata
@@ -500,11 +591,19 @@ def send_nudge_for_user(
     start_time = datetime.utcnow()
 
     try:
+        # Get config for this nudge type
+        config = NUDGE_CONFIGS.get(nudge_type)
+        if not config:
+            raise ValueError(f"Unknown nudge type: {nudge_type}")
+
         # Build full context
         context_text, conversation_history = build_full_context(db, user_number)
 
-        # Create system prompt
-        system_prompt = system_prompt_template.format(context=context_text, max_length=max_length)
+        # Create system prompt from template
+        system_prompt = config["system_prompt"].format(
+            context=context_text,
+            max_length=config["max_length"]
+        )
 
         # Generate AI message
         message_text = generate_ai_message(system_prompt, conversation_history, nudge_type, user_number)
@@ -547,29 +646,15 @@ def morning_nudge(
     Send morning motivational message (typically scheduled for 7am).
 
     Uses FULL context: journey + tasks + habits + conversation history
+    Prompt configured in NUDGE_CONFIGS["morning"]
     """
-    nudge_type = "morning_nudge"
-    logger.info(f"🌅 {nudge_type.upper()} endpoint invoked")
+    nudge_type = "morning"
+    logger.info(f"🌅 {nudge_type.upper()} nudge endpoint invoked")
 
     user_number = validate_user_number(user_number)
+    result = send_nudge_for_user(user_number, nudge_type, db)
 
-    system_prompt_template = """You are Alfred, an AI Chief of Staff.
-It's the start of the user's day.
-
-{context}
-
-Your task:
-- Send ONE uplifting morning message
-- Reference their specific tasks, habits, or recent conversation naturally
-- Be warm, concise, empowering
-- No questions (save for evening)
-- Max {max_length} characters
-
-Be conversational and acknowledge their context."""
-
-    result = send_nudge_for_user(user_number, nudge_type, system_prompt_template, db, max_length=350)
-
-    logger.info(f"✅ {nudge_type} completed: {result['status']}")
+    logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
     return {
         "nudge_type": nudge_type,
         "timestamp": datetime.utcnow().isoformat(),
@@ -586,68 +671,15 @@ def evening_nudge(
     Send evening reflection prompt (typically scheduled for 6pm).
 
     Uses FULL context: journey + tasks + habits + conversation history
+    Prompt configured in NUDGE_CONFIGS["evening"]
     """
-    nudge_type = "evening_nudge"
-    logger.info(f"🌙 {nudge_type.upper()} endpoint invoked")
+    nudge_type = "evening"
+    logger.info(f"🌙 {nudge_type.upper()} nudge endpoint invoked")
 
     user_number = validate_user_number(user_number)
+    result = send_nudge_for_user(user_number, nudge_type, db)
 
-    system_prompt_template = """You are Alfred, an AI Chief of Staff and executive coach.
-It's the end of the user's day.
-
-{context}
-
-Your task:
-- Ask 1-3 thoughtful reflection questions about their day
-- Reference specific tasks, habits, goals, or recent conversation
-- Be warm, personal, and genuinely curious
-- Max {max_length} characters
-
-Be conversational and build on recent context."""
-
-    result = send_nudge_for_user(user_number, nudge_type, system_prompt_template, db, max_length=450)
-
-    logger.info(f"✅ {nudge_type} completed: {result['status']}")
-    return {
-        "nudge_type": nudge_type,
-        "timestamp": datetime.utcnow().isoformat(),
-        **result
-    }
-
-
-@router.get("/nudge/sunday_review")
-def sunday_review_nudge(
-        user_number: Optional[str] = Query(None, description="WhatsApp number"),
-        db: Session = Depends(get_db)
-):
-    """
-    Send Sunday evening strategic review and planning prompt.
-
-    Uses FULL context: journey + tasks + habits + conversation history
-    """
-    nudge_type = "sunday_review_nudge"
-    logger.info(f"📋 {nudge_type.upper()} endpoint invoked")
-
-    user_number = validate_user_number(user_number)
-
-    system_prompt_template = """You are Alfred, an AI Chief of Staff and executive coach.
-
-It is Sunday evening. The user is transitioning from execution to reflection and planning.
-
-{context}
-
-Your task:
-- Ask 3-5 thoughtful strategic questions
-- Focus on weekly progress, what worked vs didn't, and priorities for next week
-- Reference their specific context naturally
-- Be structured, calm, and strategic
-- Max {max_length} characters
-
-Help them plan their week ahead based on their current state."""
-
-    result = send_nudge_for_user(user_number, nudge_type, system_prompt_template, db, max_length=550)
-
-    logger.info(f"✅ {nudge_type} completed: {result['status']}")
+    logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
     return {
         "nudge_type": nudge_type,
         "timestamp": datetime.utcnow().isoformat(),
@@ -661,47 +693,48 @@ def weekly_nudge(
         db: Session = Depends(get_db)
 ):
     """
-    Send weekly structured reflection prompt.
-    Fixed template (no AI generation for consistency).
+    Send Friday weekly coaching nudge - go deeper on the week.
+
+    Uses FULL context: journey + tasks + habits + conversation history
+    Prompt configured in NUDGE_CONFIGS["weekly"]
     """
-    nudge_type = "weekly_nudge"
-    start_time = datetime.utcnow()
-    logger.info(f"🗓️ {nudge_type.upper()} endpoint invoked")
+    nudge_type = "weekly"
+    logger.info(f"🎯 {nudge_type.upper()} coaching nudge endpoint invoked")
 
-    try:
-        user_number = validate_user_number(user_number)
+    user_number = validate_user_number(user_number)
+    result = send_nudge_for_user(user_number, nudge_type, db)
 
-        message_text = (
-            "🧭 *Your Weekly Reflection*\n"
-            "Here are a few questions for your journey:\n\n"
-            "• What strengths did you use this week?\n"
-            "• Any failures or learnings to capture?\n"
-            "• Any new projects or progress worth noting?\n"
-            "• Anyone who mattered this week?\n"
-            "• What do you want to improve next week?\n\n"
-            "Reply naturally — I'll structure everything automatically."
-        )
+    logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
+    return {
+        "nudge_type": nudge_type,
+        "timestamp": datetime.utcnow().isoformat(),
+        **result
+    }
 
-        send_whatsapp_message(message_text, user_number, nudge_type)
-        save_message_safe(db, user_number, message_text)
 
-        duration = (datetime.utcnow() - start_time).total_seconds()
-        logger.info(f"✅ {nudge_type} completed successfully in {duration:.2f}s")
+@router.get("/nudge/sunday_review")
+def sunday_review_nudge(
+        user_number: Optional[str] = Query(None, description="WhatsApp number"),
+        db: Session = Depends(get_db)
+):
+    """
+    Send Sunday evening goal review and weekly planning prompt.
 
-        return {
-            "status": "success",
-            "nudge_type": nudge_type,
-            "user_number": user_number,
-            "message_length": len(message_text),
-            "duration_seconds": duration,
-            "timestamp": datetime.utcnow().isoformat(),
-        }
+    Uses FULL context: journey + tasks + habits + conversation history
+    Prompt configured in NUDGE_CONFIGS["sunday_review"]
+    """
+    nudge_type = "sunday_review"
+    logger.info(f"📋 {nudge_type.upper()} goal setting endpoint invoked")
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"❌ Unexpected error in {nudge_type}: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+    user_number = validate_user_number(user_number)
+    result = send_nudge_for_user(user_number, nudge_type, db)
+
+    logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
+    return {
+        "nudge_type": nudge_type,
+        "timestamp": datetime.utcnow().isoformat(),
+        **result
+    }
 
 
 # -------------------------------------------------
@@ -712,40 +745,25 @@ def weekly_nudge(
 def morning_nudge_batch(db: Session = Depends(get_db)):
     """
     Send morning nudge to ALL active users.
-
-    Returns summary of successes and failures.
+    Uses same prompt as single-user endpoint (NUDGE_CONFIGS["morning"])
     """
-    nudge_type = "morning_nudge_batch"
+    nudge_type = "morning"
     start_time = datetime.utcnow()
-    logger.info(f"🌅📦 {nudge_type.upper()} endpoint invoked")
-
-    system_prompt_template = """You are Alfred, an AI Chief of Staff.
-It's the start of the user's day.
-
-{context}
-
-Your task:
-- Send ONE uplifting morning message
-- Reference their specific tasks, habits, or recent conversation naturally
-- Be warm, concise, empowering
-- No questions (save for evening)
-- Max {max_length} characters
-
-Be conversational and acknowledge their context."""
+    logger.info(f"🌅📦 {nudge_type.upper()} batch endpoint invoked")
 
     users = get_all_active_users(db)
     results = []
 
     for user_number in users:
-        logger.info(f"Sending morning nudge to {user_number}")
-        result = send_nudge_for_user(user_number, "morning_nudge", system_prompt_template, db, max_length=350)
+        logger.info(f"Sending {nudge_type} nudge to {user_number}")
+        result = send_nudge_for_user(user_number, nudge_type, db)
         results.append(result)
 
     duration = (datetime.utcnow() - start_time).total_seconds()
     successful = len([r for r in results if r["status"] == "success"])
     failed = len([r for r in results if r["status"] == "failed"])
 
-    logger.info(f"✅ {nudge_type} completed: {successful} successful, {failed} failed in {duration:.2f}s")
+    logger.info(f"✅ {nudge_type} batch completed: {successful} successful, {failed} failed in {duration:.2f}s")
 
     return {
         "status": "batch_complete",
@@ -763,37 +781,97 @@ Be conversational and acknowledge their context."""
 def evening_nudge_batch(db: Session = Depends(get_db)):
     """
     Send evening nudge to ALL active users.
+    Uses same prompt as single-user endpoint (NUDGE_CONFIGS["evening"])
     """
-    nudge_type = "evening_nudge_batch"
+    nudge_type = "evening"
     start_time = datetime.utcnow()
-    logger.info(f"🌙📦 {nudge_type.upper()} endpoint invoked")
-
-    system_prompt_template = """You are Alfred, an AI Chief of Staff and executive coach.
-It's the end of the user's day.
-
-{context}
-
-Your task:
-- Ask 1-3 thoughtful reflection questions about their day
-- Reference specific tasks, habits, goals, or recent conversation
-- Be warm, personal, and genuinely curious
-- Max {max_length} characters
-
-Be conversational and build on recent context."""
+    logger.info(f"🌙📦 {nudge_type.upper()} batch endpoint invoked")
 
     users = get_all_active_users(db)
     results = []
 
     for user_number in users:
-        logger.info(f"Sending evening nudge to {user_number}")
-        result = send_nudge_for_user(user_number, "evening_nudge", system_prompt_template, db, max_length=450)
+        logger.info(f"Sending {nudge_type} nudge to {user_number}")
+        result = send_nudge_for_user(user_number, nudge_type, db)
         results.append(result)
 
     duration = (datetime.utcnow() - start_time).total_seconds()
     successful = len([r for r in results if r["status"] == "success"])
     failed = len([r for r in results if r["status"] == "failed"])
 
-    logger.info(f"✅ {nudge_type} completed: {successful} successful, {failed} failed in {duration:.2f}s")
+    logger.info(f"✅ {nudge_type} batch completed: {successful} successful, {failed} failed in {duration:.2f}s")
+
+    return {
+        "status": "batch_complete",
+        "nudge_type": nudge_type,
+        "total_users": len(users),
+        "successful": successful,
+        "failed": failed,
+        "duration_seconds": duration,
+        "timestamp": datetime.utcnow().isoformat(),
+        "results": results
+    }
+
+
+@router.get("/nudge/weekly/batch")
+def weekly_batch(db: Session = Depends(get_db)):
+    """
+    Send Friday coaching nudge to ALL active users.
+    Uses same prompt as single-user endpoint (NUDGE_CONFIGS["weekly"])
+    """
+    nudge_type = "weekly"
+    start_time = datetime.utcnow()
+    logger.info(f"🎯📦 {nudge_type.upper()} batch endpoint invoked")
+
+    users = get_all_active_users(db)
+    results = []
+
+    for user_number in users:
+        logger.info(f"Sending {nudge_type} nudge to {user_number}")
+        result = send_nudge_for_user(user_number, nudge_type, db)
+        results.append(result)
+
+    duration = (datetime.utcnow() - start_time).total_seconds()
+    successful = len([r for r in results if r["status"] == "success"])
+    failed = len([r for r in results if r["status"] == "failed"])
+
+    logger.info(f"✅ {nudge_type} batch completed: {successful} successful, {failed} failed")
+
+    return {
+        "status": "batch_complete",
+        "nudge_type": nudge_type,
+        "total_users": len(users),
+        "successful": successful,
+        "failed": failed,
+        "duration_seconds": duration,
+        "timestamp": datetime.utcnow().isoformat(),
+        "results": results
+    }
+
+
+@router.get("/nudge/sunday_review/batch")
+def sunday_review_batch(db: Session = Depends(get_db)):
+    """
+    Send Sunday goal review nudge to ALL active users.
+    Uses same prompt as single-user endpoint (NUDGE_CONFIGS["sunday_review"])
+    """
+    nudge_type = "sunday_review"
+    start_time = datetime.utcnow()
+    logger.info(f"📋📦 {nudge_type.upper()} batch endpoint invoked")
+
+    users = get_all_active_users(db)
+    results = []
+
+    for user_number in users:
+        logger.info(f"Sending {nudge_type} nudge to {user_number}")
+        result = send_nudge_for_user(user_number, nudge_type, db)
+        results.append(result)
+
+    duration = (datetime.utcnow() - start_time).total_seconds()
+    successful = len([r for r in results if r["status"] == "success"])
+    failed = len([r for r in results if r["status"] == "failed"])
+
+    logger.info(f"✅ {nudge_type} batch completed: {successful} successful, {failed} failed")
 
     return {
         "status": "batch_complete",
@@ -837,16 +915,19 @@ def health_check(db: Session = Depends(get_db)):
         "users": {
             "active_count": user_count,
         },
+        "nudge_types": list(NUDGE_CONFIGS.keys()),
         "endpoints": {
             "single_user": [
                 "/nudge/morning?user_number=...",
                 "/nudge/evening?user_number=...",
-                "/nudge/weekly?user_number=...",
-                "/nudge/sunday_review?user_number=...",
+                "/nudge/weekly?user_number=... (Friday coaching)",
+                "/nudge/sunday_review?user_number=... (Sunday goals)",
             ],
             "batch": [
                 "/nudge/morning/batch",
                 "/nudge/evening/batch",
+                "/nudge/weekly/batch (Friday coaching)",
+                "/nudge/sunday_review/batch (Sunday goals)",
             ],
             "utility": [
                 "/nudge/health",
