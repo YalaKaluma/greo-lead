@@ -11,3 +11,5 @@ jinja2
 python-multipart
 twilio
 PyYAML==6.0.1
+openpyxl==3.1.2
+pandas==2.1.4

@@ -15,15 +15,18 @@ Key Features:
 - Graceful degradation when context unavailable
 - Structured logging for debugging and monitoring
 - Prompts loaded from external YAML config (easy to edit!)
+- Excel logging for systematic prompt tuning
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 from openai import OpenAI, OpenAIError
 import logging
 import yaml
+import pandas as pd
 from pathlib import Path
 from typing import Optional, List, Dict
 from datetime import datetime, date, timedelta
@@ -124,6 +127,85 @@ def load_nudge_configs() -> Dict:
 
 # Load configs at startup
 NUDGE_CONFIGS = load_nudge_configs()
+
+# -------------------------------------------------
+# Nudge Logging - Excel Export for Feedback
+# -------------------------------------------------
+
+NUDGE_LOG_PATH = Path("/app/nudge_feedback_log.xlsx")
+
+
+def log_nudge_to_excel(
+        nudge_type: str,
+        user_number: str,
+        message_text: str,
+        context_summary: str,
+        character_count: int,
+        status: str = "success",
+        error: Optional[str] = None
+) -> None:
+    """
+    Log a nudge to Excel file for feedback and prompt tuning.
+    Non-blocking - errors are logged but don't fail the nudge.
+    """
+    try:
+        log_entry = {
+            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S EST"),
+            "Nudge Type": nudge_type,
+            "User": user_number,
+            "Status": status,
+            "Message": message_text,
+            "Character Count": character_count,
+            "Context Summary": context_summary,
+            "Error": error if error else "",
+            # Empty columns for user feedback
+            "Your Rating (1-5)": "",
+            "Your Feedback": "",
+            "Suggested Improvement": "",
+            "Prompt Version": "v1.0"
+        }
+
+        # Load existing or create new
+        if NUDGE_LOG_PATH.exists():
+            df = pd.read_excel(NUDGE_LOG_PATH)
+            df = pd.concat([df, pd.DataFrame([log_entry])], ignore_index=True)
+        else:
+            df = pd.DataFrame([log_entry])
+
+        # Save with formatting
+        with pd.ExcelWriter(NUDGE_LOG_PATH, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Nudge Log')
+            worksheet = writer.sheets['Nudge Log']
+
+            # Set column widths
+            worksheet.column_dimensions['A'].width = 20  # Timestamp
+            worksheet.column_dimensions['B'].width = 15  # Nudge Type
+            worksheet.column_dimensions['C'].width = 20  # User
+            worksheet.column_dimensions['D'].width = 10  # Status
+            worksheet.column_dimensions['E'].width = 60  # Message
+            worksheet.column_dimensions['F'].width = 12  # Char Count
+            worksheet.column_dimensions['G'].width = 40  # Context
+            worksheet.column_dimensions['H'].width = 30  # Error
+            worksheet.column_dimensions['I'].width = 15  # Rating
+            worksheet.column_dimensions['J'].width = 50  # Feedback
+            worksheet.column_dimensions['K'].width = 50  # Suggestion
+            worksheet.column_dimensions['L'].width = 12  # Version
+
+            # Bold headers
+            for cell in worksheet[1]:
+                cell.font = cell.font.copy(bold=True)
+
+        logger.info(f"📊 Logged {nudge_type} to Excel (total: {len(df)} nudges)")
+
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to log nudge to Excel: {e}")
+
+
+def build_context_summary_for_log(task_context: str, habit_context: str) -> str:
+    """Build brief context summary for log."""
+    tasks_count = task_context.count("□") if task_context else 0
+    habits_count = (habit_context.count("○") + habit_context.count("✓")) if habit_context else 0
+    return f"{tasks_count} tasks, {habits_count} habits"
 
 
 # -------------------------------------------------
@@ -550,6 +632,7 @@ def send_nudge_for_user(
     """
     Core function to send a nudge to a specific user.
     Uses NUDGE_CONFIGS loaded from YAML file.
+    Logs every nudge to Excel for feedback and prompt tuning.
 
     Args:
         user_number: User's WhatsApp number
@@ -569,6 +652,11 @@ def send_nudge_for_user(
 
         # Build full context
         context_text, conversation_history = build_full_context(db, user_number)
+
+        # Build context summary for logging
+        task_ctx = build_task_context(db, user_number)
+        habit_ctx = build_habit_context(db, user_number)
+        context_summary = build_context_summary_for_log(task_ctx, habit_ctx)
 
         # Create system prompt from template
         system_prompt = config["system_prompt"].format(
@@ -590,6 +678,16 @@ def send_nudge_for_user(
         # Save to database (non-blocking)
         save_message_safe(db, user_number, message_text)
 
+        # LOG TO EXCEL (non-blocking) ✨
+        log_nudge_to_excel(
+            nudge_type=nudge_type,
+            user_number=user_number,
+            message_text=message_text,
+            context_summary=context_summary,
+            character_count=len(message_text),
+            status="success"
+        )
+
         # Calculate execution time
         duration = (datetime.utcnow() - start_time).total_seconds()
 
@@ -602,6 +700,18 @@ def send_nudge_for_user(
 
     except Exception as e:
         logger.exception(f"Failed to send {nudge_type} to {user_number}: {e}")
+
+        # LOG FAILURE TO EXCEL (non-blocking) ✨
+        log_nudge_to_excel(
+            nudge_type=nudge_type,
+            user_number=user_number,
+            message_text="",
+            context_summary="",
+            character_count=0,
+            status="failed",
+            error=str(e)
+        )
+
         return {
             "status": "failed",
             "user_number": user_number,
@@ -852,6 +962,67 @@ def reload_config():
         raise HTTPException(status_code=500, detail=f"Failed to reload configs: {str(e)}")
 
 
+@router.get("/nudge/download_log")
+def download_nudge_log():
+    """
+    Download the nudge feedback log Excel file.
+
+    Use this to download all logged nudges, add your feedback,
+    and share back for prompt tuning.
+    """
+    if not NUDGE_LOG_PATH.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No nudge log found yet. Send some nudges first!"
+        )
+
+    return FileResponse(
+        path=NUDGE_LOG_PATH,
+        filename=f"nudge_feedback_log_{datetime.now().strftime('%Y%m%d')}.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+
+@router.get("/nudge/log_summary")
+def get_log_summary():
+    """
+    Get a text summary of logged nudges.
+    Shows stats and ratings if available.
+    """
+    if not NUDGE_LOG_PATH.exists():
+        return {"summary": "No nudges logged yet."}
+
+    try:
+        df = pd.read_excel(NUDGE_LOG_PATH)
+
+        # Calculate stats
+        total = len(df)
+        by_type = df['Nudge Type'].value_counts().to_dict()
+        by_status = df['Status'].value_counts().to_dict()
+        avg_chars = df['Character Count'].mean()
+
+        # Ratings
+        rated = df[df['Your Rating (1-5)'].notna()]
+        if len(rated) > 0:
+            avg_rating = rated['Your Rating (1-5)'].mean()
+            rating_text = f"Average Rating: {avg_rating:.1f}/5 ({len(rated)} rated)"
+        else:
+            rating_text = "No ratings yet"
+
+        summary = f"""📊 NUDGE LOG SUMMARY
+Total: {total} nudges
+By Type: {by_type}
+By Status: {by_status}
+Avg Characters: {avg_chars:.0f}
+{rating_text}
+
+Download: /api/nudge/download_log"""
+
+        return {"summary": summary}
+    except Exception as e:
+        return {"summary": f"Error: {e}"}
+
+
 @router.get("/nudge/health")
 def health_check(db: Session = Depends(get_db)):
     """
@@ -880,6 +1051,12 @@ def health_check(db: Session = Depends(get_db)):
         },
         "nudge_types": list(NUDGE_CONFIGS.keys()),
         "config_source": "nudge_prompts.yaml",
+        "log": {
+            "filepath": str(NUDGE_LOG_PATH),
+            "exists": NUDGE_LOG_PATH.exists(),
+            "download_url": "/api/nudge/download_log",
+            "summary_url": "/api/nudge/log_summary"
+        },
         "endpoints": {
             "single_user": [
                 "/nudge/morning?user_number=...",
@@ -896,6 +1073,8 @@ def health_check(db: Session = Depends(get_db)):
             "utility": [
                 "/nudge/health",
                 "/nudge/reload_config (reload prompts without restart)",
+                "/nudge/download_log (download Excel log for feedback)",
+                "/nudge/log_summary (view stats)",
             ]
         }
     }
