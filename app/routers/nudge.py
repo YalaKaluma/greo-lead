@@ -69,9 +69,9 @@ def morning_nudge(db=Depends(get_db)):
     """
 
     logger.info("⏰ MORNING NUDGE ENDPOINT HIT")
+    user_number = DEFAULT_USER_NUMBER
     logger.info(f"🌅 MORNING NUDGE | user_number={user_number}")
 
-    user_number = DEFAULT_USER_NUMBER
     if not user_number:
         logger.error("DEFAULT_USER_NUMBER is not set")
         return {"status": "error", "reason": "DEFAULT_USER_NUMBER missing"}
