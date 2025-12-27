@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from app.db import get_db
 from app.models import User
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(tags=["auth"])
 
 
 class LoginRequest(BaseModel):
