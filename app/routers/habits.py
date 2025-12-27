@@ -58,10 +58,11 @@ def get_habits(user_number: str, db: Session = Depends(get_db)):
 
     for h in habits:
         completed_today = any(c.date == today for c in h.completions)
-
         response.append({
             "id": h.id,
             "title": h.title,
+            "goal_id": h.goal_id,
+            "goal_text": h.goal.goal_text if h.goal else None,
             "completed_today": completed_today,
             "streak": compute_streak(h),
         })
@@ -77,8 +78,10 @@ def create_habit(payload: dict, user_number: str, db: Session = Depends(get_db))
 
     habit = Habit(
         user_number=user_number,
-        title=title.strip()
+        title=title.strip(),
+        goal_id=payload.get("goal_id")
     )
+
     db.add(habit)
     db.commit()
     db.refresh(habit)
@@ -97,6 +100,7 @@ def update_habit(habit_id: int, payload: dict, user_number: str, db: Session = D
         raise HTTPException(status_code=404, detail="Habit not found")
 
     habit.title = payload.get("title", habit.title)
+    habit.goal_id = payload.get("goal_id", habit.goal_id)
     db.commit()
     return habit
 

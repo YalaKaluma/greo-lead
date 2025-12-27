@@ -256,6 +256,15 @@ class Habit(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_number = Column(String, index=True, nullable=False)
     title = Column(String, nullable=False)
+
+    # 🔗 NEW: optional link to journey goals
+    goal_id = Column(
+        Integer,
+        ForeignKey("journey_goals.id", ondelete="SET NULL"),
+        nullable=True
+    )
+    goal = relationship("JourneyGoal", backref="habits")
+
     is_active = Column(Boolean, default=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
