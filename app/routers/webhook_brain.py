@@ -24,7 +24,7 @@ from app.services.message_service import save_message
 from app.services.orchestrator import orchestrate
 from app.utils.message_splitter import split_message
 
-# Onboarding support      I
+# Onboarding support
 from app.models import User
 from app.services.onboarding_service import (
     OnboardingConversation,
@@ -34,20 +34,6 @@ from app.services.onboarding_service import (
 router = APIRouter()
 twilio_client = Client(TWILIO_SID, TWILIO_AUTH_TOKEN)
 
-# debug section
-
-
-def process_message_brain(*, channel: str, sender: str, incoming_msg: str, db: Session) -> str:
-    # ADD THESE DEBUG LINES AT THE VERY TOP
-    print(f"🔍 DEBUG: Message='{incoming_msg}', Sender={sender}")
-    is_trigger = OnboardingConversation.is_onboarding_trigger(incoming_msg)
-    print(f"🔍 DEBUG: is_onboarding_trigger returned: {is_trigger}")
-
-    # Get or create user first
-    user = db.query(User).filter(User.phone_number == sender).first()
-    print(f"🔍 DEBUG: User exists? {user is not None}")
-    if user:
-        print(f"🔍 DEBUG: onboarding_step={user.onboarding_step}, completed={user.onboarding_completed}")
 
 # =========================================================
 # BRAIN-POWERED MESSAGE PROCESSING
@@ -77,9 +63,17 @@ def process_message_brain(
         Alfred's response
     """
 
+    # DEBUG LOGGING
+    print(f"🔍 DEBUG: Message='{incoming_msg}', Sender={sender}")
+    is_trigger = OnboardingConversation.is_onboarding_trigger(incoming_msg)
+    print(f"🔍 DEBUG: is_onboarding_trigger returned: {is_trigger}")
+
     # -------- ONBOARDING FLOW CHECK (HIGHEST PRIORITY) --------
     # Get or create user first
     user = db.query(User).filter(User.phone_number == sender).first()
+    print(f"🔍 DEBUG: User exists? {user is not None}")
+    if user:
+        print(f"🔍 DEBUG: onboarding_step={user.onboarding_step}, completed={user.onboarding_completed}")
 
     # Check if this is "Hey Alfred" trigger
     if OnboardingConversation.is_onboarding_trigger(incoming_msg):
