@@ -63,7 +63,7 @@ def process_message_brain(
         Alfred's response
     """
 
-    # DEBUG LOGGING
+    # Debug logging
     print(f"🔍 DEBUG: Message='{incoming_msg}', Sender={sender}")
     is_trigger = OnboardingConversation.is_onboarding_trigger(incoming_msg)
     print(f"🔍 DEBUG: is_onboarding_trigger returned: {is_trigger}")
@@ -71,6 +71,7 @@ def process_message_brain(
     # -------- ONBOARDING FLOW CHECK (HIGHEST PRIORITY) --------
     # Get or create user first
     user = db.query(User).filter(User.phone_number == sender).first()
+
     print(f"🔍 DEBUG: User exists? {user is not None}")
     if user:
         print(f"🔍 DEBUG: onboarding_step={user.onboarding_step}, completed={user.onboarding_completed}")
@@ -79,21 +80,32 @@ def process_message_brain(
     if OnboardingConversation.is_onboarding_trigger(incoming_msg):
         if not user:
             # Brand new user - create them
+            print(f"✨ DEBUG: Creating new user for onboarding")
             user, is_new = OnboardingConversation.get_user_or_create(db, sender)
-        else:
-            # Existing user wants to restart onboarding
+        elif not user.onboarding_completed:
+            # ✅ SECURITY: Only reset if NOT completed
+            # Existing incomplete user wants to restart onboarding
+            print(f"🔄 DEBUG: Resetting incomplete user's onboarding")
             user.onboarding_step = 'INITIAL'
             user.onboarding_completed = False
             db.commit()
+        else:
+            # ✅ SECURITY: Completed user said "Hey Alfred" - just treat as normal message
+            print(f"👋 DEBUG: Completed user said 'Hey Alfred' - treating as greeting, not onboarding trigger")
+            # Don't process as onboarding, fall through to normal Brain processing
+            pass
 
-        # Process the trigger message and RETURN EARLY
-        response = OnboardingConversation.process_onboarding_message(db, user, incoming_msg)
-        save_message(db, sender="user", user_number=sender, content=incoming_msg)
-        save_message(db, sender="assistant", user_number=sender, content=response)
-        return response
+        # Only process onboarding if user is NOT completed
+        if not user.onboarding_completed:
+            print(f"🎯 DEBUG: Processing onboarding message")
+            response = OnboardingConversation.process_onboarding_message(db, user, incoming_msg)
+            save_message(db, sender="user", user_number=sender, content=incoming_msg)
+            save_message(db, sender="assistant", user_number=sender, content=response)
+            return response
 
     # If user exists and is mid-onboarding (not completed), continue onboarding
     if user and user.onboarding_step != 'COMPLETED' and not user.onboarding_completed:
+        print(f"📝 DEBUG: User mid-onboarding, continuing flow")
         response = OnboardingConversation.process_onboarding_message(db, user, incoming_msg)
         if response:  # Onboarding returned a response
             save_message(db, sender="user", user_number=sender, content=incoming_msg)

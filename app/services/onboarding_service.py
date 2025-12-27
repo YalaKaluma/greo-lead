@@ -12,13 +12,14 @@ import re
 class OnboardingConversation:
     """Handles the conversational onboarding flow for Leadership OS."""
 
-    TRIGGER_PHRASES = ["hey alfred", "hi alfred", "hello alfred", "start"]
+    TRIGGER_PHRASES = ["hey alfred", "hi alfred", "hello alfred"]
 
     @staticmethod
     def is_onboarding_trigger(message: str) -> bool:
-        """Check if message is an onboarding trigger"""
+        """Check if message is an onboarding trigger - exact phrase match only"""
         msg_lower = message.lower().strip()
-        result = any(trigger in msg_lower for trigger in OnboardingConversation.TRIGGER_PHRASES)
+        # Use startswith to match only at beginning, avoiding "restarted" matching "start"
+        result = any(msg_lower.startswith(trigger) for trigger in OnboardingConversation.TRIGGER_PHRASES)
         print(f"🔍 DEBUG [is_onboarding_trigger]: message='{message}' → result={result}")
         return result
 
