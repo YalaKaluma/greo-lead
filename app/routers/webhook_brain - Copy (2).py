@@ -64,28 +64,19 @@ def process_message_brain(
     """
 
     # -------- ONBOARDING FLOW CHECK (HIGHEST PRIORITY) --------
-    # Get or create user first
-    user = db.query(User).filter(User.phone_number == sender).first()
-
-    # Check if this is "Hey Alfred" trigger
+    # Check if this is a new user or user in onboarding
     if OnboardingConversation.is_onboarding_trigger(incoming_msg):
-        if not user:
-            # Brand new user - create them
-            user, is_new = OnboardingConversation.get_user_or_create(db, sender)
-        else:
-            # Existing user wants to restart onboarding
+        user, is_new = OnboardingConversation.get_user_or_create(db, sender)
+        if is_new or not user.onboarding_completed:
+            # Reset onboarding for returning user who wants to start over
             user.onboarding_step = 'INITIAL'
-            user.onboarding_completed = False
             db.commit()
 
-        # Process the trigger message and RETURN EARLY
-        response = OnboardingConversation.process_onboarding_message(db, user, incoming_msg)
-        save_message(db, sender="user", user_number=sender, content=incoming_msg)
-        save_message(db, sender="assistant", user_number=sender, content=response)
-        return response
+    # Get or create user
+    user = db.query(User).filter(User.phone_number == sender).first()
 
-    # If user exists and is mid-onboarding (not completed), continue onboarding
-    if user and user.onboarding_step != 'COMPLETED' and not user.onboarding_completed:
+    # If user is in onboarding, handle via onboarding service
+    if user and user.onboarding_step != 'COMPLETED':
         response = OnboardingConversation.process_onboarding_message(db, user, incoming_msg)
         if response:  # Onboarding returned a response
             save_message(db, sender="user", user_number=sender, content=incoming_msg)

@@ -227,8 +227,8 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
       {/* Header */}
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800">My Goals</h1>
-          <p className="text-slate-600 mt-1">Your aspirations and objectives</p>
+          <h1 className="text-3xl font-bold text-slate-800">My Vision and Goals</h1>
+          <p className="text-slate-600 mt-1">Define your true North</p>
         </div>
         <button
           onClick={() => setShowAddForm(!showAddForm)}
