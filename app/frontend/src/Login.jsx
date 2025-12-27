@@ -29,8 +29,13 @@ export default function Login({ onLogin }) {
       if (!res.ok) throw new Error("Auth failed");
 
       const data = await res.json();
-      localStorage.setItem("user_number", data.user.user_number);
-      onLogin(data.user.user_number);
+      if (!data.success) {
+        throw new Error("Login failed");
+      }
+      localStorage.setItem("user_number", data.user_number);
+      localStorage.setItem("user_name", data.user_name);
+      onLogin(data.user_number);
+
     } catch (err) {
       setError(mode === "login" ? "Invalid credentials" : "Registration failed");
     }
