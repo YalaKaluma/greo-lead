@@ -272,31 +272,32 @@ class HabitCompletion(Base):
 
     habit = relationship("Habit", backref="completions")
 
+# Replace lines 275-290 in models.py with this:
+
 class OnboardingStep(str, enum.Enum):
     """Onboarding flow steps"""
-    INITIAL = "initial"  # User sent "Hey Alfred"
-    NAME = "name"  # Collecting name
-    PROFESSION = "profession"  # Collecting profession
-    GOAL = "goal"  # Collecting first goal
-    GOAL_WHY = "goal_why"  # Collecting goal motivation (optional)
-    TASKS = "tasks"  # Collecting initial tasks
-    QUICK_WIN = "quick_win"  # Identifying first task to tackle
-    APP_LINK_SENT = "app_link_sent"  # Link shared, waiting for login
-    TOUR_GOALS = "tour_goals"  # In-app tour: Goals page
-    TOUR_TASKS = "tour_tasks"  # In-app tour: Tasks page
-    TOUR_TEAM = "tour_team"  # In-app tour: Team page
-    TOUR_JOURNEY = "tour_journey"  # In-app tour: Journey page
-    TOUR_HABITS = "tour_habits"  # In-app tour: Habits page
-    COMPLETED = "completed"  # Onboarding finished
+    INITIAL = "INITIAL"  # ✅ UPPERCASE
+    NAME = "NAME"
+    PROFESSION = "PROFESSION"
+    GOAL = "GOAL"
+    GOAL_WHY = "GOAL_WHY"
+    TASKS = "TASKS"
+    QUICK_WIN = "QUICK_WIN"
+    APP_LINK_SENT = "APP_LINK_SENT"
+    TOUR_GOALS = "TOUR_GOALS"
+    TOUR_TASKS = "TOUR_TASKS"
+    TOUR_TEAM = "TOUR_TEAM"
+    TOUR_JOURNEY = "TOUR_JOURNEY"
+    TOUR_HABITS = "TOUR_HABITS"
+    COMPLETED = "COMPLETED"
 
 
 class SubscriptionStatus(str, enum.Enum):
     """User subscription status"""
-    TRIAL = "trial"  # In 21-day trial
-    ACTIVE = "active"  # Paying customer
-    EXPIRED = "expired"  # Trial ended, not converted
-    CANCELLED = "cancelled"  # Subscription cancelled
-
+    TRIAL = "TRIAL"  # ✅ UPPERCASE
+    ACTIVE = "ACTIVE"
+    EXPIRED = "EXPIRED"
+    CANCELLED = "CANCELLED"
 
 class User(Base):
     __tablename__ = "users"
