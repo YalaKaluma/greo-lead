@@ -20,5 +20,3 @@ console.log('API Config:', {
   apiBaseUrl: API_BASE_URL,
   userNumber: USER_NUMBER
 });
-// Alias export for compatibility
-export const API_URL = API_BASE_URL;

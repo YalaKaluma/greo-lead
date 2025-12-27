@@ -5,10 +5,8 @@ import MyLeadershipJourney from './components/MyLeadershipJourney';
 import MyTeam from './components/MyTeam';
 import MyJournal from './components/MyJournal';
 import MyHabits from './components/MyHabits';
-import TourOverlay from './components/TourOverlay';
 import { useEffect, useState } from "react";
 import Login from "./Login";
-import Welcome from "./Welcome";
 import Waitlist from "./Waitlist";
 
 // API URL handling
@@ -19,22 +17,17 @@ const API_URL = import.meta.env.PROD
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userNumber, setUserNumber] = useState(null);
-  const [needsTour, setNeedsTour] = useState(false);
-  const [tourComplete, setTourComplete] = useState(false);
 
-  const [currentPage, setCurrentPage] = useState('my-goals'); // Start on goals page for tour
+  const [currentPage, setCurrentPage] = useState('todo-list');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   // 🔐 Check login on app load
   useEffect(() => {
     const storedUser = localStorage.getItem("user_number");
-    const storedTour = localStorage.getItem("needs_tour");
-    
     if (storedUser) {
       setUserNumber(storedUser);
       setIsLoggedIn(true);
-      setNeedsTour(storedTour === "true");
     }
   }, []);
 
@@ -42,14 +35,6 @@ function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const page = params.get('page');
-    const user = params.get('user');
-    
-    // If there's a user param in URL, show Welcome page
-    if (user && !isLoggedIn) {
-      // Welcome page will handle this
-      return;
-    }
-    
     if (page) {
       setCurrentPage(page);
     }
@@ -81,40 +66,20 @@ function App() {
     setIsSidebarOpen(!isSidebarOpen);
   };
 
-  const handleLogin = (userNumber, requiresTour = false) => {
-    localStorage.setItem("user_number", userNumber);
-    setUserNumber(userNumber);
-    setIsLoggedIn(true);
-    setNeedsTour(requiresTour);
-    
-    // If tour is needed, start on goals page
-    if (requiresTour) {
-      setCurrentPage('my-goals');
-    }
-  };
-
-  const handleTourComplete = () => {
-    setTourComplete(true);
-    setNeedsTour(false);
-  };
-
-  // Waitlist page
   if (window.location.pathname === "/waitlist") {
-    return <Waitlist />;
+  return <Waitlist />;
   }
 
-  // Welcome page (first-time login)
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('user') && !isLoggedIn) {
-    return <Welcome onLogin={handleLogin} />;
-  }
-
-  // 🔒 AUTH GATE (existing users)
+  // 🔒 AUTH GATE
   if (!isLoggedIn) {
     return (
       <Login
         onLogin={(userNumber) => {
-          handleLogin(userNumber, false);
+       
+          localStorage.setItem("user_number", userNumber);  // ✅ Save
+          setUserNumber(userNumber);                        // ✅ Use directly
+          setIsLoggedIn(true);
+
         }}
       />
     );
@@ -122,15 +87,6 @@ function App() {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      {/* Tour Overlay - Shows when needed */}
-      {needsTour && !tourComplete && (
-        <TourOverlay 
-          userNumber={userNumber}
-          currentPage={currentPage}
-          onTourComplete={handleTourComplete}
-        />
-      )}
-
       {/* Mobile Header */}
       {isMobile && (
         <div className="fixed top-0 left-0 right-0 h-14 bg-white border-b border-gray-200 flex items-center px-4 z-30">
@@ -145,7 +101,6 @@ function App() {
             {currentPage === 'my-goals' && 'My Goals'}
             {currentPage === 'my-team' && 'My Team'}
             {currentPage === 'my-journey' && 'My Leadership Journey'}
-            {currentPage === 'my-habits' && 'My Habits'}
             {currentPage === 'my-journal' && 'My Journal'}
           </h1>
         </div>
