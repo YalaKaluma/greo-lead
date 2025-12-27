@@ -275,4 +275,134 @@ See you inside."""
         db.commit()
         print(f"✅ DEBUG [complete_onboarding]: Done")
 
-# (EmailVerificationService and TourManager remain the same - only added debug to OnboardingConversation)
+
+class EmailVerificationService:
+    """Handles email verification for associating email with account"""
+
+    @staticmethod
+    def create_verification(db: Session, user_id: int, email: str) -> str:
+        """Create a verification code and send to user's email. Returns the verification code."""
+        code = EmailVerification.generate_code()
+        verification = EmailVerification(
+            user_id=user_id,
+            email=email,
+            verification_code=code,
+            expires_at=datetime.utcnow() + timedelta(minutes=15)
+        )
+        db.add(verification)
+        db.commit()
+        return code
+
+    @staticmethod
+    def verify_code(db: Session, user_id: int, code: str) -> Tuple[bool, str]:
+        """Verify the code sent via WhatsApp matches the one sent to email. Returns: (success, message)"""
+        verification = db.query(EmailVerification).filter(
+            EmailVerification.user_id == user_id,
+            EmailVerification.verification_code == code,
+            EmailVerification.verified == False
+        ).order_by(EmailVerification.created_at.desc()).first()
+
+        if not verification:
+            return False, "Invalid verification code. Please check and try again."
+
+        if not verification.is_valid():
+            return False, "This code has expired. Please request a new one by sending another email."
+
+        verification.verified = True
+        verification.verified_at = datetime.utcnow()
+        user = db.query(User).get(user_id)
+        user.email = verification.email
+        db.commit()
+
+        return True, f"✓ Email verified! {verification.email} is now linked to your account."
+
+    @staticmethod
+    def get_pending_verification(db: Session, user_id: int) -> Optional[EmailVerification]:
+        """Get the most recent pending verification for a user"""
+        return db.query(EmailVerification).filter(
+            EmailVerification.user_id == user_id,
+            EmailVerification.verified == False
+        ).order_by(EmailVerification.created_at.desc()).first()
+
+
+class TourManager:
+    """Manages the in-app guided tour"""
+
+    TOUR_STEPS = ['TOUR_GOALS', 'TOUR_TASKS', 'TOUR_TEAM', 'TOUR_JOURNEY', 'TOUR_HABITS']
+
+    @staticmethod
+    def start_tour(db: Session, user: User):
+        """Initialize tour when user first logs in"""
+        if not user.tour_completed:
+            user.tour_current_step = 'TOUR_GOALS'
+            user.tour_completed_steps = []
+            user.onboarding_step = 'TOUR_GOALS'
+            db.commit()
+
+    @staticmethod
+    def complete_tour_step(db: Session, user: User, step: str) -> Optional[str]:
+        """Mark a tour step as complete and return the next step (or None if tour is done)."""
+        if user.tour_completed:
+            return None
+
+        completed = user.tour_completed_steps or []
+        if step not in completed:
+            completed.append(step)
+            user.tour_completed_steps = completed
+
+        try:
+            current_idx = TourManager.TOUR_STEPS.index(step)
+            if current_idx < len(TourManager.TOUR_STEPS) - 1:
+                next_step = TourManager.TOUR_STEPS[current_idx + 1]
+                user.tour_current_step = next_step
+                user.onboarding_step = next_step
+                db.commit()
+                return next_step
+            else:
+                TourManager.finish_tour(db, user)
+                return None
+        except ValueError:
+            return None
+
+    @staticmethod
+    def finish_tour(db: Session, user: User):
+        """Mark tour as completed"""
+        user.tour_completed = True
+        user.tour_current_step = None
+        user.onboarding_step = 'COMPLETED'
+        user.onboarding_completed = True
+        db.commit()
+
+    @staticmethod
+    def get_tour_progress(user: User) -> Dict:
+        """Get current tour progress"""
+        return {
+            "completed": user.tour_completed,
+            "current_step": user.tour_current_step,
+            "completed_steps": user.tour_completed_steps or [],
+            "total_steps": len(TourManager.TOUR_STEPS),
+            "progress_percentage": int((len(user.tour_completed_steps or []) / len(TourManager.TOUR_STEPS)) * 100)
+        }
+
+
+def extract_tasks_from_onboarding(task_text: str) -> list:
+    """Extract individual tasks from onboarding free-form text."""
+    tasks = []
+    lines = task_text.replace('\r\n', '\n').split('\n')
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        task = re.sub(r'^[-•*\d]+[\.)]\s*', '', line)
+        task = task.strip()
+
+        if task and len(task) > 3:
+            tasks.append(task)
+
+    if len(tasks) == 0 and task_text:
+        potential_tasks = re.split(r',\s*(?:and\s+)?|;\s*|(?:\s+and\s+)', task_text)
+        tasks = [t.strip() for t in potential_tasks if len(t.strip()) > 3]
+
+    return tasks if tasks else [task_text]
