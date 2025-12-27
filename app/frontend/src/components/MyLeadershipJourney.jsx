@@ -1,9 +1,9 @@
 import React from "react";
 
-const CENTER = { x: 500, y: 500 };
-const R_CENTER = 120;
-const R_MIDDLE = 240;
-const R_OUTER = 380;
+const CENTER = { x: 600, y: 600 };
+const R_CENTER = 150;
+const R_MIDDLE = 300;
+const R_OUTER = 480;
 
 const DIMENSIONS = [
   {
@@ -60,89 +60,93 @@ export default function MyLeadershipJourney() {
 
   const handleTopicClick = (topic) => {
     console.log("Clicked topic:", topic);
-    // TODO: open side panel / modal here
+    // hook to existing side panel / modal
   };
 
   return (
-    <div className="flex justify-center py-12">
-      <svg viewBox="0 0 1000 1000" width="700" height="700">
-        {/* Center */}
-        <circle cx={500} cy={500} r={R_CENTER} fill="#0F172A" />
-        <text
-          x={500}
-          y={485}
-          textAnchor="middle"
-          fontSize="28"
-          fill="white"
-          fontWeight="600"
-        >
-          Alfred
-        </text>
-        <text
-          x={500}
-          y={525}
-          textAnchor="middle"
-          fontSize="18"
-          fill="#CBD5E1"
-        >
-          Leadership OS
-        </text>
+    <div className="px-10 py-8">
+      {/* Page title */}
+      <h1 className="text-3xl font-semibold text-slate-800 mb-6">
+        My Leadership Journey
+      </h1>
 
-        {/* Dimensions + Topics */}
-        {DIMENSIONS.map((dim, i) => {
-          const start = i * anglePerDim;
-          const end = start + anglePerDim;
-          const topicAngle = anglePerDim / dim.topics.length;
+      <div className="flex justify-center">
+        <svg viewBox="0 0 1200 1200" width="900" height="900">
+          {/* Center */}
+          <circle cx={600} cy={600} r={R_CENTER} fill="#0F172A" />
+          <text
+            x={600}
+            y={585}
+            textAnchor="middle"
+            fontSize="30"
+            fill="white"
+            fontWeight="600"
+          >
+            Alfred
+          </text>
+          <text
+            x={600}
+            y={625}
+            textAnchor="middle"
+            fontSize="18"
+            fill="#CBD5E1"
+          >
+            Leadership Model
+          </text>
 
-          return (
-            <g key={dim.name}>
-              {/* Middle ring */}
-              <path
-                d={wedgePath(R_CENTER, R_MIDDLE, start, end)}
-                fill="#CBD5E1"
-                stroke="#E5E7EB"
-                strokeWidth="1"
-              />
+          {DIMENSIONS.map((dim, i) => {
+            const start = i * anglePerDim;
+            const end = start + anglePerDim;
+            const topicAngle = anglePerDim / dim.topics.length;
 
-              {/* Dimension label */}
-              {(() => {
-                const mid = (start + end) / 2;
-                const p = polar(CENTER.x, CENTER.y, 300, mid);
-                return (
-                  <text
-                    x={p.x}
-                    y={p.y}
-                    textAnchor="middle"
-                    fontSize="15"
-                    fill="#0F172A"
-                    fontWeight="500"
-                  >
-                    {dim.name}
-                  </text>
-                );
-              })()}
+            // middle label position
+            const midAngle = (start + end) / 2;
+            const labelPos = polar(600, 600, 350, midAngle);
 
-              {/* Topic wedges */}
-              {dim.topics.map((topic, j) => {
-                const tStart = start + j * topicAngle;
-                const tEnd = tStart + topicAngle;
+            return (
+              <g key={dim.name}>
+                {/* Middle ring */}
+                <path
+                  d={wedgePath(R_CENTER, R_MIDDLE, start, end)}
+                  fill="#CBD5E1"
+                  stroke="#E2E8F0"
+                  strokeWidth="1.2"
+                />
 
-                return (
-                  <path
-                    key={topic}
-                    d={wedgePath(R_MIDDLE, R_OUTER, tStart, tEnd)}
-                    fill="#E5E7EB"
-                    stroke="#CBD5E1"
-                    strokeWidth="1"
-                    className="cursor-pointer hover:fill-slate-300"
-                    onClick={() => handleTopicClick(topic)}
-                  />
-                );
-              })}
-            </g>
-          );
-        })}
-      </svg>
+                {/* Dimension label */}
+                <text
+                  x={labelPos.x}
+                  y={labelPos.y}
+                  textAnchor="middle"
+                  fontSize="16"
+                  fill="#0F172A"
+                  fontWeight="500"
+                >
+                  {dim.name}
+                </text>
+
+                {/* Topic wedges */}
+                {dim.topics.map((topic, j) => {
+                  const tStart = start + j * topicAngle;
+                  const tEnd = tStart + topicAngle;
+
+                  return (
+                    <path
+                      key={topic}
+                      d={wedgePath(R_MIDDLE, R_OUTER, tStart, tEnd)}
+                      fill="#E5E7EB"
+                      stroke="#CBD5E1"
+                      strokeWidth="1"
+                      className="cursor-pointer hover:fill-slate-300 transition-colors"
+                      onClick={() => handleTopicClick(topic)}
+                    />
+                  );
+                })}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
     </div>
   );
 }
