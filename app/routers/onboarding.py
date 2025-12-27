@@ -20,7 +20,7 @@ from app.services.onboarding_service import (
 from app.services import journey_service
 from app.routers.tasks import Task as TaskModel
 
-router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
+router = APIRouter(tags=["onboarding"])
 
 
 # ============== PYDANTIC MODELS ==============
