@@ -1,6 +1,8 @@
 """
 Onboarding Service - Executive Onboarding Flow
 Handles the complete onboarding journey from "Hey Alfred" to tour completion
+
+CRITICAL: All OnboardingStep enum values must use .value when assigning to user.onboarding_step
 """
 
 from sqlalchemy.orm import Session
@@ -36,7 +38,7 @@ class OnboardingConversation:
         if not user:
             user = User(
                 phone_number=phone_number,
-                onboarding_step=OnboardingStep.INITIAL,
+                onboarding_step='INITIAL',  # Use string directly
                 onboarding_data={},
             )
             db.add(user)
@@ -55,18 +57,18 @@ class OnboardingConversation:
         step = user.onboarding_step
 
         # INITIAL: User just said "Hey Alfred"
-        if step == OnboardingStep.INITIAL:
-            user.onboarding_step = OnboardingStep.NAME
+        if step == 'INITIAL':
+            user.onboarding_step = 'NAME'
             user.start_trial()
             db.commit()
             return OnboardingConversation._greeting()
 
         # NAME: Collecting name
-        elif step == OnboardingStep.NAME:
+        elif step == 'NAME':
             name = OnboardingConversation._extract_name(message)
             if name:
                 user.name = name
-                user.onboarding_step = OnboardingStep.PROFESSION
+                user.onboarding_step = 'PROFESSION'
                 user.onboarding_data = user.onboarding_data or {}
                 user.onboarding_data['name'] = name
                 db.commit()
@@ -75,18 +77,18 @@ class OnboardingConversation:
                 return "I didn't catch that. What's your name?"
 
         # PROFESSION: Collecting profession/role
-        elif step == OnboardingStep.PROFESSION:
+        elif step == 'PROFESSION':
             profession = message.strip()
             user.profession = profession
-            user.onboarding_step = OnboardingStep.GOAL
+            user.onboarding_step = 'GOAL'
             user.onboarding_data['profession'] = profession
             db.commit()
             return OnboardingConversation._ask_goal(user.name, profession)
 
         # GOAL: Collecting first goal
-        elif step == OnboardingStep.GOAL:
+        elif step == 'GOAL':
             goal = message.strip()
-            user.onboarding_step = OnboardingStep.GOAL_WHY
+            user.onboarding_step = 'GOAL_WHY'
             user.onboarding_data['first_goal'] = goal
             db.commit()
 
@@ -94,33 +96,33 @@ class OnboardingConversation:
             return OnboardingConversation._ask_goal_why(goal)
 
         # GOAL_WHY: Collecting goal motivation (optional, can skip)
-        elif step == OnboardingStep.GOAL_WHY:
+        elif step == 'GOAL_WHY':
             if message.lower().strip() in ['skip', 'no', 'later', 'pass']:
-                user.onboarding_step = OnboardingStep.TASKS
+                user.onboarding_step = 'TASKS'
                 db.commit()
                 return OnboardingConversation._ask_tasks(user.name)
             else:
                 why = message.strip()
                 user.onboarding_data['goal_why'] = why
-                user.onboarding_step = OnboardingStep.TASKS
+                user.onboarding_step = 'TASKS'
                 db.commit()
                 return OnboardingConversation._ask_tasks(user.name)
 
         # TASKS: Collecting initial tasks
-        elif step == OnboardingStep.TASKS:
+        elif step == 'TASKS':
             tasks_text = message.strip()
             user.onboarding_data['tasks_raw'] = tasks_text
-            user.onboarding_step = OnboardingStep.QUICK_WIN
+            user.onboarding_step = 'QUICK_WIN'
             db.commit()
 
             # Parse tasks (will be extracted via NLP or simple split)
             return OnboardingConversation._ask_quick_win()
 
         # QUICK_WIN: Identifying first task to tackle
-        elif step == OnboardingStep.QUICK_WIN:
+        elif step == 'QUICK_WIN':
             quick_win = message.strip()
             user.onboarding_data['quick_win'] = quick_win
-            user.onboarding_step = OnboardingStep.APP_LINK_SENT
+            user.onboarding_step = 'APP_LINK_SENT'
             db.commit()
 
             # Generate temp password and send link
@@ -130,17 +132,15 @@ class OnboardingConversation:
             return OnboardingConversation._send_app_link(user.name, user.id, temp_password)
 
         # APP_LINK_SENT: Waiting for user to login
-        elif step == OnboardingStep.APP_LINK_SENT:
+        elif step == 'APP_LINK_SENT':
             return "Please use the link I sent to access your Leadership OS dashboard. Once you're in, I'll guide you through a quick tour."
 
         # Tour steps - handled in the app, not WhatsApp
-        elif step in [OnboardingStep.TOUR_GOALS, OnboardingStep.TOUR_TASKS,
-                      OnboardingStep.TOUR_TEAM, OnboardingStep.TOUR_JOURNEY,
-                      OnboardingStep.TOUR_HABITS]:
+        elif step in ['TOUR_GOALS', 'TOUR_TASKS', 'TOUR_TEAM', 'TOUR_JOURNEY', 'TOUR_HABITS']:
             return "I see you're in the app! Follow the tour to get oriented. Text me if you need anything."
 
         # COMPLETED: Onboarding done
-        elif step == OnboardingStep.COMPLETED:
+        elif step == 'COMPLETED':
             return None  # Let normal message processing take over
 
         return "I'm not sure what to do with that. Can you try again?"
@@ -237,7 +237,7 @@ See you inside."""
     def complete_onboarding(db: Session, user: User):
         """Mark onboarding as completed"""
         user.onboarding_completed = True
-        user.onboarding_step = OnboardingStep.COMPLETED
+        user.onboarding_step = 'COMPLETED'
         db.commit()
 
 
@@ -308,20 +308,20 @@ class TourManager:
     """Manages the in-app guided tour"""
 
     TOUR_STEPS = [
-        OnboardingStep.TOUR_GOALS,
-        OnboardingStep.TOUR_TASKS,
-        OnboardingStep.TOUR_TEAM,
-        OnboardingStep.TOUR_JOURNEY,
-        OnboardingStep.TOUR_HABITS,
+        'TOUR_GOALS',
+        'TOUR_TASKS',
+        'TOUR_TEAM',
+        'TOUR_JOURNEY',
+        'TOUR_HABITS',
     ]
 
     @staticmethod
     def start_tour(db: Session, user: User):
         """Initialize tour when user first logs in"""
         if not user.tour_completed:
-            user.tour_current_step = OnboardingStep.TOUR_GOALS.value
+            user.tour_current_step = 'TOUR_GOALS'
             user.tour_completed_steps = []
-            user.onboarding_step = OnboardingStep.TOUR_GOALS
+            user.onboarding_step = 'TOUR_GOALS'
             db.commit()
 
     @staticmethod
@@ -340,13 +340,13 @@ class TourManager:
 
         # Find next step
         try:
-            current_idx = [s.value for s in TourManager.TOUR_STEPS].index(step)
+            current_idx = TourManager.TOUR_STEPS.index(step)
             if current_idx < len(TourManager.TOUR_STEPS) - 1:
                 next_step = TourManager.TOUR_STEPS[current_idx + 1]
-                user.tour_current_step = next_step.value
+                user.tour_current_step = next_step
                 user.onboarding_step = next_step
                 db.commit()
-                return next_step.value
+                return next_step
             else:
                 # Tour complete!
                 TourManager.finish_tour(db, user)
@@ -359,7 +359,7 @@ class TourManager:
         """Mark tour as completed"""
         user.tour_completed = True
         user.tour_current_step = None
-        user.onboarding_step = OnboardingStep.COMPLETED
+        user.onboarding_step = 'COMPLETED'
         user.onboarding_completed = True
         db.commit()
 
