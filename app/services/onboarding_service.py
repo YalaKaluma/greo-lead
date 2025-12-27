@@ -74,8 +74,10 @@ class OnboardingConversation:
             if name:
                 user.name = name
                 user.onboarding_step = 'PROFESSION'
-                user.onboarding_data = user.onboarding_data or {}
-                user.onboarding_data['name'] = name
+                # FIX: Reassign dict to trigger SQLAlchemy change detection
+                data = user.onboarding_data or {}
+                data['name'] = name
+                user.onboarding_data = data
                 db.commit()
                 print(f"✅ DEBUG [NAME]: Saved name='{name}', moved to PROFESSION")
                 print(f"   onboarding_data now: {user.onboarding_data}")
@@ -91,7 +93,10 @@ class OnboardingConversation:
 
             user.profession = profession
             user.onboarding_step = 'GOAL'
-            user.onboarding_data['profession'] = profession
+            # FIX: Reassign dict to trigger SQLAlchemy change detection
+            data = user.onboarding_data or {}
+            data['profession'] = profession
+            user.onboarding_data = data
             db.commit()
             print(f"✅ DEBUG [PROFESSION]: Saved, moved to GOAL")
             print(f"   onboarding_data now: {user.onboarding_data}")
@@ -103,7 +108,10 @@ class OnboardingConversation:
             print(f"📝 DEBUG [GOAL]: Saving goal='{goal}'")
 
             user.onboarding_step = 'GOAL_WHY'
-            user.onboarding_data['first_goal'] = goal
+            # FIX: Reassign dict to trigger SQLAlchemy change detection
+            data = user.onboarding_data or {}
+            data['first_goal'] = goal
+            user.onboarding_data = data
             db.commit()
             print(f"✅ DEBUG [GOAL]: Saved, moved to GOAL_WHY")
             print(f"   onboarding_data now: {user.onboarding_data}")
@@ -121,7 +129,10 @@ class OnboardingConversation:
             else:
                 why = message.strip()
                 print(f"📝 DEBUG [GOAL_WHY]: Saving why='{why}'")
-                user.onboarding_data['goal_why'] = why
+                # FIX: Reassign dict to trigger SQLAlchemy change detection
+                data = user.onboarding_data or {}
+                data['goal_why'] = why
+                user.onboarding_data = data
                 user.onboarding_step = 'TASKS'
                 db.commit()
                 print(f"✅ DEBUG [GOAL_WHY]: Saved, moved to TASKS")
@@ -133,7 +144,10 @@ class OnboardingConversation:
             tasks_text = message.strip()
             print(f"📝 DEBUG [TASKS]: Saving tasks_raw='{tasks_text[:100]}...'")
 
-            user.onboarding_data['tasks_raw'] = tasks_text
+            # FIX: Reassign dict to trigger SQLAlchemy change detection
+            data = user.onboarding_data or {}
+            data['tasks_raw'] = tasks_text
+            user.onboarding_data = data
             user.onboarding_step = 'QUICK_WIN'
             db.commit()
             print(f"✅ DEBUG [TASKS]: Saved, moved to QUICK_WIN")
@@ -145,7 +159,10 @@ class OnboardingConversation:
             quick_win = message.strip()
             print(f"📝 DEBUG [QUICK_WIN]: Saving quick_win='{quick_win}'")
 
-            user.onboarding_data['quick_win'] = quick_win
+            # FIX: Reassign dict to trigger SQLAlchemy change detection
+            data = user.onboarding_data or {}
+            data['quick_win'] = quick_win
+            user.onboarding_data = data
             user.onboarding_step = 'APP_LINK_SENT'
             db.commit()
             print(f"✅ DEBUG [QUICK_WIN]: Saved, moved to APP_LINK_SENT")
