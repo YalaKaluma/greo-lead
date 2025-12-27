@@ -188,7 +188,7 @@ Which one should you tackle first today? Just tell me the task."""
     @staticmethod
     def _send_app_link(name: str, user_id: int, temp_password: str) -> str:
         # In production, this would be your actual Railway URL
-        app_url = f"https://your-app.railway.app/welcome?user={user_id}"
+        app_url = f"https://https://greo-lead-production.up.railway.app/welcome?user={user_id}"
         
         return f"""Excellent, {name}. I've set up your Leadership OS.
 
