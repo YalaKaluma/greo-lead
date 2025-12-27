@@ -14,11 +14,6 @@ from app.config import (
     OPENAI_MODEL,
 )
 
-from app.models import User, OnboardingStep, EmailVerification
-from app.services.onboarding_service import (
-    OnboardingConversation,
-    EmailVerificationService
-)
 from app.services.message_service import save_message, load_conversation_history
 from app.services.journey_context import build_journey_context
 from app.services import journey_service
@@ -51,44 +46,6 @@ def process_message(
     incoming_msg: str,
     db: Session,
 ) -> str:
-    """
-    Enhanced message processing with onboarding support.
-    Checks if user is in onboarding flow first, then processes normally.
-    """
-    
-    # -------- ONBOARDING FLOW CHECK --------
-    # Check if this is a new user or user in onboarding
-    if OnboardingConversation.is_onboarding_trigger(incoming_msg):
-        user, is_new = OnboardingConversation.get_user_or_create(db, sender)
-        if is_new or not user.onboarding_completed:
-            # Reset onboarding for returning user who wants to start over
-            user.onboarding_step = OnboardingStep.INITIAL
-            db.commit()
-    
-    # Get or create user
-    user = db.query(User).filter(User.phone_number == sender).first()
-    
-    # If user is in onboarding, handle via onboarding service
-    if user and user.onboarding_step != OnboardingStep.COMPLETED:
-        response = OnboardingConversation.process_onboarding_message(db, user, incoming_msg)
-        if response:  # Onboarding returned a response
-            save_message(db, sender="user", user_number=sender, content=incoming_msg)
-            save_message(db, sender="assistant", user_number=sender, content=response)
-            return response
-    
-    # -------- EMAIL VERIFICATION CHECK --------
-    # Check if user is sending a verification code
-    if user and user.email is None:  # Email not yet verified
-        # Check if message is a 6-digit code
-        if incoming_msg.strip().isdigit() and len(incoming_msg.strip()) == 6:
-            pending = EmailVerificationService.get_pending_verification(db, user.id)
-            if pending:
-                success, message = EmailVerificationService.verify_code(db, user.id, incoming_msg.strip())
-                save_message(db, sender="user", user_number=sender, content=incoming_msg)
-                save_message(db, sender="assistant", user_number=sender, content=message)
-                return message
-    
-    # -------- NORMAL MESSAGE PROCESSING --------
     # Save user message
     save_message(db, sender="user", user_number=sender, content=incoming_msg)
 
@@ -228,79 +185,29 @@ async def email_webhook(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """
-    Enhanced email webhook that handles both:
-    1. Normal email messages to Alfred
-    2. First-time email from new users (triggers verification code)
-    """
     form = await request.form()
 
-    sender_email = form.get("sender")
+    sender = form.get("sender")
     subject = form.get("subject") or ""
     body = form.get("stripped-text") or ""
 
-    # Check if this email is from a known user
-    user = db.query(User).filter(User.email == sender_email).first()
-    
-    # If no user with this email, check if there's a user without email (new user scenario)
-    if not user:
-        # This might be a first-time email - create verification code
-        # Try to find user by checking recent onboarding users without email
-        recent_users = db.query(User).filter(
-            User.email == None,
-            User.onboarding_step.in_([
-                OnboardingStep.APP_LINK_SENT,
-                OnboardingStep.TOUR_GOALS,
-                OnboardingStep.TOUR_TASKS,
-                OnboardingStep.TOUR_TEAM,
-                OnboardingStep.TOUR_JOURNEY,
-                OnboardingStep.TOUR_HABITS,
-                OnboardingStep.COMPLETED
-            ])
-        ).order_by(User.created_at.desc()).limit(5).all()
-        
-        if recent_users:
-            # Create verification for the most recent user (simplified - in production, might need better matching)
-            user = recent_users[0]
-            
-            # Generate verification code
-            code = EmailVerificationService.create_verification(db, user.id, sender_email)
-            
-            # Send code back to user
-            verification_message = f"""Thank you for your email!
+    incoming_msg = f"Subject: {subject}\n\n{body}"
 
-To link this email ({sender_email}) to your Leadership OS account, please send this verification code via WhatsApp:
+    bot_reply = process_message(
+        channel="email",
+        sender=sender,
+        incoming_msg=incoming_msg,
+        db=db,
+    )
 
-{code}
+    # For now: just log (sending email reply is next step)
+#    print("📧 Alfred email reply:\n", bot_reply)
 
-This code expires in 15 minutes.
-
-Once verified, I'll be able to help you via email as well."""
-            
-            send_email(
-                to=sender_email,
-                subject="Verify Your Email - Leadership OS",
-                text=verification_message
-            )
-            
-            return {"status": "ok", "message": "Verification code sent"}
-    
-    # Normal email processing for verified users
-    if user and user.email:
-        incoming_msg = f"Subject: {subject}\n\n{body}"
-
-        bot_reply = process_message(
-            channel="email",
-            sender=user.phone_number,  # Use phone number as sender for consistency
-            incoming_msg=incoming_msg,
-            db=db,
-        )
-
-        send_email(
-            to=sender_email,
-            subject=f"Re: {subject}" if subject else "Re:",
-            text=bot_reply,
-        )
+    send_email(
+        to=sender,
+        subject=f"Re: {subject}" if subject else "Re:",
+        text=bot_reply,
+    )
 
     return {"status": "ok"}
 
@@ -318,3 +225,4 @@ def send_email(to: str, subject: str, text: str):
             "text": text,
         },
     )
+

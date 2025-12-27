@@ -80,6 +80,7 @@ class JourneyGoal(Base):
     why = Column(Text, nullable=True)
     time_horizon = Column(String, nullable=True)  # short, medium, long
     parent_goal_id = Column(Integer, ForeignKey('journey_goals.id'), nullable=True)  # Hierarchical goals
+    sort_order = Column(Integer, default=0, nullable=True)  # ← NEW FIELD FOR DRAG-AND-DROP ORDERING
 
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -221,6 +222,15 @@ class JourneyValue(Base):
     why = Column(Text, nullable=True)
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class WaitlistEntry(Base):
+    __tablename__ = "waitlist"
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    source = Column(String, nullable=True)  # e.g. 'video', 'linkedin', 'friend'
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class JourneyAchievement(Base):

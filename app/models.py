@@ -1,11 +1,13 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Enum as SQLEnum
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Date
 from sqlalchemy.sql import func
 from app.db import Base
 from .db import Base   # use your existing Base
 from sqlalchemy.dialects.postgresql import JSONB
+import enum
+import secrets
 
 
 
@@ -270,14 +272,119 @@ class HabitCompletion(Base):
 
     habit = relationship("Habit", backref="completions")
 
+class OnboardingStep(str, enum.Enum):
+    """Onboarding flow steps"""
+    INITIAL = "initial"  # User sent "Hey Alfred"
+    NAME = "name"  # Collecting name
+    PROFESSION = "profession"  # Collecting profession
+    GOAL = "goal"  # Collecting first goal
+    GOAL_WHY = "goal_why"  # Collecting goal motivation (optional)
+    TASKS = "tasks"  # Collecting initial tasks
+    QUICK_WIN = "quick_win"  # Identifying first task to tackle
+    APP_LINK_SENT = "app_link_sent"  # Link shared, waiting for login
+    TOUR_GOALS = "tour_goals"  # In-app tour: Goals page
+    TOUR_TASKS = "tour_tasks"  # In-app tour: Tasks page
+    TOUR_TEAM = "tour_team"  # In-app tour: Team page
+    TOUR_JOURNEY = "tour_journey"  # In-app tour: Journey page
+    TOUR_HABITS = "tour_habits"  # In-app tour: Habits page
+    COMPLETED = "completed"  # Onboarding finished
+
+
+class SubscriptionStatus(str, enum.Enum):
+    """User subscription status"""
+    TRIAL = "trial"  # In 21-day trial
+    ACTIVE = "active"  # Paying customer
+    EXPIRED = "expired"  # Trial ended, not converted
+    CANCELLED = "cancelled"  # Subscription cancelled
+
+
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True)
-    created_at = Column(DateTime)
-    phone_number = Column(String)
-    name = Column(String, unique=True)      # 👈 this is username
-    password = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Contact information
+    phone_number = Column(String, unique=True, index=True)  # WhatsApp number
+    email = Column(String, nullable=True, index=True)  # Email (added during onboarding or later)
+    name = Column(String, nullable=True)  # Full name (collected in onboarding)
+    profession = Column(String, nullable=True)  # Collected in onboarding
+    
+    # Authentication
+    password_hash = Column(String, nullable=True)  # Hashed password
+    temp_password = Column(String, nullable=True)  # One-time password for first login
+    temp_password_expires = Column(DateTime, nullable=True)
+    
+    # Onboarding state
+    onboarding_step = Column(SQLEnum(OnboardingStep), default=OnboardingStep.INITIAL)
+    onboarding_completed = Column(Boolean, default=False)
+    onboarding_data = Column(JSONB, nullable=True)  # Store intermediate data during onboarding
+    
+    # Subscription
+    subscription_status = Column(SQLEnum(SubscriptionStatus), default=SubscriptionStatus.TRIAL)
+    trial_start_date = Column(DateTime, nullable=True)
+    trial_end_date = Column(DateTime, nullable=True)
+    subscription_end_date = Column(DateTime, nullable=True)
+    
+    # Tour progress
+    tour_completed = Column(Boolean, default=False)
+    tour_current_step = Column(String, nullable=True)  # Current tour step
+    tour_completed_steps = Column(JSONB, nullable=True)  # List of completed steps
+    
+    # Timestamps
+    last_active_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-# ✅ ADD THIS LINE:
+    # Relationships
     entries = relationship("JournalEntry", back_populates="user", cascade="all, delete-orphan")
+    
+    def start_trial(self):
+        """Initialize 21-day trial period"""
+        self.trial_start_date = datetime.utcnow()
+        self.trial_end_date = datetime.utcnow() + timedelta(days=21)
+        self.subscription_status = SubscriptionStatus.TRIAL
+    
+    def generate_temp_password(self, length=8):
+        """Generate a secure one-time password"""
+        self.temp_password = secrets.token_urlsafe(length)[:length].upper()
+        self.temp_password_expires = datetime.utcnow() + timedelta(hours=24)
+        return self.temp_password
+    
+    def is_trial_active(self):
+        """Check if trial is still valid"""
+        if not self.trial_end_date:
+            return False
+        return datetime.utcnow() < self.trial_end_date
+    
+    def days_left_in_trial(self):
+        """Calculate remaining trial days"""
+        if not self.trial_end_date:
+            return 0
+        delta = self.trial_end_date - datetime.utcnow()
+        return max(0, delta.days)
+
+
+class EmailVerification(Base):
+    """Track email verification codes sent via email"""
+    __tablename__ = "email_verifications"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    verification_code = Column(String(6), nullable=False)  # 6-digit code
+    verified = Column(Boolean, default=False)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)  # Code expires after 15 minutes
+    verified_at = Column(DateTime, nullable=True)
+    
+    user = relationship("User")
+    
+    def is_valid(self):
+        """Check if code is still valid"""
+        return not self.verified and datetime.utcnow() < self.expires_at
+    
+    @staticmethod
+    def generate_code():
+        """Generate a 6-digit verification code"""
+        return f"{secrets.randbelow(1000000):06d}"

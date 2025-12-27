@@ -8,9 +8,9 @@ import sys
 import os
 from datetime import datetime
 from app.db import Base, engine
-from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits
+from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits, waitlist
 from app.routers import auth
-
+from sqlalchemy import text
 
 
 
@@ -125,8 +125,11 @@ routers_to_register = [
     (nudge.router, "/api", "Nudge"),
     (journey.router, "/api/journey", "Journey"),
     (messages.router, "/api", "Messages"),
+    (waitlist.router, "/api", "Waitlist"),
     (habits.router, "/api/habits", "Habits"),
 ]
+
+
 
 for router, prefix, tag in routers_to_register:
     try:
@@ -152,7 +155,7 @@ def health():
     # Test database connection
     try:
         with engine.connect() as conn:
-            conn.execute("SELECT 1")
+            conn.execute(text("SELECT 1"))
         db_status = "connected"
         db_test = "✓"
     except Exception as e:
@@ -246,6 +249,12 @@ if static_path.exists():
             from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Not found")
 
+        # Try to serve static files first (images, etc.)
+        file_path = static_path / full_path
+        if file_path.is_file():
+            logger.info(f"📄 Serving static file: /{full_path}")
+            return FileResponse(str(file_path))
+
         # Serve React app for everything else (including root "/")
         index_file = static_path / "index.html"
         if index_file.exists():
@@ -266,6 +275,9 @@ else:
     logger.warning(f"⚠️  Static directory not found at {static_path.absolute()}")
     logger.warning("  Frontend will not be available!")
     logger.warning("  API endpoints will still work.")
+
+
+
 
 # --------------------------------------
 # Startup Complete

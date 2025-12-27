@@ -1,0 +1,4 @@
+curl "https://greo-lead-production.up.railway.app/api/nudge/morning"
+curl "https://greo-lead-production.up.railway.app/api/nudge/evening"
+curl "https://greo-lead-production.up.railway.app/api/nudge/weekly"
+curl "https://greo-lead-production.up.railway.app/api/nudge/sunday_review"

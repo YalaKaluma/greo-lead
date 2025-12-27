@@ -8,7 +8,7 @@ import sys
 import os
 from datetime import datetime
 from app.db import Base, engine
-from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits, waitlist
+from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits, waitlist, onboarding
 from app.routers import auth
 from sqlalchemy import text
 
@@ -119,6 +119,7 @@ logger.info("🔌 Registering API routers...")
 routers_to_register = [
     (journal.router, "/api/journal", "Journal"),
     (auth.router, "/api/auth", "Auth"),
+    (onboarding.router, "/api/onboarding", "Onboarding"),
     (webhook.router, "/api", "Webhook"),
     (webhook_brain.router, "/api/brain", "Webhook-Brain"),
     (tasks.router, "/api/tasks", "Tasks"),
