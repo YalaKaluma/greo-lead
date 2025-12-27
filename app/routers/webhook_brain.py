@@ -25,7 +25,7 @@ from app.services.orchestrator import orchestrate
 from app.utils.message_splitter import split_message
 
 # Onboarding support
-from app.models import User, OnboardingStep
+from app.models import User
 from app.services.onboarding_service import (
     OnboardingConversation,
     EmailVerificationService
@@ -69,14 +69,14 @@ def process_message_brain(
         user, is_new = OnboardingConversation.get_user_or_create(db, sender)
         if is_new or not user.onboarding_completed:
             # Reset onboarding for returning user who wants to start over
-            user.onboarding_step = OnboardingStep.INITIAL
+            user.onboarding_step = 'INITIAL'
             db.commit()
 
     # Get or create user
     user = db.query(User).filter(User.phone_number == sender).first()
 
     # If user is in onboarding, handle via onboarding service
-    if user and user.onboarding_step != OnboardingStep.COMPLETED:
+    if user and user.onboarding_step != 'COMPLETED':
         response = OnboardingConversation.process_onboarding_message(db, user, incoming_msg)
         if response:  # Onboarding returned a response
             save_message(db, sender="user", user_number=sender, content=incoming_msg)
