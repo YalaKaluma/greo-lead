@@ -1,77 +1,94 @@
+"""
+Auth Router - Handle user authentication
+app/routers/auth.py
+"""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 from app.db import get_db
 from app.models import User
-from pydantic import BaseModel
 
-router = APIRouter(tags=["Auth"])
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 class LoginRequest(BaseModel):
-    username: str
+    username: str  # Could be name, email, or phone
     password: str
 
 
 @router.post("/login")
-def login(credentials: LoginRequest, db: Session = Depends(get_db)):
+async def login(credentials: LoginRequest, db: Session = Depends(get_db)):
+    """
+    Login endpoint - handles both temporary passwords and permanent passwords.
+    """
+    # Try to find user by name (username field)
     user = db.query(User).filter(User.name == credentials.username).first()
 
-    if not user or user.password != credentials.password:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    # Generate user_number in WhatsApp format to match existing data
-    user_number = user.phone_number
-    if not user_number:
-        # Use WhatsApp format: whatsapp:+<phone> or whatsapp:+<id>
-        if user.phone_number and user.phone_number.startswith('whatsapp:'):
-            user_number = user.phone_number
-        else:
-            # Generate in WhatsApp format for consistency
-            user_number = f"whatsapp:+{user.id}"
-            user.phone_number = user_number
-            db.commit()
-
-    return {
-        "success": True,
-        "user": {
-            "id": user.id,
-            "name": user.name,
-            "user_number": user_number
+    if not user:
+        return {
+            "success": False,
+            "message": "Invalid credentials"
         }
+
+    # Check temporary password first (onboarding users)
+    if user.temp_password and user.temp_password == credentials.password:
+        return {
+            "success": True,
+            "user_number": user.phone_number,
+            "user_name": user.name,
+            "needs_tour": not user.tour_completed,
+            "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 21
+        }
+
+    # Check permanent password (returning users)
+    # TODO: Implement proper bcrypt password hashing
+    if user.password_hash and user.password_hash == credentials.password:
+        return {
+            "success": True,
+            "user_number": user.phone_number,
+            "user_name": user.name,
+            "needs_tour": False,
+            "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 0
+        }
+
+    # Neither password matched
+    return {
+        "success": False,
+        "message": "Invalid credentials"
     }
 
 
-class RegisterRequest(BaseModel):
-    username: str
-    password: str
+@router.post("/logout")
+async def logout():
+    """
+    Logout endpoint - just returns success since we're using simple auth.
+    In production, this would invalidate session tokens.
+    """
+    return {"success": True, "message": "Logged out successfully"}
 
 
-@router.post("/register")
-def register(payload: RegisterRequest, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.name == payload.username).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Username already exists")
+@router.get("/me")
+async def get_current_user(user_number: str, db: Session = Depends(get_db)):
+    """
+    Get current user info.
+    Used by frontend to check auth status and get user details.
+    """
+    user = db.query(User).filter(User.phone_number == user_number).first()
 
-    user = User(
-        name=payload.username,
-        password=payload.password,
-        phone_number=None  # Will be set immediately after
-    )
-
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-
-    # Generate user_number in WhatsApp format for consistency
-    user_number = f"whatsapp:+{user.id}"
-    user.phone_number = user_number
-    db.commit()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
     return {
         "success": True,
         "user": {
-            "id": user.id,
             "name": user.name,
-            "user_number": user_number
+            "email": user.email,
+            "profession": user.profession,
+            "phone_number": user.phone_number,
+            "subscription_status": user.subscription_status,
+            "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 0,
+            "onboarding_completed": user.onboarding_completed,
+            "tour_completed": user.tour_completed
         }
     }
