@@ -154,7 +154,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   };
 
   return (
-    <div className="px-4 md:px-10 py-4 md:py-8">
+    <div className="px-2 md:px-10 py-4 md:py-8">
       {/* Page title */}
       <h1 className="text-2xl md:text-3xl font-semibold text-slate-800 mb-1 md:mb-2">
         My Leadership Journey
@@ -164,15 +164,15 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       <div className="flex justify-center items-start">
         <svg 
           viewBox="0 0 1200 1200" 
-          className="w-full max-w-[500px] md:max-w-[700px] lg:max-w-[900px] h-auto"
+          className="w-full md:max-w-[700px] lg:max-w-[900px] h-auto"
         >
           {/* Center */}
           <circle cx={600} cy={600} r={R_CENTER} fill="#0F172A" />
           <text
             x={600}
-            y={585}
+            y={575}
             textAnchor="middle"
-            fontSize="30"
+            fontSize="42"
             fill="white"
             fontWeight="600"
           >
@@ -182,7 +182,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
             x={600}
             y={625}
             textAnchor="middle"
-            fontSize="18"
+            fontSize="24"
             fill="#CBD5E1"
           >
             Leadership Model
@@ -212,13 +212,13 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                   x={labelPos.x}
                   y={labelPos.y}
                   textAnchor="middle"
-                  fontSize="14"
+                  fontSize="18"
                   fill="#0F172A"
                   fontWeight="500"
                   style={{ wordSpacing: '100vw' }}
                 >
                   {dim.name.split(' ').map((word, idx) => (
-                    <tspan key={idx} x={labelPos.x} dy={idx === 0 ? 0 : 16}>
+                    <tspan key={idx} x={labelPos.x} dy={idx === 0 ? 0 : 20}>
                       {word}
                     </tspan>
                   ))}
@@ -250,9 +250,9 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                         x={topicLabelPos.x}
                         y={topicLabelPos.y}
                         textAnchor="middle"
-                        fontSize="13"
+                        fontSize="16"
                         fill="#1e293b"
-                        fontWeight="400"
+                        fontWeight="500"
                         className="pointer-events-none"
                       >
                         {topic}

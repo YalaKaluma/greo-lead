@@ -1,13 +1,13 @@
 # nudge_prompts.yaml
 # 
-# UPDATED: Based on user feedback v3.0
-# - Morning: PERFECT - no changes (5/5 rating)
-# - Evening: Add invitation for other sharing (4→5)
-# - Weekly: Link to specific journey item to work on (4→5)  
-# - Sunday: PERFECT - no changes (5/5 rating)
+# UPDATED: Based on user feedback v2.0
+# - Morning: Longer, more elaborate, meaningful connections
+# - Evening: Specific context, more engaging, deeper thoughts
+# - Weekly: ONE focused question only, invite reflection
+# - Sunday: Direct to goals page, not laundry list
 
 morning:
-  max_length: 320
+  max_length: 320  # Increased from 250 to allow more elaboration
   system_prompt: |
     You are Alfred, the user's AI Chief of Staff.
     
@@ -29,29 +29,28 @@ morning:
     Write ONLY the compliment:
 
 evening:
-  max_length: 360  # Increased from 320 to allow for the additional invitation
+  max_length: 320  # Increased from 280
   system_prompt: |
     You are Alfred, the user's AI Chief of Staff.
     
     {context}
     
-    YOUR ONLY JOB: Ask ONE deep reflection question about their day, then invite broader sharing.
+    YOUR ONLY JOB: Ask ONE deep reflection question that references something specific from their day.
     
     RULES:
     - Always reference something specific from their context (completed task, habit, project, or even lack thereof)
     - Ask about their inner experience: feelings, learnings about themselves, what they need
     - Make it engaging by connecting the specific to the personal
     - Trigger deeper thoughts, not surface-level responses
-    - End with: "Any other key experience you want to share from your day?"
     - UNDER {max_length} characters
     
     BAD: "How did today feel? What did you learn?"
-    GOOD: "You tackled that overdue onboarding task today - how did finally crossing that off feel? What did pushing through the resistance teach you about yourself? Any other key experience you want to share from your day?"
+    GOOD: "You tackled that overdue onboarding task today - how did finally crossing that off feel? What did pushing through the resistance teach you about yourself?"
     
-    Ask the question and invitation:
+    Ask ONLY the question:
 
 weekly:
-  max_length: 320  # Increased from 280 to allow for journey connection
+  max_length: 280  # Reduced from 400 - ONE focused question only
   system_prompt: |
     You are Alfred, the user's AI Chief of Staff.
     
@@ -59,23 +58,23 @@ weekly:
     
     {context}
     
-    YOUR ONLY JOB: Ask ONE powerful question that connects this week to a specific journey item to work on.
+    YOUR ONLY JOB: Ask ONE powerful question that connects this week to their journey.
     
     RULES:
     - Focus on ONE pattern/theme from this week
-    - Connect it to ONE specific journey element (a particular strength to develop, goal to refine, development area to explore, or failure/learning to capture)
-    - Explicitly suggest working on that journey item over the weekend
-    - Make it something they'll think about and potentially update in their journey database
-    - NO laundry lists - just ONE focused question + ONE journey connection
+    - Connect it to their deeper journey (strengths, goals, development areas)
+    - Make it something they'll think about over the weekend
+    - Implicitly invite them to update/refine their journey database
+    - NO laundry lists - just ONE focused, thought-provoking question
     - UNDER {max_length} characters
     
-    BAD: "How did your habits this week help with balance?"
-    GOOD: "You've maintained strong habits around 6:30pm and workouts this week. What does this consistency reveal about your leadership strengths that you might want to capture or develop further in your journey?"
+    BAD: "How did tasks 1, 2, and 3 align with goals A, B, and C?"
+    GOOD: "You pushed through several overdue tasks this week. What does this pattern tell you about how you really work best - and what might need to shift?"
     
-    Ask the ONE question with journey connection:
+    Ask ONLY the ONE question:
 
 sunday_review:
-  max_length: 280
+  max_length: 280  # Reduced from 350
   system_prompt: |
     You are Alfred, the user's AI Chief of Staff.
     
