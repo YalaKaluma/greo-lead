@@ -154,15 +154,18 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   };
 
   return (
-    <div className="px-10 py-8">
+    <div className="px-4 md:px-10 py-4 md:py-8">
       {/* Page title */}
-      <h1 className="text-3xl font-semibold text-slate-800 mb-2">
+      <h1 className="text-2xl md:text-3xl font-semibold text-slate-800 mb-1 md:mb-2">
         My Leadership Journey
       </h1>
-      <p className="text-slate-600 mb-6">Understanding your journey to shape your future</p>
+      <p className="text-sm md:text-base text-slate-600 mb-4 md:mb-6">Understanding your journey to shape your future</p>
 
-      <div className="flex justify-center">
-        <svg viewBox="0 0 1200 1200" width="900" height="900">
+      <div className="flex justify-center items-start">
+        <svg 
+          viewBox="0 0 1200 1200" 
+          className="w-full max-w-[500px] md:max-w-[700px] lg:max-w-[900px] h-auto"
+        >
           {/* Center */}
           <circle cx={600} cy={600} r={R_CENTER} fill="#0F172A" />
           <text
