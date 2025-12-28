@@ -31,15 +31,6 @@ const isTodayET = (dateString) => {
   return taskDate === todayET;
 };
 
-// Helper function to get next Monday
-const getNextMonday = () => {
-  const date = new Date();
-  const day = date.getDay();
-  const daysUntilMonday = day === 0 ? 1 : 8 - day; // If Sunday, 1 day. Otherwise, days until next Monday
-  date.setDate(date.getDate() + daysUntilMonday);
-  return date.toISOString().split('T')[0];
-};
-
 // Helper function to sort goals hierarchically
 // Groups by parent long-term goal, then shows medium and short under each
 const getSortedGoals = (goals) => {
@@ -100,8 +91,8 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [goals, setGoals] = useState([]);
   
   // UI state
-  const [showTaskModal, setShowTaskModal] = useState(false);
-  const [editingTask, setEditingTask] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState(null);
   const [sortOrder, setSortOrder] = useState([]);
   const [completingTasks, setCompletingTasks] = useState([]);
   const [filtersCollapsed, setFiltersCollapsed] = useState(true); // Collapsed by default
@@ -278,8 +269,7 @@ export default function TodoList({ apiUrl, userNumber }) {
         { params: { user_number: userNumber } }
       );
       await fetchTasks();
-      setShowTaskModal(false);
-      setEditingTask(null);
+      setEditingTaskId(null);
     } catch (err) {
       console.error('Error updating task:', err);
       alert('Failed to update task');
@@ -294,7 +284,7 @@ export default function TodoList({ apiUrl, userNumber }) {
         { params: { user_number: userNumber } }
       );
       await fetchTasks();
-      setShowTaskModal(false);
+      setShowAddForm(false);
     } catch (err) {
       console.error('Error adding task:', err);
       alert('Failed to add task');
@@ -311,34 +301,6 @@ export default function TodoList({ apiUrl, userNumber }) {
   const resetSortOrder = () => {
     localStorage.removeItem('taskSortOrder');
     setSortOrder([]);
-  };
-
-  // Set all overdue tasks to today
-  const setOverdueToToday = async () => {
-    const overdueTasks = tasks.filter(t => isOverdueET(t.due_date));
-    if (overdueTasks.length === 0) {
-      alert('No overdue tasks found');
-      return;
-    }
-
-    if (!confirm(`Set ${overdueTasks.length} overdue task(s) to today?`)) return;
-
-    const today = getTodayET();
-    try {
-      await Promise.all(
-        overdueTasks.map(task =>
-          axios.put(
-            `${apiUrl}/api/tasks/${task.id}`,
-            { due_date: today },
-            { params: { user_number: userNumber } }
-          )
-        )
-      );
-      await fetchTasks();
-    } catch (err) {
-      console.error('Error updating overdue tasks:', err);
-      alert('Failed to update some tasks');
-    }
   };
 
   const hasActiveFilters = selectedProject || selectedDelegate || selectedGoal || filterType !== 'due_today';
@@ -381,26 +343,8 @@ export default function TodoList({ apiUrl, userNumber }) {
                 ↻ Reset Sort
               </button>
             )}
-            {/* Set Overdue to Today Button */}
             <button
-              onClick={setOverdueToToday}
-              className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-lg font-medium transition-colors text-sm hidden sm:inline-block"
-              title="Set all overdue tasks to today"
-            >
-              📅 Overdue → Today
-            </button>
-            <button
-              onClick={setOverdueToToday}
-              className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-lg font-medium transition-colors text-sm sm:hidden"
-              title="Set all overdue tasks to today"
-            >
-              📅
-            </button>
-            <button
-              onClick={() => {
-                setEditingTask(null);
-                setShowTaskModal(true);
-              }}
+              onClick={() => setShowAddForm(!showAddForm)}
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
             >
               <span className="hidden sm:inline">+ Add Task</span>
@@ -506,6 +450,17 @@ export default function TodoList({ apiUrl, userNumber }) {
           )}
         </div>
 
+        {/* Add Task Form */}
+        {showAddForm && (
+          <AddTaskForm
+            onAdd={addTask}
+            onCancel={() => setShowAddForm(false)}
+            projects={projects}
+            delegates={delegates}
+            goals={goals}
+          />
+        )}
+
         {/* Error State */}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4">
@@ -528,19 +483,22 @@ export default function TodoList({ apiUrl, userNumber }) {
                 <div
                   {...provided.droppableProps}
                   ref={provided.innerRef}
-                  className="space-y-1"
+                  className="space-y-2"
                 >
                   {sortedTasks.map((task, index) => (
                     <TaskItem
                       key={task.id}
                       task={task}
                       index={index}
+                      isEditing={editingTaskId === task.id}
                       isCompleting={completingTasks.includes(task.id)}
                       onToggle={() => toggleTaskComplete(task.id)}
-                      onStartEdit={() => {
-                        setEditingTask(task);
-                        setShowTaskModal(true);
-                      }}
+                      onDelete={() => deleteTask(task.id)}
+                      onStartEdit={() => setEditingTaskId(task.id)}
+                      onCancelEdit={() => setEditingTaskId(null)}
+                      onUpdate={(updates) => updateTask(task.id, updates)}
+                      projects={projects}
+                      delegates={delegates}
                       goals={goals}
                     />
                   ))}
@@ -552,20 +510,14 @@ export default function TodoList({ apiUrl, userNumber }) {
         )}
       </div>
 
-      {/* Unified Task Modal (for both Add and Edit) */}
-      {showTaskModal && (
-        <TaskModal
-          task={editingTask}
-          onSave={editingTask ? (updates) => updateTask(editingTask.id, updates) : addTask}
-          onCancel={() => {
-            setShowTaskModal(false);
-            setEditingTask(null);
-          }}
-          onDelete={editingTask ? () => {
-            deleteTask(editingTask.id);
-            setShowTaskModal(false);
-            setEditingTask(null);
-          } : null}
+      {/* Modal for Editing Task */}
+      {editingTaskId && (
+        <EditTaskModal
+          task={sortedTasks.find(t => t.id === editingTaskId)}
+          onUpdate={(updates) => updateTask(editingTaskId, updates)}
+          onCancel={() => setEditingTaskId(null)}
+          onDelete={() => deleteTask(editingTaskId)}
+          projects={projects}
           delegates={delegates}
           goals={getSortedGoals(goals)}
         />
@@ -675,7 +627,7 @@ function TaskItem({
   );
 }
 
-// Task Card Component - TIGHTER MOBILE SPACING
+// Task Card Component - REDESIGNED LAYOUT
 function TaskCard({
   task,
   index,
@@ -707,7 +659,7 @@ function TaskCard({
         transform: `${provided.draggableProps.style?.transform || ''} translateX(-${swipeDistance}px)`,
       }}
       className={`
-        bg-white border border-gray-200 rounded px-3 py-2
+        bg-white border border-gray-200 rounded px-3 py-3
         hover:border-gray-300 transition-all cursor-pointer
         ${snapshot.isDragging ? 'opacity-50 scale-98 shadow-lg' : ''}
         ${isCompleting ? 'opacity-60' : ''}
@@ -719,7 +671,7 @@ function TaskCard({
         {/* Drag Handle */}
         <div
           {...provided.dragHandleProps}
-          className="text-slate-300 cursor-grab active:cursor-grabbing mt-0.5"
+          className="text-slate-300 cursor-grab active:cursor-grabbing mt-1"
           onClick={(e) => e.stopPropagation()}
         >
           ⋮⋮
@@ -740,13 +692,13 @@ function TaskCard({
         {/* CONTENT */}
         <div className="flex-1 min-w-0">
           {/* TITLE */}
-          <div className="font-medium text-slate-800 text-base break-words leading-tight">
+          <div className="font-medium text-slate-800 text-base break-words">
             {task.title}
           </div>
                     
 
                 {/* META ROW (structured like Google Tasks) */}
-          <div className="flex items-center justify-between mt-1">
+          <div className="flex items-center justify-between mt-2">
           {/* Due date — LEFT */}
           <div>
           {task.due_date && (
@@ -771,14 +723,14 @@ function TaskCard({
 
           {/* NOTES */}
           {task.notes && (
-            <p className="text-sm text-slate-600 leading-snug mt-1">
+            <p className="text-sm text-slate-600 leading-relaxed mt-2">
               {task.notes}
             </p>
           )}
 
           {/* DELEGATE */}
           {task.delegated_to && (
-            <div className="mt-1">
+            <div className="mt-2">
               <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
                 👤 {task.delegated_to}
               </span>
@@ -791,17 +743,16 @@ function TaskCard({
 }
 
 
-// Unified Task Modal Component (for both Add and Edit)
-function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
-  const isEditing = !!task;
-  
+// Edit Task Modal Component - Todoist-style
+function EditTaskModal({ task, onUpdate, onCancel, onDelete, projects, delegates, goals }) {
   const [editData, setEditData] = useState({
-    title: task?.title || '',
-    delegated_to: task?.delegated_to || '',
-    due_date: task?.due_date || getTodayET(),
-    priority: task?.priority?.toLowerCase() || 'medium',
-    notes: task?.notes || '',
-    goal_id: task?.goal_id || null
+    title: task.title,
+    project: task.project || '',
+    delegated_to: task.delegated_to || '',
+    due_date: task.due_date || '',
+    priority: task.priority?.toLowerCase() || 'medium',
+    notes: task.notes || '',
+    goal_id: task.goal_id || null
   });
 
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -815,8 +766,9 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
   };
 
   const setNextWeek = () => {
-    // Set to next Monday instead of +7 days
-    setEditData({ ...editData, due_date: getNextMonday() });
+    const nextWeek = new Date();
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    setEditData({ ...editData, due_date: nextWeek.toISOString().split('T')[0] });
     setShowDatePicker(false);
   };
 
@@ -828,16 +780,13 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
   };
 
   const handleSave = () => {
-    if (!editData.title.trim()) {
-      alert('Please enter a task title');
-      return;
-    }
-    onSave(editData);
+    onUpdate(editData);
   };
 
   const handleDelete = () => {
     if (confirm('Delete this task?')) {
       onDelete();
+      onCancel();
     }
   };
 
@@ -849,14 +798,12 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
         onClick={onCancel}
       />
       
-      {/* Modal Content - OPTIMIZED FOR MOBILE HEIGHT */}
+      {/* Modal Content */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto">
+        <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
           {/* Modal Header */}
-          <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-slate-800">
-              {isEditing ? 'Edit Task' : 'Add Task'}
-            </h2>
+          <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-slate-800">Edit Task</h2>
             <button
               onClick={onCancel}
               className="text-slate-400 hover:text-slate-600 text-2xl leading-none"
@@ -865,16 +812,16 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
             </button>
           </div>
 
-          {/* Modal Body - COMPACT SPACING */}
-          <div className="p-4 space-y-3">
+          {/* Modal Body */}
+          <div className="p-6 space-y-4">
             {/* Task Title */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Task Title</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Task Title</label>
               <input
                 type="text"
                 value={editData.title}
                 onChange={(e) => setEditData({ ...editData, title: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
                 placeholder="What needs to be done?"
                 autoFocus
               />
@@ -882,11 +829,11 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
 
             {/* Due Date Section */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Due Date</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Due Date</label>
               <div className="relative">
                 <div 
                   onClick={() => setShowDatePicker(!showDatePicker)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white cursor-pointer hover:border-blue-400 transition-colors flex items-center justify-between"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white cursor-pointer hover:border-blue-400 transition-colors flex items-center justify-between"
                 >
                   <span className={editData.due_date ? 'text-slate-800' : 'text-slate-400'}>
                     {editData.due_date ? new Date(editData.due_date).toLocaleDateString('en-US', { 
@@ -917,7 +864,7 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
                         onClick={setNextWeek}
                         className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded text-sm text-slate-700"
                       >
-                        📆 Next Monday
+                        📆 Next Week
                       </button>
                       <button
                         onClick={setNextMonth}
@@ -927,7 +874,7 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
                       </button>
                     </div>
 
-                    {/* Calendar Picker */}
+                    {/* Calendar Picker - Always Visible */}
                     <div className="border-t border-gray-200 p-2">
                       <input
                         type="date"
@@ -946,11 +893,11 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
 
             {/* Priority */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Priority</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Priority</label>
               <select
                 value={editData.priority}
                 onChange={(e) => setEditData({ ...editData, priority: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
                 <option value="high">🔴 High Priority</option>
                 <option value="medium">🟠 Medium Priority</option>
@@ -958,13 +905,29 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
               </select>
             </div>
 
+            {/* Project */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Project</label>
+              <input
+                type="text"
+                value={editData.project}
+                onChange={(e) => setEditData({ ...editData, project: e.target.value })}
+                list="modal-project-list"
+                placeholder="No project"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <datalist id="modal-project-list">
+                {projects.map(p => <option key={p} value={p} />)}
+              </datalist>
+            </div>
+
             {/* Goal */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Goal</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Goal</label>
               <select
                 value={editData.goal_id || ''}
                 onChange={(e) => setEditData({ ...editData, goal_id: e.target.value ? parseInt(e.target.value) : null })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
                 <option value="">No goal</option>
                 {goals.map(g => {
@@ -978,14 +941,14 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
 
             {/* Delegate */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Delegate To</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Delegate To</label>
               <input
                 type="text"
                 value={editData.delegated_to}
                 onChange={(e) => setEditData({ ...editData, delegated_to: e.target.value })}
                 list="modal-delegate-list"
                 placeholder="No one"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <datalist id="modal-delegate-list">
                 {delegates.map(d => <option key={d} value={d} />)}
@@ -994,46 +957,170 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
 
             {/* Notes */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Notes</label>
               <textarea
                 value={editData.notes}
                 onChange={(e) => setEditData({ ...editData, notes: e.target.value })}
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 placeholder="Add any additional details..."
               />
             </div>
           </div>
 
-          {/* Modal Footer - CONSISTENT STYLING */}
-          <div className="sticky bottom-0 bg-slate-50 border-t border-gray-200 px-4 py-3 flex items-center justify-between">
-            {isEditing ? (
-              <button
-                onClick={handleDelete}
-                className="px-4 py-2 bg-white border border-red-300 hover:bg-red-50 text-red-600 rounded-lg font-medium transition-colors"
-              >
-                Delete
-              </button>
-            ) : (
-              <div></div>
-            )}
+          {/* Modal Footer */}
+          <div className="sticky bottom-0 bg-slate-50 border-t border-gray-200 px-6 py-4 flex items-center justify-between">
+            <button
+              onClick={handleDelete}
+              className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg font-medium transition-colors"
+            >
+              🗑️ Delete
+            </button>
             <div className="flex gap-2">
               <button
                 onClick={onCancel}
-                className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg font-medium transition-colors"
+                className="px-6 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg font-medium transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
               >
-                {isEditing ? 'Save Changes' : 'Add Task'}
+                Save Changes
               </button>
             </div>
           </div>
         </div>
       </div>
     </>
+  );
+}
+
+// Add Task Form Component
+function AddTaskForm({ onAdd, onCancel, projects, delegates, goals }) {
+  const [formData, setFormData] = useState({
+    title: '',
+    project: '',
+    delegated_to: '',
+    due_date: getTodayET(),
+    priority: 'medium',
+    notes: '',
+    goal_id: null
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!formData.title.trim()) {
+      alert('Please enter a task title');
+      return;
+    }
+    onAdd(formData);
+    setFormData({
+      title: '',
+      project: '',
+      delegated_to: '',
+      due_date: getTodayET(),
+      priority: 'medium',
+      notes: '',
+      goal_id: null
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+      <h3 className="font-semibold text-slate-800 mb-3">Add New Task</h3>
+      
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
+        <input
+          type="text"
+          value={formData.title}
+          onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+          placeholder="Task title *"
+          className="md:col-span-2 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          required
+        />
+        
+        <input
+          type="text"
+          value={formData.project}
+          onChange={(e) => setFormData({ ...formData, project: e.target.value })}
+          list="add-project-list"
+          placeholder="Project"
+          className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <datalist id="add-project-list">
+          {projects.map(p => <option key={p} value={p} />)}
+        </datalist>
+
+        <input
+          type="text"
+          value={formData.delegated_to}
+          onChange={(e) => setFormData({ ...formData, delegated_to: e.target.value })}
+          list="add-delegate-list"
+          placeholder="Delegate to"
+          className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <datalist id="add-delegate-list">
+          {delegates.map(d => <option key={d} value={d} />)}
+        </datalist>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
+        <input
+          type="date"
+          value={formData.due_date}
+          onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+          className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+
+        <select
+          value={formData.priority}
+          onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+          className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="high">🔴 High</option>
+          <option value="medium">🟠 Medium</option>
+          <option value="low">🟢 Low</option>
+        </select>
+
+        <select
+          value={formData.goal_id || ''}
+          onChange={(e) => setFormData({ ...formData, goal_id: e.target.value ? parseInt(e.target.value) : null })}
+          className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">No goal</option>
+          {getSortedGoals(goals).map(g => {
+            const displayText = g.title || g.goal_text;
+            const truncatedText = displayText.length > 25 ? displayText.substring(0, 25) + '...' : displayText;
+            const indentation = getGoalIndentation(g.time_horizon);
+            return <option key={g.id} value={g.id}>{indentation}{truncatedText}</option>;
+          })}
+        </select>
+
+        <input
+          type="text"
+          value={formData.notes}
+          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+          placeholder="Notes (optional)"
+          className="md:col-span-2 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+
+        <button
+          type="submit"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition-colors"
+        >
+          + Add
+        </button>
+      </div>
+
+      <button
+        type="button"
+        onClick={onCancel}
+        className="mt-2 text-sm text-slate-600 hover:text-slate-800"
+      >
+        Cancel
+      </button>
+    </form>
   );
 }
