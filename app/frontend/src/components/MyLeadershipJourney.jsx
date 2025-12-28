@@ -71,6 +71,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   const [selectedTopic, setSelectedTopic] = useState(null);
   const [topicData, setTopicData] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [editing, setEditing] = useState({ type: null, id: null });
 
   const anglePerDim = 360 / DIMENSIONS.length;
 
@@ -104,14 +105,61 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   const closeModal = () => {
     setSelectedTopic(null);
     setTopicData([]);
+    setEditing({ type: null, id: null });
+  };
+
+  const updateItem = async (id, updates) => {
+    const endpoint = TOPIC_ENDPOINTS[selectedTopic];
+    
+    try {
+      await axios.put(
+        `${apiUrl}/api/journey/${endpoint}/${id}`,
+        updates,
+        { params: { user_number: userNumber } }
+      );
+      
+      // Refresh data
+      const response = await axios.get(`${apiUrl}/api/journey/${endpoint}`, {
+        params: { user_number: userNumber }
+      });
+      const data = response.data?.data || response.data || [];
+      setTopicData(Array.isArray(data) ? data : []);
+      setEditing({ type: null, id: null });
+    } catch (err) {
+      console.error(`Error updating ${selectedTopic}:`, err);
+      alert(`Failed to update ${selectedTopic}`);
+    }
+  };
+
+  const deleteItem = async (id) => {
+    if (!confirm(`Delete this ${selectedTopic.toLowerCase()}?`)) return;
+    
+    const endpoint = TOPIC_ENDPOINTS[selectedTopic];
+    
+    try {
+      await axios.delete(`${apiUrl}/api/journey/${endpoint}/${id}`, {
+        params: { user_number: userNumber }
+      });
+      
+      // Refresh data
+      const response = await axios.get(`${apiUrl}/api/journey/${endpoint}`, {
+        params: { user_number: userNumber }
+      });
+      const data = response.data?.data || response.data || [];
+      setTopicData(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error(`Error deleting ${selectedTopic}:`, err);
+      alert(`Failed to delete ${selectedTopic}`);
+    }
   };
 
   return (
     <div className="px-10 py-8">
       {/* Page title */}
-      <h1 className="text-3xl font-semibold text-slate-800 mb-6">
+      <h1 className="text-3xl font-semibold text-slate-800 mb-2">
         My Leadership Journey
       </h1>
+      <p className="text-slate-600 mb-6">Understanding your journey to shape your future</p>
 
       <div className="flex justify-center">
         <svg viewBox="0 0 1200 1200" width="900" height="900">
@@ -161,11 +209,16 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                   x={labelPos.x}
                   y={labelPos.y}
                   textAnchor="middle"
-                  fontSize="16"
+                  fontSize="14"
                   fill="#0F172A"
                   fontWeight="500"
+                  style={{ wordSpacing: '100vw' }}
                 >
-                  {dim.name}
+                  {dim.name.split(' ').map((word, idx) => (
+                    <tspan key={idx} x={labelPos.x} dy={idx === 0 ? 0 : 16}>
+                      {word}
+                    </tspan>
+                  ))}
                 </text>
 
                 {/* Topic wedges */}
@@ -216,7 +269,12 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
           topic={selectedTopic}
           data={topicData}
           loading={loading}
+          editing={editing}
           onClose={closeModal}
+          onEdit={(id) => setEditing({ type: selectedTopic, id })}
+          onCancelEdit={() => setEditing({ type: null, id: null })}
+          onUpdate={updateItem}
+          onDelete={deleteItem}
         />
       )}
     </div>
@@ -224,7 +282,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
 }
 
 // Topic Modal Component
-function TopicModal({ topic, data, loading, onClose }) {
+function TopicModal({ topic, data, loading, editing, onClose, onEdit, onCancelEdit, onUpdate, onDelete }) {
   return (
     <>
       {/* Overlay */}
@@ -237,7 +295,7 @@ function TopicModal({ topic, data, loading, onClose }) {
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
         <div
           className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden pointer-events-auto flex flex-col"
-          onClick={(e) => e.stopPropagagation()}
+          onClick={(e) => e.stopPropagation()}
         >
           {/* Modal Header */}
           <div className="sticky top-0 bg-slate-800 text-white px-6 py-4 flex items-center justify-between border-b border-slate-700">
@@ -263,7 +321,16 @@ function TopicModal({ topic, data, loading, onClose }) {
             ) : (
               <div className="space-y-4">
                 {data.map((item, index) => (
-                  <TopicCard key={item.id || index} topic={topic} item={item} />
+                  <TopicCard 
+                    key={item.id || index} 
+                    topic={topic} 
+                    item={item}
+                    isEditing={editing.type === topic && editing.id === item.id}
+                    onEdit={() => onEdit(item.id)}
+                    onCancelEdit={onCancelEdit}
+                    onUpdate={onUpdate}
+                    onDelete={() => onDelete(item.id)}
+                  />
                 ))}
               </div>
             )}
@@ -285,7 +352,236 @@ function TopicModal({ topic, data, loading, onClose }) {
 }
 
 // Topic Card Component - renders different fields based on topic type
-function TopicCard({ topic, item }) {
+function TopicCard({ topic, item, isEditing, onEdit, onCancelEdit, onUpdate, onDelete }) {
+  const [formData, setFormData] = useState(item);
+
+  const handleSubmit = () => {
+    onUpdate(item.id, formData);
+  };
+
+  const renderEditForm = () => {
+    switch (topic) {
+      case "Strengths":
+        return (
+          <>
+            <input
+              type="text"
+              value={formData.title || ''}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Title (optional)"
+            />
+            <textarea
+              value={formData.strength || ''}
+              onChange={(e) => setFormData({ ...formData, strength: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Strength"
+              rows={2}
+            />
+            <input
+              type="text"
+              value={formData.source || ''}
+              onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500"
+              placeholder="Source (optional)"
+            />
+          </>
+        );
+
+      case "Values":
+        return (
+          <>
+            <input
+              type="text"
+              value={formData.title || ''}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Title (optional)"
+            />
+            <textarea
+              value={formData.value_text || ''}
+              onChange={(e) => setFormData({ ...formData, value_text: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Value"
+              rows={2}
+            />
+            <textarea
+              value={formData.why || ''}
+              onChange={(e) => setFormData({ ...formData, why: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500"
+              placeholder="Why it matters (optional)"
+              rows={2}
+            />
+          </>
+        );
+
+      case "Goals":
+        return (
+          <>
+            <input
+              type="text"
+              value={formData.title || ''}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Title (optional)"
+            />
+            <textarea
+              value={formData.goal_text || ''}
+              onChange={(e) => setFormData({ ...formData, goal_text: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Goal"
+              rows={2}
+            />
+            <select
+              value={formData.time_horizon || ''}
+              onChange={(e) => setFormData({ ...formData, time_horizon: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+            >
+              <option value="">No time horizon</option>
+              <option value="short">Short term</option>
+              <option value="medium">Medium term</option>
+              <option value="long">Long term</option>
+            </select>
+            <textarea
+              value={formData.why || ''}
+              onChange={(e) => setFormData({ ...formData, why: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500"
+              placeholder="Why (optional)"
+              rows={2}
+            />
+          </>
+        );
+
+      case "Projects":
+        return (
+          <>
+            <input
+              type="text"
+              value={formData.project_name || ''}
+              onChange={(e) => setFormData({ ...formData, project_name: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Project name"
+            />
+            <textarea
+              value={formData.goal || ''}
+              onChange={(e) => setFormData({ ...formData, goal: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Goal (optional)"
+              rows={2}
+            />
+            <textarea
+              value={formData.description || ''}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Description (optional)"
+              rows={2}
+            />
+            <select
+              value={formData.status || ''}
+              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500"
+            >
+              <option value="">No status</option>
+              <option value="active">Active</option>
+              <option value="paused">Paused</option>
+              <option value="completed">Completed</option>
+            </select>
+          </>
+        );
+
+      case "Key People":
+        return (
+          <>
+            <input
+              type="text"
+              value={formData.name || ''}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Name"
+            />
+            <input
+              type="text"
+              value={formData.relation || ''}
+              onChange={(e) => setFormData({ ...formData, relation: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Relation (optional)"
+            />
+            <input
+              type="email"
+              value={formData.email || ''}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Email (optional)"
+            />
+            <input
+              type="tel"
+              value={formData.phone || ''}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Phone (optional)"
+            />
+            <textarea
+              value={formData.context || ''}
+              onChange={(e) => setFormData({ ...formData, context: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500"
+              placeholder="Context (optional)"
+              rows={2}
+            />
+          </>
+        );
+
+      case "Failures & Scars":
+        return (
+          <>
+            <textarea
+              value={formData.failure_text || ''}
+              onChange={(e) => setFormData({ ...formData, failure_text: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Failure"
+              rows={2}
+            />
+            <textarea
+              value={formData.learning || ''}
+              onChange={(e) => setFormData({ ...formData, learning: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Learning (optional)"
+              rows={2}
+            />
+            <textarea
+              value={formData.scar || ''}
+              onChange={(e) => setFormData({ ...formData, scar: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500"
+              placeholder="Scar (optional)"
+              rows={2}
+            />
+          </>
+        );
+
+      case "Development Opportunities":
+        return (
+          <>
+            <textarea
+              value={formData.skill || ''}
+              onChange={(e) => setFormData({ ...formData, skill: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Skill"
+              rows={2}
+            />
+            <input
+              type="text"
+              value={formData.source || ''}
+              onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500"
+              placeholder="Source (optional)"
+            />
+          </>
+        );
+
+      default:
+        return null;
+    }
+  };
+
   const renderContent = () => {
     switch (topic) {
       case "Strengths":
@@ -425,8 +721,39 @@ function TopicCard({ topic, item }) {
     }
   };
 
+  if (isEditing) {
+    return (
+      <div className="bg-white border-2 border-gray-200 rounded-lg p-4 space-y-3">
+        {renderEditForm()}
+        <div className="flex gap-2 pt-2">
+          <button
+            onClick={handleSubmit}
+            className="flex-1 bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded text-sm font-medium"
+          >
+            Save
+          </button>
+          <button
+            onClick={onCancelEdit}
+            className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1.5 rounded text-sm font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onDelete}
+            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-medium"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm hover:shadow-md transition-shadow">
+    <div 
+      className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+      onClick={onEdit}
+    >
       {renderContent()}
       {item.first_seen_at && (
         <p className="text-xs text-slate-400 mt-3">
