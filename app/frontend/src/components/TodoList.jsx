@@ -17,18 +17,18 @@ const getTodayET = () => {
 
 const isOverdueET = (dateString) => {
   if (!dateString) return false;
-  const taskDate = new Date(dateString);
-  const todayET = getETDate();
-  todayET.setHours(0, 0, 0, 0);
-  taskDate.setHours(0, 0, 0, 0);
-  return taskDate < todayET;
+  // Parse date string as YYYY-MM-DD and compare directly (no timezone conversion)
+  const taskDateStr = dateString.split('T')[0]; // Get just the date part
+  const todayStr = getTodayET();
+  return taskDateStr < todayStr;
 };
 
 const isTodayET = (dateString) => {
   if (!dateString) return false;
-  const taskDate = new Date(dateString).toISOString().split('T')[0];
-  const todayET = getTodayET();
-  return taskDate === todayET;
+  // Compare date strings directly (no timezone conversion)
+  const taskDateStr = dateString.split('T')[0]; // Get just the date part
+  const todayStr = getTodayET();
+  return taskDateStr === todayStr;
 };
 
 // Helper function to get next Monday
@@ -41,7 +41,6 @@ const getNextMonday = () => {
 };
 
 // Helper function to sort goals hierarchically
-// Groups by parent long-term goal, then shows medium and short under each
 const getSortedGoals = (goals) => {
   const longTerm = goals.filter(g => g.time_horizon === 'long');
   const mediumTerm = goals.filter(g => g.time_horizon === 'medium');
@@ -50,22 +49,19 @@ const getSortedGoals = (goals) => {
   const result = [];
   
   longTerm.forEach(ltGoal => {
-    result.push(ltGoal); // Add long-term goal
+    result.push(ltGoal);
     
-    // Find medium-term goals associated with this long-term goal
     const relatedMedium = mediumTerm.filter(mt => mt.parent_goal_id === ltGoal.id);
     relatedMedium.forEach(mtGoal => {
-      result.push(mtGoal); // Add medium-term goal
+      result.push(mtGoal);
       
-      // Find short-term goals associated with this medium-term goal
       const relatedShort = shortTerm.filter(st => st.parent_goal_id === mtGoal.id);
       relatedShort.forEach(stGoal => {
-        result.push(stGoal); // Add short-term goal
+        result.push(stGoal);
       });
     });
   });
   
-  // Add any orphaned goals (those without parent relationships)
   mediumTerm.forEach(mt => {
     if (!result.includes(mt)) result.push(mt);
   });
@@ -76,12 +72,12 @@ const getSortedGoals = (goals) => {
   return result;
 };
 
-// Helper function to get goal indentation based on hierarchy
+// Helper function to get goal indentation
 const getGoalIndentation = (timeHorizon) => {
   const h = timeHorizon?.toLowerCase();
   if (h === 'long') return '';
-  if (h === 'medium') return '\u00A0\u00A0\u00A0\u00A0'; // 1 level indent
-  if (h === 'short') return '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0'; // 2 levels indent
+  if (h === 'medium') return '\u00A0\u00A0\u00A0\u00A0';
+  if (h === 'short') return '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0';
   return '';
 };
 
@@ -90,7 +86,6 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // Filters - DEFAULT to 'due_today'
   const [filterType, setFilterType] = useState('due_today');
   const [selectedProject, setSelectedProject] = useState('');
   const [selectedDelegate, setSelectedDelegate] = useState('');
@@ -99,25 +94,28 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [delegates, setDelegates] = useState([]);
   const [goals, setGoals] = useState([]);
   
-  // UI state
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [sortOrder, setSortOrder] = useState([]);
   const [completingTasks, setCompletingTasks] = useState([]);
-  const [filtersCollapsed, setFiltersCollapsed] = useState(true); // Collapsed by default
+  const [filtersCollapsed, setFiltersCollapsed] = useState(true);
 
-  // IMPORTANT: Reset filters when component unmounts (leaving page)
+  // Multi-select state
+  const [selectedTasks, setSelectedTasks] = useState([]);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [showBulkActionModal, setShowBulkActionModal] = useState(false);
+
   useEffect(() => {
     return () => {
-      // Cleanup function - resets filters when leaving page
       setFilterType('due_today');
       setSelectedProject('');
       setSelectedDelegate('');
       setSelectedGoal('');
+      setSelectedTasks([]);
+      setSelectionMode(false);
     };
   }, []);
 
-  // Load sort order from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('taskSortOrder');
     if (saved) {
@@ -125,13 +123,11 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
   }, []);
 
-  // Fetch filters (projects, delegates, goals)
   useEffect(() => {
     fetchFilters();
     fetchGoals();
   }, []);
 
-  // Fetch tasks when filters change
   useEffect(() => {
     fetchTasks();
   }, [filterType, selectedProject, selectedDelegate, selectedGoal]);
@@ -178,7 +174,6 @@ export default function TodoList({ apiUrl, userNumber }) {
       if (response.data && Array.isArray(response.data)) {
         let activeTasks = response.data.filter(t => t.status !== 'completed');
         
-        // Filter by goal if selected
         if (selectedGoal) {
           activeTasks = activeTasks.filter(t => t.goal_id === parseInt(selectedGoal));
         }
@@ -199,7 +194,6 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const getSortedTasks = () => {
-    // If user has manually sorted tasks, use that order
     if (sortOrder.length > 0) {
       return [...tasks].sort((a, b) => {
         const indexA = sortOrder.indexOf(a.id);
@@ -214,7 +208,6 @@ export default function TodoList({ apiUrl, userNumber }) {
       });
     }
     
-    // Default: sort by priority (High -> Medium -> Low)
     const priorityOrder = { 'high': 0, 'medium': 1, 'low': 2 };
     return [...tasks].sort((a, b) => {
       const aPriority = priorityOrder[a.priority?.toLowerCase()] ?? 3;
@@ -313,7 +306,6 @@ export default function TodoList({ apiUrl, userNumber }) {
     setSortOrder([]);
   };
 
-  // Set all overdue tasks to today
   const setOverdueToToday = async () => {
     const overdueTasks = tasks.filter(t => isOverdueET(t.due_date));
     if (overdueTasks.length === 0) {
@@ -341,8 +333,48 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
   };
 
-  const hasActiveFilters = selectedProject || selectedDelegate || selectedGoal || filterType !== 'due_today';
+  // Multi-select functions
+  const toggleTaskSelection = (taskId) => {
+    setSelectedTasks(prev => {
+      if (prev.includes(taskId)) {
+        return prev.filter(id => id !== taskId);
+      } else {
+        return [...prev, taskId];
+      }
+    });
+  };
 
+  const enterSelectionMode = (taskId) => {
+    setSelectionMode(true);
+    setSelectedTasks([taskId]);
+  };
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedTasks([]);
+  };
+
+  const applyBulkAction = async (updates) => {
+    try {
+      await Promise.all(
+        selectedTasks.map(taskId =>
+          axios.put(
+            `${apiUrl}/api/tasks/${taskId}`,
+            updates,
+            { params: { user_number: userNumber } }
+          )
+        )
+      );
+      await fetchTasks();
+      exitSelectionMode();
+      setShowBulkActionModal(false);
+    } catch (err) {
+      console.error('Error applying bulk action:', err);
+      alert('Failed to update some tasks');
+    }
+  };
+
+  const hasActiveFilters = selectedProject || selectedDelegate || selectedGoal || filterType !== 'due_today';
   const sortedTasks = getSortedTasks();
 
   if (loading) {
@@ -363,16 +395,24 @@ export default function TodoList({ apiUrl, userNumber }) {
               Your To-Do List
             </h1>
             <p className="text-slate-600 mt-1">
-              {filterType === 'due_today' && 'Tasks due today'}
-              {filterType === 'next_7_days' && 'Tasks due in the next 7 days'}
-              {filterType === 'all' && 'All active tasks'}
-              {selectedProject && ` • Project: ${selectedProject}`}
-              {selectedDelegate && ` • Delegated to: ${selectedDelegate}`}
-              {selectedGoal && ` • Goal: ${goals.find(g => g.id === parseInt(selectedGoal))?.title || 'Selected'}`}
+              {selectionMode ? (
+                <span className="text-blue-600 font-medium">
+                  {selectedTasks.length} task(s) selected
+                </span>
+              ) : (
+                <>
+                  {filterType === 'due_today' && 'Tasks due today'}
+                  {filterType === 'next_7_days' && 'Tasks due in the next 7 days'}
+                  {filterType === 'all' && 'All active tasks'}
+                  {selectedProject && ` • Project: ${selectedProject}`}
+                  {selectedDelegate && ` • Delegated to: ${selectedDelegate}`}
+                  {selectedGoal && ` • Goal: ${goals.find(g => g.id === parseInt(selectedGoal))?.title || 'Selected'}`}
+                </>
+              )}
             </p>
           </div>
           <div className="flex gap-2">
-            {sortOrder.length > 0 && (
+            {sortOrder.length > 0 && !selectionMode && (
               <button
                 onClick={resetSortOrder}
                 className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-lg font-medium transition-colors text-sm"
@@ -381,132 +421,131 @@ export default function TodoList({ apiUrl, userNumber }) {
                 ↻ Reset Sort
               </button>
             )}
-            {/* Set Overdue to Today Button */}
-            <button
-              onClick={setOverdueToToday}
-              className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-lg font-medium transition-colors text-sm hidden sm:inline-block"
-              title="Set all overdue tasks to today"
-            >
-              📅 Overdue → Today
-            </button>
-            <button
-              onClick={setOverdueToToday}
-              className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-lg font-medium transition-colors text-sm sm:hidden"
-              title="Set all overdue tasks to today"
-            >
-              📅
-            </button>
-            <button
-              onClick={() => {
-                setEditingTask(null);
-                setShowTaskModal(true);
-              }}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-            >
-              <span className="hidden sm:inline">+ Add Task</span>
-              <span className="sm:hidden">+</span>
-            </button>
+            {!selectionMode && (
+              <>
+                <button
+                  onClick={setOverdueToToday}
+                  className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-lg font-medium transition-colors text-sm hidden sm:inline-block"
+                  title="Set all overdue tasks to today"
+                >
+                  📅 Overdue → Today
+                </button>
+                <button
+                  onClick={setOverdueToToday}
+                  className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-lg font-medium transition-colors text-sm sm:hidden"
+                  title="Set all overdue tasks to today"
+                >
+                  📅
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingTask(null);
+                    setShowTaskModal(true);
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                >
+                  <span className="hidden sm:inline">+ Add Task</span>
+                  <span className="sm:hidden">+</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Collapsible Filters Section */}
-        <div className="bg-white border border-gray-200 rounded-lg mb-6">
-          <button
-            onClick={() => setFiltersCollapsed(!filtersCollapsed)}
-            className="w-full px-4 py-3 flex items-center justify-between text-slate-700 hover:bg-slate-50 transition-colors rounded-lg"
-          >
-            <span className="font-semibold">Filters</span>
-            <span className="text-xl">{filtersCollapsed ? '▼' : '▲'}</span>
-          </button>
-          
-          {!filtersCollapsed && (
-            <div className="border-t border-gray-200 p-4">
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Due Date Filter */}
-                <div className="flex-shrink-0">
-                  <label className="text-xs font-medium text-slate-600 mb-1 block">Due Date</label>
-                  <select
-                    value={filterType}
-                    onChange={(e) => setFilterType(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                  >
-                    <option value="due_today">Due Today</option>
-                    <option value="next_7_days">Next 7 Days</option>
-                    <option value="all">All Tasks</option>
-                  </select>
+        {/* Filters Section */}
+        {!selectionMode && (
+          <div className="bg-white border border-gray-200 rounded-lg mb-6">
+            <button
+              onClick={() => setFiltersCollapsed(!filtersCollapsed)}
+              className="w-full px-4 py-3 flex items-center justify-between text-slate-700 hover:bg-slate-50 transition-colors rounded-lg"
+            >
+              <span className="font-semibold">Filters</span>
+              <span className="text-xl">{filtersCollapsed ? '▼' : '▲'}</span>
+            </button>
+            
+            {!filtersCollapsed && (
+              <div className="border-t border-gray-200 p-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex-shrink-0">
+                    <label className="text-xs font-medium text-slate-600 mb-1 block">Due Date</label>
+                    <select
+                      value={filterType}
+                      onChange={(e) => setFilterType(e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="due_today">Due Today</option>
+                      <option value="next_7_days">Next 7 Days</option>
+                      <option value="all">All Tasks</option>
+                    </select>
+                  </div>
+
+                  {projects.length > 0 && (
+                    <div className="flex-shrink-0">
+                      <label className="text-xs font-medium text-slate-600 mb-1 block">Project</label>
+                      <select
+                        value={selectedProject}
+                        onChange={(e) => setSelectedProject(e.target.value)}
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        <option value="">All Projects</option>
+                        {projects.map(p => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {delegates.length > 0 && (
+                    <div className="flex-shrink-0">
+                      <label className="text-xs font-medium text-slate-600 mb-1 block">Delegated To</label>
+                      <select
+                        value={selectedDelegate}
+                        onChange={(e) => setSelectedDelegate(e.target.value)}
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        <option value="">All Delegates</option>
+                        {delegates.map(d => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {goals.length > 0 && (
+                    <div className="flex-shrink-0">
+                      <label className="text-xs font-medium text-slate-600 mb-1 block">Goal</label>
+                      <select
+                        value={selectedGoal}
+                        onChange={(e) => setSelectedGoal(e.target.value)}
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        <option value="">All Goals</option>
+                        {getSortedGoals(goals).map(g => {
+                          const displayText = g.title || g.goal_text;
+                          const truncatedText = displayText.length > 30 ? displayText.substring(0, 30) + '...' : displayText;
+                          const indentation = getGoalIndentation(g.time_horizon);
+                          return <option key={g.id} value={g.id}>{indentation}{truncatedText}</option>;
+                        })}
+                      </select>
+                    </div>
+                  )}
+
+                  {hasActiveFilters && (
+                    <div className="flex-shrink-0 mt-auto">
+                      <button
+                        onClick={clearFilters}
+                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
+                      >
+                        ✕ Clear Filters
+                      </button>
+                    </div>
+                  )}
                 </div>
-
-                {/* Project Filter */}
-                {projects.length > 0 && (
-                  <div className="flex-shrink-0">
-                    <label className="text-xs font-medium text-slate-600 mb-1 block">Project</label>
-                    <select
-                      value={selectedProject}
-                      onChange={(e) => setSelectedProject(e.target.value)}
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                    >
-                      <option value="">All Projects</option>
-                      {projects.map(p => (
-                        <option key={p} value={p}>{p}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {/* Delegate Filter */}
-                {delegates.length > 0 && (
-                  <div className="flex-shrink-0">
-                    <label className="text-xs font-medium text-slate-600 mb-1 block">Delegated To</label>
-                    <select
-                      value={selectedDelegate}
-                      onChange={(e) => setSelectedDelegate(e.target.value)}
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                    >
-                      <option value="">All Delegates</option>
-                      {delegates.map(d => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {/* Goal Filter */}
-                {goals.length > 0 && (
-                  <div className="flex-shrink-0">
-                    <label className="text-xs font-medium text-slate-600 mb-1 block">Goal</label>
-                    <select
-                      value={selectedGoal}
-                      onChange={(e) => setSelectedGoal(e.target.value)}
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                    >
-                      <option value="">All Goals</option>
-                      {getSortedGoals(goals).map(g => {
-                        const displayText = g.title || g.goal_text;
-                        const truncatedText = displayText.length > 30 ? displayText.substring(0, 30) + '...' : displayText;
-                        const indentation = getGoalIndentation(g.time_horizon);
-                        return <option key={g.id} value={g.id}>{indentation}{truncatedText}</option>;
-                      })}
-                    </select>
-                  </div>
-                )}
-
-                {/* Clear Filters Button */}
-                {hasActiveFilters && (
-                  <div className="flex-shrink-0 mt-auto">
-                    <button
-                      onClick={clearFilters}
-                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
-                    >
-                      ✕ Clear Filters
-                    </button>
-                  </div>
-                )}
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
-        {/* Error State */}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4">
             {error}
@@ -536,11 +575,15 @@ export default function TodoList({ apiUrl, userNumber }) {
                       task={task}
                       index={index}
                       isCompleting={completingTasks.includes(task.id)}
+                      isSelected={selectedTasks.includes(task.id)}
+                      selectionMode={selectionMode}
                       onToggle={() => toggleTaskComplete(task.id)}
                       onStartEdit={() => {
                         setEditingTask(task);
                         setShowTaskModal(true);
                       }}
+                      onLongPress={() => enterSelectionMode(task.id)}
+                      onSelectToggle={() => toggleTaskSelection(task.id)}
                       goals={goals}
                     />
                   ))}
@@ -552,7 +595,32 @@ export default function TodoList({ apiUrl, userNumber }) {
         )}
       </div>
 
-      {/* Unified Task Modal (for both Add and Edit) */}
+      {/* Floating Action Bar */}
+      {selectionMode && selectedTasks.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-blue-500 shadow-2xl z-50">
+          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <span className="text-slate-700 font-medium">
+                {selectedTasks.length} selected
+              </span>
+              <button
+                onClick={exitSelectionMode}
+                className="text-slate-600 hover:text-slate-800 text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+            <button
+              onClick={() => setShowBulkActionModal(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+            >
+              Edit Selected
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Task Modal */}
       {showTaskModal && (
         <TaskModal
           task={editingTask}
@@ -570,6 +638,17 @@ export default function TodoList({ apiUrl, userNumber }) {
           goals={getSortedGoals(goals)}
         />
       )}
+
+      {/* Bulk Action Modal */}
+      {showBulkActionModal && (
+        <BulkActionModal
+          selectedCount={selectedTasks.length}
+          onApply={applyBulkAction}
+          onCancel={() => setShowBulkActionModal(false)}
+          delegates={delegates}
+          goals={getSortedGoals(goals)}
+        />
+      )}
     </div>
   );
 }
@@ -580,18 +659,24 @@ function getPriorityIcon(priority) {
   if (p === 'high') return '🔴';
   if (p === 'medium') return '🟠';
   if (p === 'low') return '🟢';
-  return '🟢'; // default to low
+  return '🟢';
 }
 
 function formatDueDate(dateString) {
   if (!dateString) return '';
   
-  const taskDate = new Date(dateString);
-  const todayET = getETDate();
-  todayET.setHours(0, 0, 0, 0);
-  taskDate.setHours(0, 0, 0, 0);
+  // Parse date parts directly from string to avoid timezone issues
+  const taskDateStr = dateString.split('T')[0]; // YYYY-MM-DD
+  const todayStr = getTodayET(); // YYYY-MM-DD
   
-  const diffTime = taskDate - todayET;
+  // Calculate difference in days using string parsing
+  const taskParts = taskDateStr.split('-').map(Number);
+  const todayParts = todayStr.split('-').map(Number);
+  
+  const taskDate = new Date(taskParts[0], taskParts[1] - 1, taskParts[2]);
+  const todayDate = new Date(todayParts[0], todayParts[1] - 1, todayParts[2]);
+  
+  const diffTime = taskDate - todayDate;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
   if (diffDays < 0) return `Overdue ${Math.abs(diffDays)}d`;
@@ -612,12 +697,17 @@ function getDueDateColor(dateString) {
     return 'bg-orange-100 text-orange-700 font-semibold';
   }
   
-  const taskDate = new Date(dateString);
-  const todayET = getETDate();
-  todayET.setHours(0, 0, 0, 0);
-  taskDate.setHours(0, 0, 0, 0);
+  // Parse date parts directly from string to avoid timezone issues
+  const taskDateStr = dateString.split('T')[0];
+  const todayStr = getTodayET();
   
-  const diffTime = taskDate - todayET;
+  const taskParts = taskDateStr.split('-').map(Number);
+  const todayParts = todayStr.split('-').map(Number);
+  
+  const taskDate = new Date(taskParts[0], taskParts[1] - 1, taskParts[2]);
+  const todayDate = new Date(todayParts[0], todayParts[1] - 1, todayParts[2]);
+  
+  const diffTime = taskDate - todayDate;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
   if (diffDays <= 3) {
@@ -632,29 +722,53 @@ function TaskItem({
   task,
   index,
   isCompleting,
+  isSelected,
+  selectionMode,
   onToggle,
   onStartEdit,
+  onLongPress,
+  onSelectToggle,
   goals
 }) {
   const [swipeDistance, setSwipeDistance] = useState(0);
   const [touchStartX, setTouchStartX] = useState(0);
+  const [longPressTimer, setLongPressTimer] = useState(null);
 
   const onTouchStart = (e) => {
     setTouchStartX(e.touches[0].clientX);
+    
+    const timer = setTimeout(() => {
+      if (!selectionMode) {
+        onLongPress();
+        if (navigator.vibrate) {
+          navigator.vibrate(50);
+        }
+      }
+    }, 750);
+    setLongPressTimer(timer);
   };
 
   const onTouchMove = (e) => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+    
     const currentX = e.touches[0].clientX;
     const distance = Math.max(0, touchStartX - currentX);
     setSwipeDistance(Math.min(distance, 100));
   };
 
   const onTouchEnd = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
     setSwipeDistance(0);
   };
 
   return (
-    <Draggable draggableId={String(task.id)} index={index}>
+    <Draggable draggableId={String(task.id)} index={index} isDragDisabled={selectionMode}>
       {(provided, snapshot) => (
         <TaskCard
           task={task}
@@ -662,12 +776,15 @@ function TaskItem({
           provided={provided}
           snapshot={snapshot}
           isCompleting={isCompleting}
+          isSelected={isSelected}
+          selectionMode={selectionMode}
           swipeDistance={swipeDistance}
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
           onToggle={onToggle}
           onStartEdit={onStartEdit}
+          onSelectToggle={onSelectToggle}
           goals={goals}
         />
       )}
@@ -675,25 +792,50 @@ function TaskItem({
   );
 }
 
-// Task Card Component - TIGHTER MOBILE SPACING
+// Task Card Component
 function TaskCard({
   task,
   index,
   provided,
   snapshot,
   isCompleting,
+  isSelected,
+  selectionMode,
   swipeDistance,
   onTouchStart,
   onTouchMove,
   onTouchEnd,
   onToggle,
   onStartEdit,
+  onSelectToggle,
   goals
 }) {
   const goalLabel =
     goals.find(g => g.id === task.goal_id)?.title ||
     goals.find(g => g.id === task.goal_id)?.goal_text ||
     'Goal';
+
+  const handleClick = (e) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!selectionMode) {
+        onLongPress();
+      } else {
+        onSelectToggle();
+      }
+      return;
+    }
+
+    if (selectionMode) {
+      e.preventDefault();
+      e.stopPropagation();
+      onSelectToggle();
+      return;
+    }
+
+    onStartEdit();
+  };
 
   return (
     <div
@@ -707,76 +849,78 @@ function TaskCard({
         transform: `${provided.draggableProps.style?.transform || ''} translateX(-${swipeDistance}px)`,
       }}
       className={`
-        bg-white border border-gray-200 rounded px-3 py-2
+        bg-white border-2 rounded px-3 py-2
         hover:border-gray-300 transition-all cursor-pointer
         ${snapshot.isDragging ? 'opacity-50 scale-98 shadow-lg' : ''}
         ${isCompleting ? 'opacity-60' : ''}
         ${index >= 10 ? 'opacity-40' : ''}
+        ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}
       `}
-      onClick={onStartEdit}
+      onClick={handleClick}
     >
       <div className={`flex items-start gap-2 ${isCompleting ? 'line-through' : ''}`}>
-        {/* Drag Handle */}
-        <div
-          {...provided.dragHandleProps}
-          className="text-slate-300 cursor-grab active:cursor-grabbing mt-0.5"
-          onClick={(e) => e.stopPropagation()}
-        >
-          ⋮⋮
-        </div>
+        {isSelected && (
+          <div className="flex-shrink-0 mt-0.5">
+            <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
+              <span className="text-white text-xs">✓</span>
+            </div>
+          </div>
+        )}
 
-        {/* Priority */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle();
-          }}
-          className="flex-shrink-0 text-2xl hover:scale-110 transition-transform"
-          title={`${task.priority} priority - Click to complete`}
-        >
-          {getPriorityIcon(task.priority)}
-        </button>
+        {!selectionMode && (
+          <div
+            {...provided.dragHandleProps}
+            className="text-slate-300 cursor-grab active:cursor-grabbing mt-0.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            ⋮⋮
+          </div>
+        )}
 
-        {/* CONTENT */}
+        {!selectionMode && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle();
+            }}
+            className="flex-shrink-0 text-2xl hover:scale-110 transition-transform"
+            title={`${task.priority} priority - Click to complete`}
+          >
+            {getPriorityIcon(task.priority)}
+          </button>
+        )}
+
         <div className="flex-1 min-w-0">
-          {/* TITLE */}
           <div className="font-medium text-slate-800 text-base break-words leading-tight">
             {task.title}
           </div>
-                    
 
-                {/* META ROW (structured like Google Tasks) */}
           <div className="flex items-center justify-between mt-1">
-          {/* Due date — LEFT */}
-          <div>
-          {task.due_date && (
-            <span
-              className={`px-2 py-0.5 rounded text-xs font-medium ${getDueDateColor(
-                task.due_date
-              )}`}
-            >
-              {formatDueDate(task.due_date)}
-            </span>
-          )}
+            <div>
+              {task.due_date && (
+                <span
+                  className={`px-2 py-0.5 rounded text-xs font-medium ${getDueDateColor(
+                    task.due_date
+                  )}`}
+                >
+                  {formatDueDate(task.due_date)}
+                </span>
+              )}
+            </div>
+
+            {task.goal_id && (
+              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-medium">
+                🎯 {goalLabel}
+              </span>
+            )}
           </div>
 
-          {/* Goal — RIGHT */}
-          {task.goal_id && (
-          <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-medium">
-            🎯 {goalLabel}
-          </span>
-          )}
-          </div>
-          
-
-          {/* NOTES */}
           {task.notes && (
             <p className="text-sm text-slate-600 leading-snug mt-1">
               {task.notes}
             </p>
           )}
 
-          {/* DELEGATE */}
           {task.delegated_to && (
             <div className="mt-1">
               <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
@@ -790,8 +934,7 @@ function TaskCard({
   );
 }
 
-
-// Unified Task Modal Component (for both Add and Edit)
+// Task Modal Component
 function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
   const isEditing = !!task;
   
@@ -806,7 +949,6 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
 
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // Quick date functions
   const setTomorrow = () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -815,7 +957,6 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
   };
 
   const setNextWeek = () => {
-    // Set to next Monday instead of +7 days
     setEditData({ ...editData, due_date: getNextMonday() });
     setShowDatePicker(false);
   };
@@ -843,16 +984,13 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
 
   return (
     <>
-      {/* Modal Overlay */}
       <div 
         className="fixed inset-0 bg-black bg-opacity-50 z-40"
         onClick={onCancel}
       />
       
-      {/* Modal Content - OPTIMIZED FOR MOBILE HEIGHT */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto">
-          {/* Modal Header */}
           <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
             <h2 className="text-xl font-semibold text-slate-800">
               {isEditing ? 'Edit Task' : 'Add Task'}
@@ -865,9 +1003,7 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
             </button>
           </div>
 
-          {/* Modal Body - COMPACT SPACING */}
           <div className="p-4 space-y-3">
-            {/* Task Title */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Task Title</label>
               <input
@@ -880,7 +1016,6 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
               />
             </div>
 
-            {/* Due Date Section */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Due Date</label>
               <div className="relative">
@@ -899,13 +1034,11 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
                   <span className="text-slate-400">📅</span>
                 </div>
 
-                {/* Date Picker Dropdown */}
                 {showDatePicker && (
                   <div 
                     className="absolute z-10 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {/* Quick Buttons */}
                     <div className="p-2 space-y-1">
                       <button
                         onClick={setTomorrow}
@@ -927,7 +1060,6 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
                       </button>
                     </div>
 
-                    {/* Calendar Picker */}
                     <div className="border-t border-gray-200 p-2">
                       <input
                         type="date"
@@ -944,7 +1076,6 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
               </div>
             </div>
 
-            {/* Priority */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Priority</label>
               <select
@@ -958,7 +1089,6 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
               </select>
             </div>
 
-            {/* Goal */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Goal</label>
               <select
@@ -976,7 +1106,6 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
               </select>
             </div>
 
-            {/* Delegate */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Delegate To</label>
               <input
@@ -992,7 +1121,6 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
               </datalist>
             </div>
 
-            {/* Notes */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
               <textarea
@@ -1005,7 +1133,6 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
             </div>
           </div>
 
-          {/* Modal Footer - CONSISTENT STYLING */}
           <div className="sticky bottom-0 bg-slate-50 border-t border-gray-200 px-4 py-3 flex items-center justify-between">
             {isEditing ? (
               <button
@@ -1031,6 +1158,215 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
                 {isEditing ? 'Save Changes' : 'Add Task'}
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// Bulk Action Modal
+function BulkActionModal({ selectedCount, onApply, onCancel, delegates, goals }) {
+  const [bulkData, setBulkData] = useState({
+    due_date: '',
+    priority: '',
+    goal_id: '',
+    delegated_to: ''
+  });
+
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  const setToday = () => {
+    setBulkData({ ...bulkData, due_date: getTodayET() });
+    setShowDatePicker(false);
+  };
+
+  const setTomorrow = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    setBulkData({ ...bulkData, due_date: tomorrow.toISOString().split('T')[0] });
+    setShowDatePicker(false);
+  };
+
+  const setNextMonday = () => {
+    setBulkData({ ...bulkData, due_date: getNextMonday() });
+    setShowDatePicker(false);
+  };
+
+  const setNextMonth = () => {
+    const nextMonth = new Date();
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    setBulkData({ ...bulkData, due_date: nextMonth.toISOString().split('T')[0] });
+    setShowDatePicker(false);
+  };
+
+  const handleApply = () => {
+    const updates = {};
+    if (bulkData.due_date) updates.due_date = bulkData.due_date;
+    if (bulkData.priority) updates.priority = bulkData.priority;
+    if (bulkData.goal_id) updates.goal_id = parseInt(bulkData.goal_id);
+    if (bulkData.delegated_to) updates.delegated_to = bulkData.delegated_to;
+
+    if (Object.keys(updates).length === 0) {
+      alert('Please select at least one field to update');
+      return;
+    }
+
+    onApply(updates);
+  };
+
+  return (
+    <>
+      <div 
+        className="fixed inset-0 bg-black bg-opacity-50 z-40"
+        onClick={onCancel}
+      />
+      
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto">
+          <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-slate-800">
+              Edit {selectedCount} Task{selectedCount > 1 ? 's' : ''}
+            </h2>
+            <button
+              onClick={onCancel}
+              className="text-slate-400 hover:text-slate-600 text-2xl leading-none"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="p-4 space-y-3">
+            <p className="text-sm text-slate-600 mb-4">
+              Select the fields you want to update. Only selected fields will be changed.
+            </p>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Due Date</label>
+              <div className="relative">
+                <div 
+                  onClick={() => setShowDatePicker(!showDatePicker)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white cursor-pointer hover:border-blue-400 transition-colors flex items-center justify-between"
+                >
+                  <span className={bulkData.due_date ? 'text-slate-800' : 'text-slate-400'}>
+                    {bulkData.due_date ? new Date(bulkData.due_date).toLocaleDateString('en-US', { 
+                      weekday: 'short', 
+                      month: 'short', 
+                      day: 'numeric',
+                      year: 'numeric'
+                    }) : 'Leave unchanged'}
+                  </span>
+                  <span className="text-slate-400">📅</span>
+                </div>
+
+                {showDatePicker && (
+                  <div 
+                    className="absolute z-10 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-lg"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="p-2 space-y-1">
+                      <button
+                        onClick={setToday}
+                        className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded text-sm text-slate-700"
+                      >
+                        📅 Today
+                      </button>
+                      <button
+                        onClick={setTomorrow}
+                        className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded text-sm text-slate-700"
+                      >
+                        🗓️ Tomorrow
+                      </button>
+                      <button
+                        onClick={setNextMonday}
+                        className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded text-sm text-slate-700"
+                      >
+                        📆 Next Monday
+                      </button>
+                      <button
+                        onClick={setNextMonth}
+                        className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded text-sm text-slate-700"
+                      >
+                        🗓️ Next Month
+                      </button>
+                    </div>
+
+                    <div className="border-t border-gray-200 p-2">
+                      <input
+                        type="date"
+                        value={bulkData.due_date}
+                        onChange={(e) => {
+                          setBulkData({ ...bulkData, due_date: e.target.value });
+                          setShowDatePicker(false);
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Priority</label>
+              <select
+                value={bulkData.priority}
+                onChange={(e) => setBulkData({ ...bulkData, priority: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="">Leave unchanged</option>
+                <option value="high">🔴 High Priority</option>
+                <option value="medium">🟠 Medium Priority</option>
+                <option value="low">🟢 Low Priority</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Goal</label>
+              <select
+                value={bulkData.goal_id}
+                onChange={(e) => setBulkData({ ...bulkData, goal_id: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="">Leave unchanged</option>
+                {goals.map(g => {
+                  const displayText = g.title || g.goal_text;
+                  const truncatedText = displayText.length > 50 ? displayText.substring(0, 50) + '...' : displayText;
+                  const indentation = getGoalIndentation(g.time_horizon);
+                  return <option key={g.id} value={g.id}>{indentation}{truncatedText}</option>;
+                })}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Delegate To</label>
+              <input
+                type="text"
+                value={bulkData.delegated_to}
+                onChange={(e) => setBulkData({ ...bulkData, delegated_to: e.target.value })}
+                list="bulk-delegate-list"
+                placeholder="Leave unchanged"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <datalist id="bulk-delegate-list">
+                {delegates.map(d => <option key={d} value={d} />)}
+              </datalist>
+            </div>
+          </div>
+
+          <div className="sticky bottom-0 bg-slate-50 border-t border-gray-200 px-4 py-3 flex items-center justify-end gap-2">
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg font-medium transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleApply}
+              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+            >
+              Apply to {selectedCount} Task{selectedCount > 1 ? 's' : ''}
+            </button>
           </div>
         </div>
       </div>
