@@ -784,7 +784,6 @@ function TaskItem({
           onTouchEnd={onTouchEnd}
           onToggle={onToggle}
           onStartEdit={onStartEdit}
-          onLongPress={onLongPress}
           onSelectToggle={onSelectToggle}
           goals={goals}
         />
@@ -808,7 +807,6 @@ function TaskCard({
   onTouchEnd,
   onToggle,
   onStartEdit,
-  onLongPress,
   onSelectToggle,
   goals
 }) {
