@@ -256,13 +256,38 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
             viewBox="0 0 1400 1400" 
             className="w-full max-w-[900px] lg:max-w-[1100px] h-auto"
           >
-            {/* Center circle */}
+            {/* Define all gradients at the top level */}
             <defs>
+              {/* Center gradient */}
               <linearGradient id="center-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stopColor="#334155" />
                 <stop offset="100%" stopColor="#1e293b" />
               </linearGradient>
+              
+              {/* Dimension gradients */}
+              <linearGradient id="gradient-0" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#60a5fa" />
+                <stop offset="100%" stopColor="#3b82f6" />
+              </linearGradient>
+              <linearGradient id="gradient-1" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#a78bfa" />
+                <stop offset="100%" stopColor="#8b5cf6" />
+              </linearGradient>
+              <linearGradient id="gradient-2" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#fbbf24" />
+                <stop offset="100%" stopColor="#f59e0b" />
+              </linearGradient>
+              <linearGradient id="gradient-3" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#34d399" />
+                <stop offset="100%" stopColor="#10b981" />
+              </linearGradient>
+              <linearGradient id="gradient-4" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#f87171" />
+                <stop offset="100%" stopColor="#ef4444" />
+              </linearGradient>
             </defs>
+
+            {/* Center circle */}
             <circle
               cx={CENTER.x}
               cy={CENTER.y}
@@ -322,14 +347,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
 
               return (
                 <g key={dimIdx}>
-                  {/* Define gradient */}
-                  <defs>
-                    <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor={gradient.start} />
-                      <stop offset="100%" stopColor={gradient.end} />
-                    </linearGradient>
-                  </defs>
-
                   {/* Middle ring: Dimension label */}
                   <path
                     d={wedgePath(R_CENTER, R_MIDDLE, dimAngleStart, dimAngleEnd)}
