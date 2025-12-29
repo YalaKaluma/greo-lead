@@ -6,6 +6,7 @@ const R_CENTER = 150;
 const R_MIDDLE = 300;
 const R_OUTER = 480;
 
+// New Alfred Leadership Model dimensions
 const DIMENSIONS = [
   {
     name: "Vision & Goals",
@@ -33,7 +34,7 @@ const DIMENSIONS = [
   },
 ];
 
-// Map topics to database endpoints
+// Map topics to backend endpoints
 const TOPIC_ENDPOINTS = {
   "Values": "values",
   "Strengths": "strengths",
@@ -41,7 +42,7 @@ const TOPIC_ENDPOINTS = {
   "Team Composition": "team-composition",
   "Inspire": "inspiration",
   "Coach & Delegate": "coaching-moments",
-  "Prioritization": "execution-systems",
+  "Prioritization": "execution-systems", // Will filter by category
   "Execution System": "execution-systems",
   "Procrastination": "procrastination-patterns",
   "Energy Sources": "energy-sources",
@@ -49,25 +50,55 @@ const TOPIC_ENDPOINTS = {
   "Recovery": "recovery-methods",
   "Failures & Scars": "failures",
   "Development Opportunities": "development-areas",
-  "Development Plan": "execution-systems",
+  "Development Plan": "execution-systems", // Will filter by category='development'
 };
 
+// "Why it matters" explanations
 const WHY_IT_MATTERS = {
-  "Values": "Values are the rules you follow when no one is watching. They reduce inner conflict and make trade-offs easier.",
-  "Strengths": "Leadership impact compounds when you deliberately use what already works instead of trying to fix everything.",
-  "Goals": "Clear goals give direction and permission. They reduce noise and help you decide what deserves attention now.",
-  "Team Composition": "The people around you shape your behavior more than your intentions. Structure often beats effort.",
-  "Inspire": "Inspiration creates energy and alignment. Without it, leaders end up pushing instead of pulling.",
-  "Coach & Delegate": "Coaching and delegation turn effort into leverage and protect your focus.",
-  "Prioritization": "Every yes quietly creates a no. Prioritization is the ability to say no without guilt.",
-  "Execution System": "Willpower doesn't scale. A clear execution system creates progress without mental overload.",
-  "Procrastination": "Procrastination is usually a signal of resistance, fear, or misalignment — not laziness.",
-  "Energy Sources": "Energy determines the quality of your decisions. Knowing what fuels you protects clarity.",
-  "Energy Drains": "Some activities cost more than they appear. Identifying them allows redesign or containment.",
-  "Recovery": "Recovery is not a reward. It is a prerequisite for sustained leadership.",
-  "Failures & Scars": "Unexamined experiences tend to repeat. Reflection turns experience into information.",
-  "Development Opportunities": "Growth often hides inside discomfort. Naming it creates direction.",
-  "Development Plan": "Insight only compounds when it leads to deliberate action.",
+  Values:
+    "Values are the rules you follow when no one is watching. They reduce inner conflict and make trade-offs easier to live with.",
+
+  Strengths:
+    "Leadership impact compounds when you deliberately use what already works instead of trying to fix everything.",
+
+  Goals:
+    "Clear goals give direction and permission. They reduce noise and help you decide what deserves attention now.",
+
+  "Team Composition":
+    "The people around you shape your behavior more than your intentions. Structure often beats effort.",
+
+  Inspire:
+    "Inspiration creates energy and alignment. Without it, leaders end up pushing instead of pulling.",
+
+  "Coach & Delegate":
+    "Coaching and delegation turn effort into leverage and protect your focus.",
+
+  Prioritization:
+    "Every yes quietly creates a no. Prioritization is the ability to say no without guilt.",
+
+  "Execution System":
+    "Willpower doesn't scale. A clear execution system creates progress without mental overload.",
+
+  Procrastination:
+    "Procrastination is usually a signal of resistance, fear, or misalignment — not laziness.",
+
+  "Energy Sources":
+    "Energy determines the quality of your decisions. Knowing what fuels you protects clarity.",
+
+  "Energy Drains":
+    "Some activities cost more than they appear. Identifying them allows redesign or containment.",
+
+  Recovery:
+    "Recovery is not a reward. It is a prerequisite for sustained leadership.",
+
+  "Failures & Scars":
+    "Unexamined experiences tend to repeat. Reflection turns experience into information.",
+
+  "Development Opportunities":
+    "Growth often hides inside discomfort. Naming it creates direction.",
+
+  "Development Plan":
+    "Insight only compounds when it leads to deliberate action.",
 };
 
 function polar(cx, cy, r, angleDeg) {
@@ -98,6 +129,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   const [topicData, setTopicData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState({ type: null, id: null });
+  const [showWhyModal, setShowWhyModal] = useState(null);
   const [hoveredTopic, setHoveredTopic] = useState(null);
 
   const anglePerDim = 360 / DIMENSIONS.length;
@@ -118,8 +150,15 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
         params: { user_number: userNumber }
       });
       
-      // Handle response that might be wrapped in {data: []} or just []
-      const data = response.data?.data || response.data || [];
+      let data = response.data?.data || response.data || [];
+      
+      // Filter by category for specific topics
+      if (topic === "Prioritization" && Array.isArray(data)) {
+        data = data.filter(item => item.category === "prioritization");
+      } else if (topic === "Development Plan" && Array.isArray(data)) {
+        data = data.filter(item => item.category === "development");
+      }
+      
       setTopicData(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(`Error fetching ${topic}:`, err);
@@ -129,10 +168,19 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
     }
   };
 
+  const handleWhyClick = (topic, e) => {
+    e.stopPropagation();
+    setShowWhyModal(topic);
+  };
+
   const closeModal = () => {
     setSelectedTopic(null);
     setTopicData([]);
     setEditing({ type: null, id: null });
+  };
+
+  const closeWhyModal = () => {
+    setShowWhyModal(null);
   };
 
   const updateItem = async (id, updates) => {
@@ -186,7 +234,9 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       <h1 className="text-2xl md:text-3xl font-semibold text-slate-800 mb-1 md:mb-2">
         Alfred Leadership Model
       </h1>
-      <p className="text-sm md:text-base text-slate-600 mb-4 md:mb-6">Understanding your journey to shape your future</p>
+      <p className="text-sm md:text-base text-slate-600 mb-4 md:mb-6">
+        A comprehensive framework for executive development
+      </p>
 
       {/* Main layout with transitions */}
       <div className={`flex flex-col gap-6 transition-all duration-700 ease-in-out ${
@@ -299,6 +349,18 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                       >
                         {topic}
                       </text>
+
+                      {/* + Why this matters button */}
+                      <text
+                        x={topicLabelPos.x + 42}
+                        y={topicLabelPos.y - 6}
+                        fontSize="18"
+                        fill="#475569"
+                        className="cursor-pointer select-none"
+                        onClick={(e) => handleWhyClick(topic, e)}
+                      >
+                        +
+                      </text>
                     </g>
                   );
                 })}
@@ -308,7 +370,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
         </svg>
       </div>
 
-      {/* Hover tooltip below wheel */}
+      {/* Hover tooltip - only when no topic */}
       {!selectedTopic && hoveredTopic && (
         <div className="max-w-[700px] mx-auto mt-6 bg-blue-50 border-l-4 border-blue-500 p-4 md:p-6 rounded-r">
           <h3 className="text-base md:text-lg font-semibold text-blue-900 mb-2">
@@ -324,12 +386,17 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
     {/* Content panel on right */}
     {selectedTopic && (
       <div className="flex-1">
-        <div className="bg-white border border-slate-300 rounded-lg shadow-lg p-4 md:p-6">
+        <div className="bg-white border-2 border-slate-300 rounded-lg shadow-lg p-4 md:p-6">
           <div className="flex justify-between items-start mb-4 pb-4 border-b">
-            <h2 className="text-xl md:text-2xl font-semibold text-slate-800">{selectedTopic}</h2>
+            <div className="flex-1">
+              <h2 className="text-xl md:text-2xl font-bold text-slate-800 mb-2">{selectedTopic}</h2>
+              <p className="text-sm md:text-base text-slate-600 leading-relaxed">
+                {WHY_IT_MATTERS[selectedTopic]}
+              </p>
+            </div>
             <button
               onClick={closeModal}
-              className="text-slate-400 hover:text-slate-600 text-2xl md:text-3xl"
+              className="ml-4 text-slate-400 hover:text-slate-600 text-3xl leading-none"
             >
               ×
             </button>
@@ -340,11 +407,13 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
             </div>
           ) : topicData.length === 0 ? (
-            <div className="text-center py-12 text-slate-500">
-              No {selectedTopic.toLowerCase()} captured yet.
+            <div className="text-center py-12">
+              <p className="text-slate-600">
+                No {selectedTopic.toLowerCase()} captured yet. Share with Alfred to see them here!
+              </p>
             </div>
           ) : (
-            <div className="space-y-4 max-h-[calc(100vh-300px)] overflow-y-auto pr-2">
+            <div className="space-y-4 max-h-[calc(100vh-300px)] overflow-y-auto">
               {topicData.map((item, index) => (
                 <TopicCard 
                   key={item.id || index} 
@@ -352,10 +421,23 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                   item={item}
                   isEditing={editing.type === selectedTopic && editing.id === item.id}
                   onEdit={() => setEditing({ type: selectedTopic, id: item.id })}
+                  onCancelEdit={() => setEditing({ type: null, id: null })}
+                  onUpdate={updateItem}
+                  onDelete={() => deleteItem(item.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+    )}
+  </div>
+    </div>
+  );
+}
 
-      {/* "Why it matters" Modal */}
-      {showWhyModal && (
+// TopicCard Component
+function TopicCard({ topic, item, isEditing, onEdit, onCancelEdit, onUpdate, onDelete }) {
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
           onClick={closeWhyModal}
@@ -762,3 +844,449 @@ function DataCard({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDele
             />
             <textarea
               value={formData.approach || ''}
+              onChange={(e) => setFormData({ ...formData, approach: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Approach (storytelling, vision-setting, etc.)"
+              rows={2}
+            />
+            <input
+              type="text"
+              value={formData.effectiveness || ''}
+              onChange={(e) => setFormData({ ...formData, effectiveness: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500"
+              placeholder="What works well (optional)"
+            />
+          </>
+        );
+
+      case "Coach & Delegate":
+        return (
+          <>
+            <input
+              type="text"
+              value={formData.title || ''}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Title (optional)"
+            />
+            <textarea
+              value={formData.moment_text || ''}
+              onChange={(e) => setFormData({ ...formData, moment_text: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Coaching or delegation moment"
+              rows={2}
+            />
+            <input
+              type="text"
+              value={formData.person || ''}
+              onChange={(e) => setFormData({ ...formData, person: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Person (optional)"
+            />
+            <textarea
+              value={formData.outcome || ''}
+              onChange={(e) => setFormData({ ...formData, outcome: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Outcome (optional)"
+              rows={2}
+            />
+            <textarea
+              value={formData.learning || ''}
+              onChange={(e) => setFormData({ ...formData, learning: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500"
+              placeholder="Learning (optional)"
+              rows={2}
+            />
+          </>
+        );
+
+      case "Failures & Scars":
+        return (
+          <>
+            <input
+              type="text"
+              value={formData.title || ''}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Title (optional)"
+            />
+            <textarea
+              value={formData.failure_text || ''}
+              onChange={(e) => setFormData({ ...formData, failure_text: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Failure"
+              rows={2}
+            />
+            <textarea
+              value={formData.learning || ''}
+              onChange={(e) => setFormData({ ...formData, learning: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Learning (optional)"
+              rows={2}
+            />
+            <textarea
+              value={formData.scar || ''}
+              onChange={(e) => setFormData({ ...formData, scar: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500"
+              placeholder="Scar (optional)"
+              rows={2}
+            />
+          </>
+        );
+
+      case "Development Opportunities":
+        return (
+          <>
+            <input
+              type="text"
+              value={formData.title || ''}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Title (optional)"
+            />
+            <textarea
+              value={formData.skill || ''}
+              onChange={(e) => setFormData({ ...formData, skill: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500 mb-2"
+              placeholder="Skill"
+              rows={2}
+            />
+            <input
+              type="text"
+              value={formData.source || ''}
+              onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+              className="w-full px-3 py-2 border rounded focus:ring-2 focus:ring-gray-500"
+              placeholder="Source (optional)"
+            />
+          </>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  const renderContent = () => {
+    switch (topic) {
+      case "Values":
+        return (
+          <>
+            {item.title && (
+              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+            )}
+            <p className="text-slate-800 font-medium mb-2">{item.value_text}</p>
+            {item.why && (
+              <div className="bg-slate-50 p-3 rounded mt-2">
+                <p className="text-sm text-slate-700">
+                  <span className="font-medium">Why it matters:</span> {item.why}
+                </p>
+              </div>
+            )}
+          </>
+        );
+
+      case "Strengths":
+        return (
+          <>
+            {item.title && (
+              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+            )}
+            <p className="text-slate-800 font-medium mb-2">{item.strength}</p>
+            {item.source && (
+              <p className="text-sm text-slate-600">
+                <span className="font-medium">Source:</span> {item.source}
+              </p>
+            )}
+          </>
+        );
+
+      case "Goals":
+        return (
+          <>
+            {item.title && (
+              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+            )}
+            <p className="text-slate-800 font-medium mb-2">{item.goal_text}</p>
+            {item.time_horizon && (
+              <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full mb-2">
+                {item.time_horizon.charAt(0).toUpperCase() + item.time_horizon.slice(1)} term
+              </span>
+            )}
+            {item.why && (
+              <div className="bg-slate-50 p-3 rounded mt-2">
+                <p className="text-sm text-slate-700">
+                  <span className="font-medium">Why:</span> {item.why}
+                </p>
+              </div>
+            )}
+          </>
+        );
+
+      case "Energy Sources":
+        return (
+          <>
+            {item.title && (
+              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+            )}
+            <p className="text-slate-800 font-medium mb-2">{item.source_text}</p>
+            {item.category && (
+              <span className="inline-block px-3 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                {item.category}
+              </span>
+            )}
+          </>
+        );
+
+      case "Energy Drains":
+        return (
+          <>
+            {item.title && (
+              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+            )}
+            <p className="text-slate-800 font-medium mb-2">{item.drain_text}</p>
+            {item.category && (
+              <span className="inline-block px-3 py-1 bg-red-100 text-red-800 text-xs font-medium rounded-full mb-2">
+                {item.category}
+              </span>
+            )}
+            {item.mitigation && (
+              <div className="bg-blue-50 p-3 rounded mt-2">
+                <p className="text-sm text-slate-700">
+                  <span className="font-medium">Mitigation:</span> {item.mitigation}
+                </p>
+              </div>
+            )}
+          </>
+        );
+
+      case "Recovery":
+        return (
+          <>
+            {item.title && (
+              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+            )}
+            <p className="text-slate-800 font-medium mb-2">{item.method_text}</p>
+            <div className="flex gap-2 flex-wrap">
+              {item.category && (
+                <span className="inline-block px-3 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">
+                  {item.category}
+                </span>
+              )}
+              {item.frequency && (
+                <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-800 text-xs font-medium rounded-full">
+                  {item.frequency}
+                </span>
+              )}
+            </div>
+          </>
+        );
+
+      case "Procrastination":
+        return (
+          <>
+            {item.title && (
+              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+            )}
+            <p className="text-slate-800 font-medium mb-2">{item.pattern_text}</p>
+            {item.underlying_reason && (
+              <div className="bg-amber-50 p-3 rounded mb-2">
+                <p className="text-sm text-slate-700">
+                  <span className="font-medium">Why:</span> {item.underlying_reason}
+                </p>
+              </div>
+            )}
+            {item.strategy && (
+              <div className="bg-green-50 p-3 rounded">
+                <p className="text-sm text-slate-700">
+                  <span className="font-medium">Strategy:</span> {item.strategy}
+                </p>
+              </div>
+            )}
+          </>
+        );
+
+      case "Execution System":
+      case "Prioritization":
+      case "Development Plan":
+        return (
+          <>
+            {item.title && (
+              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+            )}
+            <p className="text-slate-800 font-medium mb-2">{item.system_text}</p>
+            <div className="flex gap-2 flex-wrap">
+              {item.category && (
+                <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                  {item.category}
+                </span>
+              )}
+              {item.effectiveness && (
+                <span className="inline-block px-3 py-1 bg-slate-100 text-slate-800 text-xs font-medium rounded-full">
+                  {item.effectiveness}
+                </span>
+              )}
+            </div>
+          </>
+        );
+
+      case "Team Composition":
+        return (
+          <>
+            {item.title && (
+              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+            )}
+            <p className="text-slate-800 font-medium mb-2">{item.composition_text}</p>
+            {item.team_type && (
+              <span className="inline-block px-3 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded-full mb-2">
+                {item.team_type}
+              </span>
+            )}
+            {item.dynamics && (
+              <div className="bg-slate-50 p-3 rounded mt-2">
+                <p className="text-sm text-slate-700">
+                  <span className="font-medium">Dynamics:</span> {item.dynamics}
+                </p>
+              </div>
+            )}
+          </>
+        );
+
+      case "Inspire":
+        return (
+          <>
+            {item.title && (
+              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+            )}
+            <p className="text-slate-800 font-medium mb-2">{item.inspiration_text}</p>
+            {item.approach && (
+              <div className="bg-blue-50 p-3 rounded mb-2">
+                <p className="text-sm text-slate-700">
+                  <span className="font-medium">Approach:</span> {item.approach}
+                </p>
+              </div>
+            )}
+            {item.effectiveness && (
+              <div className="bg-green-50 p-3 rounded">
+                <p className="text-sm text-slate-700">
+                  <span className="font-medium">What works:</span> {item.effectiveness}
+                </p>
+              </div>
+            )}
+          </>
+        );
+
+      case "Coach & Delegate":
+        return (
+          <>
+            {item.title && (
+              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+            )}
+            <p className="text-slate-800 font-medium mb-2">{item.moment_text}</p>
+            {item.person && (
+              <p className="text-sm text-slate-600 mb-2">
+                <span className="font-medium">Person:</span> {item.person}
+              </p>
+            )}
+            {item.outcome && (
+              <div className="bg-blue-50 p-3 rounded mb-2">
+                <p className="text-sm text-slate-700">
+                  <span className="font-medium">Outcome:</span> {item.outcome}
+                </p>
+              </div>
+            )}
+            {item.learning && (
+              <div className="bg-green-50 p-3 rounded">
+                <p className="text-sm text-slate-700">
+                  <span className="font-medium">Learning:</span> {item.learning}
+                </p>
+              </div>
+            )}
+          </>
+        );
+
+      case "Failures & Scars":
+        return (
+          <>
+            {item.title && (
+              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+            )}
+            <p className="text-slate-800 font-medium mb-3">{item.failure_text}</p>
+            {item.learning && (
+              <div className="bg-green-50 p-3 rounded mb-2">
+                <p className="text-sm text-slate-700">
+                  <span className="font-medium">Learning:</span> {item.learning}
+                </p>
+              </div>
+            )}
+            {item.scar && (
+              <div className="bg-red-50 p-3 rounded">
+                <p className="text-sm text-slate-700">
+                  <span className="font-medium">Scar:</span> {item.scar}
+                </p>
+              </div>
+            )}
+          </>
+        );
+
+      case "Development Opportunities":
+        return (
+          <>
+            {item.title && (
+              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+            )}
+            <p className="text-slate-800 font-medium mb-2">{item.skill}</p>
+            {item.source && (
+              <p className="text-sm text-slate-600">
+                <span className="font-medium">Source:</span> {item.source}
+              </p>
+            )}
+          </>
+        );
+
+      default:
+        return <p className="text-slate-600">No data available</p>;
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <div className="bg-white border-2 border-gray-200 rounded-lg p-4 space-y-3">
+        {renderEditForm()}
+        <div className="flex gap-2 pt-2">
+          <button
+            onClick={handleSubmit}
+            className="flex-1 bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded text-sm font-medium"
+          >
+            Save
+          </button>
+          <button
+            onClick={onCancelEdit}
+            className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1.5 rounded text-sm font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onDelete}
+            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-medium"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div 
+      className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+      onClick={onEdit}
+    >
+      {renderContent()}
+      {item.first_seen_at && (
+        <p className="text-xs text-slate-400 mt-3">
+          Added {new Date(item.first_seen_at).toLocaleDateString()}
+        </p>
+      )}
+    </div>
+  );
+}
