@@ -238,20 +238,20 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       </p>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
-        {/* Left side: "Why it matters" text (appears on hover) */}
-        <div className="w-full lg:w-64 flex-shrink-0">
-          {hoveredTopic && WHY_IT_MATTERS[hoveredTopic] && (
+        {/* Left side: "Why it matters" text (appears on hover) - only takes space when visible */}
+        {hoveredTopic && WHY_IT_MATTERS[hoveredTopic] && (
+          <div className="w-full lg:w-64 flex-shrink-0">
             <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
               <h3 className="font-semibold text-slate-800 mb-2">{hoveredTopic}</h3>
               <p className="text-sm text-slate-700 leading-relaxed">
                 {WHY_IT_MATTERS[hoveredTopic]}
               </p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Center: The wheel */}
-        <div className={`flex-shrink-0 transition-all duration-300 ${selectedTopic ? 'lg:w-[400px]' : 'lg:mx-auto lg:w-[600px]'}`}>
+        <div className={`flex-shrink-0 transition-all duration-300 ${selectedTopic ? 'lg:w-[450px]' : 'lg:w-full lg:max-w-4xl lg:mx-auto'}`}>
           <svg 
             viewBox="0 0 1000 1000" 
             className="w-full h-auto"
