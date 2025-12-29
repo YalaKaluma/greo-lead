@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
-const CENTER = { x: 700, y: 700 };
-const R_CENTER = 180;
-const R_MIDDLE = 360;
-const R_OUTER = 540;
+const CENTER = { x: 500, y: 500 };
+const R_CENTER = 120;
+const R_MIDDLE = 240;
+const R_OUTER = 360;
 
 // New Alfred Leadership Model dimensions
 const DIMENSIONS = [
@@ -251,9 +251,9 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
         </div>
 
         {/* Center: The wheel */}
-        <div className={`flex-shrink-0 transition-all duration-300 ${selectedTopic ? 'lg:ml-0 lg:w-1/2' : 'lg:mx-auto lg:w-full'}`}>
+        <div className={`flex-shrink-0 transition-all duration-300 ${selectedTopic ? 'lg:w-[400px]' : 'lg:mx-auto lg:w-[600px]'}`}>
           <svg 
-            viewBox="0 0 1400 1400" 
+            viewBox="0 0 1000 1000" 
             className="w-full h-auto"
           >
             {/* Define all gradients at the top level */}
@@ -298,10 +298,10 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
             />
             <text
               x={CENTER.x}
-              y={CENTER.y - 25}
+              y={CENTER.y - 15}
               textAnchor="middle"
               fill="white"
-              fontSize="36"
+              fontSize="28"
               fontWeight="bold"
             >
               Alfred
@@ -311,16 +311,16 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
               y={CENTER.y + 10}
               textAnchor="middle"
               fill="white"
-              fontSize="26"
+              fontSize="18"
             >
               Leadership
             </text>
             <text
               x={CENTER.x}
-              y={CENTER.y + 45}
+              y={CENTER.y + 32}
               textAnchor="middle"
               fill="white"
-              fontSize="26"
+              fontSize="18"
             >
               Model
             </text>
@@ -332,7 +332,9 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
               const anglePerTopic = anglePerDim / dim.topics.length;
 
               const dimMidAngle = dimAngleStart + anglePerDim / 2;
-              const labelPos = polar(CENTER.x, CENTER.y, R_OUTER + 80, dimMidAngle);
+              
+              // Position dimension label in the MIDDLE ring (not outside)
+              const labelPos = polar(CENTER.x, CENTER.y, (R_CENTER + R_MIDDLE) / 2, dimMidAngle);
 
               // Premium monochromatic blue gradients for executive feel
               const dimGradients = [
@@ -358,9 +360,10 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                     x={labelPos.x}
                     y={labelPos.y}
                     textAnchor="middle"
-                    fill="#1e293b"
-                    fontSize="22"
-                    fontWeight="bold"
+                    fill="white"
+                    fontSize="16"
+                    fontWeight="600"
+                    style={{ pointerEvents: "none" }}
                   >
                     {dim.name}
                   </text>
@@ -401,7 +404,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                           y={topicLabelPos.y}
                           textAnchor="middle"
                           fill={isSelected ? "white" : "#1e293b"}
-                          fontSize="16"
+                          fontSize="12"
                           fontWeight="500"
                           style={{ 
                             pointerEvents: "none",
@@ -409,7 +412,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                           }}
                         >
                           {topic.split(" ").map((word, i) => (
-                            <tspan key={i} x={topicLabelPos.x} dy={i === 0 ? 0 : 18}>
+                            <tspan key={i} x={topicLabelPos.x} dy={i === 0 ? 0 : 14}>
                               {word}
                             </tspan>
                           ))}
