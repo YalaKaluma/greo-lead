@@ -251,39 +251,39 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
         </div>
 
         {/* Center: The wheel */}
-        <div className={`flex-shrink-0 transition-all duration-300 ${selectedTopic ? 'lg:ml-0' : 'lg:mx-auto'}`}>
+        <div className={`flex-shrink-0 transition-all duration-300 ${selectedTopic ? 'lg:ml-0 lg:w-1/2' : 'lg:mx-auto lg:w-full'}`}>
           <svg 
             viewBox="0 0 1400 1400" 
-            className="w-full max-w-[900px] lg:max-w-[1100px] h-auto"
+            className="w-full h-auto"
           >
             {/* Define all gradients at the top level */}
             <defs>
-              {/* Center gradient */}
+              {/* Center gradient - dark blue */}
               <linearGradient id="center-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#334155" />
-                <stop offset="100%" stopColor="#1e293b" />
+                <stop offset="0%" stopColor="#1e3a8a" />
+                <stop offset="100%" stopColor="#1e40af" />
               </linearGradient>
               
-              {/* Dimension gradients */}
+              {/* Dimension gradients - all sophisticated blues */}
               <linearGradient id="gradient-0" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#3b82f6" />
+                <stop offset="100%" stopColor="#2563eb" />
+              </linearGradient>
+              <linearGradient id="gradient-1" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stopColor="#60a5fa" />
                 <stop offset="100%" stopColor="#3b82f6" />
               </linearGradient>
-              <linearGradient id="gradient-1" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#a78bfa" />
-                <stop offset="100%" stopColor="#8b5cf6" />
-              </linearGradient>
               <linearGradient id="gradient-2" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#fbbf24" />
-                <stop offset="100%" stopColor="#f59e0b" />
+                <stop offset="0%" stopColor="#2563eb" />
+                <stop offset="100%" stopColor="#1d4ed8" />
               </linearGradient>
               <linearGradient id="gradient-3" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#34d399" />
-                <stop offset="100%" stopColor="#10b981" />
+                <stop offset="0%" stopColor="#3b82f6" />
+                <stop offset="100%" stopColor="#2563eb" />
               </linearGradient>
               <linearGradient id="gradient-4" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#f87171" />
-                <stop offset="100%" stopColor="#ef4444" />
+                <stop offset="0%" stopColor="#60a5fa" />
+                <stop offset="100%" stopColor="#3b82f6" />
               </linearGradient>
             </defs>
 
@@ -334,13 +334,13 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
               const dimMidAngle = dimAngleStart + anglePerDim / 2;
               const labelPos = polar(CENTER.x, CENTER.y, R_OUTER + 80, dimMidAngle);
 
-              // Premium gradient colors for each dimension
+              // Premium monochromatic blue gradients for executive feel
               const dimGradients = [
-                { start: "#60a5fa", end: "#3b82f6" }, // blue
-                { start: "#a78bfa", end: "#8b5cf6" }, // purple
-                { start: "#fbbf24", end: "#f59e0b" }, // amber
-                { start: "#34d399", end: "#10b981" }, // green
-                { start: "#f87171", end: "#ef4444" }, // red
+                { start: "#3b82f6", end: "#2563eb" }, // blue-500 to blue-600
+                { start: "#60a5fa", end: "#3b82f6" }, // blue-400 to blue-500
+                { start: "#2563eb", end: "#1d4ed8" }, // blue-600 to blue-700
+                { start: "#3b82f6", end: "#2563eb" }, // blue-500 to blue-600
+                { start: "#60a5fa", end: "#3b82f6" }, // blue-400 to blue-500
               ];
               const gradient = dimGradients[dimIdx % dimGradients.length];
               const gradientId = `gradient-${dimIdx}`;
