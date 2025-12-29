@@ -254,7 +254,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
         <div className={`flex-shrink-0 transition-all duration-300 ${selectedTopic ? 'lg:ml-0' : 'lg:mx-auto'}`}>
           <svg 
             viewBox="0 0 1400 1400" 
-            className="w-full md:max-w-[700px] lg:max-w-[900px] h-auto"
+            className="w-full max-w-[900px] lg:max-w-[1100px] h-auto"
           >
             {/* Center circle */}
             <defs>
