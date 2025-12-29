@@ -238,24 +238,11 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
         A comprehensive framework for executive development
       </p>
 
-      {/* Main layout with transitions */}
-      <div className={`flex flex-col gap-6 transition-all duration-700 ease-in-out ${
-        selectedTopic ? 'lg:flex-row lg:gap-8' : 'items-center justify-center min-h-[60vh]'
-      }`}>
-        
-        {/* Wheel container */}
-        <div className={`transition-all duration-700 ease-in-out ${
-          selectedTopic ? 'lg:w-[420px] flex-shrink-0' : 'w-full max-w-[900px]'
-        }`}>
-          <div className="flex justify-center items-start">
-            <svg 
-              viewBox="0 0 1200 1200" 
-              className={`w-full h-auto transition-all duration-700 ease-in-out ${
-                selectedTopic 
-                  ? 'max-w-[280px] md:max-w-[350px] lg:max-w-[420px]' 
-                  : 'max-w-[350px] md:max-w-[550px] lg:max-w-[900px]'
-              }`}
-            >
+      <div className="flex justify-center items-start">
+        <svg 
+          viewBox="0 0 1200 1200" 
+          className="w-full md:max-w-[700px] lg:max-w-[900px] h-auto"
+        >
           {/* Center */}
           <circle cx={600} cy={600} r={R_CENTER} fill="#0F172A" />
           <text
@@ -370,74 +357,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
         </svg>
       </div>
 
-      {/* Hover tooltip - only when no topic */}
-      {!selectedTopic && hoveredTopic && (
-        <div className="max-w-[700px] mx-auto mt-6 bg-blue-50 border-l-4 border-blue-500 p-4 md:p-6 rounded-r">
-          <h3 className="text-base md:text-lg font-semibold text-blue-900 mb-2">
-            Why {hoveredTopic} Matters
-          </h3>
-          <p className="text-sm md:text-base text-blue-800 leading-relaxed">
-            {WHY_IT_MATTERS[hoveredTopic]}
-          </p>
-        </div>
-      )}
-    </div>
-
-    {/* Content panel on right */}
-    {selectedTopic && (
-      <div className="flex-1">
-        <div className="bg-white border-2 border-slate-300 rounded-lg shadow-lg p-4 md:p-6">
-          <div className="flex justify-between items-start mb-4 pb-4 border-b">
-            <div className="flex-1">
-              <h2 className="text-xl md:text-2xl font-bold text-slate-800 mb-2">{selectedTopic}</h2>
-              <p className="text-sm md:text-base text-slate-600 leading-relaxed">
-                {WHY_IT_MATTERS[selectedTopic]}
-              </p>
-            </div>
-            <button
-              onClick={closeModal}
-              className="ml-4 text-slate-400 hover:text-slate-600 text-3xl leading-none"
-            >
-              ×
-            </button>
-          </div>
-
-          {loading ? (
-            <div className="flex justify-center items-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            </div>
-          ) : topicData.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-slate-600">
-                No {selectedTopic.toLowerCase()} captured yet. Share with Alfred to see them here!
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4 max-h-[calc(100vh-300px)] overflow-y-auto">
-              {topicData.map((item, index) => (
-                <TopicCard 
-                  key={item.id || index} 
-                  topic={selectedTopic} 
-                  item={item}
-                  isEditing={editing.type === selectedTopic && editing.id === item.id}
-                  onEdit={() => setEditing({ type: selectedTopic, id: item.id })}
-                  onCancelEdit={() => setEditing({ type: null, id: null })}
-                  onUpdate={updateItem}
-                  onDelete={() => deleteItem(item.id)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    )}
-  </div>
-    </div>
-  );
-}
-
-// TopicCard Component
-function TopicCard({ topic, item, isEditing, onEdit, onCancelEdit, onUpdate, onDelete }) {
+      {/* "Why it matters" Modal */}
+      {showWhyModal && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
           onClick={closeWhyModal}
@@ -461,6 +382,18 @@ function TopicCard({ topic, item, isEditing, onEdit, onCancelEdit, onUpdate, onD
               {WHY_IT_MATTERS[showWhyModal]}
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Hover tooltip - below wheel */}
+      {!selectedTopic && hoveredTopic && !showWhyModal && (
+        <div className="max-w-[700px] mx-auto mt-6 bg-blue-50 border-l-4 border-blue-500 p-4 md:p-6 rounded-r animate-fadeIn">
+          <h3 className="text-base md:text-lg font-semibold text-blue-900 mb-2">
+            Why {hoveredTopic} Matters
+          </h3>
+          <p className="text-sm md:text-base text-blue-800 leading-relaxed">
+            {WHY_IT_MATTERS[hoveredTopic]}
+          </p>
         </div>
       )}
 
