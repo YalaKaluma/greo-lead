@@ -323,6 +323,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       </div>
     )}
   </div>
+    </div>
   );
 }
 
