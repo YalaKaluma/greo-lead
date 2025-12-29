@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
-const CENTER = { x: 600, y: 600 };
-const R_CENTER = 150;
-const R_MIDDLE = 300;
-const R_OUTER = 480;
+const CENTER = { x: 700, y: 700 };
+const R_CENTER = 180;
+const R_MIDDLE = 360;
+const R_OUTER = 540;
 
 // New Alfred Leadership Model dimensions
 const DIMENSIONS = [
@@ -253,24 +253,30 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
         {/* Center: The wheel */}
         <div className={`flex-shrink-0 transition-all duration-300 ${selectedTopic ? 'lg:ml-0' : 'lg:mx-auto'}`}>
           <svg 
-            viewBox="0 0 1200 1200" 
-            className="w-full md:max-w-[500px] lg:max-w-[600px] h-auto"
+            viewBox="0 0 1400 1400" 
+            className="w-full md:max-w-[700px] lg:max-w-[900px] h-auto"
           >
             {/* Center circle */}
+            <defs>
+              <linearGradient id="center-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#334155" />
+                <stop offset="100%" stopColor="#1e293b" />
+              </linearGradient>
+            </defs>
             <circle
               cx={CENTER.x}
               cy={CENTER.y}
               r={R_CENTER}
-              fill="#1e293b"
+              fill="url(#center-gradient)"
               stroke="white"
-              strokeWidth="3"
+              strokeWidth="4"
             />
             <text
               x={CENTER.x}
-              y={CENTER.y - 20}
+              y={CENTER.y - 25}
               textAnchor="middle"
               fill="white"
-              fontSize="28"
+              fontSize="36"
               fontWeight="bold"
             >
               Alfred
@@ -280,16 +286,16 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
               y={CENTER.y + 10}
               textAnchor="middle"
               fill="white"
-              fontSize="20"
+              fontSize="26"
             >
               Leadership
             </text>
             <text
               x={CENTER.x}
-              y={CENTER.y + 35}
+              y={CENTER.y + 45}
               textAnchor="middle"
               fill="white"
-              fontSize="20"
+              fontSize="26"
             >
               Model
             </text>
@@ -301,32 +307,42 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
               const anglePerTopic = anglePerDim / dim.topics.length;
 
               const dimMidAngle = dimAngleStart + anglePerDim / 2;
-              const labelPos = polar(CENTER.x, CENTER.y, R_OUTER + 60, dimMidAngle);
+              const labelPos = polar(CENTER.x, CENTER.y, R_OUTER + 80, dimMidAngle);
 
-              const dimColors = [
-                "#3b82f6", // blue
-                "#8b5cf6", // purple
-                "#f59e0b", // amber
-                "#10b981", // green
-                "#ef4444", // red
+              // Premium gradient colors for each dimension
+              const dimGradients = [
+                { start: "#60a5fa", end: "#3b82f6" }, // blue
+                { start: "#a78bfa", end: "#8b5cf6" }, // purple
+                { start: "#fbbf24", end: "#f59e0b" }, // amber
+                { start: "#34d399", end: "#10b981" }, // green
+                { start: "#f87171", end: "#ef4444" }, // red
               ];
-              const dimColor = dimColors[dimIdx % dimColors.length];
+              const gradient = dimGradients[dimIdx % dimGradients.length];
+              const gradientId = `gradient-${dimIdx}`;
 
               return (
                 <g key={dimIdx}>
+                  {/* Define gradient */}
+                  <defs>
+                    <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor={gradient.start} />
+                      <stop offset="100%" stopColor={gradient.end} />
+                    </linearGradient>
+                  </defs>
+
                   {/* Middle ring: Dimension label */}
                   <path
                     d={wedgePath(R_CENTER, R_MIDDLE, dimAngleStart, dimAngleEnd)}
-                    fill={dimColor}
+                    fill={`url(#${gradientId})`}
                     stroke="white"
-                    strokeWidth="3"
+                    strokeWidth="4"
                   />
                   <text
                     x={labelPos.x}
                     y={labelPos.y}
                     textAnchor="middle"
                     fill="#1e293b"
-                    fontSize="18"
+                    fontSize="22"
                     fontWeight="bold"
                   >
                     {dim.name}
@@ -348,13 +364,16 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                     const isHovered = hoveredTopic === topic;
                     const isSelected = selectedTopic === topic;
 
+                    // Border color matches dimension gradient
+                    const borderColor = gradient.end;
+
                     return (
                       <g key={topic}>
                         <path
                           d={wedgePath(R_MIDDLE, R_OUTER, topicAngleStart, topicAngleEnd)}
-                          fill={isSelected ? "#1e293b" : isHovered ? "#cbd5e1" : "white"}
-                          stroke={dimColor}
-                          strokeWidth="2"
+                          fill={isSelected ? "#1e293b" : isHovered ? "#f1f5f9" : "white"}
+                          stroke={borderColor}
+                          strokeWidth="3"
                           style={{ cursor: "pointer", transition: "fill 0.2s" }}
                           onClick={() => handleTopicClick(topic)}
                           onMouseEnter={() => setHoveredTopic(topic)}
@@ -365,7 +384,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                           y={topicLabelPos.y}
                           textAnchor="middle"
                           fill={isSelected ? "white" : "#1e293b"}
-                          fontSize="14"
+                          fontSize="16"
                           fontWeight="500"
                           style={{ 
                             pointerEvents: "none",
@@ -373,7 +392,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                           }}
                         >
                           {topic.split(" ").map((word, i) => (
-                            <tspan key={i} x={topicLabelPos.x} dy={i === 0 ? 0 : 16}>
+                            <tspan key={i} x={topicLabelPos.x} dy={i === 0 ? 0 : 18}>
                               {word}
                             </tspan>
                           ))}
