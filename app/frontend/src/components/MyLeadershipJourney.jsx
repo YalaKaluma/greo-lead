@@ -8,82 +8,51 @@ const R_OUTER = 480;
 
 const DIMENSIONS = [
   {
-    name: "Vision & Goals",
-    topics: ["Values", "Strengths", "Goals"],
+    name: "Vision & Meaning",
+    topics: ["Strengths", "Values", "Goals"],
   },
   {
-    name: "People",
-    topics: ["Team Composition", "Inspire", "Coach & Delegate"],
+    name: "Prioritization & Execution",
+    topics: ["Projects", "Tasks", "Delegation"],
   },
   {
-    name: "Prioritize & Execute",
-    topics: ["Prioritization", "Execution System", "Procrastination"],
+    name: "People Development",
+    topics: ["Key People", "Feedback", "Coaching Moments"],
   },
   {
     name: "Time & Energy",
-    topics: ["Energy Sources", "Energy Drains", "Recovery"],
+    topics: ["Energy Sources", "Recovery", "Boundaries"],
   },
   {
     name: "Learning & Development",
     topics: [
       "Failures & Scars",
       "Development Opportunities",
-      "Development Plan",
+      "Patterns & Insights",
     ],
   },
 ];
 
 // Map topics to database endpoints
 const TOPIC_ENDPOINTS = {
-  "Values": "values",
   "Strengths": "strengths",
+  "Values": "values",
   "Goals": "goals",
-  "Team Composition": "team-composition",
-  "Inspire": "inspiration",
-  "Coach & Delegate": "coaching-moments",
-  "Prioritization": "execution-systems",
-  "Execution System": "execution-systems",
-  "Procrastination": "procrastination-patterns",
-  "Energy Sources": "energy-sources",
-  "Energy Drains": "energy-drains",
-  "Recovery": "recovery-methods",
+  "Projects": "projects",
+  "Key People": "people",
   "Failures & Scars": "failures",
-  "Development Opportunities": "development-areas",
-  "Development Plan": "execution-systems",
+  "Development Opportunities": "development-areas"
 };
 
 // "Why it matters" explanations
 const WHY_IT_MATTERS = {
-  Values:
-    "Values are the rules you follow when no one is watching. They reduce inner conflict and make trade-offs easier to live with.",
-  Strengths:
-    "Leadership impact compounds when you deliberately use what already works instead of trying to fix everything.",
-  Goals:
-    "Clear goals give direction and permission. They reduce noise and help you decide what deserves attention now.",
-  "Team Composition":
-    "The people around you shape your behavior more than your intentions. Structure often beats effort.",
-  Inspire:
-    "Inspiration creates energy and alignment. Without it, leaders end up pushing instead of pulling.",
-  "Coach & Delegate":
-    "Coaching and delegation turn effort into leverage and protect your focus.",
-  Prioritization:
-    "Every yes quietly creates a no. Prioritization is the ability to say no without guilt.",
-  "Execution System":
-    "Willpower doesn't scale. A clear execution system creates progress without mental overload.",
-  Procrastination:
-    "Procrastination is usually a signal of resistance, fear, or misalignment — not laziness.",
-  "Energy Sources":
-    "Energy determines the quality of your decisions. Knowing what fuels you protects clarity.",
-  "Energy Drains":
-    "Some activities cost more than they appear. Identifying them allows redesign or containment.",
-  Recovery:
-    "Recovery is not a reward. It is a prerequisite for sustained leadership.",
-  "Failures & Scars":
-    "Unexamined experiences tend to repeat. Reflection turns experience into information.",
-  "Development Opportunities":
-    "Growth often hides inside discomfort. Naming it creates direction.",
-  "Development Plan":
-    "Insight only compounds when it leads to deliberate action.",
+  "Strengths": "Leadership impact compounds when you deliberately use what already works instead of trying to fix everything.",
+  "Values": "Values are the rules you follow when no one is watching. They reduce inner conflict and make trade-offs easier.",
+  "Goals": "Clear goals give direction and permission. They reduce noise and help you decide what deserves attention now.",
+  "Projects": "Projects are how strategy becomes real. They need clear owners and milestones to avoid drift.",
+  "Key People": "The people around you shape your behavior more than your intentions. Structure often beats effort.",
+  "Failures & Scars": "Unexamined experiences tend to repeat. Reflection turns experience into information.",
+  "Development Opportunities": "Growth often hides inside discomfort. Naming it creates direction."
 };
 
 function polar(cx, cy, r, angleDeg) {
@@ -115,7 +84,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState({ type: null, id: null });
   const [hoveredTopic, setHoveredTopic] = useState(null);
-  const [selectedItem, setSelectedItem] = useState(null);
 
   const anglePerDim = 360 / DIMENSIONS.length;
 
@@ -169,7 +137,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       const data = response.data?.data || response.data || [];
       setTopicData(Array.isArray(data) ? data : []);
       setEditing({ type: null, id: null });
-      setSelectedItem(null); // Close modal
     } catch (err) {
       console.error(`Error updating ${selectedTopic}:`, err);
       alert(`Failed to update ${selectedTopic}`);
@@ -192,7 +159,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       });
       const data = response.data?.data || response.data || [];
       setTopicData(Array.isArray(data) ? data : []);
-      setSelectedItem(null); // Close modal
     } catch (err) {
       console.error(`Error deleting ${selectedTopic}:`, err);
       alert(`Failed to delete ${selectedTopic}`);
@@ -207,23 +173,21 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       </h1>
       <p className="text-sm md:text-base text-slate-600 mb-4 md:mb-6">Understanding your journey to shape your future</p>
 
-      {/* Dynamic Layout: Center initially, Left-Right when topic selected */}
+      {/* Main container with conditional layout */}
       <div className={`flex flex-col gap-6 transition-all duration-700 ease-in-out ${
-        selectedTopic ? 'lg:flex-row lg:gap-8' : 'items-center justify-center min-h-[70vh]'
+        selectedTopic ? 'lg:flex-row lg:gap-8' : 'items-center justify-center min-h-[60vh]'
       }`}>
         
-        {/* Wheel Container - Large center, then shrinks left */}
+        {/* Wheel container - shrinks and moves left when topic selected */}
         <div className={`transition-all duration-700 ease-in-out ${
-          selectedTopic 
-            ? 'lg:w-[400px] flex-shrink-0' 
-            : 'w-full max-w-[900px]'
+          selectedTopic ? 'lg:w-[420px] flex-shrink-0' : 'w-full max-w-[900px]'
         }`}>
           <div className="flex justify-center items-start">
             <svg 
               viewBox="0 0 1200 1200" 
               className={`w-full h-auto transition-all duration-700 ease-in-out ${
                 selectedTopic 
-                  ? 'max-w-[280px] md:max-w-[350px] lg:max-w-[400px]' 
+                  ? 'max-w-[280px] md:max-w-[350px] lg:max-w-[420px]' 
                   : 'max-w-[350px] md:max-w-[550px] lg:max-w-[900px]'
               }`}
             >
@@ -342,165 +306,45 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       )}
     </div>
 
-    {/* RIGHT SIDE: Content panel - appears when topic selected */}
+    {/* Right side content - slides in when topic selected */}
     {selectedTopic && (
       <div className="flex-1">
-        <div className="bg-white border-2 border-slate-300 rounded-lg shadow-lg p-4 md:p-6">
-          {/* Header */}
-          <div className="flex justify-between items-start mb-4 pb-4 border-b">
-            <div className="flex-1">
-              <h2 className="text-xl md:text-2xl font-bold text-slate-800 mb-2">
-                {selectedTopic}
-              </h2>
-              <p className="text-sm md:text-base text-slate-600 leading-relaxed">
-                {WHY_IT_MATTERS[selectedTopic]}
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                setSelectedTopic(null);
-                setTopicData([]);
-                setSelectedItem(null);
-              }}
-              className="ml-4 text-slate-400 hover:text-slate-600 text-3xl leading-none"
-            >
-              ×
-            </button>
-          </div>
-
-          {/* Content */}
-          {loading ? (
-            <div className="flex justify-center items-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            </div>
-          ) : topicData.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-slate-600">
-                No {selectedTopic.toLowerCase()} captured yet. Share with Alfred to see them here!
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[calc(100vh-350px)] overflow-y-auto pr-2">
-              {topicData.map((item) => (
-                <SimpleDataCard
-                  key={item.id}
-                  item={item}
-                  topic={selectedTopic}
-                  onClick={() => setSelectedItem(item)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        <TopicModal
+          topic={selectedTopic}
+          data={topicData}
+          loading={loading}
+          editing={editing}
+          onClose={closeModal}
+          onEdit={(id) => setEditing({ type: selectedTopic, id })}
+          onCancelEdit={() => setEditing({ type: null, id: null })}
+          onUpdate={updateItem}
+          onDelete={deleteItem}
+        />
       </div>
     )}
   </div>
-
-  {/* Item Detail Modal */}
-  {selectedItem && (
-    <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-      onClick={() => {
-        setSelectedItem(null);
-        setEditing({ type: null, id: null });
-      }}
-    >
-      <div 
-        className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Modal Header */}
-        <div className="sticky top-0 bg-white border-b border-slate-200 p-4 md:p-6 flex justify-between items-center z-10">
-          <h3 className="text-lg md:text-xl font-bold text-slate-800">
-            {selectedTopic}
-          </h3>
-          <button
-            onClick={() => {
-              setSelectedItem(null);
-              setEditing({ type: null, id: null });
-            }}
-            className="text-slate-400 hover:text-slate-600 text-2xl md:text-3xl leading-none"
-          >
-            ×
-          </button>
-        </div>
-
-        {/* Modal Content */}
-        <div className="p-4 md:p-6">
-          <ItemDetailWithEdit
-            item={selectedItem}
-            topic={selectedTopic}
-            isEditing={editing.id === selectedItem.id}
-            onEdit={() => setEditing({ type: selectedTopic, id: selectedItem.id })}
-            onCancelEdit={() => setEditing({ type: null, id: null })}
-            onSave={(updates) => updateItem(selectedItem.id, updates)}
-            onDelete={() => deleteItem(selectedItem.id)}
-          />
-        </div>
-      </div>
-    </div>
-  )}
-</div>
   );
 }
 
-// Simple preview card for grid
-function SimpleDataCard({ item, topic, onClick }) {
-  const getPreviewText = () => {
-    switch (topic) {
-      case "Values": return item.value_text;
-      case "Strengths": return item.strength;
-      case "Goals": return item.goal_text;
-      case "Energy Sources": return item.source_text;
-      case "Energy Drains": return item.drain_text;
-      case "Recovery": return item.method_text;
-      case "Procrastination": return item.pattern_text;
-      case "Execution System":
-      case "Prioritization":
-      case "Development Plan": return item.system_text;
-      case "Team Composition": return item.composition_text;
-      case "Inspire": return item.inspiration_text;
-      case "Coach & Delegate": return item.moment_text;
-      case "Failures & Scars": return item.failure_text;
-      case "Development Opportunities": return item.skill;
-      default: return "No preview available";
-    }
-  };
-
-  const truncate = (text, maxLength = 120) => {
-    if (!text) return "";
-    return text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
-  };
-
+// Topic Modal Component
+function TopicModal({ topic, data, loading, editing, onClose, onEdit, onCancelEdit, onUpdate, onDelete }) {
   return (
-    <div 
-      className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer"
-      onClick={onClick}
-    >
-      {item.title && (
-        <h4 className="text-base font-bold text-slate-800 mb-2">{item.title}</h4>
-      )}
-      <p className="text-sm md:text-base text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
-        {truncate(getPreviewText())}
-      </p>
-      {item.first_seen_at && (
-        <p className="text-xs text-slate-400 mt-3">
-          {new Date(item.first_seen_at).toLocaleDateString()}
-        </p>
-      )}
-    </div>
-  );
-}
+    <>
+      {/* Overlay */}
+      <div
+        className="fixed inset-0 bg-black bg-opacity-50 z-40"
+        onClick={onClose}
+      />
 
-// Item detail component with edit capability
-function ItemDetailWithEdit({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDelete }) {
-  const [formData, setFormData] = useState(item);
-
-  const handleSubmit = () => {
-    onSave(formData);
-  };
-
-  const renderEditForm = () => {
+      {/* Modal */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+        <div
+          className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden pointer-events-auto flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Modal Header */}
+          <div className="sticky top-0 bg-slate-800 text-white px-6 py-4 flex items-center justify-between border-b border-slate-700">
+            <h2 className="text-xl font-semibold">{topic}</h2>
             <button
               onClick={onClose}
               className="text-slate-300 hover:text-white text-2xl font-bold w-8 h-8 flex items-center justify-center"
