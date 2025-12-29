@@ -129,7 +129,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   const [topicData, setTopicData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState({ type: null, id: null });
-  const [showWhyModal, setShowWhyModal] = useState(null);
+  const [hoveredTopic, setHoveredTopic] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null);
 
   const anglePerDim = 360 / DIMENSIONS.length;
 
@@ -141,7 +142,16 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       return;
     }
 
+    // If clicking the same topic, deselect it
+    if (selectedTopic === topic) {
+      setSelectedTopic(null);
+      setTopicData([]);
+      setSelectedItem(null);
+      return;
+    }
+
     setSelectedTopic(topic);
+    setSelectedItem(null); // Clear selected item when switching topics
     setLoading(true);
 
     try {
@@ -167,19 +177,9 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
     }
   };
 
-  const handleWhyClick = (topic, e) => {
-    e.stopPropagation();
-    setShowWhyModal(topic);
-  };
-
-  const closeModal = () => {
-    setSelectedTopic(null);
-    setTopicData([]);
+  const closeItemModal = () => {
+    setSelectedItem(null);
     setEditing({ type: null, id: null });
-  };
-
-  const closeWhyModal = () => {
-    setShowWhyModal(null);
   };
 
   const updateItem = async (id, updates) => {
@@ -199,6 +199,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       const data = response.data?.data || response.data || [];
       setTopicData(Array.isArray(data) ? data : []);
       setEditing({ type: null, id: null });
+      setSelectedItem(null); // Close the item modal after save
     } catch (err) {
       console.error(`Error updating ${selectedTopic}:`, err);
       alert(`Failed to update ${selectedTopic}`);
@@ -221,6 +222,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       });
       const data = response.data?.data || response.data || [];
       setTopicData(Array.isArray(data) ? data : []);
+      setSelectedItem(null); // Close the item modal after delete
     } catch (err) {
       console.error(`Error deleting ${selectedTopic}:`, err);
       alert(`Failed to delete ${selectedTopic}`);
@@ -228,19 +230,20 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   };
 
   return (
-    <div className="px-2 md:px-10 py-4 md:py-8">
+    <div className="px-2 md:px-6 lg:px-10 py-2 md:py-4">
       {/* Page title */}
-      <h1 className="text-2xl md:text-3xl font-semibold text-slate-800 mb-1 md:mb-2">
+      <h1 className="text-xl md:text-2xl lg:text-3xl font-semibold text-slate-800 mb-1">
         Alfred Leadership Model
       </h1>
-      <p className="text-sm md:text-base text-slate-600 mb-4 md:mb-6">
+      <p className="text-xs md:text-sm lg:text-base text-slate-600 mb-2 md:mb-4">
         A comprehensive framework for executive development
       </p>
 
-      <div className="flex justify-center items-start">
+      {/* SVG Wheel - moved higher on screen */}
+      <div className="flex justify-center items-start mb-6">
         <svg 
           viewBox="0 0 1200 1200" 
-          className="w-full md:max-w-[700px] lg:max-w-[900px] h-auto"
+          className="w-full max-w-[280px] md:max-w-[500px] lg:max-w-[700px] h-auto"
         >
           {/* Center */}
           <circle cx={600} cy={600} r={R_CENTER} fill="#0F172A" />
@@ -308,42 +311,45 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                   
                   // Position for topic label in outer ring
                   const topicLabelPos = polar(600, 600, 390, tMiddle);
+                  const isSelected = selectedTopic === topic;
 
                   return (
                     <g key={topic}>
                       {/* Topic wedge */}
                       <path
                         d={wedgePath(R_MIDDLE, R_OUTER, tStart, tEnd)}
-                        fill="#E5E7EB"
+                        fill={isSelected ? "#CBD5E1" : "#E5E7EB"}
                         stroke="#CBD5E1"
                         strokeWidth="1"
                         className="cursor-pointer hover:fill-slate-300 transition-colors"
                         onClick={() => handleTopicClick(topic)}
+                        onMouseEnter={() => setHoveredTopic(topic)}
+                        onMouseLeave={() => setHoveredTopic(null)}
                       />
                       
-                      {/* Topic label */}
+                      {/* Topic label - split long text into two lines */}
                       <text
                         x={topicLabelPos.x}
                         y={topicLabelPos.y}
                         textAnchor="middle"
-                        fontSize="16"
+                        fontSize="14"
                         fill="#1e293b"
                         fontWeight="500"
                         className="pointer-events-none"
                       >
-                        {topic}
-                      </text>
-
-                      {/* + Why this matters button */}
-                      <text
-                        x={topicLabelPos.x + 42}
-                        y={topicLabelPos.y - 6}
-                        fontSize="18"
-                        fill="#475569"
-                        className="cursor-pointer select-none"
-                        onClick={(e) => handleWhyClick(topic, e)}
-                      >
-                        +
+                        {topic.includes(' & ') ? (
+                          <>
+                            <tspan x={topicLabelPos.x} dy="-8">{topic.split(' & ')[0]}</tspan>
+                            <tspan x={topicLabelPos.x} dy="16">& {topic.split(' & ')[1]}</tspan>
+                          </>
+                        ) : topic.length > 12 ? (
+                          <>
+                            <tspan x={topicLabelPos.x} dy="-8">{topic.split(' ')[0]}</tspan>
+                            <tspan x={topicLabelPos.x} dy="16">{topic.split(' ').slice(1).join(' ')}</tspan>
+                          </>
+                        ) : (
+                          topic
+                        )}
                       </text>
                     </g>
                   );
@@ -354,88 +360,105 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
         </svg>
       </div>
 
-      {/* "Why it matters" Modal */}
-      {showWhyModal && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={closeWhyModal}
-        >
-          <div 
-            className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-start mb-4">
-              <h3 className="text-xl font-bold text-slate-800">
-                Why {showWhyModal} Matters
-              </h3>
-              <button
-                onClick={closeWhyModal}
-                className="text-slate-400 hover:text-slate-600 text-2xl leading-none"
-              >
-                ×
-              </button>
-            </div>
-            <p className="text-slate-700 leading-relaxed">
-              {WHY_IT_MATTERS[showWhyModal]}
-            </p>
-          </div>
+      {/* Hover Tooltip - "Why it matters" */}
+      {hoveredTopic && (
+        <div className="max-w-2xl mx-auto mb-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r">
+          <h3 className="text-base md:text-lg font-semibold text-blue-900 mb-2">
+            Why {hoveredTopic} Matters
+          </h3>
+          <p className="text-sm md:text-base text-blue-800 leading-relaxed">
+            {WHY_IT_MATTERS[hoveredTopic]}
+          </p>
         </div>
       )}
 
-      {/* Data Modal */}
+      {/* Selected Topic Data Display */}
       {selectedTopic && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={closeModal}
-        >
-          <div 
-            className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex justify-between items-center">
-              <div>
-                <h2 className="text-2xl font-bold text-slate-800">{selectedTopic}</h2>
-                <p className="text-sm text-slate-600 mt-1">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white border-2 border-slate-300 rounded-lg shadow-lg p-4 md:p-6">
+            {/* Header */}
+            <div className="flex justify-between items-start mb-4 pb-4 border-b">
+              <div className="flex-1">
+                <h2 className="text-xl md:text-2xl font-bold text-slate-800 mb-2">
+                  {selectedTopic}
+                </h2>
+                <p className="text-sm md:text-base text-slate-600 leading-relaxed">
                   {WHY_IT_MATTERS[selectedTopic]}
                 </p>
               </div>
               <button
-                onClick={closeModal}
-                className="text-slate-400 hover:text-slate-600 text-3xl leading-none"
+                onClick={() => {
+                  setSelectedTopic(null);
+                  setTopicData([]);
+                  setSelectedItem(null);
+                }}
+                className="ml-4 text-slate-400 hover:text-slate-600 text-2xl md:text-3xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Content */}
+            {loading ? (
+              <div className="flex justify-center items-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              </div>
+            ) : topicData.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-sm md:text-base text-slate-600">
+                  No {selectedTopic.toLowerCase()} captured yet. Share with Alfred to see them here!
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+                {topicData.map((item) => (
+                  <DataCard
+                    key={item.id}
+                    item={item}
+                    topic={selectedTopic}
+                    onClick={() => setSelectedItem(item)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Individual Item Modal - only when clicking a specific card */}
+      {selectedItem && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={closeItemModal}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-white border-b border-slate-200 p-4 md:p-6 flex justify-between items-center">
+              <h3 className="text-lg md:text-xl font-bold text-slate-800">
+                {selectedTopic}
+              </h3>
+              <button
+                onClick={closeItemModal}
+                className="text-slate-400 hover:text-slate-600 text-2xl md:text-3xl leading-none"
               >
                 ×
               </button>
             </div>
 
             {/* Modal Content */}
-            <div className="p-6">
-              {loading ? (
-                <div className="flex justify-center items-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-                </div>
-              ) : topicData.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-slate-600">
-                    No {selectedTopic.toLowerCase()} captured yet. Share with Alfred to see them here!
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {topicData.map((item) => (
-                    <DataCard
-                      key={item.id}
-                      item={item}
-                      topic={selectedTopic}
-                      isEditing={editing.id === item.id}
-                      onEdit={() => setEditing({ type: selectedTopic, id: item.id })}
-                      onCancelEdit={() => setEditing({ type: null, id: null })}
-                      onSave={(updates) => updateItem(item.id, updates)}
-                      onDelete={() => deleteItem(item.id)}
-                    />
-                  ))}
-                </div>
-              )}
+            <div className="p-4 md:p-6">
+              <DataCardDetail
+                item={selectedItem}
+                topic={selectedTopic}
+                isEditing={editing.id === selectedItem.id}
+                onEdit={() => setEditing({ type: selectedTopic, id: selectedItem.id })}
+                onCancelEdit={() => setEditing({ type: null, id: null })}
+                onSave={(updates) => updateItem(selectedItem.id, updates)}
+                onDelete={() => deleteItem(selectedItem.id)}
+              />
             </div>
           </div>
         </div>
@@ -444,8 +467,56 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   );
 }
 
-// Reusable DataCard component for displaying and editing items
-function DataCard({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDelete }) {
+// Simple preview card for grid display
+function DataCard({ item, topic, onClick }) {
+  const getPreviewText = () => {
+    switch (topic) {
+      case "Values": return item.value_text;
+      case "Strengths": return item.strength;
+      case "Goals": return item.goal_text;
+      case "Energy Sources": return item.source_text;
+      case "Energy Drains": return item.drain_text;
+      case "Recovery": return item.method_text;
+      case "Procrastination": return item.pattern_text;
+      case "Execution System":
+      case "Prioritization":
+      case "Development Plan": return item.system_text;
+      case "Team Composition": return item.composition_text;
+      case "Inspire": return item.inspiration_text;
+      case "Coach & Delegate": return item.moment_text;
+      case "Failures & Scars": return item.failure_text;
+      case "Development Opportunities": return item.skill;
+      default: return "No preview available";
+    }
+  };
+
+  const truncate = (text, maxLength = 100) => {
+    if (!text) return "";
+    return text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
+  };
+
+  return (
+    <div 
+      className="bg-white border border-gray-200 rounded-lg p-3 md:p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+      onClick={onClick}
+    >
+      {item.title && (
+        <h4 className="text-sm md:text-base font-bold text-slate-800 mb-2">{item.title}</h4>
+      )}
+      <p className="text-sm md:text-base text-slate-700 leading-relaxed">
+        {truncate(getPreviewText())}
+      </p>
+      {item.first_seen_at && (
+        <p className="text-xs text-slate-400 mt-2">
+          {new Date(item.first_seen_at).toLocaleDateString()}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Detailed card with editing capability for modal
+function DataCardDetail({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDelete }) {
   const [formData, setFormData] = useState(item);
 
   const handleSubmit = () => {
@@ -890,12 +961,14 @@ function DataCard({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDele
         return (
           <>
             {item.title && (
-              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+              <h4 className="text-lg md:text-xl font-bold text-slate-800 mb-3">{item.title}</h4>
             )}
-            <p className="text-slate-800 font-medium mb-2">{item.value_text}</p>
+            <p className="text-base md:text-lg text-slate-800 font-medium mb-3 leading-relaxed whitespace-pre-wrap break-words">
+              {item.value_text}
+            </p>
             {item.why && (
-              <div className="bg-slate-50 p-3 rounded mt-2">
-                <p className="text-sm text-slate-700">
+              <div className="bg-slate-50 p-3 md:p-4 rounded mt-3">
+                <p className="text-sm md:text-base text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
                   <span className="font-medium">Why it matters:</span> {item.why}
                 </p>
               </div>
@@ -907,11 +980,13 @@ function DataCard({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDele
         return (
           <>
             {item.title && (
-              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+              <h4 className="text-lg md:text-xl font-bold text-slate-800 mb-3">{item.title}</h4>
             )}
-            <p className="text-slate-800 font-medium mb-2">{item.strength}</p>
+            <p className="text-base md:text-lg text-slate-800 font-medium mb-3 leading-relaxed whitespace-pre-wrap break-words">
+              {item.strength}
+            </p>
             {item.source && (
-              <p className="text-sm text-slate-600">
+              <p className="text-sm md:text-base text-slate-600">
                 <span className="font-medium">Source:</span> {item.source}
               </p>
             )}
@@ -922,17 +997,19 @@ function DataCard({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDele
         return (
           <>
             {item.title && (
-              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+              <h4 className="text-lg md:text-xl font-bold text-slate-800 mb-3">{item.title}</h4>
             )}
-            <p className="text-slate-800 font-medium mb-2">{item.goal_text}</p>
+            <p className="text-base md:text-lg text-slate-800 font-medium mb-3 leading-relaxed whitespace-pre-wrap break-words">
+              {item.goal_text}
+            </p>
             {item.time_horizon && (
-              <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full mb-2">
+              <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 text-xs md:text-sm font-medium rounded-full mb-3">
                 {item.time_horizon.charAt(0).toUpperCase() + item.time_horizon.slice(1)} term
               </span>
             )}
             {item.why && (
-              <div className="bg-slate-50 p-3 rounded mt-2">
-                <p className="text-sm text-slate-700">
+              <div className="bg-slate-50 p-3 md:p-4 rounded mt-3">
+                <p className="text-sm md:text-base text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
                   <span className="font-medium">Why:</span> {item.why}
                 </p>
               </div>
@@ -944,11 +1021,13 @@ function DataCard({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDele
         return (
           <>
             {item.title && (
-              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+              <h4 className="text-lg md:text-xl font-bold text-slate-800 mb-3">{item.title}</h4>
             )}
-            <p className="text-slate-800 font-medium mb-2">{item.source_text}</p>
+            <p className="text-base md:text-lg text-slate-800 font-medium mb-3 leading-relaxed whitespace-pre-wrap break-words">
+              {item.source_text}
+            </p>
             {item.category && (
-              <span className="inline-block px-3 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+              <span className="inline-block px-3 py-1 bg-green-100 text-green-800 text-xs md:text-sm font-medium rounded-full">
                 {item.category}
               </span>
             )}
@@ -959,17 +1038,19 @@ function DataCard({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDele
         return (
           <>
             {item.title && (
-              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+              <h4 className="text-lg md:text-xl font-bold text-slate-800 mb-3">{item.title}</h4>
             )}
-            <p className="text-slate-800 font-medium mb-2">{item.drain_text}</p>
+            <p className="text-base md:text-lg text-slate-800 font-medium mb-3 leading-relaxed whitespace-pre-wrap break-words">
+              {item.drain_text}
+            </p>
             {item.category && (
-              <span className="inline-block px-3 py-1 bg-red-100 text-red-800 text-xs font-medium rounded-full mb-2">
+              <span className="inline-block px-3 py-1 bg-red-100 text-red-800 text-xs md:text-sm font-medium rounded-full mb-3">
                 {item.category}
               </span>
             )}
             {item.mitigation && (
-              <div className="bg-blue-50 p-3 rounded mt-2">
-                <p className="text-sm text-slate-700">
+              <div className="bg-blue-50 p-3 md:p-4 rounded mt-3">
+                <p className="text-sm md:text-base text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
                   <span className="font-medium">Mitigation:</span> {item.mitigation}
                 </p>
               </div>
@@ -981,17 +1062,19 @@ function DataCard({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDele
         return (
           <>
             {item.title && (
-              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+              <h4 className="text-lg md:text-xl font-bold text-slate-800 mb-3">{item.title}</h4>
             )}
-            <p className="text-slate-800 font-medium mb-2">{item.method_text}</p>
+            <p className="text-base md:text-lg text-slate-800 font-medium mb-3 leading-relaxed whitespace-pre-wrap break-words">
+              {item.method_text}
+            </p>
             <div className="flex gap-2 flex-wrap">
               {item.category && (
-                <span className="inline-block px-3 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">
+                <span className="inline-block px-3 py-1 bg-purple-100 text-purple-800 text-xs md:text-sm font-medium rounded-full">
                   {item.category}
                 </span>
               )}
               {item.frequency && (
-                <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-800 text-xs font-medium rounded-full">
+                <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-800 text-xs md:text-sm font-medium rounded-full">
                   {item.frequency}
                 </span>
               )}
@@ -1003,19 +1086,21 @@ function DataCard({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDele
         return (
           <>
             {item.title && (
-              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+              <h4 className="text-lg md:text-xl font-bold text-slate-800 mb-3">{item.title}</h4>
             )}
-            <p className="text-slate-800 font-medium mb-2">{item.pattern_text}</p>
+            <p className="text-base md:text-lg text-slate-800 font-medium mb-3 leading-relaxed whitespace-pre-wrap break-words">
+              {item.pattern_text}
+            </p>
             {item.underlying_reason && (
-              <div className="bg-amber-50 p-3 rounded mb-2">
-                <p className="text-sm text-slate-700">
+              <div className="bg-amber-50 p-3 md:p-4 rounded mb-3">
+                <p className="text-sm md:text-base text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
                   <span className="font-medium">Why:</span> {item.underlying_reason}
                 </p>
               </div>
             )}
             {item.strategy && (
-              <div className="bg-green-50 p-3 rounded">
-                <p className="text-sm text-slate-700">
+              <div className="bg-green-50 p-3 md:p-4 rounded">
+                <p className="text-sm md:text-base text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
                   <span className="font-medium">Strategy:</span> {item.strategy}
                 </p>
               </div>
@@ -1029,17 +1114,19 @@ function DataCard({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDele
         return (
           <>
             {item.title && (
-              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+              <h4 className="text-lg md:text-xl font-bold text-slate-800 mb-3">{item.title}</h4>
             )}
-            <p className="text-slate-800 font-medium mb-2">{item.system_text}</p>
+            <p className="text-base md:text-lg text-slate-800 font-medium mb-3 leading-relaxed whitespace-pre-wrap break-words">
+              {item.system_text}
+            </p>
             <div className="flex gap-2 flex-wrap">
               {item.category && (
-                <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 text-xs md:text-sm font-medium rounded-full">
                   {item.category}
                 </span>
               )}
               {item.effectiveness && (
-                <span className="inline-block px-3 py-1 bg-slate-100 text-slate-800 text-xs font-medium rounded-full">
+                <span className="inline-block px-3 py-1 bg-slate-100 text-slate-800 text-xs md:text-sm font-medium rounded-full">
                   {item.effectiveness}
                 </span>
               )}
@@ -1051,17 +1138,19 @@ function DataCard({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDele
         return (
           <>
             {item.title && (
-              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+              <h4 className="text-lg md:text-xl font-bold text-slate-800 mb-3">{item.title}</h4>
             )}
-            <p className="text-slate-800 font-medium mb-2">{item.composition_text}</p>
+            <p className="text-base md:text-lg text-slate-800 font-medium mb-3 leading-relaxed whitespace-pre-wrap break-words">
+              {item.composition_text}
+            </p>
             {item.team_type && (
-              <span className="inline-block px-3 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded-full mb-2">
+              <span className="inline-block px-3 py-1 bg-purple-100 text-purple-800 text-xs md:text-sm font-medium rounded-full mb-3">
                 {item.team_type}
               </span>
             )}
             {item.dynamics && (
-              <div className="bg-slate-50 p-3 rounded mt-2">
-                <p className="text-sm text-slate-700">
+              <div className="bg-slate-50 p-3 md:p-4 rounded mt-3">
+                <p className="text-sm md:text-base text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
                   <span className="font-medium">Dynamics:</span> {item.dynamics}
                 </p>
               </div>
@@ -1073,19 +1162,21 @@ function DataCard({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDele
         return (
           <>
             {item.title && (
-              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+              <h4 className="text-lg md:text-xl font-bold text-slate-800 mb-3">{item.title}</h4>
             )}
-            <p className="text-slate-800 font-medium mb-2">{item.inspiration_text}</p>
+            <p className="text-base md:text-lg text-slate-800 font-medium mb-3 leading-relaxed whitespace-pre-wrap break-words">
+              {item.inspiration_text}
+            </p>
             {item.approach && (
-              <div className="bg-blue-50 p-3 rounded mb-2">
-                <p className="text-sm text-slate-700">
+              <div className="bg-blue-50 p-3 md:p-4 rounded mb-3">
+                <p className="text-sm md:text-base text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
                   <span className="font-medium">Approach:</span> {item.approach}
                 </p>
               </div>
             )}
             {item.effectiveness && (
-              <div className="bg-green-50 p-3 rounded">
-                <p className="text-sm text-slate-700">
+              <div className="bg-green-50 p-3 md:p-4 rounded">
+                <p className="text-sm md:text-base text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
                   <span className="font-medium">What works:</span> {item.effectiveness}
                 </p>
               </div>
@@ -1097,24 +1188,26 @@ function DataCard({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDele
         return (
           <>
             {item.title && (
-              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+              <h4 className="text-lg md:text-xl font-bold text-slate-800 mb-3">{item.title}</h4>
             )}
-            <p className="text-slate-800 font-medium mb-2">{item.moment_text}</p>
+            <p className="text-base md:text-lg text-slate-800 font-medium mb-3 leading-relaxed whitespace-pre-wrap break-words">
+              {item.moment_text}
+            </p>
             {item.person && (
-              <p className="text-sm text-slate-600 mb-2">
+              <p className="text-sm md:text-base text-slate-600 mb-3">
                 <span className="font-medium">Person:</span> {item.person}
               </p>
             )}
             {item.outcome && (
-              <div className="bg-blue-50 p-3 rounded mb-2">
-                <p className="text-sm text-slate-700">
+              <div className="bg-blue-50 p-3 md:p-4 rounded mb-3">
+                <p className="text-sm md:text-base text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
                   <span className="font-medium">Outcome:</span> {item.outcome}
                 </p>
               </div>
             )}
             {item.learning && (
-              <div className="bg-green-50 p-3 rounded">
-                <p className="text-sm text-slate-700">
+              <div className="bg-green-50 p-3 md:p-4 rounded">
+                <p className="text-sm md:text-base text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
                   <span className="font-medium">Learning:</span> {item.learning}
                 </p>
               </div>
@@ -1126,19 +1219,21 @@ function DataCard({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDele
         return (
           <>
             {item.title && (
-              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+              <h4 className="text-lg md:text-xl font-bold text-slate-800 mb-3">{item.title}</h4>
             )}
-            <p className="text-slate-800 font-medium mb-3">{item.failure_text}</p>
+            <p className="text-base md:text-lg text-slate-800 font-medium mb-4 leading-relaxed whitespace-pre-wrap break-words">
+              {item.failure_text}
+            </p>
             {item.learning && (
-              <div className="bg-green-50 p-3 rounded mb-2">
-                <p className="text-sm text-slate-700">
+              <div className="bg-green-50 p-3 md:p-4 rounded mb-3">
+                <p className="text-sm md:text-base text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
                   <span className="font-medium">Learning:</span> {item.learning}
                 </p>
               </div>
             )}
             {item.scar && (
-              <div className="bg-red-50 p-3 rounded">
-                <p className="text-sm text-slate-700">
+              <div className="bg-red-50 p-3 md:p-4 rounded">
+                <p className="text-sm md:text-base text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
                   <span className="font-medium">Scar:</span> {item.scar}
                 </p>
               </div>
@@ -1150,11 +1245,13 @@ function DataCard({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDele
         return (
           <>
             {item.title && (
-              <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
+              <h4 className="text-lg md:text-xl font-bold text-slate-800 mb-3">{item.title}</h4>
             )}
-            <p className="text-slate-800 font-medium mb-2">{item.skill}</p>
+            <p className="text-base md:text-lg text-slate-800 font-medium mb-3 leading-relaxed whitespace-pre-wrap break-words">
+              {item.skill}
+            </p>
             {item.source && (
-              <p className="text-sm text-slate-600">
+              <p className="text-sm md:text-base text-slate-600">
                 <span className="font-medium">Source:</span> {item.source}
               </p>
             )}
@@ -1162,7 +1259,7 @@ function DataCard({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDele
         );
 
       default:
-        return <p className="text-slate-600">No data available</p>;
+        return <p className="text-base md:text-lg text-slate-600">No data available</p>;
     }
   };
 
@@ -1173,19 +1270,19 @@ function DataCard({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDele
         <div className="flex gap-2 pt-2">
           <button
             onClick={handleSubmit}
-            className="flex-1 bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded text-sm font-medium"
+            className="flex-1 bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded text-sm md:text-base font-medium"
           >
             Save
           </button>
           <button
             onClick={onCancelEdit}
-            className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1.5 rounded text-sm font-medium"
+            className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded text-sm md:text-base font-medium"
           >
             Cancel
           </button>
           <button
             onClick={onDelete}
-            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-sm font-medium"
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm md:text-base font-medium"
           >
             Delete
           </button>
@@ -1195,16 +1292,21 @@ function DataCard({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDele
   }
 
   return (
-    <div 
-      className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-      onClick={onEdit}
-    >
+    <div className="bg-white">
       {renderContent()}
-      {item.first_seen_at && (
-        <p className="text-xs text-slate-400 mt-3">
-          Added {new Date(item.first_seen_at).toLocaleDateString()}
-        </p>
-      )}
+      <div className="flex justify-between items-center mt-6 pt-4 border-t">
+        {item.first_seen_at && (
+          <p className="text-xs md:text-sm text-slate-400">
+            Added {new Date(item.first_seen_at).toLocaleDateString()}
+          </p>
+        )}
+        <button
+          onClick={onEdit}
+          className="ml-auto bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded text-sm md:text-base font-medium"
+        >
+          Edit
+        </button>
+      </div>
     </div>
   );
 }
