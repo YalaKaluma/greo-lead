@@ -10,7 +10,15 @@ from app.models import (
     JourneyFailure,
     JourneyOpportunity,
     JourneyValue,
-    JourneyAchievement
+    JourneyAchievement,
+    JourneyEnergySource,
+    JourneyEnergyDrain,
+    JourneyRecoveryMethod,
+    JourneyProcrastinationPattern,
+    JourneyExecutionSystem,
+    JourneyInspiration,
+    JourneyCoachingMoment,
+    JourneyTeamComposition
 )
 from pydantic import BaseModel
 from datetime import datetime
@@ -1072,3 +1080,939 @@ def delete_achievement(
     db.delete(achievement)
     db.commit()
     return {"success": True, "message": "Achievement deleted"}
+
+
+# ============================================
+# ENERGY SOURCES - FULL CRUD
+# ============================================
+
+class EnergySourceCreate(BaseModel):
+    title: Optional[str] = None
+    source_text: str
+    category: Optional[str] = None
+
+
+class EnergySourceUpdate(BaseModel):
+    title: Optional[str] = None
+    source_text: Optional[str] = None
+    category: Optional[str] = None
+
+
+class EnergySourceResponse(BaseModel):
+    id: int
+    user_number: str
+    title: Optional[str]
+    source_text: str
+    category: Optional[str]
+    first_seen_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/energy-sources", response_model=list[EnergySourceResponse])
+def get_energy_sources(
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Get all energy sources for a user"""
+    sources = db.query(JourneyEnergySource).filter(
+        JourneyEnergySource.user_number == user_number
+    ).order_by(JourneyEnergySource.first_seen_at.desc()).all()
+    return sources
+
+
+@router.post("/energy-sources", response_model=EnergySourceResponse)
+def create_energy_source(
+        source_data: EnergySourceCreate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Create a new energy source"""
+    new_source = JourneyEnergySource(
+        user_number=user_number,
+        title=source_data.title,
+        source_text=source_data.source_text,
+        category=source_data.category,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(new_source)
+    db.commit()
+    db.refresh(new_source)
+    return new_source
+
+
+@router.put("/energy-sources/{source_id}", response_model=EnergySourceResponse)
+def update_energy_source(
+        source_id: int,
+        source_data: EnergySourceUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update an energy source"""
+    source = db.query(JourneyEnergySource).filter(
+        JourneyEnergySource.id == source_id,
+        JourneyEnergySource.user_number == user_number
+    ).first()
+
+    if not source:
+        raise HTTPException(status_code=404, detail="Energy source not found")
+
+    if source_data.title is not None:
+        source.title = source_data.title
+    if source_data.source_text is not None:
+        source.source_text = source_data.source_text
+    if source_data.category is not None:
+        source.category = source_data.category
+
+    source.updated_at = datetime.now()
+    db.commit()
+    db.refresh(source)
+    return source
+
+
+@router.delete("/energy-sources/{source_id}")
+def delete_energy_source(
+        source_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete an energy source"""
+    source = db.query(JourneyEnergySource).filter(
+        JourneyEnergySource.id == source_id,
+        JourneyEnergySource.user_number == user_number
+    ).first()
+
+    if not source:
+        raise HTTPException(status_code=404, detail="Energy source not found")
+
+    db.delete(source)
+    db.commit()
+    return {"success": True, "message": "Energy source deleted"}
+
+
+# ============================================
+# ENERGY DRAINS - FULL CRUD
+# ============================================
+
+class EnergyDrainCreate(BaseModel):
+    title: Optional[str] = None
+    drain_text: str
+    category: Optional[str] = None
+    mitigation: Optional[str] = None
+
+
+class EnergyDrainUpdate(BaseModel):
+    title: Optional[str] = None
+    drain_text: Optional[str] = None
+    category: Optional[str] = None
+    mitigation: Optional[str] = None
+
+
+class EnergyDrainResponse(BaseModel):
+    id: int
+    user_number: str
+    title: Optional[str]
+    drain_text: str
+    category: Optional[str]
+    mitigation: Optional[str]
+    first_seen_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/energy-drains", response_model=list[EnergyDrainResponse])
+def get_energy_drains(
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Get all energy drains for a user"""
+    drains = db.query(JourneyEnergyDrain).filter(
+        JourneyEnergyDrain.user_number == user_number
+    ).order_by(JourneyEnergyDrain.first_seen_at.desc()).all()
+    return drains
+
+
+@router.post("/energy-drains", response_model=EnergyDrainResponse)
+def create_energy_drain(
+        drain_data: EnergyDrainCreate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Create a new energy drain"""
+    new_drain = JourneyEnergyDrain(
+        user_number=user_number,
+        title=drain_data.title,
+        drain_text=drain_data.drain_text,
+        category=drain_data.category,
+        mitigation=drain_data.mitigation,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(new_drain)
+    db.commit()
+    db.refresh(new_drain)
+    return new_drain
+
+
+@router.put("/energy-drains/{drain_id}", response_model=EnergyDrainResponse)
+def update_energy_drain(
+        drain_id: int,
+        drain_data: EnergyDrainUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update an energy drain"""
+    drain = db.query(JourneyEnergyDrain).filter(
+        JourneyEnergyDrain.id == drain_id,
+        JourneyEnergyDrain.user_number == user_number
+    ).first()
+
+    if not drain:
+        raise HTTPException(status_code=404, detail="Energy drain not found")
+
+    if drain_data.title is not None:
+        drain.title = drain_data.title
+    if drain_data.drain_text is not None:
+        drain.drain_text = drain_data.drain_text
+    if drain_data.category is not None:
+        drain.category = drain_data.category
+    if drain_data.mitigation is not None:
+        drain.mitigation = drain_data.mitigation
+
+    drain.updated_at = datetime.now()
+    db.commit()
+    db.refresh(drain)
+    return drain
+
+
+@router.delete("/energy-drains/{drain_id}")
+def delete_energy_drain(
+        drain_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete an energy drain"""
+    drain = db.query(JourneyEnergyDrain).filter(
+        JourneyEnergyDrain.id == drain_id,
+        JourneyEnergyDrain.user_number == user_number
+    ).first()
+
+    if not drain:
+        raise HTTPException(status_code=404, detail="Energy drain not found")
+
+    db.delete(drain)
+    db.commit()
+    return {"success": True, "message": "Energy drain deleted"}
+
+
+# ============================================
+# RECOVERY METHODS - FULL CRUD
+# ============================================
+
+class RecoveryMethodCreate(BaseModel):
+    title: Optional[str] = None
+    method_text: str
+    category: Optional[str] = None
+    frequency: Optional[str] = None
+
+
+class RecoveryMethodUpdate(BaseModel):
+    title: Optional[str] = None
+    method_text: Optional[str] = None
+    category: Optional[str] = None
+    frequency: Optional[str] = None
+
+
+class RecoveryMethodResponse(BaseModel):
+    id: int
+    user_number: str
+    title: Optional[str]
+    method_text: str
+    category: Optional[str]
+    frequency: Optional[str]
+    first_seen_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/recovery-methods", response_model=list[RecoveryMethodResponse])
+def get_recovery_methods(
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Get all recovery methods for a user"""
+    methods = db.query(JourneyRecoveryMethod).filter(
+        JourneyRecoveryMethod.user_number == user_number
+    ).order_by(JourneyRecoveryMethod.first_seen_at.desc()).all()
+    return methods
+
+
+@router.post("/recovery-methods", response_model=RecoveryMethodResponse)
+def create_recovery_method(
+        method_data: RecoveryMethodCreate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Create a new recovery method"""
+    new_method = JourneyRecoveryMethod(
+        user_number=user_number,
+        title=method_data.title,
+        method_text=method_data.method_text,
+        category=method_data.category,
+        frequency=method_data.frequency,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(new_method)
+    db.commit()
+    db.refresh(new_method)
+    return new_method
+
+
+@router.put("/recovery-methods/{method_id}", response_model=RecoveryMethodResponse)
+def update_recovery_method(
+        method_id: int,
+        method_data: RecoveryMethodUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update a recovery method"""
+    method = db.query(JourneyRecoveryMethod).filter(
+        JourneyRecoveryMethod.id == method_id,
+        JourneyRecoveryMethod.user_number == user_number
+    ).first()
+
+    if not method:
+        raise HTTPException(status_code=404, detail="Recovery method not found")
+
+    if method_data.title is not None:
+        method.title = method_data.title
+    if method_data.method_text is not None:
+        method.method_text = method_data.method_text
+    if method_data.category is not None:
+        method.category = method_data.category
+    if method_data.frequency is not None:
+        method.frequency = method_data.frequency
+
+    method.updated_at = datetime.now()
+    db.commit()
+    db.refresh(method)
+    return method
+
+
+@router.delete("/recovery-methods/{method_id}")
+def delete_recovery_method(
+        method_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete a recovery method"""
+    method = db.query(JourneyRecoveryMethod).filter(
+        JourneyRecoveryMethod.id == method_id,
+        JourneyRecoveryMethod.user_number == user_number
+    ).first()
+
+    if not method:
+        raise HTTPException(status_code=404, detail="Recovery method not found")
+
+    db.delete(method)
+    db.commit()
+    return {"success": True, "message": "Recovery method deleted"}
+
+
+# ============================================
+# PROCRASTINATION PATTERNS - FULL CRUD
+# ============================================
+
+class ProcrastinationPatternCreate(BaseModel):
+    title: Optional[str] = None
+    pattern_text: str
+    underlying_reason: Optional[str] = None
+    strategy: Optional[str] = None
+
+
+class ProcrastinationPatternUpdate(BaseModel):
+    title: Optional[str] = None
+    pattern_text: Optional[str] = None
+    underlying_reason: Optional[str] = None
+    strategy: Optional[str] = None
+
+
+class ProcrastinationPatternResponse(BaseModel):
+    id: int
+    user_number: str
+    title: Optional[str]
+    pattern_text: str
+    underlying_reason: Optional[str]
+    strategy: Optional[str]
+    first_seen_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/procrastination-patterns", response_model=list[ProcrastinationPatternResponse])
+def get_procrastination_patterns(
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Get all procrastination patterns for a user"""
+    patterns = db.query(JourneyProcrastinationPattern).filter(
+        JourneyProcrastinationPattern.user_number == user_number
+    ).order_by(JourneyProcrastinationPattern.first_seen_at.desc()).all()
+    return patterns
+
+
+@router.post("/procrastination-patterns", response_model=ProcrastinationPatternResponse)
+def create_procrastination_pattern(
+        pattern_data: ProcrastinationPatternCreate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Create a new procrastination pattern"""
+    new_pattern = JourneyProcrastinationPattern(
+        user_number=user_number,
+        title=pattern_data.title,
+        pattern_text=pattern_data.pattern_text,
+        underlying_reason=pattern_data.underlying_reason,
+        strategy=pattern_data.strategy,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(new_pattern)
+    db.commit()
+    db.refresh(new_pattern)
+    return new_pattern
+
+
+@router.put("/procrastination-patterns/{pattern_id}", response_model=ProcrastinationPatternResponse)
+def update_procrastination_pattern(
+        pattern_id: int,
+        pattern_data: ProcrastinationPatternUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update a procrastination pattern"""
+    pattern = db.query(JourneyProcrastinationPattern).filter(
+        JourneyProcrastinationPattern.id == pattern_id,
+        JourneyProcrastinationPattern.user_number == user_number
+    ).first()
+
+    if not pattern:
+        raise HTTPException(status_code=404, detail="Procrastination pattern not found")
+
+    if pattern_data.title is not None:
+        pattern.title = pattern_data.title
+    if pattern_data.pattern_text is not None:
+        pattern.pattern_text = pattern_data.pattern_text
+    if pattern_data.underlying_reason is not None:
+        pattern.underlying_reason = pattern_data.underlying_reason
+    if pattern_data.strategy is not None:
+        pattern.strategy = pattern_data.strategy
+
+    pattern.updated_at = datetime.now()
+    db.commit()
+    db.refresh(pattern)
+    return pattern
+
+
+@router.delete("/procrastination-patterns/{pattern_id}")
+def delete_procrastination_pattern(
+        pattern_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete a procrastination pattern"""
+    pattern = db.query(JourneyProcrastinationPattern).filter(
+        JourneyProcrastinationPattern.id == pattern_id,
+        JourneyProcrastinationPattern.user_number == user_number
+    ).first()
+
+    if not pattern:
+        raise HTTPException(status_code=404, detail="Procrastination pattern not found")
+
+    db.delete(pattern)
+    db.commit()
+    return {"success": True, "message": "Procrastination pattern deleted"}
+
+
+# ============================================
+# EXECUTION SYSTEMS - FULL CRUD
+# ============================================
+
+class ExecutionSystemCreate(BaseModel):
+    title: Optional[str] = None
+    system_text: str
+    category: Optional[str] = None
+    effectiveness: Optional[str] = None
+
+
+class ExecutionSystemUpdate(BaseModel):
+    title: Optional[str] = None
+    system_text: Optional[str] = None
+    category: Optional[str] = None
+    effectiveness: Optional[str] = None
+
+
+class ExecutionSystemResponse(BaseModel):
+    id: int
+    user_number: str
+    title: Optional[str]
+    system_text: str
+    category: Optional[str]
+    effectiveness: Optional[str]
+    first_seen_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/execution-systems", response_model=list[ExecutionSystemResponse])
+def get_execution_systems(
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Get all execution systems for a user"""
+    systems = db.query(JourneyExecutionSystem).filter(
+        JourneyExecutionSystem.user_number == user_number
+    ).order_by(JourneyExecutionSystem.first_seen_at.desc()).all()
+    return systems
+
+
+@router.post("/execution-systems", response_model=ExecutionSystemResponse)
+def create_execution_system(
+        system_data: ExecutionSystemCreate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Create a new execution system"""
+    new_system = JourneyExecutionSystem(
+        user_number=user_number,
+        title=system_data.title,
+        system_text=system_data.system_text,
+        category=system_data.category,
+        effectiveness=system_data.effectiveness,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(new_system)
+    db.commit()
+    db.refresh(new_system)
+    return new_system
+
+
+@router.put("/execution-systems/{system_id}", response_model=ExecutionSystemResponse)
+def update_execution_system(
+        system_id: int,
+        system_data: ExecutionSystemUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update an execution system"""
+    system = db.query(JourneyExecutionSystem).filter(
+        JourneyExecutionSystem.id == system_id,
+        JourneyExecutionSystem.user_number == user_number
+    ).first()
+
+    if not system:
+        raise HTTPException(status_code=404, detail="Execution system not found")
+
+    if system_data.title is not None:
+        system.title = system_data.title
+    if system_data.system_text is not None:
+        system.system_text = system_data.system_text
+    if system_data.category is not None:
+        system.category = system_data.category
+    if system_data.effectiveness is not None:
+        system.effectiveness = system_data.effectiveness
+
+    system.updated_at = datetime.now()
+    db.commit()
+    db.refresh(system)
+    return system
+
+
+@router.delete("/execution-systems/{system_id}")
+def delete_execution_system(
+        system_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete an execution system"""
+    system = db.query(JourneyExecutionSystem).filter(
+        JourneyExecutionSystem.id == system_id,
+        JourneyExecutionSystem.user_number == user_number
+    ).first()
+
+    if not system:
+        raise HTTPException(status_code=404, detail="Execution system not found")
+
+    db.delete(system)
+    db.commit()
+    return {"success": True, "message": "Execution system deleted"}
+
+
+# ============================================
+# INSPIRATION - FULL CRUD
+# ============================================
+
+class InspirationCreate(BaseModel):
+    title: Optional[str] = None
+    inspiration_text: str
+    approach: Optional[str] = None
+    effectiveness: Optional[str] = None
+
+
+class InspirationUpdate(BaseModel):
+    title: Optional[str] = None
+    inspiration_text: Optional[str] = None
+    approach: Optional[str] = None
+    effectiveness: Optional[str] = None
+
+
+class InspirationResponse(BaseModel):
+    id: int
+    user_number: str
+    title: Optional[str]
+    inspiration_text: str
+    approach: Optional[str]
+    effectiveness: Optional[str]
+    first_seen_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/inspiration", response_model=list[InspirationResponse])
+def get_inspiration(
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Get all inspiration entries for a user"""
+    inspiration = db.query(JourneyInspiration).filter(
+        JourneyInspiration.user_number == user_number
+    ).order_by(JourneyInspiration.first_seen_at.desc()).all()
+    return inspiration
+
+
+@router.post("/inspiration", response_model=InspirationResponse)
+def create_inspiration(
+        inspiration_data: InspirationCreate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Create a new inspiration entry"""
+    new_inspiration = JourneyInspiration(
+        user_number=user_number,
+        title=inspiration_data.title,
+        inspiration_text=inspiration_data.inspiration_text,
+        approach=inspiration_data.approach,
+        effectiveness=inspiration_data.effectiveness,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(new_inspiration)
+    db.commit()
+    db.refresh(new_inspiration)
+    return new_inspiration
+
+
+@router.put("/inspiration/{inspiration_id}", response_model=InspirationResponse)
+def update_inspiration(
+        inspiration_id: int,
+        inspiration_data: InspirationUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update an inspiration entry"""
+    inspiration = db.query(JourneyInspiration).filter(
+        JourneyInspiration.id == inspiration_id,
+        JourneyInspiration.user_number == user_number
+    ).first()
+
+    if not inspiration:
+        raise HTTPException(status_code=404, detail="Inspiration not found")
+
+    if inspiration_data.title is not None:
+        inspiration.title = inspiration_data.title
+    if inspiration_data.inspiration_text is not None:
+        inspiration.inspiration_text = inspiration_data.inspiration_text
+    if inspiration_data.approach is not None:
+        inspiration.approach = inspiration_data.approach
+    if inspiration_data.effectiveness is not None:
+        inspiration.effectiveness = inspiration_data.effectiveness
+
+    inspiration.updated_at = datetime.now()
+    db.commit()
+    db.refresh(inspiration)
+    return inspiration
+
+
+@router.delete("/inspiration/{inspiration_id}")
+def delete_inspiration(
+        inspiration_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete an inspiration entry"""
+    inspiration = db.query(JourneyInspiration).filter(
+        JourneyInspiration.id == inspiration_id,
+        JourneyInspiration.user_number == user_number
+    ).first()
+
+    if not inspiration:
+        raise HTTPException(status_code=404, detail="Inspiration not found")
+
+    db.delete(inspiration)
+    db.commit()
+    return {"success": True, "message": "Inspiration deleted"}
+
+
+# ============================================
+# COACHING MOMENTS - FULL CRUD
+# ============================================
+
+class CoachingMomentCreate(BaseModel):
+    title: Optional[str] = None
+    moment_text: str
+    person: Optional[str] = None
+    outcome: Optional[str] = None
+    learning: Optional[str] = None
+
+
+class CoachingMomentUpdate(BaseModel):
+    title: Optional[str] = None
+    moment_text: Optional[str] = None
+    person: Optional[str] = None
+    outcome: Optional[str] = None
+    learning: Optional[str] = None
+
+
+class CoachingMomentResponse(BaseModel):
+    id: int
+    user_number: str
+    title: Optional[str]
+    moment_text: str
+    person: Optional[str]
+    outcome: Optional[str]
+    learning: Optional[str]
+    first_seen_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/coaching-moments", response_model=list[CoachingMomentResponse])
+def get_coaching_moments(
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Get all coaching moments for a user"""
+    moments = db.query(JourneyCoachingMoment).filter(
+        JourneyCoachingMoment.user_number == user_number
+    ).order_by(JourneyCoachingMoment.first_seen_at.desc()).all()
+    return moments
+
+
+@router.post("/coaching-moments", response_model=CoachingMomentResponse)
+def create_coaching_moment(
+        moment_data: CoachingMomentCreate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Create a new coaching moment"""
+    new_moment = JourneyCoachingMoment(
+        user_number=user_number,
+        title=moment_data.title,
+        moment_text=moment_data.moment_text,
+        person=moment_data.person,
+        outcome=moment_data.outcome,
+        learning=moment_data.learning,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(new_moment)
+    db.commit()
+    db.refresh(new_moment)
+    return new_moment
+
+
+@router.put("/coaching-moments/{moment_id}", response_model=CoachingMomentResponse)
+def update_coaching_moment(
+        moment_id: int,
+        moment_data: CoachingMomentUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update a coaching moment"""
+    moment = db.query(JourneyCoachingMoment).filter(
+        JourneyCoachingMoment.id == moment_id,
+        JourneyCoachingMoment.user_number == user_number
+    ).first()
+
+    if not moment:
+        raise HTTPException(status_code=404, detail="Coaching moment not found")
+
+    if moment_data.title is not None:
+        moment.title = moment_data.title
+    if moment_data.moment_text is not None:
+        moment.moment_text = moment_data.moment_text
+    if moment_data.person is not None:
+        moment.person = moment_data.person
+    if moment_data.outcome is not None:
+        moment.outcome = moment_data.outcome
+    if moment_data.learning is not None:
+        moment.learning = moment_data.learning
+
+    moment.updated_at = datetime.now()
+    db.commit()
+    db.refresh(moment)
+    return moment
+
+
+@router.delete("/coaching-moments/{moment_id}")
+def delete_coaching_moment(
+        moment_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete a coaching moment"""
+    moment = db.query(JourneyCoachingMoment).filter(
+        JourneyCoachingMoment.id == moment_id,
+        JourneyCoachingMoment.user_number == user_number
+    ).first()
+
+    if not moment:
+        raise HTTPException(status_code=404, detail="Coaching moment not found")
+
+    db.delete(moment)
+    db.commit()
+    return {"success": True, "message": "Coaching moment deleted"}
+
+
+# ============================================
+# TEAM COMPOSITION - FULL CRUD
+# ============================================
+
+class TeamCompositionCreate(BaseModel):
+    title: Optional[str] = None
+    composition_text: str
+    team_type: Optional[str] = None
+    dynamics: Optional[str] = None
+
+
+class TeamCompositionUpdate(BaseModel):
+    title: Optional[str] = None
+    composition_text: Optional[str] = None
+    team_type: Optional[str] = None
+    dynamics: Optional[str] = None
+
+
+class TeamCompositionResponse(BaseModel):
+    id: int
+    user_number: str
+    title: Optional[str]
+    composition_text: str
+    team_type: Optional[str]
+    dynamics: Optional[str]
+    first_seen_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/team-composition", response_model=list[TeamCompositionResponse])
+def get_team_composition(
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Get all team composition entries for a user"""
+    compositions = db.query(JourneyTeamComposition).filter(
+        JourneyTeamComposition.user_number == user_number
+    ).order_by(JourneyTeamComposition.first_seen_at.desc()).all()
+    return compositions
+
+
+@router.post("/team-composition", response_model=TeamCompositionResponse)
+def create_team_composition(
+        composition_data: TeamCompositionCreate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Create a new team composition entry"""
+    new_composition = JourneyTeamComposition(
+        user_number=user_number,
+        title=composition_data.title,
+        composition_text=composition_data.composition_text,
+        team_type=composition_data.team_type,
+        dynamics=composition_data.dynamics,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(new_composition)
+    db.commit()
+    db.refresh(new_composition)
+    return new_composition
+
+
+@router.put("/team-composition/{composition_id}", response_model=TeamCompositionResponse)
+def update_team_composition(
+        composition_id: int,
+        composition_data: TeamCompositionUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update a team composition entry"""
+    composition = db.query(JourneyTeamComposition).filter(
+        JourneyTeamComposition.id == composition_id,
+        JourneyTeamComposition.user_number == user_number
+    ).first()
+
+    if not composition:
+        raise HTTPException(status_code=404, detail="Team composition not found")
+
+    if composition_data.title is not None:
+        composition.title = composition_data.title
+    if composition_data.composition_text is not None:
+        composition.composition_text = composition_data.composition_text
+    if composition_data.team_type is not None:
+        composition.team_type = composition_data.team_type
+    if composition_data.dynamics is not None:
+        composition.dynamics = composition_data.dynamics
+
+    composition.updated_at = datetime.now()
+    db.commit()
+    db.refresh(composition)
+    return composition
+
+
+@router.delete("/team-composition/{composition_id}")
+def delete_team_composition(
+        composition_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete a team composition entry"""
+    composition = db.query(JourneyTeamComposition).filter(
+        JourneyTeamComposition.id == composition_id,
+        JourneyTeamComposition.user_number == user_number
+    ).first()
+
+    if not composition:
+        raise HTTPException(status_code=404, detail="Team composition not found")
+
+    db.delete(composition)
+    db.commit()
+    return {"success": True, "message": "Team composition deleted"}

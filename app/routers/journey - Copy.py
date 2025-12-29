@@ -8,7 +8,9 @@ from app.models import (
     JourneyProject,
     JourneyPerson,
     JourneyFailure,
-    JourneyOpportunity
+    JourneyOpportunity,
+    JourneyValue,
+    JourneyAchievement
 )
 from pydantic import BaseModel
 from datetime import datetime
@@ -21,6 +23,8 @@ class GoalCreate(BaseModel):
     goal_text: str
     why: Optional[str] = None
     time_horizon: Optional[str] = "medium"
+    parent_goal_id: Optional[int] = None
+    sort_order: Optional[int] = 0
 
 
 class GoalUpdate(BaseModel):
@@ -28,6 +32,8 @@ class GoalUpdate(BaseModel):
     goal_text: Optional[str] = None
     why: Optional[str] = None
     time_horizon: Optional[str] = None
+    parent_goal_id: Optional[int] = None
+    sort_order: Optional[int] = None
 
 
 # Pydantic request models for People
@@ -54,6 +60,7 @@ router = APIRouter()
 class StrengthResponse(BaseModel):
     id: int
     user_number: str
+    title: Optional[str]
     strength: str
     source: Optional[str]
     first_seen_at: datetime
@@ -66,6 +73,7 @@ class StrengthResponse(BaseModel):
 class DevelopmentAreaResponse(BaseModel):
     id: int
     user_number: str
+    title: Optional[str]
     skill: str
     source: Optional[str]
 
@@ -105,6 +113,7 @@ class PersonResponse(BaseModel):
 class FailureResponse(BaseModel):
     id: int
     user_number: str
+    title: Optional[str]
     failure_text: str
     learning: Optional[str]
     scar: Optional[str]
@@ -134,6 +143,8 @@ class GoalResponse(BaseModel):
     goal_text: str
     why: Optional[str]
     time_horizon: Optional[str]
+    parent_goal_id: Optional[int]
+    sort_order: Optional[int]
     first_seen_at: datetime
     updated_at: datetime
 
@@ -158,6 +169,7 @@ def get_strengths(
 
 
 class StrengthCreate(BaseModel):
+    title: Optional[str] = None
     strength: str
     source: Optional[str] = None
 
@@ -171,6 +183,7 @@ def create_strength(
     """Create a new strength"""
     new_strength = JourneyStrength(
         user_number=user_number,
+        title=strength_data.title,
         strength=strength_data.strength,
         source=strength_data.source,
         first_seen_at=datetime.now(),
@@ -199,6 +212,7 @@ def get_development_areas(
 
 
 class DevelopmentAreaCreate(BaseModel):
+    title: Optional[str] = None
     skill: str
     source: Optional[str] = None
 
@@ -212,6 +226,7 @@ def create_development_area(
     """Create a new development area"""
     new_area = JourneyDevelopmentArea(
         user_number=user_number,
+        title=area_data.title,
         skill=area_data.skill,
         source=area_data.source
     )
@@ -375,6 +390,7 @@ def get_failures(
 
 
 class FailureCreate(BaseModel):
+    title: Optional[str] = None
     failure_text: str
     learning: Optional[str] = None
     scar: Optional[str] = None
@@ -389,6 +405,7 @@ def create_failure(
     """Create a new failure/learning"""
     new_failure = JourneyFailure(
         user_number=user_number,
+        title=failure_data.title,
         failure_text=failure_data.failure_text,
         learning=failure_data.learning,
         scar=failure_data.scar,
@@ -453,7 +470,7 @@ def get_goals(
     """Get all goals for a user"""
     goals = db.query(JourneyGoal).filter(
         JourneyGoal.user_number == user_number
-    ).order_by(JourneyGoal.first_seen_at.desc()).all()
+    ).order_by(JourneyGoal.sort_order, JourneyGoal.first_seen_at.desc()).all()
 
     return goals
 
@@ -471,6 +488,8 @@ def create_goal(
         goal_text=goal_data.goal_text,
         why=goal_data.why,
         time_horizon=goal_data.time_horizon,
+        parent_goal_id=goal_data.parent_goal_id,
+        sort_order=goal_data.sort_order if goal_data.sort_order is not None else 0,
         first_seen_at=datetime.now(),
         updated_at=datetime.now()
     )
@@ -504,6 +523,10 @@ def update_goal(
         goal.why = goal_data.why
     if goal_data.time_horizon is not None:
         goal.time_horizon = goal_data.time_horizon
+    if goal_data.parent_goal_id is not None:
+        goal.parent_goal_id = goal_data.parent_goal_id
+    if goal_data.sort_order is not None:
+        goal.sort_order = goal_data.sort_order
 
     goal.updated_at = datetime.now()
     db.commit()
@@ -535,6 +558,7 @@ def delete_goal(
 # STRENGTHS - UPDATE & DELETE
 # ========================================
 class StrengthUpdate(BaseModel):
+    title: Optional[str] = None
     strength: Optional[str] = None
     source: Optional[str] = None
 
@@ -555,6 +579,8 @@ def update_strength(
     if not strength:
         raise HTTPException(status_code=404, detail="Strength not found")
 
+    if updates.title is not None:
+        strength.title = updates.title
     if updates.strength is not None:
         strength.strength = updates.strength
     if updates.source is not None:
@@ -590,6 +616,7 @@ def delete_strength(
 # DEVELOPMENT AREAS - UPDATE & DELETE
 # ========================================
 class DevelopmentAreaUpdate(BaseModel):
+    title: Optional[str] = None
     skill: Optional[str] = None
     source: Optional[str] = None
 
@@ -610,10 +637,18 @@ def update_development_area(
     if not area:
         raise HTTPException(status_code=404, detail="Development area not found")
 
+    if updates.title is not None:
+        area.title = updates.title
     if updates.skill is not None:
         area.skill = updates.skill
     if updates.source is not None:
         area.source = updates.source
+
+    # Only set updated_at if the column exists
+    try:
+        area.updated_at = datetime.now()
+    except:
+        pass
 
     db.commit()
     db.refresh(area)
@@ -705,6 +740,7 @@ def delete_project(
 # FAILURES - UPDATE & DELETE
 # ========================================
 class FailureUpdate(BaseModel):
+    title: Optional[str] = None
     failure_text: Optional[str] = None
     learning: Optional[str] = None
     scar: Optional[str] = None
@@ -726,6 +762,8 @@ def update_failure(
     if not failure:
         raise HTTPException(status_code=404, detail="Failure not found")
 
+    if updates.title is not None:
+        failure.title = updates.title
     if updates.failure_text is not None:
         failure.failure_text = updates.failure_text
     if updates.learning is not None:
@@ -812,3 +850,225 @@ def delete_opportunity(
     db.delete(opportunity)
     db.commit()
     return {"success": True, "message": "Opportunity deleted"}
+
+
+# ============================================
+# VALUES - FULL CRUD
+# ============================================
+
+class ValueCreate(BaseModel):
+    title: str
+    value_text: str
+    why: Optional[str] = None
+
+
+class ValueUpdate(BaseModel):
+    title: Optional[str] = None
+    value_text: Optional[str] = None
+    why: Optional[str] = None
+
+
+class ValueResponse(BaseModel):
+    id: int
+    user_number: str
+    title: str
+    value_text: str
+    why: Optional[str]
+    first_seen_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/values", response_model=list[ValueResponse])
+def get_values(
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Get all values for a user"""
+    values = db.query(JourneyValue).filter(
+        JourneyValue.user_number == user_number
+    ).order_by(JourneyValue.first_seen_at.desc()).all()
+    return values
+
+
+@router.post("/values", response_model=ValueResponse)
+def create_value(
+        value_data: ValueCreate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Create a new value"""
+    new_value = JourneyValue(
+        user_number=user_number,
+        title=value_data.title,
+        value_text=value_data.value_text,
+        why=value_data.why,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(new_value)
+    db.commit()
+    db.refresh(new_value)
+    return new_value
+
+
+@router.put("/values/{value_id}", response_model=ValueResponse)
+def update_value(
+        value_id: int,
+        value_data: ValueUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update a value"""
+    value = db.query(JourneyValue).filter(
+        JourneyValue.id == value_id,
+        JourneyValue.user_number == user_number
+    ).first()
+
+    if not value:
+        raise HTTPException(status_code=404, detail="Value not found")
+
+    if value_data.title is not None:
+        value.title = value_data.title
+    if value_data.value_text is not None:
+        value.value_text = value_data.value_text
+    if value_data.why is not None:
+        value.why = value_data.why
+
+    value.updated_at = datetime.now()
+    db.commit()
+    db.refresh(value)
+    return value
+
+
+@router.delete("/values/{value_id}")
+def delete_value(
+        value_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete a value"""
+    value = db.query(JourneyValue).filter(
+        JourneyValue.id == value_id,
+        JourneyValue.user_number == user_number
+    ).first()
+
+    if not value:
+        raise HTTPException(status_code=404, detail="Value not found")
+
+    db.delete(value)
+    db.commit()
+    return {"success": True, "message": "Value deleted"}
+
+
+# ============================================
+# ACHIEVEMENTS - FULL CRUD
+# ============================================
+
+class AchievementCreate(BaseModel):
+    title: str
+    achievement_text: str
+    impact: Optional[str] = None
+
+
+class AchievementUpdate(BaseModel):
+    title: Optional[str] = None
+    achievement_text: Optional[str] = None
+    impact: Optional[str] = None
+
+
+class AchievementResponse(BaseModel):
+    id: int
+    user_number: str
+    title: str
+    achievement_text: str
+    impact: Optional[str]
+    first_seen_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/achievements", response_model=list[AchievementResponse])
+def get_achievements(
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Get all achievements for a user"""
+    achievements = db.query(JourneyAchievement).filter(
+        JourneyAchievement.user_number == user_number
+    ).order_by(JourneyAchievement.first_seen_at.desc()).all()
+    return achievements
+
+
+@router.post("/achievements", response_model=AchievementResponse)
+def create_achievement(
+        achievement_data: AchievementCreate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Create a new achievement"""
+    new_achievement = JourneyAchievement(
+        user_number=user_number,
+        title=achievement_data.title,
+        achievement_text=achievement_data.achievement_text,
+        impact=achievement_data.impact,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    db.add(new_achievement)
+    db.commit()
+    db.refresh(new_achievement)
+    return new_achievement
+
+
+@router.put("/achievements/{achievement_id}", response_model=AchievementResponse)
+def update_achievement(
+        achievement_id: int,
+        achievement_data: AchievementUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update an achievement"""
+    achievement = db.query(JourneyAchievement).filter(
+        JourneyAchievement.id == achievement_id,
+        JourneyAchievement.user_number == user_number
+    ).first()
+
+    if not achievement:
+        raise HTTPException(status_code=404, detail="Achievement not found")
+
+    if achievement_data.title is not None:
+        achievement.title = achievement_data.title
+    if achievement_data.achievement_text is not None:
+        achievement.achievement_text = achievement_data.achievement_text
+    if achievement_data.impact is not None:
+        achievement.impact = achievement_data.impact
+
+    achievement.updated_at = datetime.now()
+    db.commit()
+    db.refresh(achievement)
+    return achievement
+
+
+@router.delete("/achievements/{achievement_id}")
+def delete_achievement(
+        achievement_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Delete an achievement"""
+    achievement = db.query(JourneyAchievement).filter(
+        JourneyAchievement.id == achievement_id,
+        JourneyAchievement.user_number == user_number
+    ).first()
+
+    if not achievement:
+        raise HTTPException(status_code=404, detail="Achievement not found")
+
+    db.delete(achievement)
+    db.commit()
+    return {"success": True, "message": "Achievement deleted"}
