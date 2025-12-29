@@ -130,7 +130,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState({ type: null, id: null });
   const [hoveredTopic, setHoveredTopic] = useState(null);
-  const [selectedItem, setSelectedItem] = useState(null);
 
   const anglePerDim = 360 / DIMENSIONS.length;
 
@@ -146,12 +145,12 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
     if (selectedTopic === topic) {
       setSelectedTopic(null);
       setTopicData([]);
-      setSelectedItem(null);
+      setEditing({ type: null, id: null });
       return;
     }
 
     setSelectedTopic(topic);
-    setSelectedItem(null); // Clear selected item when switching topics
+    setEditing({ type: null, id: null }); // Clear editing state when switching topics
     setLoading(true);
 
     try {
@@ -177,11 +176,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
     }
   };
 
-  const closeItemModal = () => {
-    setSelectedItem(null);
-    setEditing({ type: null, id: null });
-  };
-
   const updateItem = async (id, updates) => {
     const endpoint = TOPIC_ENDPOINTS[selectedTopic];
     
@@ -198,8 +192,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       });
       const data = response.data?.data || response.data || [];
       setTopicData(Array.isArray(data) ? data : []);
-      setEditing({ type: null, id: null });
-      setSelectedItem(null); // Close the item modal after save
+      setEditing({ type: null, id: null }); // Close editing after save
     } catch (err) {
       console.error(`Error updating ${selectedTopic}:`, err);
       alert(`Failed to update ${selectedTopic}`);
@@ -222,7 +215,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       });
       const data = response.data?.data || response.data || [];
       setTopicData(Array.isArray(data) ? data : []);
-      setSelectedItem(null); // Close the item modal after delete
+      setEditing({ type: null, id: null }); // Close editing after delete
     } catch (err) {
       console.error(`Error deleting ${selectedTopic}:`, err);
       alert(`Failed to delete ${selectedTopic}`);
@@ -239,12 +232,17 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
         A comprehensive framework for executive development
       </p>
 
-      {/* SVG Wheel - moved higher on screen */}
-      <div className="flex justify-center items-start mb-6">
-        <svg 
-          viewBox="0 0 1200 1200" 
-          className="w-full max-w-[280px] md:max-w-[500px] lg:max-w-[700px] h-auto"
-        >
+      {/* Main Layout: Wheel + Content Side-by-Side */}
+      <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
+        
+        {/* LEFT SIDE: Wheel + Hover Text */}
+        <div className="flex-shrink-0 lg:w-[500px]">
+          {/* SVG Wheel */}
+          <div className="flex justify-center items-start mb-4">
+            <svg 
+              viewBox="0 0 1200 1200" 
+              className="w-full max-w-[280px] md:max-w-[400px] lg:max-w-[500px] h-auto"
+            >
           {/* Center */}
           <circle cx={600} cy={600} r={R_CENTER} fill="#0F172A" />
           <text
@@ -360,164 +358,96 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
         </svg>
       </div>
 
-      {/* Hover Tooltip - "Why it matters" */}
-      {hoveredTopic && (
-        <div className="max-w-2xl mx-auto mb-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r">
-          <h3 className="text-base md:text-lg font-semibold text-blue-900 mb-2">
-            Why {hoveredTopic} Matters
-          </h3>
-          <p className="text-sm md:text-base text-blue-800 leading-relaxed">
-            {WHY_IT_MATTERS[hoveredTopic]}
-          </p>
-        </div>
-      )}
+      {/* Hover Tooltip - "Why it matters" - Below wheel on left side */}
+      <div className="min-h-[120px] md:min-h-[140px]">
+        {hoveredTopic ? (
+          <div className="bg-blue-50 border-l-4 border-blue-500 p-3 md:p-4 rounded-r">
+            <h3 className="text-sm md:text-base lg:text-lg font-semibold text-blue-900 mb-2">
+              Why {hoveredTopic} Matters
+            </h3>
+            <p className="text-xs md:text-sm lg:text-base text-blue-800 leading-relaxed">
+              {WHY_IT_MATTERS[hoveredTopic]}
+            </p>
+          </div>
+        ) : (
+          <div className="text-center text-slate-400 text-xs md:text-sm p-4">
+            Hover over any topic to learn why it matters
+          </div>
+        )}
+      </div>
+    </div>
 
-      {/* Selected Topic Data Display */}
+    {/* RIGHT SIDE: Selected Topic Data */}
+    <div className="flex-1 min-h-[500px]">
       {selectedTopic && (
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-white border-2 border-slate-300 rounded-lg shadow-lg p-4 md:p-6">
-            {/* Header */}
-            <div className="flex justify-between items-start mb-4 pb-4 border-b">
-              <div className="flex-1">
-                <h2 className="text-xl md:text-2xl font-bold text-slate-800 mb-2">
-                  {selectedTopic}
-                </h2>
-                <p className="text-sm md:text-base text-slate-600 leading-relaxed">
-                  {WHY_IT_MATTERS[selectedTopic]}
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  setSelectedTopic(null);
-                  setTopicData([]);
-                  setSelectedItem(null);
-                }}
-                className="ml-4 text-slate-400 hover:text-slate-600 text-2xl md:text-3xl leading-none"
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Content */}
-            {loading ? (
-              <div className="flex justify-center items-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-              </div>
-            ) : topicData.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-sm md:text-base text-slate-600">
-                  No {selectedTopic.toLowerCase()} captured yet. Share with Alfred to see them here!
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-                {topicData.map((item) => (
-                  <DataCard
-                    key={item.id}
-                    item={item}
-                    topic={selectedTopic}
-                    onClick={() => setSelectedItem(item)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Individual Item Modal - only when clicking a specific card */}
-      {selectedItem && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={closeItemModal}
-        >
-          <div 
-            className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="sticky top-0 bg-white border-b border-slate-200 p-4 md:p-6 flex justify-between items-center">
-              <h3 className="text-lg md:text-xl font-bold text-slate-800">
+        <div className="bg-white border-2 border-slate-300 rounded-lg shadow-lg p-3 md:p-4 lg:p-6 h-full">
+          {/* Header */}
+          <div className="flex justify-between items-start mb-4 pb-3 md:pb-4 border-b">
+            <div className="flex-1">
+              <h2 className="text-lg md:text-xl lg:text-2xl font-bold text-slate-800 mb-2">
                 {selectedTopic}
-              </h3>
-              <button
-                onClick={closeItemModal}
-                className="text-slate-400 hover:text-slate-600 text-2xl md:text-3xl leading-none"
-              >
-                ×
-              </button>
+              </h2>
+              <p className="text-xs md:text-sm lg:text-base text-slate-600 leading-relaxed">
+                {WHY_IT_MATTERS[selectedTopic]}
+              </p>
             </div>
-
-            {/* Modal Content */}
-            <div className="p-4 md:p-6">
-              <DataCardDetail
-                item={selectedItem}
-                topic={selectedTopic}
-                isEditing={editing.id === selectedItem.id}
-                onEdit={() => setEditing({ type: selectedTopic, id: selectedItem.id })}
-                onCancelEdit={() => setEditing({ type: null, id: null })}
-                onSave={(updates) => updateItem(selectedItem.id, updates)}
-                onDelete={() => deleteItem(selectedItem.id)}
-              />
-            </div>
+            <button
+              onClick={() => {
+                setSelectedTopic(null);
+                setTopicData([]);
+                setEditing({ type: null, id: null });
+              }}
+              className="ml-4 text-slate-400 hover:text-slate-600 text-2xl md:text-3xl leading-none flex-shrink-0"
+            >
+              ×
+            </button>
           </div>
+
+          {/* Content */}
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            </div>
+          ) : topicData.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-sm md:text-base text-slate-600">
+                No {selectedTopic.toLowerCase()} captured yet. Share with Alfred to see them here!
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3 md:space-y-4 overflow-y-auto max-h-[calc(100vh-300px)]">
+              {topicData.map((item) => (
+                <DataCardInlineEdit
+                  key={item.id}
+                  item={item}
+                  topic={selectedTopic}
+                  isEditing={editing.id === item.id}
+                  onStartEdit={() => setEditing({ type: selectedTopic, id: item.id })}
+                  onCancelEdit={() => setEditing({ type: null, id: null })}
+                  onSave={(updates) => updateItem(item.id, updates)}
+                  onDelete={() => deleteItem(item.id)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
+    </div>
+  </div>
     </div>
   );
 }
 
-// Simple preview card for grid display
-function DataCard({ item, topic, onClick }) {
-  const getPreviewText = () => {
-    switch (topic) {
-      case "Values": return item.value_text;
-      case "Strengths": return item.strength;
-      case "Goals": return item.goal_text;
-      case "Energy Sources": return item.source_text;
-      case "Energy Drains": return item.drain_text;
-      case "Recovery": return item.method_text;
-      case "Procrastination": return item.pattern_text;
-      case "Execution System":
-      case "Prioritization":
-      case "Development Plan": return item.system_text;
-      case "Team Composition": return item.composition_text;
-      case "Inspire": return item.inspiration_text;
-      case "Coach & Delegate": return item.moment_text;
-      case "Failures & Scars": return item.failure_text;
-      case "Development Opportunities": return item.skill;
-      default: return "No preview available";
+// Inline-edit card - click to edit automatically
+function DataCardInlineEdit({ item, topic, isEditing, onStartEdit, onCancelEdit, onSave, onDelete }) {
+  const [formData, setFormData] = useState(item);
+
+  // Auto-open edit mode when card is clicked
+  const handleCardClick = () => {
+    if (!isEditing) {
+      onStartEdit();
     }
   };
-
-  const truncate = (text, maxLength = 100) => {
-    if (!text) return "";
-    return text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
-  };
-
-  return (
-    <div 
-      className="bg-white border border-gray-200 rounded-lg p-3 md:p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-      onClick={onClick}
-    >
-      {item.title && (
-        <h4 className="text-sm md:text-base font-bold text-slate-800 mb-2">{item.title}</h4>
-      )}
-      <p className="text-sm md:text-base text-slate-700 leading-relaxed">
-        {truncate(getPreviewText())}
-      </p>
-      {item.first_seen_at && (
-        <p className="text-xs text-slate-400 mt-2">
-          {new Date(item.first_seen_at).toLocaleDateString()}
-        </p>
-      )}
-    </div>
-  );
-}
-
-// Detailed card with editing capability for modal
-function DataCardDetail({ item, topic, isEditing, onEdit, onCancelEdit, onSave, onDelete }) {
-  const [formData, setFormData] = useState(item);
 
   const handleSubmit = () => {
     onSave(formData);
@@ -1265,24 +1195,24 @@ function DataCardDetail({ item, topic, isEditing, onEdit, onCancelEdit, onSave, 
 
   if (isEditing) {
     return (
-      <div className="bg-white border-2 border-gray-200 rounded-lg p-4 space-y-3">
+      <div className="bg-white border-2 border-blue-300 rounded-lg p-3 md:p-4 space-y-3 shadow-lg">
         {renderEditForm()}
         <div className="flex gap-2 pt-2">
           <button
             onClick={handleSubmit}
-            className="flex-1 bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded text-sm md:text-base font-medium"
+            className="flex-1 bg-slate-700 hover:bg-slate-800 text-white px-3 md:px-4 py-2 rounded text-sm md:text-base font-medium"
           >
             Save
           </button>
           <button
             onClick={onCancelEdit}
-            className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded text-sm md:text-base font-medium"
+            className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 md:px-4 py-2 rounded text-sm md:text-base font-medium"
           >
             Cancel
           </button>
           <button
             onClick={onDelete}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm md:text-base font-medium"
+            className="px-3 md:px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm md:text-base font-medium"
           >
             Delete
           </button>
@@ -1292,21 +1222,16 @@ function DataCardDetail({ item, topic, isEditing, onEdit, onCancelEdit, onSave, 
   }
 
   return (
-    <div className="bg-white">
+    <div 
+      className="bg-white border border-gray-200 rounded-lg p-3 md:p-4 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer"
+      onClick={handleCardClick}
+    >
       {renderContent()}
-      <div className="flex justify-between items-center mt-6 pt-4 border-t">
-        {item.first_seen_at && (
-          <p className="text-xs md:text-sm text-slate-400">
-            Added {new Date(item.first_seen_at).toLocaleDateString()}
-          </p>
-        )}
-        <button
-          onClick={onEdit}
-          className="ml-auto bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded text-sm md:text-base font-medium"
-        >
-          Edit
-        </button>
-      </div>
+      {item.first_seen_at && (
+        <p className="text-xs text-slate-400 mt-3">
+          Added {new Date(item.first_seen_at).toLocaleDateString()}
+        </p>
+      )}
     </div>
   );
 }
