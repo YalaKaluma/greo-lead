@@ -428,7 +428,7 @@ export default function TodoList({ apiUrl, userNumber }) {
                   className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-lg font-medium transition-colors text-sm hidden sm:inline-block"
                   title="Set all overdue tasks to today"
                 >
-                  📅 Overdue → Today
+                   Overdue → Today
                 </button>
                 <button
                   onClick={setOverdueToToday}
