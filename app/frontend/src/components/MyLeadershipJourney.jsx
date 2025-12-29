@@ -44,15 +44,14 @@ const TOPIC_ENDPOINTS = {
   "Development Opportunities": "development-areas"
 };
 
-// "Why it matters" explanations
 const WHY_IT_MATTERS = {
-  "Strengths": "Leadership impact compounds when you deliberately use what already works instead of trying to fix everything.",
-  "Values": "Values are the rules you follow when no one is watching. They reduce inner conflict and make trade-offs easier.",
-  "Goals": "Clear goals give direction and permission. They reduce noise and help you decide what deserves attention now.",
-  "Projects": "Projects are how strategy becomes real. They need clear owners and milestones to avoid drift.",
-  "Key People": "The people around you shape your behavior more than your intentions. Structure often beats effort.",
-  "Failures & Scars": "Unexamined experiences tend to repeat. Reflection turns experience into information.",
-  "Development Opportunities": "Growth often hides inside discomfort. Naming it creates direction."
+  "Strengths": "Leadership impact compounds when you deliberately use what already works.",
+  "Values": "Values are the rules you follow when no one is watching.",
+  "Goals": "Clear goals give direction and reduce noise.",
+  "Projects": "Projects are how strategy becomes real.",
+  "Key People": "The people around you shape your behavior more than your intentions.",
+  "Failures & Scars": "Unexamined experiences tend to repeat.",
+  "Development Opportunities": "Growth often hides inside discomfort."
 };
 
 function polar(cx, cy, r, angleDeg) {
@@ -173,12 +172,12 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       </h1>
       <p className="text-sm md:text-base text-slate-600 mb-4 md:mb-6">Understanding your journey to shape your future</p>
 
-      {/* Main container with conditional layout */}
+      {/* Main layout with transitions */}
       <div className={`flex flex-col gap-6 transition-all duration-700 ease-in-out ${
         selectedTopic ? 'lg:flex-row lg:gap-8' : 'items-center justify-center min-h-[60vh]'
       }`}>
         
-        {/* Wheel container - shrinks and moves left when topic selected */}
+        {/* Wheel container */}
         <div className={`transition-all duration-700 ease-in-out ${
           selectedTopic ? 'lg:w-[420px] flex-shrink-0' : 'w-full max-w-[900px]'
         }`}>
@@ -293,7 +292,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
         </svg>
       </div>
 
-      {/* Hover tooltip - only when no topic selected */}
+      {/* Hover tooltip below wheel */}
       {!selectedTopic && hoveredTopic && (
         <div className="max-w-[700px] mx-auto mt-6 bg-blue-50 border-l-4 border-blue-500 p-4 md:p-6 rounded-r">
           <h3 className="text-base md:text-lg font-semibold text-blue-900 mb-2">
@@ -306,20 +305,45 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       )}
     </div>
 
-    {/* Right side content - slides in when topic selected */}
+    {/* Content panel on right */}
     {selectedTopic && (
       <div className="flex-1">
-        <TopicModal
-          topic={selectedTopic}
-          data={topicData}
-          loading={loading}
-          editing={editing}
-          onClose={closeModal}
-          onEdit={(id) => setEditing({ type: selectedTopic, id })}
-          onCancelEdit={() => setEditing({ type: null, id: null })}
-          onUpdate={updateItem}
-          onDelete={deleteItem}
-        />
+        <div className="bg-white border border-slate-300 rounded-lg shadow-lg p-4 md:p-6">
+          <div className="flex justify-between items-start mb-4 pb-4 border-b">
+            <h2 className="text-xl md:text-2xl font-semibold text-slate-800">{selectedTopic}</h2>
+            <button
+              onClick={closeModal}
+              className="text-slate-400 hover:text-slate-600 text-2xl md:text-3xl"
+            >
+              ×
+            </button>
+          </div>
+
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            </div>
+          ) : topicData.length === 0 ? (
+            <div className="text-center py-12 text-slate-500">
+              No {selectedTopic.toLowerCase()} captured yet.
+            </div>
+          ) : (
+            <div className="space-y-4 max-h-[calc(100vh-300px)] overflow-y-auto pr-2">
+              {topicData.map((item, index) => (
+                <TopicCard 
+                  key={item.id || index} 
+                  topic={selectedTopic} 
+                  item={item}
+                  isEditing={editing.type === selectedTopic && editing.id === item.id}
+                  onEdit={() => setEditing({ type: selectedTopic, id: item.id })}
+                  onCancelEdit={() => setEditing({ type: null, id: null })}
+                  onUpdate={updateItem}
+                  onDelete={() => deleteItem(item.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     )}
   </div>
@@ -327,77 +351,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   );
 }
 
-// Topic Modal Component
-function TopicModal({ topic, data, loading, editing, onClose, onEdit, onCancelEdit, onUpdate, onDelete }) {
-  return (
-    <>
-      {/* Overlay */}
-      <div
-        className="fixed inset-0 bg-black bg-opacity-50 z-40"
-        onClick={onClose}
-      />
-
-      {/* Modal */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-        <div
-          className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden pointer-events-auto flex flex-col"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Modal Header */}
-          <div className="sticky top-0 bg-slate-800 text-white px-6 py-4 flex items-center justify-between border-b border-slate-700">
-            <h2 className="text-xl font-semibold">{topic}</h2>
-            <button
-              onClick={onClose}
-              className="text-slate-300 hover:text-white text-2xl font-bold w-8 h-8 flex items-center justify-center"
-            >
-              ×
-            </button>
-          </div>
-
-          {/* Modal Body */}
-          <div className="flex-1 overflow-y-auto p-6">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              </div>
-            ) : data.length === 0 ? (
-              <div className="text-center py-12 text-slate-500">
-                No {topic.toLowerCase()} captured yet. Share them with Alfred to see them here!
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {data.map((item, index) => (
-                  <TopicCard 
-                    key={item.id || index} 
-                    topic={topic} 
-                    item={item}
-                    isEditing={editing.type === topic && editing.id === item.id}
-                    onEdit={() => onEdit(item.id)}
-                    onCancelEdit={onCancelEdit}
-                    onUpdate={onUpdate}
-                    onDelete={() => onDelete(item.id)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Modal Footer */}
-          <div className="sticky bottom-0 bg-slate-50 border-t border-gray-200 px-6 py-4 flex items-center justify-end">
-            <button
-              onClick={onClose}
-              className="px-6 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg font-medium transition-colors"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
-// Topic Card Component - renders different fields based on topic type
+// TopicCard Component
 function TopicCard({ topic, item, isEditing, onEdit, onCancelEdit, onUpdate, onDelete }) {
   const [formData, setFormData] = useState(item);
 
