@@ -129,7 +129,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   const [topicData, setTopicData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-  const [hoveredTopic, setHoveredTopic] = useState(null);
 
   const anglePerDim = 360 / DIMENSIONS.length;
 
@@ -248,18 +247,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       </p>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
-        {/* Left side: "Why it matters" text (appears on hover) - only takes space when visible */}
-        {hoveredTopic && WHY_IT_MATTERS[hoveredTopic] && (
-          <div className="w-full lg:w-64 flex-shrink-0">
-            <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-              <h3 className="font-semibold text-slate-800 mb-2">{hoveredTopic}</h3>
-              <p className="text-sm text-slate-700 leading-relaxed">
-                {WHY_IT_MATTERS[hoveredTopic]}
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Center: The wheel */}
         <div className={`flex-shrink-0 transition-all duration-300 mx-auto ${selectedTopic ? 'lg:w-[450px] lg:mx-0' : 'lg:w-full lg:max-w-4xl'}`}>
           <svg 
@@ -391,7 +378,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                       topicMidAngle
                     );
 
-                    const isHovered = hoveredTopic === topic;
                     const isSelected = selectedTopic === topic;
 
                     // Border color matches dimension gradient
@@ -401,13 +387,11 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                       <g key={topic}>
                         <path
                           d={wedgePath(R_MIDDLE, R_OUTER, topicAngleStart, topicAngleEnd)}
-                          fill={isSelected ? "#1e3a5f" : isHovered ? "#d1dce8" : "#e8eef5"}
+                          fill={isSelected ? "#1e3a5f" : "#e8eef5"}
                           stroke={borderColor}
                           strokeWidth="2"
                           style={{ cursor: "pointer", transition: "fill 0.2s" }}
                           onClick={() => handleTopicClick(topic)}
-                          onMouseEnter={() => setHoveredTopic(topic)}
-                          onMouseLeave={() => setHoveredTopic(null)}
                         />
                         <text
                           x={topicLabelPos.x}
