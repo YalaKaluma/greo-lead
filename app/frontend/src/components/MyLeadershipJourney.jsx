@@ -185,11 +185,21 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
     const endpoint = TOPIC_ENDPOINTS[selectedTopic];
     
     try {
-      await axios.put(
-        `${apiUrl}/api/journey/${endpoint}/${id}`,
-        updates,
-        { params: { user_number: userNumber } }
-      );
+      if (id) {
+        // Update existing item
+        await axios.put(
+          `${apiUrl}/api/journey/${endpoint}/${id}`,
+          updates,
+          { params: { user_number: userNumber } }
+        );
+      } else {
+        // Create new item
+        await axios.post(
+          `${apiUrl}/api/journey/${endpoint}`,
+          { ...updates, user_number: userNumber },
+          { params: { user_number: userNumber } }
+        );
+      }
       
       // Refresh data
       const response = await axios.get(`${apiUrl}/api/journey/${endpoint}`, {
@@ -199,8 +209,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       setTopicData(Array.isArray(data) ? data : []);
       setEditingItem(null);
     } catch (err) {
-      console.error(`Error updating ${selectedTopic}:`, err);
-      alert(`Failed to update ${selectedTopic}`);
+      console.error(`Error ${id ? 'updating' : 'creating'} ${selectedTopic}:`, err);
+      alert(`Failed to ${id ? 'update' : 'create'} ${selectedTopic}`);
     }
   };
 
@@ -228,12 +238,12 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   };
 
   return (
-    <div className="px-2 md:px-10 py-4 md:py-8">
+    <div className="px-2 md:px-10 py-4 md:py-6">
       {/* Page title */}
-      <h1 className="text-2xl md:text-3xl font-semibold text-slate-800 mb-1 md:mb-2">
+      <h1 className="text-2xl md:text-3xl font-semibold text-slate-800 mb-1">
         Alfred Leadership Model
       </h1>
-      <p className="text-sm md:text-base text-slate-600 mb-4 md:mb-6">
+      <p className="text-sm md:text-base text-slate-600 mb-3 md:mb-4">
         A comprehensive framework for executive development
       </p>
 
@@ -251,39 +261,39 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
         )}
 
         {/* Center: The wheel */}
-        <div className={`flex-shrink-0 transition-all duration-300 ${selectedTopic ? 'lg:w-[450px]' : 'lg:w-full lg:max-w-4xl lg:mx-auto'}`}>
+        <div className={`flex-shrink-0 transition-all duration-300 mx-auto ${selectedTopic ? 'lg:w-[450px] lg:mx-0' : 'lg:w-full lg:max-w-4xl'}`}>
           <svg 
             viewBox="0 0 1000 1000" 
             className="w-full h-auto"
           >
             {/* Define all gradients at the top level */}
             <defs>
-              {/* Center gradient - dark blue */}
+              {/* Center gradient - dark navy blue */}
               <linearGradient id="center-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#1e3a8a" />
-                <stop offset="100%" stopColor="#1e40af" />
+                <stop offset="0%" stopColor="#1e3a5f" />
+                <stop offset="100%" stopColor="#2d4a6f" />
               </linearGradient>
               
-              {/* Dimension gradients - all sophisticated blues */}
+              {/* Dimension gradients - soft blues for middle ring */}
               <linearGradient id="gradient-0" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#3b82f6" />
-                <stop offset="100%" stopColor="#2563eb" />
+                <stop offset="0%" stopColor="#a8c5e6" />
+                <stop offset="100%" stopColor="#8badce" />
               </linearGradient>
               <linearGradient id="gradient-1" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#60a5fa" />
-                <stop offset="100%" stopColor="#3b82f6" />
+                <stop offset="0%" stopColor="#9cb8d9" />
+                <stop offset="100%" stopColor="#7fa0c5" />
               </linearGradient>
               <linearGradient id="gradient-2" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#2563eb" />
-                <stop offset="100%" stopColor="#1d4ed8" />
+                <stop offset="0%" stopColor="#b5ceea" />
+                <stop offset="100%" stopColor="#95b5d8" />
               </linearGradient>
               <linearGradient id="gradient-3" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#3b82f6" />
-                <stop offset="100%" stopColor="#2563eb" />
+                <stop offset="0%" stopColor="#a8c5e6" />
+                <stop offset="100%" stopColor="#8badce" />
               </linearGradient>
               <linearGradient id="gradient-4" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#60a5fa" />
-                <stop offset="100%" stopColor="#3b82f6" />
+                <stop offset="0%" stopColor="#9cb8d9" />
+                <stop offset="100%" stopColor="#7fa0c5" />
               </linearGradient>
             </defs>
 
@@ -336,13 +346,13 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
               // Position dimension label in the MIDDLE ring (not outside)
               const labelPos = polar(CENTER.x, CENTER.y, (R_CENTER + R_MIDDLE) / 2, dimMidAngle);
 
-              // Premium monochromatic blue gradients for executive feel
+              // Elegant soft blue gradients from the reference image
               const dimGradients = [
-                { start: "#3b82f6", end: "#2563eb" }, // blue-500 to blue-600
-                { start: "#60a5fa", end: "#3b82f6" }, // blue-400 to blue-500
-                { start: "#2563eb", end: "#1d4ed8" }, // blue-600 to blue-700
-                { start: "#3b82f6", end: "#2563eb" }, // blue-500 to blue-600
-                { start: "#60a5fa", end: "#3b82f6" }, // blue-400 to blue-500
+                { start: "#a8c5e6", end: "#8badce" },
+                { start: "#9cb8d9", end: "#7fa0c5" },
+                { start: "#b5ceea", end: "#95b5d8" },
+                { start: "#a8c5e6", end: "#8badce" },
+                { start: "#9cb8d9", end: "#7fa0c5" },
               ];
               const gradient = dimGradients[dimIdx % dimGradients.length];
               const gradientId = `gradient-${dimIdx}`;
@@ -391,9 +401,9 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                       <g key={topic}>
                         <path
                           d={wedgePath(R_MIDDLE, R_OUTER, topicAngleStart, topicAngleEnd)}
-                          fill={isSelected ? "#1e293b" : isHovered ? "#f1f5f9" : "white"}
+                          fill={isSelected ? "#1e3a5f" : isHovered ? "#d1dce8" : "#e8eef5"}
                           stroke={borderColor}
-                          strokeWidth="3"
+                          strokeWidth="2"
                           style={{ cursor: "pointer", transition: "fill 0.2s" }}
                           onClick={() => handleTopicClick(topic)}
                           onMouseEnter={() => setHoveredTopic(topic)}
@@ -453,9 +463,15 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                 </div>
               ) : topicData.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-slate-600">
-                    No {selectedTopic.toLowerCase()} captured yet. Share with Alfred to see them here!
+                  <p className="text-slate-600 mb-4">
+                    No {selectedTopic.toLowerCase()} captured yet. Share with Alfred or add one here!
                   </p>
+                  <button
+                    onClick={() => setEditingItem({ id: null, isNew: true })}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium"
+                  >
+                    + Add {selectedTopic}
+                  </button>
                 </div>
               ) : (
                 <div className="space-y-3 max-h-[600px] overflow-y-auto">
@@ -1037,7 +1053,7 @@ function EditForm({ item, topic, onSave, onDelete, onCancel }) {
           onClick={handleSubmit}
           className="flex-1 bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded-md font-medium"
         >
-          Save Changes
+          {item.id ? 'Save Changes' : 'Create'}
         </button>
         <button
           onClick={onCancel}
@@ -1045,12 +1061,14 @@ function EditForm({ item, topic, onSave, onDelete, onCancel }) {
         >
           Cancel
         </button>
-        <button
-          onClick={onDelete}
-          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium"
-        >
-          Delete
-        </button>
+        {item.id && (
+          <button
+            onClick={onDelete}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium"
+          >
+            Delete
+          </button>
+        )}
       </div>
     </div>
   );
