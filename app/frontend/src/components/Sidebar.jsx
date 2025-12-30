@@ -5,9 +5,9 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onC
     { id: 'my-goals', label: 'My Vision & Goals', disabled: false },
     { id: 'todo-list', label: 'My Tasks', disabled: false },
     { id: 'my-team', label: 'My Team', disabled: false },
+    { id: 'my-habits', label: 'My Habits', disabled: false },
     { id: 'my-journey', label: 'My Journey', disabled: false },
     { id: 'my-journal', label: 'My Journal', disabled: false },
-    { id: 'my-habits', label: 'My Habits', disabled: false },
     { id: 'my-feedback', label: 'My Feedback', disabled: true },
     { id: 'my-calendar', label: 'My Calendar', disabled: true },
   ];
