@@ -52,8 +52,7 @@ export default function Welcome({ onLogin }) {
       localStorage.setItem("needs_tour", data.needs_tour.toString());
       
       // Trigger onboarding data processing
-      // ✅ FIX: URL encode the user_number to preserve the + sign
-      await fetch(`${API_URL}/api/onboarding/process-onboarding-data?user_number=${encodeURIComponent(data.user_number)}`, {
+      await fetch(`${API_URL}/api/onboarding/process-onboarding-data?user_number=${data.user_number}`, {
         method: "POST"
       });
 
