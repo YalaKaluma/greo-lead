@@ -264,38 +264,40 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
       )}
 
       {/* Time Horizon Filter */}
-      <div className="mb-6 flex gap-3">
-        <button
-          onClick={() => setTimeFilter('long')}
-          className={`px-6 py-3 rounded-lg font-medium transition-all ${
-            timeFilter === 'long'
-              ? 'bg-slate-800 text-white shadow-md'
-              : 'bg-white text-slate-700 border border-gray-300 hover:bg-gray-50'
-          }`}
-        >
-          Long Term
-        </button>
-        <button
-          onClick={() => setTimeFilter('medium')}
-          className={`px-6 py-3 rounded-lg font-medium transition-all ${
-            timeFilter === 'medium'
-              ? 'bg-slate-800 text-white shadow-md'
-              : 'bg-white text-slate-700 border border-gray-300 hover:bg-gray-50'
-          }`}
-        >
-          Medium Term
-        </button>
-        <button
-          onClick={() => setTimeFilter('short')}
-          className={`px-6 py-3 rounded-lg font-medium transition-all ${
-            timeFilter === 'short'
-              ? 'bg-slate-800 text-white shadow-md'
-              : 'bg-white text-slate-700 border border-gray-300 hover:bg-gray-50'
-          }`}
-        >
-          Short Term
-        </button>
-      </div>
+      {!hierarchicalView && (
+        <div className="mb-6 flex gap-3">
+          <button
+            onClick={() => setTimeFilter('long')}
+            className={`px-6 py-3 rounded-lg font-medium transition-all ${
+              timeFilter === 'long'
+                ? 'bg-slate-800 text-white shadow-md'
+                : 'bg-white text-slate-700 border border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            Long Term
+          </button>
+          <button
+            onClick={() => setTimeFilter('medium')}
+            className={`px-6 py-3 rounded-lg font-medium transition-all ${
+              timeFilter === 'medium'
+                ? 'bg-slate-800 text-white shadow-md'
+                : 'bg-white text-slate-700 border border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            Medium Term
+          </button>
+          <button
+            onClick={() => setTimeFilter('short')}
+            className={`px-6 py-3 rounded-lg font-medium transition-all ${
+              timeFilter === 'short'
+                ? 'bg-slate-800 text-white shadow-md'
+                : 'bg-white text-slate-700 border border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            Short Term
+          </button>
+        </div>
+      )}
 
       {/* Hierarchical View Header */}
       {hierarchicalView && (
@@ -403,6 +405,9 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
               g.parent_goal_id === parentId && g.time_horizon === 'short'
             ).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
           };
+          
+          // Check if any MT goal has ST children
+          const hasAnyShortTermGoals = mediumChildren.some(mg => getShortTermChildren(mg.id).length > 0);
 
           return (
             <div className="space-y-6">
@@ -448,13 +453,9 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
                     )}
                   </div>
                   
-                  {/* Single vertical line going down from long term */}
+                  {/* Vertical line going down from long term - OUTSIDE the box */}
                   {mediumChildren.length > 0 && (
-                    <>
-                      <div className="absolute left-1/2 transform -translate-x-1/2 w-0.5 bg-slate-300 h-8 top-full"></div>
-                      {/* Horizontal line across all medium term goals */}
-                      <div className="absolute left-0 right-0 h-0.5 bg-slate-300" style={{ top: 'calc(100% + 32px)' }}></div>
-                    </>
+                    <div className="absolute left-1/2 transform -translate-x-1/2 w-0.5 bg-slate-300 h-6" style={{ top: '100%' }}></div>
                   )}
                 </div>
               </div>
@@ -470,15 +471,18 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
                   </div>
                   
                   {/* Goals Grid */}
-                  <div className="flex-1">
+                  <div className="flex-1 relative pt-6">
+                    {/* Single horizontal line at the top */}
+                    <div className="absolute left-0 right-0 h-0.5 bg-slate-300 top-0"></div>
+                    
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {mediumChildren.map((medGoal) => {
                         const shortTermChildren = getShortTermChildren(medGoal.id);
                         
                         return (
                           <div key={medGoal.id} className="relative">
-                            {/* Vertical line up to horizontal line */}
-                            <div className="absolute left-1/2 transform -translate-x-1/2 w-0.5 bg-slate-300 h-8 -top-8"></div>
+                            {/* Vertical line up to horizontal line - OUTSIDE the box */}
+                            <div className="absolute left-1/2 transform -translate-x-1/2 w-0.5 bg-slate-300 h-6 -top-6"></div>
                             
                             {/* Medium Term Goal Card */}
                             <div
@@ -503,15 +507,15 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
                             {/* Short Term Goals stacked underneath this MT goal */}
                             {shortTermChildren.length > 0 && (
                               <div className="mt-4 pl-10 relative">
-                                {/* Vertical line down from MT goal */}
-                                <div className="absolute left-5 top-0 w-0.5 bg-slate-300 h-full"></div>
+                                {/* Vertical line down from MT goal - starts BELOW the box */}
+                                <div className="absolute left-5 w-0.5 bg-slate-300" style={{ top: '-16px', height: 'calc(100% + 16px)' }}></div>
                                 
                                 {/* Stack of short term goals */}
                                 <div className="space-y-3">
-                                  {shortTermChildren.map((shortGoal) => (
+                                  {shortTermChildren.map((shortGoal, idx) => (
                                     <div key={shortGoal.id} className="relative">
                                       {/* Horizontal line connecting to vertical */}
-                                      <div className="absolute left-0 top-1/2 w-5 h-0.5 bg-slate-300 -translate-x-5"></div>
+                                      <div className="absolute top-1/2 w-5 h-0.5 bg-slate-300 -left-5"></div>
                                       
                                       {/* Arrow pointing right */}
                                       <div className="absolute left-0 top-1/2 transform -translate-y-1/2">
@@ -547,6 +551,18 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
                       })}
                     </div>
                   </div>
+                </div>
+              )}
+              
+              {/* Short Term Label - shown once if any ST goals exist */}
+              {hasAnyShortTermGoals && (
+                <div className="flex gap-6">
+                  <div className="w-32 flex-shrink-0">
+                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      Short Term
+                    </div>
+                  </div>
+                  <div className="flex-1"></div>
                 </div>
               )}
             </div>

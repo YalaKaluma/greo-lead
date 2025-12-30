@@ -433,3 +433,45 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
             status_code=500,
             detail=f"Failed to process onboarding data: {str(e)}"
         )
+
+
+# ============== DEBUG ENDPOINT (TEMPORARY) ==============
+
+@router.get("/debug/user-data")
+async def debug_user_data(user_number: str, db: Session = Depends(get_db)):
+    """
+    DEBUG ENDPOINT: Check what data is actually in the database for a user.
+
+    This helps diagnose if onboarding_data is being saved to the database.
+    Call this after completing WhatsApp onboarding to see what's stored.
+
+    Example: GET /api/onboarding/debug/user-data?user_number=whatsapp:+14709150111
+    """
+    print(f"\n🔍 DEBUG ENDPOINT: Checking user data for {user_number}")
+
+    user = db.query(User).filter(User.phone_number == user_number).first()
+
+    if not user:
+        print(f"❌ DEBUG: User not found")
+        return {"error": "User not found", "user_number": user_number}
+
+    print(f"✅ DEBUG: User found - id={user.id}")
+    print(f"   onboarding_data type: {type(user.onboarding_data)}")
+    print(f"   onboarding_data value: {user.onboarding_data}")
+
+    result = {
+        "user_id": user.id,
+        "name": user.name,
+        "profession": user.profession,
+        "phone_number": user.phone_number,
+        "onboarding_step": str(user.onboarding_step),
+        "onboarding_completed": user.onboarding_completed,
+        "onboarding_data": user.onboarding_data,
+        "onboarding_data_type": str(type(user.onboarding_data)),
+        "onboarding_data_keys": list((user.onboarding_data or {}).keys()),
+        "onboarding_data_is_empty": user.onboarding_data is None or len(user.onboarding_data or {}) == 0,
+        "temp_password": user.temp_password,  # To verify password was saved
+    }
+
+    print(f"   Returning: {result}")
+    return result

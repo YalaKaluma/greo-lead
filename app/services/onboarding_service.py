@@ -1,5 +1,7 @@
 """
-Onboarding Service - Executive Onboarding Flow (WITH DEBUG LOGGING)
+Onboarding Service - Executive Onboarding Flow
+
+✅ ENHANCED with db.refresh() after every commit to ensure data persists
 """
 
 from sqlalchemy.orm import Session
@@ -64,6 +66,7 @@ class OnboardingConversation:
             user.onboarding_step = 'NAME'
             user.start_trial()
             db.commit()
+            db.refresh(user)  # ← ADDED: Verify commit worked
             print(f"✅ DEBUG [INITIAL]: Trial started, step updated to NAME")
             return OnboardingConversation._greeting()
 
@@ -75,13 +78,16 @@ class OnboardingConversation:
             if name:
                 user.name = name
                 user.onboarding_step = 'PROFESSION'
-                # FIX: Reassign dict to trigger SQLAlchemy change detection
+                # With MutableDict, this should work, but let's be explicit
                 data = user.onboarding_data or {}
                 data['name'] = name
                 user.onboarding_data = data
+
                 db.commit()
+                db.refresh(user)  # ← ADDED: Verify commit worked
+
                 print(f"✅ DEBUG [NAME]: Saved name='{name}', moved to PROFESSION")
-                print(f"   onboarding_data now: {user.onboarding_data}")
+                print(f"   onboarding_data after refresh: {user.onboarding_data}")
                 return OnboardingConversation._ask_profession(name)
             else:
                 print(f"❌ DEBUG [NAME]: Could not extract name from message")
@@ -94,13 +100,15 @@ class OnboardingConversation:
 
             user.profession = profession
             user.onboarding_step = 'GOAL'
-            # FIX: Reassign dict to trigger SQLAlchemy change detection
             data = user.onboarding_data or {}
             data['profession'] = profession
             user.onboarding_data = data
+
             db.commit()
+            db.refresh(user)  # ← ADDED: Verify commit worked
+
             print(f"✅ DEBUG [PROFESSION]: Saved, moved to GOAL")
-            print(f"   onboarding_data now: {user.onboarding_data}")
+            print(f"   onboarding_data after refresh: {user.onboarding_data}")
             return OnboardingConversation._ask_goal(user.name, profession)
 
         # GOAL: Collecting first goal
@@ -109,13 +117,15 @@ class OnboardingConversation:
             print(f"📝 DEBUG [GOAL]: Saving goal='{goal}'")
 
             user.onboarding_step = 'GOAL_WHY'
-            # FIX: Reassign dict to trigger SQLAlchemy change detection
             data = user.onboarding_data or {}
             data['first_goal'] = goal
             user.onboarding_data = data
+
             db.commit()
+            db.refresh(user)  # ← ADDED: Verify commit worked
+
             print(f"✅ DEBUG [GOAL]: Saved, moved to GOAL_WHY")
-            print(f"   onboarding_data now: {user.onboarding_data}")
+            print(f"   onboarding_data after refresh: {user.onboarding_data}")
             return OnboardingConversation._ask_goal_why(goal)
 
         # GOAL_WHY: Collecting goal motivation (optional, can skip)
@@ -126,33 +136,41 @@ class OnboardingConversation:
                 print(f"⏭️ DEBUG [GOAL_WHY]: User skipped, moving to TASKS")
                 user.onboarding_step = 'TASKS'
                 db.commit()
+                db.refresh(user)  # ← ADDED: Verify commit worked
                 return OnboardingConversation._ask_tasks(user.name)
             else:
                 why = message.strip()
                 print(f"📝 DEBUG [GOAL_WHY]: Saving why='{why}'")
-                # FIX: Reassign dict to trigger SQLAlchemy change detection
+
                 data = user.onboarding_data or {}
                 data['goal_why'] = why
                 user.onboarding_data = data
                 user.onboarding_step = 'TASKS'
+
                 db.commit()
+                db.refresh(user)  # ← ADDED: Verify commit worked
+
                 print(f"✅ DEBUG [GOAL_WHY]: Saved, moved to TASKS")
-                print(f"   onboarding_data now: {user.onboarding_data}")
+                print(f"   onboarding_data after refresh: {user.onboarding_data}")
                 return OnboardingConversation._ask_tasks(user.name)
 
         # TASKS: Collecting initial tasks
         elif step == 'TASKS':
             tasks_text = message.strip()
-            print(f"📝 DEBUG [TASKS]: Saving tasks_raw='{tasks_text[:100]}...'")
+            print(f"📝 DEBUG [TASKS]: Saving tasks_raw (length={len(tasks_text)} chars)")
+            print(f"   tasks_raw preview: '{tasks_text[:100]}...'")
 
-            # FIX: Reassign dict to trigger SQLAlchemy change detection
             data = user.onboarding_data or {}
             data['tasks_raw'] = tasks_text
             user.onboarding_data = data
             user.onboarding_step = 'QUICK_WIN'
+
             db.commit()
+            db.refresh(user)  # ← ADDED: Verify commit worked
+
             print(f"✅ DEBUG [TASKS]: Saved, moved to QUICK_WIN")
-            print(f"   onboarding_data now: {user.onboarding_data}")
+            print(f"   onboarding_data after refresh: {user.onboarding_data}")
+            print(f"   onboarding_data keys: {list((user.onboarding_data or {}).keys())}")
             return OnboardingConversation._ask_quick_win()
 
         # QUICK_WIN: Identifying first task to tackle
@@ -160,18 +178,22 @@ class OnboardingConversation:
             quick_win = message.strip()
             print(f"📝 DEBUG [QUICK_WIN]: Saving quick_win='{quick_win}'")
 
-            # FIX: Reassign dict to trigger SQLAlchemy change detection
             data = user.onboarding_data or {}
             data['quick_win'] = quick_win
             user.onboarding_data = data
             user.onboarding_step = 'APP_LINK_SENT'
+
             db.commit()
+            db.refresh(user)  # ← ADDED: Verify commit worked
+
             print(f"✅ DEBUG [QUICK_WIN]: Saved, moved to APP_LINK_SENT")
-            print(f"   onboarding_data now: {user.onboarding_data}")
+            print(f"   onboarding_data after refresh: {user.onboarding_data}")
+            print(f"   FINAL onboarding_data keys: {list((user.onboarding_data or {}).keys())}")
 
             # Generate temp password and send link
             temp_password = user.generate_temp_password()
             db.commit()
+            db.refresh(user)  # ← ADDED: Verify password was saved
             print(f"🔑 DEBUG [QUICK_WIN]: Generated temp_password='{temp_password}'")
 
             return OnboardingConversation._send_app_link(user.name, user.id, temp_password)
@@ -198,33 +220,33 @@ class OnboardingConversation:
 
     @staticmethod
     def _greeting() -> str:
-        return """Welcome to Leadership OS. I'm Alfred, your AI Chief of Staff.
+        return """Welcome! I'm Alfred, your AI chief of staff.
 
-I'll help you think clearly, reflect intentionally, and execute effectively. Let's get you set up.
+I'm here to help you think clearly and execute better.
 
-What's your name?"""
+Let's start simple - what's your name?"""
 
     @staticmethod
     def _ask_profession(name: str) -> str:
-        return f"""Good to meet you, {name}.
+        return f"""Great to meet you, {name}!
 
-What's your current role or profession?"""
+What do you do? (Your role or profession)"""
 
     @staticmethod
     def _ask_goal(name: str, profession: str) -> str:
-        return f"""Thanks, {name}.
+        return f"""Perfect, {name}.
 
-As a {profession}, what's one professional goal you're working toward in the next 6-12 months?"""
+As a {profession}, what's one meaningful goal you want to achieve in the next 6-12 months?"""
 
     @staticmethod
     def _ask_goal_why(goal: str) -> str:
-        return f"""That's a meaningful goal.
+        return f"""Got it: "{goal}"
 
-What's driving this? Why does this matter to you? (Type 'skip' if you'd prefer to add this later)"""
+Why is this important to you? (Or type 'skip' if you want to move on)"""
 
     @staticmethod
     def _ask_tasks(name: str) -> str:
-        return f"""Perfect. Now, {name}, what's on your plate this week to move that goal forward?
+        return f"""Excellent, {name}.
 
 Share a few key tasks - just list them naturally."""
 
@@ -291,6 +313,7 @@ See you inside."""
         user.onboarding_completed = True
         user.onboarding_step = 'COMPLETED'
         db.commit()
+        db.refresh(user)
         print(f"✅ DEBUG [complete_onboarding]: Done")
 
 
