@@ -397,23 +397,12 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
             g.parent_goal_id === parentGoal.id && g.time_horizon === 'medium'
           ).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
           
-          // Get ALL short term goals under ANY medium term goal OR directly under the long term
-          const allShortTermGoals = [];
-          
-          // First, get short-term goals directly under long term
-          const directShortChildren = goals.filter(g => 
-            g.parent_goal_id === parentGoal.id && g.time_horizon === 'short'
-          ).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-          
-          allShortTermGoals.push(...directShortChildren);
-          
-          // Then, get short-term goals under each medium term goal
-          mediumChildren.forEach(medGoal => {
-            const mediumShortChildren = goals.filter(g => 
-              g.parent_goal_id === medGoal.id && g.time_horizon === 'short'
+          // Function to get short term children for a specific goal
+          const getShortTermChildren = (parentId) => {
+            return goals.filter(g => 
+              g.parent_goal_id === parentId && g.time_horizon === 'short'
             ).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-            allShortTermGoals.push(...mediumShortChildren);
-          });
+          };
 
           return (
             <div className="space-y-6">
@@ -459,9 +448,13 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
                     )}
                   </div>
                   
-                  {/* Vertical line going down from long term */}
+                  {/* Single vertical line going down from long term */}
                   {mediumChildren.length > 0 && (
-                    <div className="absolute left-1/2 transform -translate-x-1/2 w-0.5 bg-slate-300 h-8 top-full"></div>
+                    <>
+                      <div className="absolute left-1/2 transform -translate-x-1/2 w-0.5 bg-slate-300 h-8 top-full"></div>
+                      {/* Horizontal line across all medium term goals */}
+                      <div className="absolute left-0 right-0 h-0.5 bg-slate-300" style={{ top: 'calc(100% + 32px)' }}></div>
+                    </>
                   )}
                 </div>
               </div>
@@ -477,96 +470,78 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
                   </div>
                   
                   {/* Goals Grid */}
-                  <div className="flex-1 relative">
-                    {/* Horizontal line across medium term section */}
-                    <div className="absolute left-0 right-0 top-0 h-0.5 bg-slate-300 -mt-8"></div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 relative">
-                      {mediumChildren.map((medGoal, idx) => (
-                        <div key={medGoal.id} className="relative">
-                          {/* Vertical line up to horizontal line */}
-                          <div className="absolute left-1/2 transform -translate-x-1/2 w-0.5 bg-slate-300 h-8 -top-8"></div>
-                          
-                          <div
-                            onClick={() => setEditingGoalId(medGoal.id)}
-                            className="bg-white border-2 border-slate-300 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow relative"
-                          >
-                            <h4 className="font-bold text-slate-800 text-base mb-2">
-                              {medGoal.title || medGoal.goal_text}
-                            </h4>
-                            {medGoal.title && medGoal.goal_text !== medGoal.title && (
-                              <p className="text-xs text-slate-600 mb-2">
-                                {medGoal.goal_text}
-                              </p>
-                            )}
-                            {medGoal.why && (
-                              <p className="text-xs text-slate-500 italic">
-                                {medGoal.why}
-                              </p>
-                            )}
-                          </div>
-                          
-                          {/* Vertical line going down if this medium term has short term children */}
-                          {goals.filter(g => g.parent_goal_id === medGoal.id && g.time_horizon === 'short').length > 0 && (
-                            <div className="absolute left-1/2 transform -translate-x-1/2 w-0.5 bg-slate-300 h-8 top-full"></div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Short Term Goals with Label */}
-              {allShortTermGoals.length > 0 && (
-                <div className="flex gap-6 items-start">
-                  {/* Label */}
-                  <div className="w-32 flex-shrink-0 pt-4">
-                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                      Short Term
-                    </div>
-                  </div>
-                  
-                  {/* Goals Grid - Narrower columns */}
-                  <div className="flex-1 relative">
-                    {/* Horizontal line across short term section */}
-                    {mediumChildren.length > 0 && (
-                      <div className="absolute left-0 right-0 top-0 h-0.5 bg-slate-300 -mt-8"></div>
-                    )}
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3 relative">
-                      {allShortTermGoals.map((shortGoal, idx) => {
-                        // Find parent medium goal
-                        const parentMediumGoal = goals.find(g => g.id === shortGoal.parent_goal_id && g.time_horizon === 'medium');
+                  <div className="flex-1">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {mediumChildren.map((medGoal) => {
+                        const shortTermChildren = getShortTermChildren(medGoal.id);
                         
                         return (
-                          <div key={shortGoal.id} className="relative">
-                            {/* Vertical line up to horizontal line (if has medium parent) */}
-                            {parentMediumGoal && (
-                              <>
-                                <div className="absolute left-1/2 transform -translate-x-1/2 w-0.5 bg-slate-300 h-8 -top-8"></div>
-                                {/* Arrow pointing down */}
-                                <div className="absolute left-1/2 transform -translate-x-1/2 -top-1">
-                                  <svg width="8" height="8" viewBox="0 0 8 8" className="text-slate-300">
-                                    <polygon points="4,8 0,0 8,0" fill="currentColor"/>
-                                  </svg>
-                                </div>
-                              </>
-                            )}
+                          <div key={medGoal.id} className="relative">
+                            {/* Vertical line up to horizontal line */}
+                            <div className="absolute left-1/2 transform -translate-x-1/2 w-0.5 bg-slate-300 h-8 -top-8"></div>
                             
+                            {/* Medium Term Goal Card */}
                             <div
-                              onClick={() => setEditingGoalId(shortGoal.id)}
-                              className="bg-white border border-slate-300 rounded-lg p-3 cursor-pointer hover:shadow-md transition-shadow"
+                              onClick={() => setEditingGoalId(medGoal.id)}
+                              className="bg-white border-2 border-slate-300 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
                             >
-                              <h5 className="font-medium text-slate-800 text-sm mb-1">
-                                {shortGoal.title || shortGoal.goal_text}
-                              </h5>
-                              {shortGoal.title && shortGoal.goal_text !== shortGoal.title && (
-                                <p className="text-xs text-slate-500">
-                                  {shortGoal.goal_text}
+                              <h4 className="font-bold text-slate-800 text-base mb-2">
+                                {medGoal.title || medGoal.goal_text}
+                              </h4>
+                              {medGoal.title && medGoal.goal_text !== medGoal.title && (
+                                <p className="text-xs text-slate-600 mb-2">
+                                  {medGoal.goal_text}
+                                </p>
+                              )}
+                              {medGoal.why && (
+                                <p className="text-xs text-slate-500 italic">
+                                  {medGoal.why}
                                 </p>
                               )}
                             </div>
+                            
+                            {/* Short Term Goals stacked underneath this MT goal */}
+                            {shortTermChildren.length > 0 && (
+                              <div className="mt-4 pl-10 relative">
+                                {/* Vertical line down from MT goal */}
+                                <div className="absolute left-5 top-0 w-0.5 bg-slate-300 h-full"></div>
+                                
+                                {/* Stack of short term goals */}
+                                <div className="space-y-3">
+                                  {shortTermChildren.map((shortGoal) => (
+                                    <div key={shortGoal.id} className="relative">
+                                      {/* Horizontal line connecting to vertical */}
+                                      <div className="absolute left-0 top-1/2 w-5 h-0.5 bg-slate-300 -translate-x-5"></div>
+                                      
+                                      {/* Arrow pointing right */}
+                                      <div className="absolute left-0 top-1/2 transform -translate-y-1/2">
+                                        <svg width="8" height="8" viewBox="0 0 8 8" className="text-slate-300">
+                                          <polygon points="8,4 0,0 0,8" fill="currentColor"/>
+                                        </svg>
+                                      </div>
+                                      
+                                      {/* Short term goal card */}
+                                      <div
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingGoalId(shortGoal.id);
+                                        }}
+                                        className="bg-white border border-slate-300 rounded-lg p-3 cursor-pointer hover:shadow-md transition-shadow"
+                                      >
+                                        <h5 className="font-medium text-slate-800 text-sm mb-1">
+                                          {shortGoal.title || shortGoal.goal_text}
+                                        </h5>
+                                        {shortGoal.title && shortGoal.goal_text !== shortGoal.title && (
+                                          <p className="text-xs text-slate-500">
+                                            {shortGoal.goal_text}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
