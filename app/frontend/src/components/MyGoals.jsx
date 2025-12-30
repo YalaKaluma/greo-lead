@@ -299,26 +299,6 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
         </div>
       )}
 
-      {/* Hierarchical View Header */}
-      {hierarchicalView && (
-        <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold text-blue-900">
-               Hierarchical View: {goals.find(g => g.id === hierarchicalView)?.title || goals.find(g => g.id === hierarchicalView)?.goal_text}
-            </h3>
-            <p className="text-sm text-blue-800">
-              Showing parent goal and its sub-goals only
-            </p>
-          </div>
-          <button
-            onClick={() => setHierarchicalView(null)}
-            className="px-4 py-2 bg-white hover:bg-gray-100 text-slate-700 border border-gray-300 rounded-lg text-sm font-medium"
-          >
-            ✕ Exit Hierarchy
-          </button>
-        </div>
-      )}
-
       {/* Goals Grid */}
       {(() => {
         let filteredGoals;
@@ -411,10 +391,10 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
 
           return (
             <div className="space-y-6">
-              {/* Back Button */}
+              {/* Back Button - simplified */}
               <button
                 onClick={() => setHierarchicalView(null)}
-                className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium mb-4"
+                className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -472,8 +452,13 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
                   
                   {/* Goals Grid */}
                   <div className="flex-1 relative pt-6">
-                    {/* Single horizontal line at the top */}
-                    <div className="absolute left-0 right-0 h-0.5 bg-slate-300 top-0"></div>
+                    {/* Horizontal line - only spans from first to last MT goal center */}
+                    <div className="absolute h-0.5 bg-slate-300 top-0" 
+                         style={{ 
+                           left: 'calc(16.666% / 2)', // Center of first column in 3-col grid
+                           right: 'calc(16.666% / 2)' // Center of last column in 3-col grid
+                         }}>
+                    </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {mediumChildren.map((medGoal) => {
@@ -514,13 +499,13 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
                                 <div className="space-y-3">
                                   {shortTermChildren.map((shortGoal, idx) => (
                                     <div key={shortGoal.id} className="relative">
-                                      {/* Horizontal line connecting to vertical */}
-                                      <div className="absolute top-1/2 w-5 h-0.5 bg-slate-300 -left-5"></div>
+                                      {/* Horizontal line connecting to vertical - shortened to not overlap */}
+                                      <div className="absolute top-1/2 w-3 h-0.5 bg-slate-300 -left-3"></div>
                                       
-                                      {/* Arrow pointing right */}
-                                      <div className="absolute left-0 top-1/2 transform -translate-y-1/2">
-                                        <svg width="8" height="8" viewBox="0 0 8 8" className="text-slate-300">
-                                          <polygon points="8,4 0,0 0,8" fill="currentColor"/>
+                                      {/* Arrow pointing right - moved 2px left to not overlap box */}
+                                      <div className="absolute top-1/2 transform -translate-y-1/2" style={{ left: '-2px' }}>
+                                        <svg width="6" height="6" viewBox="0 0 6 6" className="text-slate-300">
+                                          <polygon points="6,3 0,0 0,6" fill="currentColor"/>
                                         </svg>
                                       </div>
                                       
@@ -554,9 +539,9 @@ export default function MyGoals({ apiUrl = '', userNumber }) {
                 </div>
               )}
               
-              {/* Short Term Label - shown once if any ST goals exist */}
+              {/* Short Term Label - aligned with first ST goal, not underneath MT section */}
               {hasAnyShortTermGoals && (
-                <div className="flex gap-6">
+                <div className="flex gap-6" style={{ marginTop: '-180px' }}>
                   <div className="w-32 flex-shrink-0">
                     <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       Short Term
