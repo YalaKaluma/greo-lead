@@ -4,11 +4,13 @@ from datetime import datetime, timedelta
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Date
 from sqlalchemy.sql import func
 from app.db import Base
-from .db import Base  # use your existing Base
+from .db import Base   # use your existing Base
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.mutable import MutableDict, MutableList  # ← ADDED FOR FIX
 import enum
 import secrets
+
+
+
 
 
 class JournalEntry(Base):
@@ -22,35 +24,32 @@ class JournalEntry(Base):
 
     user = relationship("User", back_populates="entries")
 
-
 class Message(Base):
     __tablename__ = "messages"
 
     id = Column(Integer, primary_key=True, index=True)
-    sender = Column(String, index=True)  # "user" or "assistant"
+    sender = Column(String, index=True)          # "user" or "assistant"
     user_number = Column(String, index=True)
     content = Column(Text)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
-
 
 class Task(Base):
     __tablename__ = "tasks"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_number = Column(String, index=True)  # same as messages table
+    user_number = Column(String, index=True)   # same as messages table
     title = Column(String, nullable=False)
     notes = Column(Text, nullable=True)
     project = Column(String, nullable=True)
     delegated_to = Column(String, nullable=True)
     due_date = Column(DateTime, nullable=True)
-    status = Column(String, default="open")  # open, completed, archived
+    status = Column(String, default="open")    # open, completed, archived
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
     goal_id = Column(Integer, ForeignKey('journey_goals.id', ondelete='SET NULL'), nullable=True)
     goal = relationship("JourneyGoal", backref="tasks")
-    #    deadline = Column(Date, nullable=True)
+#    deadline = Column(Date, nullable=True)
     priority = Column(String, nullable=True)  # Can be 'low', 'medium', or 'high'
-
 
 # ---------------------------------------------------------
 # EXPANDED JOURNEY STRUCTURE
@@ -65,8 +64,8 @@ class JourneyPerson(Base):
     name = Column(String, nullable=False)
     email = Column(String, nullable=True)
     phone = Column(String, nullable=True)
-    relation = Column(String, nullable=True)  # colleague, client, partner…
-    context = Column(Text, nullable=True)  # optional notes
+    relation = Column(String, nullable=True)     # colleague, client, partner…
+    context = Column(Text, nullable=True)        # optional notes
 
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -79,7 +78,7 @@ class JourneyGoal(Base):
     user_number = Column(String, index=True)
 
     title = Column(String(200), nullable=True)  # Short title for sidebar
-    goal_text = Column(Text, nullable=False)  # Full description
+    goal_text = Column(Text, nullable=False)     # Full description
     why = Column(Text, nullable=True)
     time_horizon = Column(String, nullable=True)  # short, medium, long
     parent_goal_id = Column(Integer, ForeignKey('journey_goals.id'), nullable=True)  # Hierarchical goals
@@ -98,10 +97,10 @@ class JourneyFailure(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_number = Column(String, index=True)
 
-    title = Column(String(200), nullable=True)  # Optional title
+    title = Column(String(200), nullable=True)     # Optional title
     failure_text = Column(Text, nullable=False)
-    scar = Column(Text, nullable=True)  # emotional residue
-    learning = Column(Text, nullable=True)  # lesson learned
+    scar = Column(Text, nullable=True)       # emotional residue
+    learning = Column(Text, nullable=True)   # lesson learned
 
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -114,7 +113,7 @@ class JourneyProject(Base):
     user_number = Column(String, index=True)
 
     project_name = Column(String, nullable=False)
-    goal = Column(Text, nullable=True)  # strategic purpose of the project
+    goal = Column(Text, nullable=True)        # strategic purpose of the project
     description = Column(Text, nullable=True)
     status = Column(String, default="active")  # active, paused, completed
 
@@ -128,9 +127,9 @@ class JourneyStrength(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_number = Column(String, index=True)
 
-    title = Column(String(200), nullable=True)  # Optional title
+    title = Column(String(200), nullable=True)     # Optional title
     strength = Column(Text, nullable=False)
-    source = Column(String, nullable=True)  # inference, user input...
+    source = Column(String, nullable=True)     # inference, user input...
 
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -143,7 +142,7 @@ class JourneyOpportunity(Base):
     user_number = Column(String, index=True)
 
     opportunity_text = Column(Text, nullable=False)
-    category = Column(String, nullable=True)  # leadership, delegation, mindset…
+    category = Column(String, nullable=True)    # leadership, delegation, mindset…
 
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -154,7 +153,7 @@ class JourneyDevelopmentArea(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_number = Column(String, index=True)
-    title = Column(String(200), nullable=True)  # Optional title
+    title = Column(String(200), nullable=True)     # Optional title
     skill = Column(String, nullable=False)
     source = Column(String, nullable=True)
     first_seen_at = Column(DateTime, default=datetime.utcnow, nullable=True)
@@ -210,36 +209,65 @@ class JourneyProcrastinationPattern(Base):
     user_number = Column(String, index=True)
     title = Column(String(200), nullable=True)
     pattern_text = Column(Text, nullable=False)
-    underlying_reason = Column(Text, nullable=True)  # fear, perfectionism, lack of clarity
-    mitigation = Column(Text, nullable=True)  # strategies to overcome
+    underlying_reason = Column(Text, nullable=True)  # fear, overwhelm, unclear, boring, etc.
+    strategy = Column(Text, nullable=True)  # how to overcome it
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class JourneyDecisionPattern(Base):
-    """How the user makes decisions and what factors they weigh"""
-    __tablename__ = "journey_decision_patterns"
+class JourneyExecutionSystem(Base):
+    """User's systems and approaches for getting things done"""
+    __tablename__ = "journey_execution_systems"
 
     id = Column(Integer, primary_key=True, index=True)
     user_number = Column(String, index=True)
     title = Column(String(200), nullable=True)
-    pattern_text = Column(Text, nullable=False)
-    decision_type = Column(String, nullable=True)  # strategic, operational, hiring, etc.
-    key_factors = Column(Text, nullable=True)  # what they prioritize
+    system_text = Column(Text, nullable=False)
+    category = Column(String, nullable=True)  # prioritization, planning, delegation, automation, etc.
+    effectiveness = Column(String, nullable=True)  # working well, needs improvement, abandoned
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class JourneyStressPattern(Base):
-    """What triggers stress and how it manifests"""
-    __tablename__ = "journey_stress_patterns"
+class JourneyInspiration(Base):
+    """How the user inspires and motivates others"""
+    __tablename__ = "journey_inspiration"
 
     id = Column(Integer, primary_key=True, index=True)
     user_number = Column(String, index=True)
     title = Column(String(200), nullable=True)
-    trigger = Column(Text, nullable=False)
-    manifestation = Column(Text, nullable=True)  # how stress shows up
-    mitigation = Column(Text, nullable=True)  # coping strategies
+    inspiration_text = Column(Text, nullable=False)
+    approach = Column(Text, nullable=True)  # storytelling, vision-setting, recognition, etc.
+    effectiveness = Column(String, nullable=True)  # what works well
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class JourneyCoachingMoment(Base):
+    """Coaching and delegation experiences"""
+    __tablename__ = "journey_coaching_moments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True)
+    title = Column(String(200), nullable=True)
+    moment_text = Column(Text, nullable=False)
+    person = Column(String, nullable=True)  # who was coached/delegated to
+    outcome = Column(Text, nullable=True)  # what happened
+    learning = Column(Text, nullable=True)  # what was learned
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class JourneyTeamComposition(Base):
+    """Insights about team structure and dynamics"""
+    __tablename__ = "journey_team_composition"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True)
+    title = Column(String(200), nullable=True)
+    composition_text = Column(Text, nullable=False)
+    team_type = Column(String, nullable=True)  # direct reports, cross-functional, board, etc.
+    dynamics = Column(Text, nullable=True)  # what's working, what's not
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -334,7 +362,6 @@ class JourneyAchievement(Base):
     # EXECUTIVE HABITS
     # -------------------------------
 
-
 class Habit(Base):
     __tablename__ = "habits"
 
@@ -355,7 +382,6 @@ class Habit(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-
 class HabitCompletion(Base):
     __tablename__ = "habit_completions"
 
@@ -366,7 +392,6 @@ class HabitCompletion(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     habit = relationship("Habit", backref="completions")
-
 
 # Replace lines 275-290 in models.py with this:
 
@@ -395,69 +420,64 @@ class SubscriptionStatus(str, enum.Enum):
     EXPIRED = "EXPIRED"
     CANCELLED = "CANCELLED"
 
-
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-
+    
     # Contact information
     phone_number = Column(String, unique=True, index=True)  # WhatsApp number
     email = Column(String, nullable=True, index=True)  # Email (added during onboarding or later)
     name = Column(String, nullable=True)  # Full name (collected in onboarding)
     profession = Column(String, nullable=True)  # Collected in onboarding
-
+    
     # Authentication
     password_hash = Column(String, nullable=True)  # Hashed password
     temp_password = Column(String, nullable=True)  # One-time password for first login
     temp_password_expires = Column(DateTime, nullable=True)
-
+    
     # Onboarding state
     onboarding_step = Column(SQLEnum(OnboardingStep), default=OnboardingStep.INITIAL)
     onboarding_completed = Column(Boolean, default=False)
-
-    # ✅ FIXED: Use MutableDict to track JSONB mutations properly
-    onboarding_data = Column(MutableDict.as_mutable(JSONB), nullable=True)  # Store intermediate data during onboarding
-
+    onboarding_data = Column(JSONB, nullable=True)  # Store intermediate data during onboarding
+    
     # Subscription
     subscription_status = Column(SQLEnum(SubscriptionStatus), default=SubscriptionStatus.TRIAL)
     trial_start_date = Column(DateTime, nullable=True)
     trial_end_date = Column(DateTime, nullable=True)
     subscription_end_date = Column(DateTime, nullable=True)
-
+    
     # Tour progress
     tour_completed = Column(Boolean, default=False)
     tour_current_step = Column(String, nullable=True)  # Current tour step
-
-    # ✅ FIXED: Use MutableList to track JSONB list mutations properly
-    tour_completed_steps = Column(MutableList.as_mutable(JSONB), nullable=True)  # List of completed steps
-
+    tour_completed_steps = Column(JSONB, nullable=True)  # List of completed steps
+    
     # Timestamps
     last_active_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     entries = relationship("JournalEntry", back_populates="user", cascade="all, delete-orphan")
-
+    
     def start_trial(self):
         """Initialize 21-day trial period"""
         self.trial_start_date = datetime.utcnow()
         self.trial_end_date = datetime.utcnow() + timedelta(days=21)
         self.subscription_status = SubscriptionStatus.TRIAL
-
+    
     def generate_temp_password(self, length=8):
         """Generate a secure one-time password"""
         self.temp_password = secrets.token_urlsafe(length)[:length].upper()
         self.temp_password_expires = datetime.utcnow() + timedelta(hours=24)
         return self.temp_password
-
+    
     def is_trial_active(self):
         """Check if trial is still valid"""
         if not self.trial_end_date:
             return False
         return datetime.utcnow() < self.trial_end_date
-
+    
     def days_left_in_trial(self):
         """Calculate remaining trial days"""
         if not self.trial_end_date:
@@ -469,23 +489,23 @@ class User(Base):
 class EmailVerification(Base):
     """Track email verification codes sent via email"""
     __tablename__ = "email_verifications"
-
+    
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     verification_code = Column(String(6), nullable=False)  # 6-digit code
     verified = Column(Boolean, default=False)
-
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)  # Code expires after 15 minutes
     verified_at = Column(DateTime, nullable=True)
-
+    
     user = relationship("User")
-
+    
     def is_valid(self):
         """Check if code is still valid"""
         return not self.verified and datetime.utcnow() < self.expires_at
-
+    
     @staticmethod
     def generate_code():
         """Generate a 6-digit verification code"""
