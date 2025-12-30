@@ -533,10 +533,10 @@ function renderItemContent(item, topic) {
             <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
           )}
           <p className="text-slate-800 font-medium mb-2">{item.value_text}</p>
-          {item.definition && (
+          {item.why && (
             <div className="bg-blue-50 p-3 rounded mt-2">
               <p className="text-sm text-slate-700">
-                <span className="font-medium">Definition:</span> {item.definition}
+                <span className="font-medium">Why:</span> {item.why}
               </p>
             </div>
           )}
@@ -839,12 +839,13 @@ function EditForm({ item, topic, onSave, onDelete, onCancel }) {
         return (
           <>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Title</label>
               <input
                 type="text"
                 value={formData.title || ''}
                 onChange={(e) => handleChange('title', e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
               />
             </div>
             <div>
@@ -854,13 +855,14 @@ function EditForm({ item, topic, onSave, onDelete, onCancel }) {
                 onChange={(e) => handleChange('value_text', e.target.value)}
                 rows={3}
                 className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Definition</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Why (optional)</label>
               <textarea
-                value={formData.definition || ''}
-                onChange={(e) => handleChange('definition', e.target.value)}
+                value={formData.why || ''}
+                onChange={(e) => handleChange('why', e.target.value)}
                 rows={2}
                 className="w-full px-3 py-2 border border-slate-300 rounded-md"
               />
@@ -1016,6 +1018,367 @@ function EditForm({ item, topic, onSave, onDelete, onCancel }) {
                 type="text"
                 value={formData.source || ''}
                 onChange={(e) => handleChange('source', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+          </>
+        );
+
+      case "Energy Sources":
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+              <input
+                type="text"
+                value={formData.title || ''}
+                onChange={(e) => handleChange('title', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Energy Source</label>
+              <textarea
+                value={formData.source_text || ''}
+                onChange={(e) => handleChange('source_text', e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+              <input
+                type="text"
+                value={formData.category || ''}
+                onChange={(e) => handleChange('category', e.target.value)}
+                placeholder="e.g. physical, mental, social"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+          </>
+        );
+
+      case "Energy Drains":
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+              <input
+                type="text"
+                value={formData.title || ''}
+                onChange={(e) => handleChange('title', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Energy Drain</label>
+              <textarea
+                value={formData.drain_text || ''}
+                onChange={(e) => handleChange('drain_text', e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+              <input
+                type="text"
+                value={formData.category || ''}
+                onChange={(e) => handleChange('category', e.target.value)}
+                placeholder="e.g. meetings, context-switching"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Mitigation Strategy</label>
+              <textarea
+                value={formData.mitigation || ''}
+                onChange={(e) => handleChange('mitigation', e.target.value)}
+                rows={2}
+                placeholder="How to reduce the impact"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+          </>
+        );
+
+      case "Recovery":
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+              <input
+                type="text"
+                value={formData.title || ''}
+                onChange={(e) => handleChange('title', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Recovery Method</label>
+              <textarea
+                value={formData.method_text || ''}
+                onChange={(e) => handleChange('method_text', e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+              <input
+                type="text"
+                value={formData.category || ''}
+                onChange={(e) => handleChange('category', e.target.value)}
+                placeholder="e.g. exercise, rest, social"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Frequency</label>
+              <input
+                type="text"
+                value={formData.frequency || ''}
+                onChange={(e) => handleChange('frequency', e.target.value)}
+                placeholder="e.g. daily, weekly"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+          </>
+        );
+
+      case "Procrastination":
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+              <input
+                type="text"
+                value={formData.title || ''}
+                onChange={(e) => handleChange('title', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Pattern</label>
+              <textarea
+                value={formData.pattern_text || ''}
+                onChange={(e) => handleChange('pattern_text', e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Underlying Reason</label>
+              <textarea
+                value={formData.underlying_reason || ''}
+                onChange={(e) => handleChange('underlying_reason', e.target.value)}
+                rows={2}
+                placeholder="e.g. fear, overwhelm, unclear"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Strategy</label>
+              <textarea
+                value={formData.strategy || ''}
+                onChange={(e) => handleChange('strategy', e.target.value)}
+                rows={2}
+                placeholder="How to overcome it"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+          </>
+        );
+
+      case "Execution System":
+      case "Prioritization":
+      case "Development Plan":
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+              <input
+                type="text"
+                value={formData.title || ''}
+                onChange={(e) => handleChange('title', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">System/Approach</label>
+              <textarea
+                value={formData.system_text || ''}
+                onChange={(e) => handleChange('system_text', e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+              <input
+                type="text"
+                value={formData.category || ''}
+                onChange={(e) => handleChange('category', e.target.value)}
+                placeholder="e.g. planning, delegation, automation"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Effectiveness</label>
+              <input
+                type="text"
+                value={formData.effectiveness || ''}
+                onChange={(e) => handleChange('effectiveness', e.target.value)}
+                placeholder="e.g. working well, needs improvement"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+          </>
+        );
+
+      case "Team Composition":
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+              <input
+                type="text"
+                value={formData.title || ''}
+                onChange={(e) => handleChange('title', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Composition</label>
+              <textarea
+                value={formData.composition_text || ''}
+                onChange={(e) => handleChange('composition_text', e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Team Type</label>
+              <input
+                type="text"
+                value={formData.team_type || ''}
+                onChange={(e) => handleChange('team_type', e.target.value)}
+                placeholder="e.g. direct reports, cross-functional"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Dynamics</label>
+              <textarea
+                value={formData.dynamics || ''}
+                onChange={(e) => handleChange('dynamics', e.target.value)}
+                rows={2}
+                placeholder="What's working, what's not"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+          </>
+        );
+
+      case "Inspire":
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+              <input
+                type="text"
+                value={formData.title || ''}
+                onChange={(e) => handleChange('title', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">How You Inspire</label>
+              <textarea
+                value={formData.inspiration_text || ''}
+                onChange={(e) => handleChange('inspiration_text', e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Approach</label>
+              <textarea
+                value={formData.approach || ''}
+                onChange={(e) => handleChange('approach', e.target.value)}
+                rows={2}
+                placeholder="e.g. storytelling, vision-setting"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">What Works</label>
+              <textarea
+                value={formData.effectiveness || ''}
+                onChange={(e) => handleChange('effectiveness', e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+          </>
+        );
+
+      case "Coach & Delegate":
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+              <input
+                type="text"
+                value={formData.title || ''}
+                onChange={(e) => handleChange('title', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Moment</label>
+              <textarea
+                value={formData.moment_text || ''}
+                onChange={(e) => handleChange('moment_text', e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Person</label>
+              <input
+                type="text"
+                value={formData.person || ''}
+                onChange={(e) => handleChange('person', e.target.value)}
+                placeholder="Who was coached/delegated to"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Outcome</label>
+              <textarea
+                value={formData.outcome || ''}
+                onChange={(e) => handleChange('outcome', e.target.value)}
+                rows={2}
+                placeholder="What happened"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Learning</label>
+              <textarea
+                value={formData.learning || ''}
+                onChange={(e) => handleChange('learning', e.target.value)}
+                rows={2}
+                placeholder="What was learned"
                 className="w-full px-3 py-2 border border-slate-300 rounded-md"
               />
             </div>
