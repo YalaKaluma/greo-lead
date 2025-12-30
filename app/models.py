@@ -210,36 +210,65 @@ class JourneyProcrastinationPattern(Base):
     user_number = Column(String, index=True)
     title = Column(String(200), nullable=True)
     pattern_text = Column(Text, nullable=False)
-    underlying_reason = Column(Text, nullable=True)  # fear, perfectionism, lack of clarity
-    mitigation = Column(Text, nullable=True)  # strategies to overcome
+    underlying_reason = Column(Text, nullable=True)  # fear, overwhelm, unclear, boring, etc.
+    strategy = Column(Text, nullable=True)  # how to overcome it
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class JourneyDecisionPattern(Base):
-    """How the user makes decisions and what factors they weigh"""
-    __tablename__ = "journey_decision_patterns"
+class JourneyExecutionSystem(Base):
+    """User's systems and approaches for getting things done"""
+    __tablename__ = "journey_execution_systems"
 
     id = Column(Integer, primary_key=True, index=True)
     user_number = Column(String, index=True)
     title = Column(String(200), nullable=True)
-    pattern_text = Column(Text, nullable=False)
-    decision_type = Column(String, nullable=True)  # strategic, operational, hiring, etc.
-    key_factors = Column(Text, nullable=True)  # what they prioritize
+    system_text = Column(Text, nullable=False)
+    category = Column(String, nullable=True)  # prioritization, planning, delegation, automation, etc.
+    effectiveness = Column(String, nullable=True)  # working well, needs improvement, abandoned
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class JourneyStressPattern(Base):
-    """What triggers stress and how it manifests"""
-    __tablename__ = "journey_stress_patterns"
+class JourneyInspiration(Base):
+    """How the user inspires and motivates others"""
+    __tablename__ = "journey_inspiration"
 
     id = Column(Integer, primary_key=True, index=True)
     user_number = Column(String, index=True)
     title = Column(String(200), nullable=True)
-    trigger = Column(Text, nullable=False)
-    manifestation = Column(Text, nullable=True)  # how stress shows up
-    mitigation = Column(Text, nullable=True)  # coping strategies
+    inspiration_text = Column(Text, nullable=False)
+    approach = Column(Text, nullable=True)  # storytelling, vision-setting, recognition, etc.
+    effectiveness = Column(String, nullable=True)  # what works well
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class JourneyCoachingMoment(Base):
+    """Coaching and delegation experiences"""
+    __tablename__ = "journey_coaching_moments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True)
+    title = Column(String(200), nullable=True)
+    moment_text = Column(Text, nullable=False)
+    person = Column(String, nullable=True)  # who was coached/delegated to
+    outcome = Column(Text, nullable=True)  # what happened
+    learning = Column(Text, nullable=True)  # what was learned
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class JourneyTeamComposition(Base):
+    """Insights about team structure and dynamics"""
+    __tablename__ = "journey_team_composition"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True)
+    title = Column(String(200), nullable=True)
+    composition_text = Column(Text, nullable=False)
+    team_type = Column(String, nullable=True)  # direct reports, cross-functional, board, etc.
+    dynamics = Column(Text, nullable=True)  # what's working, what's not
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
