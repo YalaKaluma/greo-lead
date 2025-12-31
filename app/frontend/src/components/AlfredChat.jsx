@@ -234,10 +234,7 @@ export default function AlfredChat({ apiUrl, userNumber, onTourStep }) {
       {/* Floating Button */}
       <button
         onClick={toggleChat}
-        className="fixed bottom-6 right-6 w-16 h-16 bg-gradient-to-br from-amber-500 to-amber-600 rounded-full shadow-2xl hover:shadow-3xl hover:scale-110 transition-all duration-300 flex items-center justify-center z-50 group"
-        style={{
-          animation: isOpen ? 'none' : 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
-        }}
+        className="fixed bottom-6 right-6 w-16 h-16 bg-black rounded-full shadow-2xl hover:shadow-3xl hover:scale-105 transition-all duration-300 flex items-center justify-center z-50 group"
       >
         {/* Alfred Logo */}
         <img 
@@ -258,17 +255,6 @@ export default function AlfredChat({ apiUrl, userNumber, onTourStep }) {
           </div>
         )}
       </button>
-
-      <style jsx>{`
-        @keyframes pulse {
-          0%, 100% {
-            box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
-          }
-          50% {
-            box-shadow: 0 0 0 15px rgba(245, 158, 11, 0);
-          }
-        }
-      `}</style>
     </>
   );
 }
