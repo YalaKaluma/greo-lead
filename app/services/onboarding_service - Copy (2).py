@@ -349,7 +349,7 @@ See you inside."""
                     user_number,
                     goal_text=goal_text,
                     why=why,
-                    time_horizon='long'  # ✅ Changed from 'medium' to 'long' for 6-12 month onboarding goals
+                    time_horizon='medium'
                 )
                 print(f"✅ DEBUG [process_data]: Goal created with ID={goal.id}")
             except Exception as e:
@@ -368,20 +368,15 @@ See you inside."""
                 is_quick_win = quick_win.lower() in task_text.lower() if quick_win else False
 
                 try:
-                    # ✅ Set due_date to today so tasks appear in default "Tasks due today" view
-                    from datetime import date
-                    today = date.today()
-
                     task = Task(
                         user_number=user_number,
                         title=task_text,
                         priority='High' if is_quick_win else 'Medium',
                         status='open',
-                        due_date=today,  # ✅ NEW: Set to today so they show up immediately
                         notes=f"Added during onboarding" + (f" - Quick win!" if is_quick_win else "")
                     )
                     db.add(task)
-                    print(f"  ✓ Task queued: '{task_text}' (priority: {task.priority}, due: {today})")
+                    print(f"  ✓ Task queued: '{task_text}' (priority: {task.priority})")
                 except Exception as e:
                     print(f"  ✗ Failed to create task '{task_text}': {e}")
 
