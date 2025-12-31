@@ -51,11 +51,8 @@ export default function Welcome({ onLogin }) {
       localStorage.setItem("user_name", data.user_name);
       localStorage.setItem("needs_tour", data.needs_tour.toString());
       
-      // Trigger onboarding data processing
-      // ✅ FIX: URL encode the user_number to preserve the + sign
-      await fetch(`${API_URL}/api/onboarding/process-onboarding-data?user_number=${encodeURIComponent(data.user_number)}`, {
-        method: "POST"
-      });
+      // ✅ NOTE: Onboarding data is now processed automatically during WhatsApp onboarding
+      // No need to call process-onboarding-data here anymore!
 
       onLogin(data.user_number, data.needs_tour);
     } catch (err) {

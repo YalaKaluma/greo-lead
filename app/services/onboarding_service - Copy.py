@@ -190,10 +190,6 @@ class OnboardingConversation:
             print(f"   onboarding_data after refresh: {user.onboarding_data}")
             print(f"   FINAL onboarding_data keys: {list((user.onboarding_data or {}).keys())}")
 
-            # ✅ NEW: Process onboarding data immediately into tasks and goals
-            print(f"\n🎯 DEBUG [QUICK_WIN]: Processing onboarding data into tasks and goals...")
-            OnboardingConversation._process_onboarding_data_to_tables(db, user)
-
             # Generate temp password and send link
             temp_password = user.generate_temp_password()
             db.commit()
@@ -319,71 +315,6 @@ See you inside."""
         db.commit()
         db.refresh(user)
         print(f"✅ DEBUG [complete_onboarding]: Done")
-
-    @staticmethod
-    def _process_onboarding_data_to_tables(db: Session, user: User):
-        """
-        Process onboarding_data and create actual tasks and goals in their respective tables.
-        This is called automatically at the end of WhatsApp onboarding.
-        """
-        from app.services import journey_service
-        from app.models import Task
-
-        data = user.onboarding_data
-        if not data:
-            print(f"⚠️ DEBUG [process_data]: No onboarding_data found")
-            return
-
-        print(f"📊 DEBUG [process_data]: Processing data with keys: {list(data.keys())}")
-        user_number = user.phone_number
-
-        # 1. Create goal in journey_goals table
-        if 'first_goal' in data:
-            goal_text = data['first_goal']
-            why = data.get('goal_why', '')
-
-            print(f"🎯 DEBUG [process_data]: Creating goal: '{goal_text}'")
-            try:
-                goal = journey_service.add_goal(
-                    db,
-                    user_number,
-                    goal_text=goal_text,
-                    why=why,
-                    time_horizon='medium'
-                )
-                print(f"✅ DEBUG [process_data]: Goal created with ID={goal.id}")
-            except Exception as e:
-                print(f"❌ DEBUG [process_data]: Failed to create goal: {e}")
-
-        # 2. Create tasks in tasks table
-        if 'tasks_raw' in data:
-            tasks_text = data['tasks_raw']
-            quick_win = data.get('quick_win', '')
-
-            print(f"📝 DEBUG [process_data]: Extracting tasks from: '{tasks_text[:50]}...'")
-            tasks = extract_tasks_from_onboarding(tasks_text)
-            print(f"✅ DEBUG [process_data]: Extracted {len(tasks)} tasks")
-
-            for task_text in tasks:
-                is_quick_win = quick_win.lower() in task_text.lower() if quick_win else False
-
-                try:
-                    task = Task(
-                        user_number=user_number,
-                        title=task_text,
-                        priority='High' if is_quick_win else 'Medium',
-                        status='open',
-                        notes=f"Added during onboarding" + (f" - Quick win!" if is_quick_win else "")
-                    )
-                    db.add(task)
-                    print(f"  ✓ Task queued: '{task_text}' (priority: {task.priority})")
-                except Exception as e:
-                    print(f"  ✗ Failed to create task '{task_text}': {e}")
-
-            db.commit()
-            print(f"✅ DEBUG [process_data]: All tasks committed to database!")
-
-        print(f"🎉 DEBUG [process_data]: Onboarding data processing complete!")
 
 
 class EmailVerificationService:
