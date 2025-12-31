@@ -6,6 +6,7 @@ import MyTeam from './components/MyTeam';
 import MyJournal from './components/MyJournal';
 import MyHabits from './components/MyHabits';
 import TourOverlay from './components/TourOverlay';
+import AlfredChat from './components/AlfredChat';
 import { useEffect, useState } from "react";
 import Login from "./Login";
 import Welcome from "./Welcome";
@@ -179,6 +180,20 @@ function App() {
           <MyJournal apiUrl={API_URL} userNumber={userNumber} />
         )}
       </main>
+
+      {/* Alfred Chat - Always available */}
+      <AlfredChat 
+        apiUrl={API_URL} 
+        userNumber={userNumber}
+        onTourStep={(action) => {
+          // Handle tour navigation from chat
+          if (action === 'navigate_goals') setCurrentPage('my-goals');
+          if (action === 'navigate_tasks') setCurrentPage('todo-list');
+          if (action === 'navigate_team') setCurrentPage('my-team');
+          if (action === 'navigate_journey') setCurrentPage('my-journey');
+          if (action === 'navigate_habits') setCurrentPage('my-habits');
+        }}
+      />
 
       {isMobile && isSidebarOpen && (
         <div
