@@ -490,13 +490,13 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                 {/* Alfred Coach Toggle */}
                 <button
                   onClick={() => setEditCoachOpen(!editCoachOpen)}
-                  className="p-2 hover:bg-slate-100 rounded-full transition-colors group relative"
+                  className="w-10 h-10 bg-black rounded-full flex items-center justify-center hover:bg-slate-800 transition-colors group relative"
                   title="Get coaching from Alfred"
                 >
                   <img 
                     src="/alfred-logo.png" 
                     alt="Alfred Coach" 
-                    className="w-6 h-6 opacity-60 group-hover:opacity-100 transition-opacity"
+                    className="w-6 h-6 object-contain"
                     onError={(e) => {
                       e.target.style.display = 'none';
                       e.target.nextSibling.style.display = 'inline-block';
