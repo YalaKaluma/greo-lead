@@ -477,7 +477,7 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                          }}>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-3 gap-2 sm:gap-4">
                       {mediumChildren.map((medGoal) => {
                         const shortTermChildren = getShortTermChildren(medGoal.id);
                         
@@ -489,26 +489,26 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                             {/* Medium Term Goal Card */}
                             <div
                               onClick={() => setEditingGoalId(medGoal.id)}
-                              className="bg-white border-2 border-slate-300 rounded-lg p-3 sm:p-4 cursor-pointer hover:shadow-md transition-shadow"
+                              className="bg-white border-2 border-slate-300 rounded-lg p-2 sm:p-3 md:p-4 cursor-pointer hover:shadow-md transition-shadow"
                             >
-                              <h4 className="font-bold text-slate-800 text-sm sm:text-base mb-2">
+                              <h4 className="font-bold text-slate-800 text-xs sm:text-sm md:text-base mb-1 sm:mb-2 leading-tight break-words">
                                 {medGoal.title || medGoal.goal_text}
                               </h4>
                               {medGoal.title && medGoal.goal_text !== medGoal.title && (
-                                <p className="text-xs text-slate-600 mb-2">
+                                <p className="text-xs text-slate-600 mb-1 sm:mb-2 line-clamp-2 break-words">
                                   {medGoal.goal_text}
                                 </p>
                               )}
                               {medGoal.why && (
-                                <p className="text-xs text-slate-500 italic">
+                                <p className="text-xs text-slate-500 italic line-clamp-2 break-words">
                                   {medGoal.why}
                                 </p>
                               )}
                             </div>
                             
-                            {/* Short Term Goals stacked underneath this MT goal */}
+                            {/* Short Term Goals stacked underneath this MT goal - HIDDEN ON MOBILE */}
                             {shortTermChildren.length > 0 && (
-                              <div className="mt-4 pl-6 sm:pl-10 relative">
+                              <div className="hidden sm:block mt-4 pl-6 sm:pl-10 relative">
                                 {/* Vertical line down from MT goal - starts BELOW the box */}
                                 <div className="absolute left-3 sm:left-5 w-0.5 bg-slate-300" style={{ top: '-16px', height: 'calc(100% + 16px)' }}></div>
                                 
