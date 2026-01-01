@@ -11,7 +11,7 @@ const createApiClient = (apiUrl) => {
   });
 };
 
-export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
+export default function MyGoals({ apiUrl = '', userNumber }) {
   const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -204,20 +204,6 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
     return colors[horizon] || 'bg-slate-100 text-slate-800';
   };
 
-  // Handle navigation to tasks page filtered by goal
-  const handleViewTasks = (e, goalId) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    if (onNavigate) {
-      // Use the onNavigate callback if provided
-      onNavigate('todo-list', { goalFilter: goalId });
-    } else {
-      // Fallback to URL navigation
-      window.location.href = `/?page=todo-list&goal=${goalId}`;
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -279,39 +265,36 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
 
       {/* Time Horizon Filter */}
       {!hierarchicalView && (
-        <div className="mb-6 flex gap-2 sm:gap-3 overflow-x-auto">
+        <div className="mb-6 flex gap-3">
           <button
             onClick={() => setTimeFilter('long')}
-            className={`px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-medium transition-all whitespace-nowrap text-sm sm:text-base ${
+            className={`px-6 py-3 rounded-lg font-medium transition-all ${
               timeFilter === 'long'
                 ? 'bg-slate-800 text-white shadow-md'
                 : 'bg-white text-slate-700 border border-gray-300 hover:bg-gray-50'
             }`}
           >
-            <span className="hidden sm:inline">Long Term</span>
-            <span className="sm:hidden">LT</span>
+            Long Term
           </button>
           <button
             onClick={() => setTimeFilter('medium')}
-            className={`px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-medium transition-all whitespace-nowrap text-sm sm:text-base ${
+            className={`px-6 py-3 rounded-lg font-medium transition-all ${
               timeFilter === 'medium'
                 ? 'bg-slate-800 text-white shadow-md'
                 : 'bg-white text-slate-700 border border-gray-300 hover:bg-gray-50'
             }`}
           >
-            <span className="hidden sm:inline">Medium Term</span>
-            <span className="sm:hidden">MT</span>
+            Medium Term
           </button>
           <button
             onClick={() => setTimeFilter('short')}
-            className={`px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-medium transition-all whitespace-nowrap text-sm sm:text-base ${
+            className={`px-6 py-3 rounded-lg font-medium transition-all ${
               timeFilter === 'short'
                 ? 'bg-slate-800 text-white shadow-md'
                 : 'bg-white text-slate-700 border border-gray-300 hover:bg-gray-50'
             }`}
           >
-            <span className="hidden sm:inline">Short Term</span>
-            <span className="sm:hidden">ST</span>
+            Short Term
           </button>
         </div>
       )}
@@ -419,33 +402,33 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                 Back to Overview
               </button>
 
-              {/* Long Term Goal with Label - IMPROVED MOBILE LAYOUT */}
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-6 items-start">
-                {/* Label - Positioned above on mobile, to left on desktop */}
-                <div className="sm:w-32 flex-shrink-0 sm:pt-4">
-                  <div className="text-xs sm:text-sm font-semibold text-slate-600 uppercase tracking-wide">
+              {/* Long Term Goal with Label */}
+              <div className="flex gap-6 items-start">
+                {/* Label */}
+                <div className="w-32 flex-shrink-0 pt-4">
+                  <div className="text-sm font-semibold text-slate-600 uppercase tracking-wide">
                     Long Term
                   </div>
                 </div>
                 
                 {/* Goal Card */}
-                <div className="flex-1 relative w-full">
+                <div className="flex-1 relative">
                   <div 
                     onClick={() => setEditingGoalId(parentGoal.id)}
                     className="bg-white border-2 border-slate-300 rounded-lg p-4 sm:p-6 cursor-pointer hover:shadow-md transition-shadow"
                   >
-                    <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-slate-800 mb-2">
+                    <h2 className="text-xl sm:text-2xl font-bold text-slate-800 mb-2">
                       {parentGoal.title || parentGoal.goal_text}
                     </h2>
                     {parentGoal.title && parentGoal.goal_text !== parentGoal.title && (
-                      <p className="text-sm sm:text-base text-slate-600 mb-3">
+                      <p className="text-slate-600 mb-3">
                         {parentGoal.goal_text}
                       </p>
                     )}
                     {parentGoal.why && (
                       <div>
-                        <span className="text-xs sm:text-sm font-medium text-slate-600">Why: </span>
-                        <span className="text-xs sm:text-sm text-slate-600">{parentGoal.why}</span>
+                        <span className="text-sm font-medium text-slate-600">Why: </span>
+                        <span className="text-sm text-slate-600">{parentGoal.why}</span>
                       </div>
                     )}
                   </div>
@@ -457,20 +440,20 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                 </div>
               </div>
 
-              {/* Medium Term Goals with Label - IMPROVED MOBILE LAYOUT */}
+              {/* Medium Term Goals with Label */}
               {mediumChildren.length > 0 && (
-                <div className="flex flex-col sm:flex-row gap-2 sm:gap-6 items-start">
-                  {/* Label - Positioned above on mobile, to left on desktop */}
-                  <div className="sm:w-32 flex-shrink-0 sm:pt-4">
-                    <div className="text-xs sm:text-sm font-semibold text-slate-600 uppercase tracking-wide">
+                <div className="flex gap-6 items-start">
+                  {/* Label */}
+                  <div className="w-32 flex-shrink-0 pt-4">
+                    <div className="text-sm font-semibold text-slate-600 uppercase tracking-wide">
                       Medium Term
                     </div>
                   </div>
                   
                   {/* Goals Grid */}
-                  <div className="flex-1 relative pt-6 w-full">
-                    {/* Horizontal line - only on desktop, hidden on mobile */}
-                    <div className="hidden sm:block absolute h-0.5 bg-slate-300 top-0" 
+                  <div className="flex-1 relative pt-6">
+                    {/* Horizontal line - only spans from first to last MT goal center */}
+                    <div className="absolute h-0.5 bg-slate-300 top-0" 
                          style={{ 
                            left: 'calc(16.666% / 2)', // Center of first column in 3-col grid
                            right: 'calc(16.666% / 2)' // Center of last column in 3-col grid
@@ -483,15 +466,15 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                         
                         return (
                           <div key={medGoal.id} className="relative">
-                            {/* Vertical line up to horizontal line - OUTSIDE the box - hidden on mobile */}
-                            <div className="hidden sm:block absolute left-1/2 transform -translate-x-1/2 w-0.5 bg-slate-300 h-6 -top-6"></div>
+                            {/* Vertical line up to horizontal line - OUTSIDE the box */}
+                            <div className="absolute left-1/2 transform -translate-x-1/2 w-0.5 bg-slate-300 h-6 -top-6"></div>
                             
                             {/* Medium Term Goal Card */}
                             <div
                               onClick={() => setEditingGoalId(medGoal.id)}
-                              className="bg-white border-2 border-slate-300 rounded-lg p-3 sm:p-4 cursor-pointer hover:shadow-md transition-shadow"
+                              className="bg-white border-2 border-slate-300 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
                             >
-                              <h4 className="font-bold text-slate-800 text-sm sm:text-base mb-2">
+                              <h4 className="font-bold text-slate-800 text-base mb-2">
                                 {medGoal.title || medGoal.goal_text}
                               </h4>
                               {medGoal.title && medGoal.goal_text !== medGoal.title && (
@@ -508,16 +491,16 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                             
                             {/* Short Term Goals stacked underneath this MT goal */}
                             {shortTermChildren.length > 0 && (
-                              <div className="mt-4 pl-6 sm:pl-10 relative">
+                              <div className="mt-4 pl-10 relative">
                                 {/* Vertical line down from MT goal - starts BELOW the box */}
-                                <div className="absolute left-3 sm:left-5 w-0.5 bg-slate-300" style={{ top: '-16px', height: 'calc(100% + 16px)' }}></div>
+                                <div className="absolute left-5 w-0.5 bg-slate-300" style={{ top: '-16px', height: 'calc(100% + 16px)' }}></div>
                                 
                                 {/* Stack of short term goals */}
                                 <div className="space-y-3">
                                   {shortTermChildren.map((shortGoal, idx) => (
                                     <div key={shortGoal.id} className="relative">
                                       {/* Horizontal line connecting to vertical - shortened to not overlap */}
-                                      <div className="absolute top-1/2 w-2 sm:w-3 h-0.5 bg-slate-300 -left-2 sm:-left-3"></div>
+                                      <div className="absolute top-1/2 w-3 h-0.5 bg-slate-300 -left-3"></div>
                                       
                                       {/* Arrow pointing right - moved 2px left to not overlap box */}
                                       <div className="absolute top-1/2 transform -translate-y-1/2" style={{ left: '-2px' }}>
@@ -532,9 +515,9 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                                           e.stopPropagation();
                                           setEditingGoalId(shortGoal.id);
                                         }}
-                                        className="bg-white border border-slate-300 rounded-lg p-2 sm:p-3 cursor-pointer hover:shadow-md transition-shadow"
+                                        className="bg-white border border-slate-300 rounded-lg p-3 cursor-pointer hover:shadow-md transition-shadow"
                                       >
-                                        <h5 className="font-medium text-slate-800 text-xs sm:text-sm mb-1">
+                                        <h5 className="font-medium text-slate-800 text-sm mb-1">
                                           {shortGoal.title || shortGoal.goal_text}
                                         </h5>
                                         {shortGoal.title && shortGoal.goal_text !== shortGoal.title && (
@@ -556,10 +539,10 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                 </div>
               )}
               
-              {/* Short Term Label - IMPROVED MOBILE LAYOUT */}
+              {/* Short Term Label - aligned with first ST goal, not underneath MT section */}
               {hasAnyShortTermGoals && (
-                <div className="flex flex-col sm:flex-row gap-2 sm:gap-6" style={{ marginTop: '0' }}>
-                  <div className="sm:w-32 flex-shrink-0">
+                <div className="flex gap-6" style={{ marginTop: '-180px' }}>
+                  <div className="w-32 flex-shrink-0">
                     <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       Short Term
                     </div>
@@ -632,16 +615,16 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                     <div className="mb-4 pb-3 border-b-2 border-slate-300">
                       <div className="flex items-center gap-3">
                         <div className="flex-1">
-                          <h3 className="text-base sm:text-lg font-bold text-slate-700">
+                          <h3 className="text-lg font-bold text-slate-700">
                             🎯 {group.parent.title || group.parent.goal_text}
                           </h3>
-                          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                          <p className="text-sm text-slate-500 mt-1">
                             Medium-term goal • {group.goals.length} short-term {group.goals.length === 1 ? 'goal' : 'goals'}
                           </p>
                         </div>
                         <button
                           onClick={() => setHierarchicalView(group.parent.id)}
-                          className="text-blue-600 hover:text-blue-700 text-xs sm:text-sm font-medium px-2 sm:px-3 py-1 rounded border border-blue-300 hover:bg-blue-50 transition-colors whitespace-nowrap"
+                          className="text-blue-600 hover:text-blue-700 text-sm font-medium px-3 py-1 rounded border border-blue-300 hover:bg-blue-50 transition-colors"
                         >
                           View Tree →
                         </button>
@@ -650,10 +633,10 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                   )}
                   {!group.parent && group.goals.length > 0 && (
                     <div className="mb-4 pb-3 border-b-2 border-slate-300">
-                      <h3 className="text-base sm:text-lg font-bold text-slate-700">
+                      <h3 className="text-lg font-bold text-slate-700">
                         📌 Independent Goals
                       </h3>
-                      <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                      <p className="text-sm text-slate-500 mt-1">
                         Not linked to a medium-term goal
                       </p>
                     </div>
@@ -698,16 +681,21 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
 
                             {goal.why && (
                               <div className="mb-2 ml-5 sm:ml-6">
-                                <span className="text-xs font-medium text-slate-600">Why: </span>
-                                <span className="text-xs text-slate-600 line-clamp-2">{goal.why}</span>
+                                <span className="text-sm font-medium text-slate-600">Why: </span>
+                                <span className="text-sm text-slate-600">{goal.why}</span>
                               </div>
                             )}
                           </div>
 
                           <div className="mt-2 sm:mt-3 flex gap-3 sm:gap-4 items-center justify-end text-slate-400">
-                            <button
-                              onClick={(e) => handleViewTasks(e, goal.id)}
-                              className="hover:text-blue-600 transition-colors cursor-pointer text-xl sm:text-xl sm:text-2xl relative"
+                            <a
+                              href={`/?page=todo-list&goal=${goal.id}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                window.location.href = `/?page=todo-list&goal=${goal.id}`;
+                              }}
+                              className="hover:text-blue-600 transition-colors cursor-pointer text-xl sm:text-2xl relative"
                               title="View tasks"
                             >
                               📋
@@ -716,14 +704,14 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                                   {taskCounts[goal.id]}
                                 </span>
                               )}
-                            </button>
+                            </a>
 
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setHierarchicalView(goal.id);
                               }}
-                              className="hover:text-blue-700 transition-colors relative text-xl sm:text-2xl"
+                              className="hover:text-blue-700 transition-colors relative text-2xl"
                               title="View sub-goals"
                             >
                               <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -796,16 +784,16 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                     <div className="mb-4 pb-3 border-b-2 border-slate-300">
                       <div className="flex items-center gap-3">
                         <div className="flex-1">
-                          <h3 className="text-base sm:text-lg font-bold text-slate-700">
+                          <h3 className="text-lg font-bold text-slate-700">
                             🎯 {group.parent.title || group.parent.goal_text}
                           </h3>
-                          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                          <p className="text-sm text-slate-500 mt-1">
                             Long-term goal • {group.goals.length} medium-term {group.goals.length === 1 ? 'goal' : 'goals'}
                           </p>
                         </div>
                         <button
                           onClick={() => setHierarchicalView(group.parent.id)}
-                          className="text-blue-600 hover:text-blue-700 text-xs sm:text-sm font-medium px-2 sm:px-3 py-1 rounded border border-blue-300 hover:bg-blue-50 transition-colors whitespace-nowrap"
+                          className="text-blue-600 hover:text-blue-700 text-sm font-medium px-3 py-1 rounded border border-blue-300 hover:bg-blue-50 transition-colors"
                         >
                           View Tree →
                         </button>
@@ -814,10 +802,10 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                   )}
                   {!group.parent && group.goals.length > 0 && (
                     <div className="mb-4 pb-3 border-b-2 border-slate-300">
-                      <h3 className="text-base sm:text-lg font-bold text-slate-700">
+                      <h3 className="text-lg font-bold text-slate-700">
                         📌 Independent Goals
                       </h3>
-                      <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                      <p className="text-sm text-slate-500 mt-1">
                         Not linked to a long-term goal
                       </p>
                     </div>
@@ -862,15 +850,20 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
 
                             {goal.why && (
                               <div className="mb-2 ml-5 sm:ml-6">
-                                <span className="text-xs sm:text-sm font-medium text-slate-600">Why: </span>
-                                <span className="text-xs sm:text-sm text-slate-600">{goal.why}</span>
+                                <span className="text-sm font-medium text-slate-600">Why: </span>
+                                <span className="text-sm text-slate-600">{goal.why}</span>
                               </div>
                             )}
                           </div>
 
                           <div className="mt-2 sm:mt-3 flex gap-3 sm:gap-4 items-center justify-end text-slate-400">
-                            <button
-                              onClick={(e) => handleViewTasks(e, goal.id)}
+                            <a
+                              href={`/?page=todo-list&goal=${goal.id}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                window.location.href = `/?page=todo-list&goal=${goal.id}`;
+                              }}
                               className="hover:text-blue-600 transition-colors cursor-pointer text-xl sm:text-2xl relative"
                               title="View tasks"
                             >
@@ -880,7 +873,7 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                                   {taskCounts[goal.id]}
                                 </span>
                               )}
-                            </button>
+                            </a>
 
                             <button
                               onClick={(e) => {
@@ -957,8 +950,13 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                 </div>
 
                 <div className="mt-2 sm:mt-3 flex gap-3 sm:gap-4 items-center justify-end text-slate-400">
-                  <button
-                    onClick={(e) => handleViewTasks(e, goal.id)}
+                  <a
+                    href={`/?page=todo-list&goal=${goal.id}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      window.location.href = `/?page=todo-list&goal=${goal.id}`;
+                    }}
                     className="hover:text-blue-600 transition-colors cursor-pointer text-xl sm:text-xl sm:text-2xl relative"
                     title="View tasks"
                   >
@@ -968,7 +966,7 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                         {taskCounts[goal.id]}
                       </span>
                     )}
-                  </button>
+                  </a>
 
                   <button
                     onClick={(e) => {
