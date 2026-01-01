@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import Login from "./Login";
 import Welcome from "./Welcome";
 import Waitlist from "./Waitlist";
+import AutoTour from './components/AutoTour';
 
 // API URL handling
 const API_URL = import.meta.env.PROD
@@ -194,6 +195,20 @@ function App() {
           if (action === 'navigate_habits') setCurrentPage('my-habits');
         }}
       />
+
+      {/* Alfred Auto-Tour - Fully automatic guided tour */}
+      {needsTour && !tourComplete && (
+        <AutoTour
+          apiUrl={API_URL}
+          userNumber={userNumber}
+          onNavigate={handleNavigate}
+          onComplete={handleTourComplete}
+        />
+      )}
+
+
+
+
 
       {isMobile && isSidebarOpen && (
         <div
