@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import AlfredJourneyCoach from './AlfredJourneyCoach';  // ADD THIS LINE
 
 const CENTER = { x: 500, y: 500 };
 const R_CENTER = 120;
@@ -129,7 +130,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   const [topicData, setTopicData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-  const [hoveredTopic, setHoveredTopic] = useState(null);
 
   const anglePerDim = 360 / DIMENSIONS.length;
 
@@ -185,11 +185,21 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
     const endpoint = TOPIC_ENDPOINTS[selectedTopic];
     
     try {
-      await axios.put(
-        `${apiUrl}/api/journey/${endpoint}/${id}`,
-        updates,
-        { params: { user_number: userNumber } }
-      );
+      if (id) {
+        // Update existing item
+        await axios.put(
+          `${apiUrl}/api/journey/${endpoint}/${id}`,
+          updates,
+          { params: { user_number: userNumber } }
+        );
+      } else {
+        // Create new item
+        await axios.post(
+          `${apiUrl}/api/journey/${endpoint}`,
+          { ...updates, user_number: userNumber },
+          { params: { user_number: userNumber } }
+        );
+      }
       
       // Refresh data
       const response = await axios.get(`${apiUrl}/api/journey/${endpoint}`, {
@@ -199,8 +209,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       setTopicData(Array.isArray(data) ? data : []);
       setEditingItem(null);
     } catch (err) {
-      console.error(`Error updating ${selectedTopic}:`, err);
-      alert(`Failed to update ${selectedTopic}`);
+      console.error(`Error ${id ? 'updating' : 'creating'} ${selectedTopic}:`, err);
+      alert(`Failed to ${id ? 'update' : 'create'} ${selectedTopic}`);
     }
   };
 
@@ -228,62 +238,50 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   };
 
   return (
-    <div className="px-2 md:px-10 py-4 md:py-8">
+    <div className="px-2 md:px-10 py-4 md:py-6">
       {/* Page title */}
-      <h1 className="text-2xl md:text-3xl font-semibold text-slate-800 mb-1 md:mb-2">
+      <h1 className="text-2xl md:text-3xl font-semibold text-slate-800 mb-1">
         Alfred Leadership Model
       </h1>
-      <p className="text-sm md:text-base text-slate-600 mb-4 md:mb-6">
+      <p className="text-sm md:text-base text-slate-600 mb-3 md:mb-4">
         A comprehensive framework for executive development
       </p>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
-        {/* Left side: "Why it matters" text (appears on hover) - only takes space when visible */}
-        {hoveredTopic && WHY_IT_MATTERS[hoveredTopic] && (
-          <div className="w-full lg:w-64 flex-shrink-0">
-            <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-              <h3 className="font-semibold text-slate-800 mb-2">{hoveredTopic}</h3>
-              <p className="text-sm text-slate-700 leading-relaxed">
-                {WHY_IT_MATTERS[hoveredTopic]}
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Center: The wheel */}
-        <div className={`flex-shrink-0 transition-all duration-300 ${selectedTopic ? 'lg:w-[450px]' : 'lg:w-full lg:max-w-4xl lg:mx-auto'}`}>
+        <div className={`flex-shrink-0 transition-all duration-300 mx-auto ${selectedTopic ? 'lg:w-[450px] lg:mx-0' : 'lg:w-full lg:max-w-4xl'}`}>
           <svg 
             viewBox="0 0 1000 1000" 
             className="w-full h-auto"
           >
             {/* Define all gradients at the top level */}
             <defs>
-              {/* Center gradient - dark blue */}
+              {/* Center gradient - dark navy blue */}
               <linearGradient id="center-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#1e3a8a" />
-                <stop offset="100%" stopColor="#1e40af" />
+                <stop offset="0%" stopColor="#1e3a5f" />
+                <stop offset="100%" stopColor="#2d4a6f" />
               </linearGradient>
               
-              {/* Dimension gradients - all sophisticated blues */}
+              {/* Dimension gradients - soft blues for middle ring */}
               <linearGradient id="gradient-0" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#3b82f6" />
-                <stop offset="100%" stopColor="#2563eb" />
+                <stop offset="0%" stopColor="#a8c5e6" />
+                <stop offset="100%" stopColor="#8badce" />
               </linearGradient>
               <linearGradient id="gradient-1" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#60a5fa" />
-                <stop offset="100%" stopColor="#3b82f6" />
+                <stop offset="0%" stopColor="#9cb8d9" />
+                <stop offset="100%" stopColor="#7fa0c5" />
               </linearGradient>
               <linearGradient id="gradient-2" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#2563eb" />
-                <stop offset="100%" stopColor="#1d4ed8" />
+                <stop offset="0%" stopColor="#b5ceea" />
+                <stop offset="100%" stopColor="#95b5d8" />
               </linearGradient>
               <linearGradient id="gradient-3" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#3b82f6" />
-                <stop offset="100%" stopColor="#2563eb" />
+                <stop offset="0%" stopColor="#a8c5e6" />
+                <stop offset="100%" stopColor="#8badce" />
               </linearGradient>
               <linearGradient id="gradient-4" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#60a5fa" />
-                <stop offset="100%" stopColor="#3b82f6" />
+                <stop offset="0%" stopColor="#9cb8d9" />
+                <stop offset="100%" stopColor="#7fa0c5" />
               </linearGradient>
             </defs>
 
@@ -336,13 +334,13 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
               // Position dimension label in the MIDDLE ring (not outside)
               const labelPos = polar(CENTER.x, CENTER.y, (R_CENTER + R_MIDDLE) / 2, dimMidAngle);
 
-              // Premium monochromatic blue gradients for executive feel
+              // Elegant soft blue gradients from the reference image
               const dimGradients = [
-                { start: "#3b82f6", end: "#2563eb" }, // blue-500 to blue-600
-                { start: "#60a5fa", end: "#3b82f6" }, // blue-400 to blue-500
-                { start: "#2563eb", end: "#1d4ed8" }, // blue-600 to blue-700
-                { start: "#3b82f6", end: "#2563eb" }, // blue-500 to blue-600
-                { start: "#60a5fa", end: "#3b82f6" }, // blue-400 to blue-500
+                { start: "#a8c5e6", end: "#8badce" },
+                { start: "#9cb8d9", end: "#7fa0c5" },
+                { start: "#b5ceea", end: "#95b5d8" },
+                { start: "#a8c5e6", end: "#8badce" },
+                { start: "#9cb8d9", end: "#7fa0c5" },
               ];
               const gradient = dimGradients[dimIdx % dimGradients.length];
               const gradientId = `gradient-${dimIdx}`;
@@ -381,7 +379,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                       topicMidAngle
                     );
 
-                    const isHovered = hoveredTopic === topic;
                     const isSelected = selectedTopic === topic;
 
                     // Border color matches dimension gradient
@@ -391,13 +388,11 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                       <g key={topic}>
                         <path
                           d={wedgePath(R_MIDDLE, R_OUTER, topicAngleStart, topicAngleEnd)}
-                          fill={isSelected ? "#1e293b" : isHovered ? "#f1f5f9" : "white"}
+                          fill={isSelected ? "#1e3a5f" : "#e8eef5"}
                           stroke={borderColor}
-                          strokeWidth="3"
+                          strokeWidth="2"
                           style={{ cursor: "pointer", transition: "fill 0.2s" }}
                           onClick={() => handleTopicClick(topic)}
-                          onMouseEnter={() => setHoveredTopic(topic)}
-                          onMouseLeave={() => setHoveredTopic(null)}
                         />
                         <text
                           x={topicLabelPos.x}
@@ -453,9 +448,15 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                 </div>
               ) : topicData.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-slate-600">
-                    No {selectedTopic.toLowerCase()} captured yet. Share with Alfred to see them here!
+                  <p className="text-slate-600 mb-4">
+                    No {selectedTopic.toLowerCase()} captured yet. Share with Alfred or add one here!
                   </p>
+                  <button
+                    onClick={() => setEditingItem({ id: null, isNew: true })}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-medium"
+                  >
+                    + Add {selectedTopic}
+                  </button>
                 </div>
               ) : (
                 <div className="space-y-3 max-h-[600px] overflow-y-auto">
@@ -533,10 +534,10 @@ function renderItemContent(item, topic) {
             <h4 className="text-lg font-bold text-slate-800 mb-2">{item.title}</h4>
           )}
           <p className="text-slate-800 font-medium mb-2">{item.value_text}</p>
-          {item.definition && (
+          {item.why && (
             <div className="bg-blue-50 p-3 rounded mt-2">
               <p className="text-sm text-slate-700">
-                <span className="font-medium">Definition:</span> {item.definition}
+                <span className="font-medium">Why:</span> {item.why}
               </p>
             </div>
           )}
@@ -839,12 +840,13 @@ function EditForm({ item, topic, onSave, onDelete, onCancel }) {
         return (
           <>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Title</label>
               <input
                 type="text"
                 value={formData.title || ''}
                 onChange={(e) => handleChange('title', e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
               />
             </div>
             <div>
@@ -854,13 +856,14 @@ function EditForm({ item, topic, onSave, onDelete, onCancel }) {
                 onChange={(e) => handleChange('value_text', e.target.value)}
                 rows={3}
                 className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Definition</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Why (optional)</label>
               <textarea
-                value={formData.definition || ''}
-                onChange={(e) => handleChange('definition', e.target.value)}
+                value={formData.why || ''}
+                onChange={(e) => handleChange('why', e.target.value)}
                 rows={2}
                 className="w-full px-3 py-2 border border-slate-300 rounded-md"
               />
@@ -1022,6 +1025,367 @@ function EditForm({ item, topic, onSave, onDelete, onCancel }) {
           </>
         );
 
+      case "Energy Sources":
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+              <input
+                type="text"
+                value={formData.title || ''}
+                onChange={(e) => handleChange('title', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Energy Source</label>
+              <textarea
+                value={formData.source_text || ''}
+                onChange={(e) => handleChange('source_text', e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+              <input
+                type="text"
+                value={formData.category || ''}
+                onChange={(e) => handleChange('category', e.target.value)}
+                placeholder="e.g. physical, mental, social"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+          </>
+        );
+
+      case "Energy Drains":
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+              <input
+                type="text"
+                value={formData.title || ''}
+                onChange={(e) => handleChange('title', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Energy Drain</label>
+              <textarea
+                value={formData.drain_text || ''}
+                onChange={(e) => handleChange('drain_text', e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+              <input
+                type="text"
+                value={formData.category || ''}
+                onChange={(e) => handleChange('category', e.target.value)}
+                placeholder="e.g. meetings, context-switching"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Mitigation Strategy</label>
+              <textarea
+                value={formData.mitigation || ''}
+                onChange={(e) => handleChange('mitigation', e.target.value)}
+                rows={2}
+                placeholder="How to reduce the impact"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+          </>
+        );
+
+      case "Recovery":
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+              <input
+                type="text"
+                value={formData.title || ''}
+                onChange={(e) => handleChange('title', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Recovery Method</label>
+              <textarea
+                value={formData.method_text || ''}
+                onChange={(e) => handleChange('method_text', e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+              <input
+                type="text"
+                value={formData.category || ''}
+                onChange={(e) => handleChange('category', e.target.value)}
+                placeholder="e.g. exercise, rest, social"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Frequency</label>
+              <input
+                type="text"
+                value={formData.frequency || ''}
+                onChange={(e) => handleChange('frequency', e.target.value)}
+                placeholder="e.g. daily, weekly"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+          </>
+        );
+
+      case "Procrastination":
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+              <input
+                type="text"
+                value={formData.title || ''}
+                onChange={(e) => handleChange('title', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Pattern</label>
+              <textarea
+                value={formData.pattern_text || ''}
+                onChange={(e) => handleChange('pattern_text', e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Underlying Reason</label>
+              <textarea
+                value={formData.underlying_reason || ''}
+                onChange={(e) => handleChange('underlying_reason', e.target.value)}
+                rows={2}
+                placeholder="e.g. fear, overwhelm, unclear"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Strategy</label>
+              <textarea
+                value={formData.strategy || ''}
+                onChange={(e) => handleChange('strategy', e.target.value)}
+                rows={2}
+                placeholder="How to overcome it"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+          </>
+        );
+
+      case "Execution System":
+      case "Prioritization":
+      case "Development Plan":
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+              <input
+                type="text"
+                value={formData.title || ''}
+                onChange={(e) => handleChange('title', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">System/Approach</label>
+              <textarea
+                value={formData.system_text || ''}
+                onChange={(e) => handleChange('system_text', e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+              <input
+                type="text"
+                value={formData.category || ''}
+                onChange={(e) => handleChange('category', e.target.value)}
+                placeholder="e.g. planning, delegation, automation"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Effectiveness</label>
+              <input
+                type="text"
+                value={formData.effectiveness || ''}
+                onChange={(e) => handleChange('effectiveness', e.target.value)}
+                placeholder="e.g. working well, needs improvement"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+          </>
+        );
+
+      case "Team Composition":
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+              <input
+                type="text"
+                value={formData.title || ''}
+                onChange={(e) => handleChange('title', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Composition</label>
+              <textarea
+                value={formData.composition_text || ''}
+                onChange={(e) => handleChange('composition_text', e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Team Type</label>
+              <input
+                type="text"
+                value={formData.team_type || ''}
+                onChange={(e) => handleChange('team_type', e.target.value)}
+                placeholder="e.g. direct reports, cross-functional"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Dynamics</label>
+              <textarea
+                value={formData.dynamics || ''}
+                onChange={(e) => handleChange('dynamics', e.target.value)}
+                rows={2}
+                placeholder="What's working, what's not"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+          </>
+        );
+
+      case "Inspire":
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+              <input
+                type="text"
+                value={formData.title || ''}
+                onChange={(e) => handleChange('title', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">How You Inspire</label>
+              <textarea
+                value={formData.inspiration_text || ''}
+                onChange={(e) => handleChange('inspiration_text', e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Approach</label>
+              <textarea
+                value={formData.approach || ''}
+                onChange={(e) => handleChange('approach', e.target.value)}
+                rows={2}
+                placeholder="e.g. storytelling, vision-setting"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">What Works</label>
+              <textarea
+                value={formData.effectiveness || ''}
+                onChange={(e) => handleChange('effectiveness', e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+          </>
+        );
+
+      case "Coach & Delegate":
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Title (optional)</label>
+              <input
+                type="text"
+                value={formData.title || ''}
+                onChange={(e) => handleChange('title', e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Moment</label>
+              <textarea
+                value={formData.moment_text || ''}
+                onChange={(e) => handleChange('moment_text', e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Person</label>
+              <input
+                type="text"
+                value={formData.person || ''}
+                onChange={(e) => handleChange('person', e.target.value)}
+                placeholder="Who was coached/delegated to"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Outcome</label>
+              <textarea
+                value={formData.outcome || ''}
+                onChange={(e) => handleChange('outcome', e.target.value)}
+                rows={2}
+                placeholder="What happened"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Learning</label>
+              <textarea
+                value={formData.learning || ''}
+                onChange={(e) => handleChange('learning', e.target.value)}
+                rows={2}
+                placeholder="What was learned"
+                className="w-full px-3 py-2 border border-slate-300 rounded-md"
+              />
+            </div>
+          </>
+        );
+
       // Add more cases for other topic types as needed
       default:
         return <p className="text-slate-600">Edit form for {topic} coming soon...</p>;
@@ -1037,7 +1401,7 @@ function EditForm({ item, topic, onSave, onDelete, onCancel }) {
           onClick={handleSubmit}
           className="flex-1 bg-slate-700 hover:bg-slate-800 text-white px-4 py-2 rounded-md font-medium"
         >
-          Save Changes
+          {item.id ? 'Save Changes' : 'Create'}
         </button>
         <button
           onClick={onCancel}
@@ -1045,12 +1409,14 @@ function EditForm({ item, topic, onSave, onDelete, onCancel }) {
         >
           Cancel
         </button>
-        <button
-          onClick={onDelete}
-          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium"
-        >
-          Delete
-        </button>
+        {item.id && (
+          <button
+            onClick={onDelete}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md font-medium"
+          >
+            Delete
+          </button>
+        )}
       </div>
     </div>
   );

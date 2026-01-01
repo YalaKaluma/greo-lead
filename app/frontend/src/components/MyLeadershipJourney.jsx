@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import AlfredJourneyCoach from './AlfredJourneyCoach';  // ADD THIS LINE
 
 const CENTER = { x: 500, y: 500 };
 const R_CENTER = 120;
@@ -129,6 +130,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   const [topicData, setTopicData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [editCoachOpen, setEditCoachOpen] = useState(false);
+
 
   const anglePerDim = 360 / DIMENSIONS.length;
 
@@ -477,26 +480,65 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       {/* Edit modal (only appears when clicking on an individual item) */}
       {editingItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden relative">
+            {/* Header with Alfred Coach button */}
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center z-10">
               <h3 className="text-xl font-bold text-slate-800">
                 Edit {selectedTopic}
               </h3>
-              <button
-                onClick={closeEditModal}
-                className="text-slate-400 hover:text-slate-600 text-2xl"
-              >
-                ×
-              </button>
+              <div className="flex items-center gap-3">
+                {/* Alfred Coach Toggle */}
+                <button
+                  onClick={() => setEditCoachOpen(!editCoachOpen)}
+                  className="p-2 hover:bg-slate-100 rounded-full transition-colors group relative"
+                  title="Get coaching from Alfred"
+                >
+                  <img 
+                    src="/alfred-logo.png" 
+                    alt="Alfred Coach" 
+                    className="w-6 h-6 opacity-60 group-hover:opacity-100 transition-opacity"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'inline-block';
+                    }}
+                  />
+                  <span style={{ display: 'none' }} className="text-xl">🎩</span>
+                  {editCoachOpen && (
+                    <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-blue-600 rounded-full border-2 border-white"></div>
+                  )}
+                </button>
+                
+                {/* Close button */}
+                <button
+                  onClick={closeEditModal}
+                  className="text-slate-400 hover:text-slate-600 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
             </div>
             
-            <div className="p-6">
-              <EditForm
-                item={editingItem}
-                topic={selectedTopic}
-                onSave={(updates) => updateItem(editingItem.id, updates)}
-                onDelete={() => deleteItem(editingItem.id)}
-                onCancel={closeEditModal}
+            {/* Content: Form + Coach */}
+            <div className="flex overflow-hidden" style={{ height: 'calc(90vh - 73px)' }}>
+              {/* Left side: Edit Form */}
+              <div className={`overflow-y-auto p-6 transition-all duration-300 ${editCoachOpen ? 'w-3/5' : 'w-full'}`}>
+                <EditForm
+                  item={editingItem}
+                  topic={selectedTopic}
+                  onSave={(updates) => updateItem(editingItem.id, updates)}
+                  onDelete={() => deleteItem(editingItem.id)}
+                  onCancel={closeEditModal}
+                />
+              </div>
+              
+              {/* Right side: Alfred Coach */}
+              <AlfredJourneyCoach
+                apiUrl={apiUrl}
+                userNumber={userNumber}
+                journeyType={mapTopicToJourneyType(selectedTopic)}
+                currentData={editingItem}
+                isOpen={editCoachOpen}
+                onClose={() => setEditCoachOpen(false)}
               />
             </div>
           </div>
@@ -814,6 +856,31 @@ function renderItemContent(item, topic) {
       return <p className="text-slate-600">No data available</p>;
   }
 }
+
+
+
+function mapTopicToJourneyType(topic) {
+  const mapping = {
+    "Strengths": "strength",
+    "Goals": "goal",
+    "Failures & Scars": "failure",
+    "Values": "value",
+    "Development Opportunities": "development-area",
+    "Team Composition": "team-composition",
+    "Inspire": "inspiration",
+    "Coach & Delegate": "coaching",
+    "Prioritization": "prioritization",
+    "Execution System": "execution-system",
+    "Procrastination": "procrastination",
+    "Energy Sources": "energy-source",
+    "Energy Drains": "energy-drain",
+    "Recovery": "recovery"
+  };
+  
+  return mapping[topic] || topic.toLowerCase();
+}
+
+
 
 // EditForm component - handles editing of individual items
 function EditForm({ item, topic, onSave, onDelete, onCancel }) {
