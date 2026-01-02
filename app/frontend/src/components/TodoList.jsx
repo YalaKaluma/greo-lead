@@ -33,7 +33,7 @@ const isTodayET = (dateString) => {
 
 // Helper function to get next Monday
 const getNextMonday = () => {
-  const date = new Date();
+  const date = getETDate();  // Use ET instead of new Date()
   const day = date.getDay();
   const daysUntilMonday = day === 0 ? 1 : 8 - day; // If Sunday, 1 day. Otherwise, days until next Monday
   date.setDate(date.getDate() + daysUntilMonday);
@@ -175,7 +175,8 @@ export default function TodoList({ apiUrl, userNumber }) {
     try {
       const params = {
         user_number: userNumber,
-        filter_type: filterType
+        // If a goal is selected, show ALL tasks for that goal, not just due today
+        filter_type: selectedGoal ? 'all' : filterType
       };
       if (selectedProject) params.project = selectedProject;
       if (selectedDelegate) params.delegated_to = selectedDelegate;
@@ -962,7 +963,7 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   const setTomorrow = () => {
-    const tomorrow = new Date();
+    const tomorrow = getETDate();  // Use ET instead of new Date()
     tomorrow.setDate(tomorrow.getDate() + 1);
     setEditData({ ...editData, due_date: tomorrow.toISOString().split('T')[0] });
     setShowDatePicker(false);
@@ -974,7 +975,7 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
   };
 
   const setNextMonth = () => {
-    const nextMonth = new Date();
+    const nextMonth = getETDate();  // Use ET instead of new Date()
     nextMonth.setMonth(nextMonth.getMonth() + 1);
     setEditData({ ...editData, due_date: nextMonth.toISOString().split('T')[0] });
     setShowDatePicker(false);
@@ -1194,7 +1195,7 @@ function BulkActionModal({ selectedCount, onApply, onCancel, delegates, goals })
   };
 
   const setTomorrow = () => {
-    const tomorrow = new Date();
+    const tomorrow = getETDate();  // Use ET instead of new Date()
     tomorrow.setDate(tomorrow.getDate() + 1);
     setBulkData({ ...bulkData, due_date: tomorrow.toISOString().split('T')[0] });
     setShowDatePicker(false);
@@ -1206,7 +1207,7 @@ function BulkActionModal({ selectedCount, onApply, onCancel, delegates, goals })
   };
 
   const setNextMonth = () => {
-    const nextMonth = new Date();
+    const nextMonth = getETDate();  // Use ET instead of new Date()
     nextMonth.setMonth(nextMonth.getMonth() + 1);
     setBulkData({ ...bulkData, due_date: nextMonth.toISOString().split('T')[0] });
     setShowDatePicker(false);
