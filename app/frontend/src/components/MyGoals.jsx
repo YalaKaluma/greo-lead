@@ -431,23 +431,41 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                 {/* Goal Card */}
                 <div className="flex-1 relative w-full">
                   <div 
-                    onClick={() => setEditingGoalId(parentGoal.id)}
-                    className="bg-white border-2 border-slate-300 rounded-lg p-4 sm:p-6 cursor-pointer hover:shadow-md transition-shadow"
+                    className="bg-white border-2 border-slate-300 rounded-lg p-4 sm:p-6 cursor-pointer hover:shadow-md transition-shadow relative"
                   >
-                    <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-slate-800 mb-2">
-                      {parentGoal.title || parentGoal.goal_text}
-                    </h2>
-                    {parentGoal.title && parentGoal.goal_text !== parentGoal.title && (
-                      <p className="text-sm sm:text-base text-slate-600 mb-3">
-                        {parentGoal.goal_text}
-                      </p>
-                    )}
-                    {parentGoal.why && (
-                      <div>
-                        <span className="text-xs sm:text-sm font-medium text-slate-600">Why: </span>
-                        <span className="text-xs sm:text-sm text-slate-600">{parentGoal.why}</span>
-                      </div>
-                    )}
+                    {/* Task link in upper right corner */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewTasks(e, parentGoal.id);
+                      }}
+                      className="absolute top-2 right-2 sm:top-3 sm:right-3 hover:text-blue-600 transition-colors text-slate-400 text-lg sm:text-xl"
+                      title="View tasks"
+                    >
+                      📋
+                      {taskCounts[parentGoal.id] > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-blue-900 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center" style={{ fontSize: '10px' }}>
+                          {taskCounts[parentGoal.id]}
+                        </span>
+                      )}
+                    </button>
+
+                    <div onClick={() => setEditingGoalId(parentGoal.id)}>
+                      <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-slate-800 mb-2 pr-8">
+                        {parentGoal.title || parentGoal.goal_text}
+                      </h2>
+                      {parentGoal.title && parentGoal.goal_text !== parentGoal.title && (
+                        <p className="text-sm sm:text-base text-slate-600 mb-3">
+                          {parentGoal.goal_text}
+                        </p>
+                      )}
+                      {parentGoal.why && (
+                        <div>
+                          <span className="text-xs sm:text-sm font-medium text-slate-600">Why: </span>
+                          <span className="text-xs sm:text-sm text-slate-600">{parentGoal.why}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   
                   {/* Vertical line going down from long term - OUTSIDE the box */}
@@ -488,32 +506,50 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                             
                             {/* Medium Term Goal Card */}
                             <div
-                              onClick={() => setEditingGoalId(medGoal.id)}
-                              className="bg-white border-2 border-slate-300 rounded-lg p-2 sm:p-3 md:p-4 cursor-pointer hover:shadow-md transition-shadow"
+                              className="bg-white border-2 border-slate-300 rounded-lg p-2 sm:p-3 md:p-4 cursor-pointer hover:shadow-md transition-shadow relative"
                             >
-                              <h4 className="font-bold text-slate-800 text-xs sm:text-sm md:text-base mb-1 sm:mb-2 leading-tight break-words">
-                                {medGoal.title || medGoal.goal_text}
-                              </h4>
-                              {medGoal.title && medGoal.goal_text !== medGoal.title && (
-                                <p className="text-xs text-slate-600 mb-1 sm:mb-2 line-clamp-2 break-words">
-                                  {medGoal.goal_text}
-                                </p>
-                              )}
-                              {medGoal.why && (
-                                <p className="text-xs text-slate-500 italic line-clamp-2 break-words">
-                                  {medGoal.why}
-                                </p>
-                              )}
+                              {/* Task link in upper right corner */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleViewTasks(e, medGoal.id);
+                                }}
+                                className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 hover:text-blue-600 transition-colors text-slate-400 text-base sm:text-lg"
+                                title="View tasks"
+                              >
+                                📋
+                                {taskCounts[medGoal.id] > 0 && (
+                                  <span className="absolute -top-1 -right-1 bg-blue-900 text-white text-xs w-4 h-4 rounded-full flex items-center justify-center" style={{ fontSize: '10px' }}>
+                                    {taskCounts[medGoal.id]}
+                                  </span>
+                                )}
+                              </button>
+
+                              <div onClick={() => setEditingGoalId(medGoal.id)}>
+                                <h4 className="font-bold text-slate-800 text-xs sm:text-sm md:text-base mb-1 sm:mb-2 leading-tight break-words pr-6">
+                                  {medGoal.title || medGoal.goal_text}
+                                </h4>
+                                {medGoal.title && medGoal.goal_text !== medGoal.title && (
+                                  <p className="text-xs text-slate-600 mb-1 sm:mb-2 line-clamp-2 break-words">
+                                    {medGoal.goal_text}
+                                  </p>
+                                )}
+                                {medGoal.why && (
+                                  <p className="text-xs text-slate-500 italic line-clamp-2 break-words">
+                                    {medGoal.why}
+                                  </p>
+                                )}
+                              </div>
                             </div>
                             
-                            {/* Short Term Goals stacked underneath this MT goal - HIDDEN ON MOBILE */}
+                            {/* Short Term Goals stacked underneath this MT goal */}
                             {shortTermChildren.length > 0 && (
-                              <div className="hidden sm:block mt-4 pl-6 sm:pl-10 relative">
+                              <div className="mt-3 sm:mt-4 pl-4 sm:pl-6 md:pl-10 relative">
                                 {/* Vertical line down from MT goal - starts BELOW the box */}
                                 <div className="absolute left-3 sm:left-5 w-0.5 bg-slate-300" style={{ top: '-16px', height: 'calc(100% + 16px)' }}></div>
                                 
                                 {/* Stack of short term goals */}
-                                <div className="space-y-3">
+                                <div className="space-y-2 sm:space-y-3">
                                   {shortTermChildren.map((shortGoal, idx) => (
                                     <div key={shortGoal.id} className="relative">
                                       {/* Horizontal line connecting to vertical - shortened to not overlap */}
@@ -528,20 +564,40 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
                                       
                                       {/* Short term goal card */}
                                       <div
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setEditingGoalId(shortGoal.id);
-                                        }}
-                                        className="bg-white border border-slate-300 rounded-lg p-2 sm:p-3 cursor-pointer hover:shadow-md transition-shadow"
+                                        className="bg-white border border-slate-300 rounded-lg p-1.5 sm:p-2 md:p-3 cursor-pointer hover:shadow-md transition-shadow relative"
                                       >
-                                        <h5 className="font-medium text-slate-800 text-xs sm:text-sm mb-1">
-                                          {shortGoal.title || shortGoal.goal_text}
-                                        </h5>
-                                        {shortGoal.title && shortGoal.goal_text !== shortGoal.title && (
-                                          <p className="text-xs text-slate-500">
-                                            {shortGoal.goal_text}
-                                          </p>
-                                        )}
+                                        {/* Task link in upper right corner */}
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleViewTasks(e, shortGoal.id);
+                                          }}
+                                          className="absolute top-1 right-1 sm:top-1.5 sm:right-1.5 hover:text-blue-600 transition-colors text-slate-400 text-sm sm:text-base"
+                                          title="View tasks"
+                                        >
+                                          📋
+                                          {taskCounts[shortGoal.id] > 0 && (
+                                            <span className="absolute -top-1 -right-1 bg-blue-900 text-white text-xs w-3 h-3 sm:w-4 sm:h-4 rounded-full flex items-center justify-center" style={{ fontSize: '9px' }}>
+                                              {taskCounts[shortGoal.id]}
+                                            </span>
+                                          )}
+                                        </button>
+
+                                        <div
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setEditingGoalId(shortGoal.id);
+                                          }}
+                                        >
+                                          <h5 className="font-medium text-slate-800 text-xs sm:text-sm mb-0.5 sm:mb-1 leading-tight break-words pr-5">
+                                            {shortGoal.title || shortGoal.goal_text}
+                                          </h5>
+                                          {shortGoal.title && shortGoal.goal_text !== shortGoal.title && (
+                                            <p className="text-xs text-slate-500 line-clamp-2 break-words">
+                                              {shortGoal.goal_text}
+                                            </p>
+                                          )}
+                                        </div>
                                       </div>
                                     </div>
                                   ))}
