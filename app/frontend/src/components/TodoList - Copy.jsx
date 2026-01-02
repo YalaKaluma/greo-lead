@@ -116,16 +116,6 @@ export default function TodoList({ apiUrl, userNumber }) {
     };
   }, []);
 
-  // Read goal filter from URL parameter on mount
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const goalParam = params.get('goal');
-    if (goalParam) {
-      setSelectedGoal(goalParam);
-      setFiltersCollapsed(false); // Expand filters to show the active goal filter
-    }
-  }, []);
-
   useEffect(() => {
     const saved = localStorage.getItem('taskSortOrder');
     if (saved) {
