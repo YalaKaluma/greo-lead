@@ -180,14 +180,14 @@ export default function TodoList({ apiUrl, userNumber }) {
       };
       if (selectedProject) params.project = selectedProject;
       if (selectedDelegate) params.delegated_to = selectedDelegate;
-      if (selectedGoal) params.goal_id = parseInt(selectedGoal);  // ← Send goal_id to backend
 
       const response = await axios.get(`${apiUrl}/api/tasks/`, { params });
       if (response.data && Array.isArray(response.data)) {
-        // Filter out completed tasks
         let activeTasks = response.data.filter(t => t.status !== 'completed');
         
-        // No need to filter by goal here anymore - backend does it
+        if (selectedGoal) {
+          activeTasks = activeTasks.filter(t => t.goal_id === parseInt(selectedGoal));
+        }
         
         setTasks(activeTasks);
       }

@@ -68,7 +68,6 @@ def get_tasks(
         filter_type: str = "all",
         project: Optional[str] = None,
         delegated_to: Optional[str] = None,
-        goal_id: Optional[int] = None,  # ← ADD THIS
         db: Session = Depends(get_db)
 ):
     """
@@ -76,7 +75,6 @@ def get_tasks(
     filter_type: "all", "due_today", "next_7_days"
     project: filter by project name
     delegated_to: filter by delegate name
-    goal_id: filter by goal ID
     """
     query = db.query(Task).filter(Task.user_number == user_number)
     today = get_today_et()  # ← CHANGED: Use Eastern Time instead of date.today()
@@ -103,10 +101,6 @@ def get_tasks(
     # Delegate filter
     if delegated_to:
         query = query.filter(Task.delegated_to == delegated_to)
-
-    # Goal filter
-    if goal_id is not None:  # ← ADD THIS
-        query = query.filter(Task.goal_id == goal_id)
 
     tasks = query.all()
 
