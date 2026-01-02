@@ -23,6 +23,7 @@ function App() {
   const [userNumber, setUserNumber] = useState(null);
   const [needsTour, setNeedsTour] = useState(false);
   const [tourComplete, setTourComplete] = useState(false);
+  const [onboardingCompleted, setOnboardingCompleted] = useState(true); // Default true, check DB
 
   const [currentPage, setCurrentPage] = useState('my-goals'); // Start on goals page for tour
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -37,8 +38,35 @@ function App() {
       setUserNumber(storedUser);
       setIsLoggedIn(true);
       setNeedsTour(storedTour === "true");
+      
+      // Check onboarding status from database
+      checkOnboardingStatus(storedUser);
     }
   }, []);
+
+  // Check onboarding status from database
+  const checkOnboardingStatus = async (userNumber) => {
+    try {
+      const response = await fetch(`${API_URL}/api/onboarding/user/status?user_number=${encodeURIComponent(userNumber)}`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Onboarding status from DB:', data);
+        
+        // Only show onboarding/tour if NOT completed in database
+        if (data.onboarding_completed === false) {
+          setOnboardingCompleted(false);
+          setNeedsTour(true);
+        } else {
+          setOnboardingCompleted(true);
+          setNeedsTour(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking onboarding status:', error);
+      // If error, assume completed to avoid blocking user
+      setOnboardingCompleted(true);
+    }
+  };
 
   // Handle URL parameters on load
   useEffect(() => {
@@ -46,16 +74,18 @@ function App() {
     const page = params.get('page');
     const user = params.get('user');
     
-    // If there's a user param in URL, show Welcome page
-    if (user && !isLoggedIn) {
-      // Welcome page will handle this
+    // If there's a numeric user param and NOT logged in, it's a new user onboarding link
+    const isNumericUser = user && !isNaN(parseInt(user));
+    if (isNumericUser && !isLoggedIn) {
+      // Let Welcome component handle this below
       return;
     }
     
-    if (page) {
+    // If there's a page param and we're logged in, navigate to it
+    if (page && isLoggedIn) {
       setCurrentPage(page);
     }
-  }, []);
+  }, [isLoggedIn]);
 
   // Handle responsive layout
   useEffect(() => {
@@ -89,6 +119,9 @@ function App() {
     setIsLoggedIn(true);
     setNeedsTour(requiresTour);
     
+    // Check onboarding status from database
+    checkOnboardingStatus(userNumber);
+    
     // If tour is needed, start on goals page
     if (requiresTour) {
       setCurrentPage('my-goals');
@@ -98,6 +131,8 @@ function App() {
   const handleTourComplete = () => {
     setTourComplete(true);
     setNeedsTour(false);
+    setOnboardingCompleted(true);
+    localStorage.removeItem("needs_tour");
   };
 
   // Waitlist page
@@ -105,9 +140,15 @@ function App() {
     return <Waitlist />;
   }
 
-  // Welcome page (first-time login)
+  // Welcome page (first-time onboarding)
+  // Only show if:
+  // 1. Has numeric 'user' param (from onboarding link)
+  // 2. NOT already logged in
   const params = new URLSearchParams(window.location.search);
-  if (params.get('user') && !isLoggedIn) {
+  const userParam = params.get('user');
+  const isNumericUser = userParam && !isNaN(parseInt(userParam));
+  
+  if (isNumericUser && !isLoggedIn) {
     return <Welcome onLogin={handleLogin} />;
   }
 
@@ -122,10 +163,11 @@ function App() {
     );
   }
 
+  // Main App - Only show tour if onboarding NOT completed in database
   return (
     <div className="flex h-screen bg-gray-50">
-      {/* Tour Overlay - Shows when needed */}
-      {needsTour && !tourComplete && (
+      {/* Tour Overlay - Only shows if onboarding NOT completed */}
+      {!onboardingCompleted && needsTour && !tourComplete && (
         <TourOverlay 
           userNumber={userNumber}
           currentPage={currentPage}
@@ -166,7 +208,7 @@ function App() {
           <TodoList apiUrl={API_URL} userNumber={userNumber} />
         )}
         {currentPage === 'my-goals' && (
-          <MyGoals apiUrl={API_URL} userNumber={userNumber} />
+          <MyGoals apiUrl={API_URL} userNumber={userNumber} onNavigate={handleNavigate} />
         )}
         {currentPage === 'my-team' && (
           <MyTeam apiUrl={API_URL} userNumber={userNumber} />
@@ -196,8 +238,8 @@ function App() {
         }}
       />
 
-      {/* Alfred Auto-Tour - Fully automatic guided tour */}
-      {needsTour && !tourComplete && (
+      {/* Alfred Auto-Tour - Only shows if onboarding NOT completed */}
+      {!onboardingCompleted && needsTour && !tourComplete && (
         <AutoTour
           apiUrl={API_URL}
           userNumber={userNumber}
@@ -205,10 +247,6 @@ function App() {
           onComplete={handleTourComplete}
         />
       )}
-
-
-
-
 
       {isMobile && isSidebarOpen && (
         <div

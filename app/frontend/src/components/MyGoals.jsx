@@ -211,10 +211,20 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
     
     if (onNavigate) {
       // Use the onNavigate callback if provided
-      onNavigate('todo-list', { goalFilter: goalId });
+      // Set URL parameter without reload
+      const url = new URL(window.location);
+      url.searchParams.set('page', 'todo-list');
+      url.searchParams.set('goal', goalId);
+      window.history.pushState({}, '', url);
+      
+      // Navigate to the page
+      onNavigate('todo-list');
     } else {
-      // Fallback to URL navigation
-      window.location.href = `/?page=todo-list&goal=${goalId}`;
+      // Fallback - this shouldn't happen but keeps backward compatibility
+      const url = new URL(window.location);
+      url.searchParams.set('page', 'todo-list');
+      url.searchParams.set('goal', goalId);
+      window.location.href = url.toString();
     }
   };
 
