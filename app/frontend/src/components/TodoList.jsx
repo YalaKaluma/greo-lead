@@ -116,14 +116,26 @@ export default function TodoList({ apiUrl, userNumber }) {
     };
   }, []);
 
-  // Read goal filter from URL parameter on mount
+  // Read goal filter from URL parameter on mount AND when URL changes
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const goalParam = params.get('goal');
-    if (goalParam) {
-      setSelectedGoal(goalParam);
-      setFiltersCollapsed(false); // Expand filters to show the active goal filter
-    }
+    const readUrlParams = () => {
+      const params = new URLSearchParams(window.location.search);
+      const goalParam = params.get('goal');
+      if (goalParam) {
+        setSelectedGoal(goalParam);
+        setFiltersCollapsed(false); // Expand filters to show the active goal filter
+      }
+    };
+
+    // Read on mount
+    readUrlParams();
+
+    // Listen for URL changes (custom event dispatched by MyGoals)
+    window.addEventListener('urlchange', readUrlParams);
+
+    return () => {
+      window.removeEventListener('urlchange', readUrlParams);
+    };
   }, []);
 
   useEffect(() => {

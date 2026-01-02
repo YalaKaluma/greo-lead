@@ -217,6 +217,9 @@ export default function MyGoals({ apiUrl = '', userNumber, onNavigate }) {
       url.searchParams.set('goal', goalId);
       window.history.pushState({}, '', url);
       
+      // Dispatch custom event to notify TodoList of URL change
+      window.dispatchEvent(new Event('urlchange'));
+      
       // Navigate to the page
       onNavigate('todo-list');
     } else {
