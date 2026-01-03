@@ -11,8 +11,8 @@ from app.db import Base, engine
 from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits, waitlist, onboarding, chat
 from app.routers import auth
 from sqlalchemy import text
-
-
+import threading
+from app.email_poller import run_email_loop
 
 # Configure logging with timestamp
 logging.basicConfig(
@@ -279,7 +279,12 @@ else:
     logger.warning("  API endpoints will still work.")
 
 
+#----------------------- email service
 
+@app.on_event("startup")
+def start_email():
+    thread = threading.Thread(target=run_email_loop, daemon=True)
+    thread.start()
 
 # --------------------------------------
 # Startup Complete
