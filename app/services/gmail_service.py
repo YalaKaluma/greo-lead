@@ -11,7 +11,7 @@ from app import config
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
-    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.modify",
 ]
 
 def _require_env(name: str, value: Optional[str]) -> str:

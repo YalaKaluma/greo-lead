@@ -1,8 +1,12 @@
+import os
+from dotenv import load_dotenv
 from google_auth_oauthlib.flow import Flow
+
+# Load .env variables
+load_dotenv()
 
 CLIENT_ID = os.environ["GMAIL_CLIENT_ID"]
 CLIENT_SECRET = os.environ["GMAIL_CLIENT_SECRET"]
-
 
 flow = Flow.from_client_config(
     {
@@ -15,16 +19,15 @@ flow = Flow.from_client_config(
     },
     scopes=[
         "https://www.googleapis.com/auth/gmail.send",
-        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.modify",
     ],
 )
 
 flow.redirect_uri = "http://localhost:8000/api/gmail/oauth/callback"
 
-
 auth_url, _ = flow.authorization_url(
     access_type="offline",
-    prompt="consent"
+    prompt="consent",
 )
 
 print("\nOpen this URL in your browser:\n")
