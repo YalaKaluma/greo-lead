@@ -41,6 +41,13 @@ router = APIRouter()
 twilio_client = Client(TWILIO_SID, TWILIO_AUTH_TOKEN)
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
+#==================== supposed to be discontinued
+
+logger.warning(
+    "⚠️ Legacy /api/webhook hit — this endpoint is deprecated. "
+    "Please switch to /api/brain/webhook."
+)
+
 # =========================================================
 # CORE SHARED BRAIN (used by WhatsApp + Email)
 # =========================================================
