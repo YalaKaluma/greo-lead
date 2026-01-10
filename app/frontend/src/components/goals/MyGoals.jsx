@@ -191,6 +191,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
         {selectedGoal && (
           <GoalViewPanel
             goal={selectedGoal}
+            allGoals={goals}
             linkedTasks={linkedTasks[selectedGoal.id] || []}
             onClose={handleClosePanel}
             onEdit={handleEditClick}

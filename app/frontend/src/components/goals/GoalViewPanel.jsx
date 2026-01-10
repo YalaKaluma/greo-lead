@@ -1,4 +1,5 @@
 import LinkedTasksSection from './LinkedTasksSection';
+import GoalTree from './GoalTree';
 
 /* =========================================================
    TIME HORIZON HELPERS
@@ -13,20 +14,11 @@ const getHorizonLabel = (horizon) => {
   return labels[horizon] || 'Goal';
 };
 
-const getHorizonColor = (horizon) => {
-  const colors = {
-    long: 'bg-purple-100 text-purple-800 border-purple-200',
-    medium: 'bg-blue-100 text-blue-800 border-blue-200',
-    short: 'bg-green-100 text-green-800 border-green-200'
-  };
-  return colors[horizon] || 'bg-slate-100 text-slate-800 border-slate-200';
-};
-
 /* =========================================================
    MAIN COMPONENT
    ========================================================= */
 
-export default function GoalViewPanel({ goal, linkedTasks, onClose, onEdit, onCreateChildGoal }) {
+export default function GoalViewPanel({ goal, allGoals, linkedTasks, onClose, onEdit, onCreateChildGoal }) {
   return (
     <div className="fixed lg:absolute top-0 right-0 bottom-0 w-full lg:w-[600px] bg-white shadow-2xl z-40 flex flex-col">
       {/* Header with close button */}
@@ -47,7 +39,7 @@ export default function GoalViewPanel({ goal, linkedTasks, onClose, onEdit, onCr
         
         {/* Time Horizon Badge */}
         <div>
-          <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium border ${getHorizonColor(goal.time_horizon)}`}>
+          <span className="inline-block px-3 py-1 rounded-full text-sm font-medium bg-slate-100 text-slate-700 border border-slate-200">
             {getHorizonLabel(goal.time_horizon)}
           </span>
         </div>
@@ -82,6 +74,11 @@ export default function GoalViewPanel({ goal, linkedTasks, onClose, onEdit, onCr
             </p>
           </div>
         )}
+
+        {/* Goal Tree - NEW */}
+        <div>
+          <GoalTree parentGoal={goal} allGoals={allGoals} />
+        </div>
 
         {/* Linked Tasks */}
         {linkedTasks.length > 0 && (

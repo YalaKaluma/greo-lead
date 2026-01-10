@@ -62,7 +62,7 @@ const shouldShowHabit = (habit) => {
 const getStatusIcon = (status) => {
   if (status === 'done') return '✅';
   if (status === 'not_done') return '❌';
-  return '⭕'; // pending or no data
+  return '🔵'; // pending or no data - blue circle
 };
 
 const getStatusColor = (status) => {
@@ -174,7 +174,7 @@ function HabitCalendar({ history, frequency, onUpdateDay }) {
       {/* Compact Legend */}
       <div className="flex gap-3 mt-3 text-xs text-slate-600">
         <div className="flex items-center gap-1">
-          <span>⭕</span> Pending
+          <span>🔵</span> Pending
         </div>
         <div className="flex items-center gap-1">
           <span>✅</span> Done

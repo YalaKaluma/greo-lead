@@ -1,23 +1,14 @@
 /* =========================================================
-   TIME HORIZON COLORS
+   TIME HORIZON LABELS
    ========================================================= */
-
-const getHorizonColor = (horizon) => {
-  const colors = {
-    long: 'border-purple-300 bg-purple-50 hover:border-purple-400',
-    medium: 'border-blue-300 bg-blue-50 hover:border-blue-400',
-    short: 'border-green-300 bg-green-50 hover:border-green-400'
-  };
-  return colors[horizon] || 'border-slate-300 bg-slate-50 hover:border-slate-400';
-};
 
 const getHorizonBadge = (horizon) => {
   const badges = {
-    long: { label: 'Long Term', color: 'bg-purple-100 text-purple-700' },
-    medium: { label: 'Medium Term', color: 'bg-blue-100 text-blue-700' },
-    short: { label: 'Short Term', color: 'bg-green-100 text-green-700' }
+    long: { label: 'Long Term' },
+    medium: { label: 'Medium Term' },
+    short: { label: 'Short Term' }
   };
-  return badges[horizon] || { label: 'Other', color: 'bg-slate-100 text-slate-700' };
+  return badges[horizon] || { label: 'Other' };
 };
 
 /* =========================================================
@@ -26,15 +17,11 @@ const getHorizonBadge = (horizon) => {
 
 export default function GoalCard({ goal, onClick, dragHandleProps }) {
   const badge = getHorizonBadge(goal.time_horizon);
-  const colorClass = getHorizonColor(goal.time_horizon);
 
   return (
     <div
       onClick={() => onClick(goal)}
-      className={`
-        p-4 rounded-lg border-2 transition-all duration-200 cursor-pointer
-        ${colorClass}
-      `}
+      className="p-4 rounded-lg border-2 border-slate-300 bg-white hover:border-slate-400 transition-all duration-200 cursor-pointer"
     >
       {/* Header with drag handle (if provided) */}
       <div className="flex items-start justify-between mb-2">
@@ -67,7 +54,7 @@ export default function GoalCard({ goal, onClick, dragHandleProps }) {
 
       {/* Why - highlighted */}
       {goal.why && (
-        <div className="mb-3 p-2 bg-white/50 rounded border border-slate-200">
+        <div className="mb-3 p-2 bg-slate-50 rounded border border-slate-200">
           <p className="text-xs font-medium text-slate-500 mb-1">WHY</p>
           <p className="text-sm text-slate-700 line-clamp-2">
             {goal.why}
@@ -77,7 +64,7 @@ export default function GoalCard({ goal, onClick, dragHandleProps }) {
 
       {/* Footer with time horizon badge */}
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-200">
-        <span className={`text-xs font-medium px-2 py-1 rounded ${badge.color}`}>
+        <span className="text-xs font-medium px-2 py-1 rounded bg-slate-100 text-slate-700">
           {badge.label}
         </span>
         
