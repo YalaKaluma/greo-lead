@@ -2,7 +2,7 @@
    RESPONSIVE CARD WITH HIERARCHY
    ========================================================= */
 
-export default function GoalCard({ goal, onClick, taskCount = 0 }) {
+export default function GoalCard({ goal, onClick, taskCount = 0, isInTree = false }) {
   
   // Full labels
   const getHorizonLabel = (horizon) => {
@@ -23,17 +23,18 @@ export default function GoalCard({ goal, onClick, taskCount = 0 }) {
       onClick={() => onClick(goal)}
       className={`
         rounded border border-slate-300 bg-white hover:bg-slate-50 cursor-pointer
-        p-1.5 lg:p-4
+        ${isInTree ? 'p-1.5 lg:p-4' : 'p-3 lg:p-4'}
         ${isLongTerm ? 'border-2 border-blue-300' : ''}
       `}
     >
       {/* Title - responsive sizing with hierarchy */}
       <div className={`
         font-medium text-slate-800 leading-tight line-clamp-2
-        ${isLongTerm ? 'text-[10px] lg:text-xl lg:font-bold' : ''}
-        ${isMediumTerm ? 'text-[10px] lg:text-base lg:font-semibold' : ''}
-        ${!isLongTerm && !isMediumTerm ? 'text-[10px] lg:text-sm' : ''}
-        mb-1 lg:mb-2
+        ${!isInTree && isLongTerm ? 'text-base lg:text-xl lg:font-bold' : ''}
+        ${isInTree && isLongTerm ? 'text-xs lg:text-xl lg:font-bold' : ''}
+        ${isMediumTerm ? 'text-xs lg:text-base lg:font-semibold' : ''}
+        ${!isLongTerm && !isMediumTerm ? 'text-[11px] lg:text-sm' : ''}
+        ${isInTree ? 'mb-1 lg:mb-2' : 'mb-2'}
       `}>
         {goal.title || goal.goal_text?.substring(0, 60) || 'Untitled'}
       </div>
@@ -41,7 +42,7 @@ export default function GoalCard({ goal, onClick, taskCount = 0 }) {
       {/* Footer with horizon and tasks */}
       <div className={`
         flex items-center justify-between
-        text-[9px] lg:text-xs
+        ${isInTree ? 'text-[10px] lg:text-xs' : 'text-xs lg:text-xs'}
         ${isLongTerm ? 'lg:pt-2 lg:border-t lg:border-slate-200' : ''}
       `}>
         <span className={`

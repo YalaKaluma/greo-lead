@@ -38,27 +38,30 @@ export default function GoalsList({ goals, onCardClick, expandedGoalId, taskCoun
           return (
             <div key={ltGoal.id}>
               {!isExpanded ? (
+                /* Main page - larger LT goals */
                 <GoalCard 
                   goal={ltGoal}
                   onClick={onCardClick}
                   taskCount={taskCounts[ltGoal.id] || 0}
+                  isInTree={false}
                 />
               ) : (
-                /* Expanded - responsive padding */
-                <div className="border border-blue-300 rounded p-1 lg:p-6 lg:rounded-xl bg-blue-50/20 lg:bg-blue-50/30">
-                  {/* LT GOAL */}
-                  <div className="mb-1 lg:mb-6">
+                /* Expanded tree - all cards in tree mode */
+                <div className="border border-blue-300 rounded p-1.5 lg:p-6 lg:rounded-xl bg-blue-50/20 lg:bg-blue-50/30">
+                  {/* LT GOAL in tree */}
+                  <div className="mb-2 lg:mb-6">
                     <GoalCard 
                       goal={ltGoal}
                       onClick={onCardClick}
                       taskCount={taskCounts[ltGoal.id] || 0}
+                      isInTree={true}
                     />
                   </div>
 
                   {/* MT GOALS - responsive grid */}
                   {hasChildren && (
                     <div 
-                      className="grid gap-1 lg:gap-4"
+                      className="grid gap-1.5 lg:gap-4"
                       style={{ gridTemplateColumns: `repeat(${ltGoal.children.length}, 1fr)` }}
                     >
                       {ltGoal.children.map((mtGoal) => {
@@ -71,28 +74,30 @@ export default function GoalsList({ goals, onCardClick, expandedGoalId, taskCoun
                                 goal={mtGoal}
                                 onClick={onCardClick}
                                 taskCount={taskCounts[mtGoal.id] || 0}
+                                isInTree={true}
                               />
                             ) : (
-                              <div className="border border-slate-300 rounded p-1 lg:p-4 lg:rounded-lg bg-white">
+                              <div className="border border-slate-300 rounded p-1.5 lg:p-4 lg:rounded-lg bg-white">
                                 {/* MT GOAL */}
-                                <div className="mb-1 lg:mb-4">
+                                <div className="mb-1.5 lg:mb-4">
                                   <GoalCard 
                                     goal={mtGoal}
                                     onClick={onCardClick}
                                     taskCount={taskCounts[mtGoal.id] || 0}
+                                    isInTree={true}
                                   />
                                 </div>
                                 
-                                {/* ST GOALS - narrower with responsive spacing */}
-                                <div className="space-y-1 lg:space-y-3 pl-1 lg:pl-4 border-l border-slate-200 lg:border-l-2">
+                                {/* ST GOALS - aligned right edge, indented left */}
+                                <div className="space-y-1.5 lg:space-y-3 pl-2 lg:pl-8 border-l border-slate-200 lg:border-l-2">
                                   {mtGoal.children.map((stGoal) => (
-                                    <div key={stGoal.id} className="w-[90%]">
-                                      <GoalCard 
-                                        goal={stGoal}
-                                        onClick={onCardClick}
-                                        taskCount={taskCounts[stGoal.id] || 0}
-                                      />
-                                    </div>
+                                    <GoalCard 
+                                      key={stGoal.id}
+                                      goal={stGoal}
+                                      onClick={onCardClick}
+                                      taskCount={taskCounts[stGoal.id] || 0}
+                                      isInTree={true}
+                                    />
                                   ))}
                                 </div>
                               </div>
