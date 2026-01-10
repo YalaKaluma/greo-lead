@@ -128,6 +128,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const handleCreateChildGoal = (parentGoalId) => {
     setParentGoalForChild(parentGoalId);
     setShowCreateModal(true);
+    setViewingGoal(null); // Close view panel when opening modal
   };
 
   /* ---------------- CRUD OPERATIONS ---------------- */
@@ -186,12 +187,10 @@ export default function MyGoals({ apiUrl, userNumber }) {
       {/* Header */}
       <GoalsHeader onAddClick={() => setShowCreateModal(true)} />
 
-      {/* Main content area */}
-      <div className="relative flex">
-        {/* Goals list - adjusts margin when panel is open */}
-        <div className={`flex-1 transition-all duration-300 ${
-          (viewingGoal || editingGoal) ? 'lg:mr-[600px]' : ''
-        }`}>
+      {/* Main content area - NO MARGIN ADJUSTMENT */}
+      <div className="relative">
+        {/* Goals list */}
+        <div>
           {loading ? (
             <div className="text-center py-12 text-slate-500">
               Loading goals...
@@ -207,17 +206,18 @@ export default function MyGoals({ apiUrl, userNumber }) {
           )}
         </div>
 
-        {/* View panel - for MEDIUM/SHORT TERM goals */}
+        {/* View panel - FIXED OVERLAY (not pushing content) */}
         {viewingGoal && (
           <GoalViewPanel
             goal={viewingGoal}
             linkedTasks={linkedTasks[viewingGoal.id] || []}
             onClose={handleClosePanel}
             onEdit={handleEditClick}
+            onCreateChildGoal={handleCreateChildGoal}
           />
         )}
 
-        {/* Edit panel - opened from View panel */}
+        {/* Edit panel - FIXED OVERLAY */}
         {editingGoal && (
           <GoalEditPanel
             goal={editingGoal}
