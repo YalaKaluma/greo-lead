@@ -210,106 +210,32 @@ class JourneyProcrastinationPattern(Base):
     user_number = Column(String, index=True)
     title = Column(String(200), nullable=True)
     pattern_text = Column(Text, nullable=False)
-    underlying_reason = Column(Text, nullable=True)  # fear, overwhelm, unclear, boring, etc.
-    strategy = Column(Text, nullable=True)  # how to overcome it
-    first_seen_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
-class JourneyExecutionSystem(Base):
-    """User's systems and approaches for getting things done"""
-    __tablename__ = "journey_execution_systems"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_number = Column(String, index=True)
-    title = Column(String(200), nullable=True)
-    system_text = Column(Text, nullable=False)
-    category = Column(String, nullable=True)  # prioritization, planning, delegation, automation, etc.
-    effectiveness = Column(String, nullable=True)  # working well, needs improvement, abandoned
-    first_seen_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
-class JourneyInspiration(Base):
-    """How the user inspires and motivates others"""
-    __tablename__ = "journey_inspiration"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_number = Column(String, index=True)
-    title = Column(String(200), nullable=True)
-    inspiration_text = Column(Text, nullable=False)
-    approach = Column(Text, nullable=True)  # storytelling, vision-setting, recognition, etc.
-    effectiveness = Column(String, nullable=True)  # what works well
-    first_seen_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
-class JourneyCoachingMoment(Base):
-    """Coaching and delegation experiences"""
-    __tablename__ = "journey_coaching_moments"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_number = Column(String, index=True)
-    title = Column(String(200), nullable=True)
-    moment_text = Column(Text, nullable=False)
-    person = Column(String, nullable=True)  # who was coached/delegated to
-    outcome = Column(Text, nullable=True)  # what happened
-    learning = Column(Text, nullable=True)  # what was learned
-    first_seen_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
-class JourneyTeamComposition(Base):
-    """Insights about team structure and dynamics"""
-    __tablename__ = "journey_team_composition"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_number = Column(String, index=True)
-    title = Column(String(200), nullable=True)
-    composition_text = Column(Text, nullable=False)
-    team_type = Column(String, nullable=True)  # direct reports, cross-functional, board, etc.
-    dynamics = Column(Text, nullable=True)  # what's working, what's not
+    trigger = Column(Text, nullable=True)
+    mitigation = Column(Text, nullable=True)
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class ConversationState(Base):
     """
-    Stores Alfred's Brain state per user for orchestration.
-
-    This table enables the Brain to track:
-    - Current conversational state (IDLE, COACHING, etc.)
-    - Detected intents with confidence scores
-    - Pending actions awaiting approval
-    - Context needed to resume interrupted flows
+    Alfred's Brain - stores conversation state for intent-driven orchestration.
+    Each user has ONE active conversation state.
     """
     __tablename__ = "conversation_state"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_number = Column(String(255), unique=True, nullable=False, index=True)
+    user_number = Column(String, unique=True, index=True, nullable=False)
 
-    # State machine
-    current_state = Column(String(50), nullable=False, default='IDLE', index=True)
-
-    # Intent detection results
-    active_intents = Column(JSONB, nullable=True)
-    # Example: [{"name": "COACH", "confidence": 0.88}, {"name": "EXECUTE", "confidence": 0.42}]
-
-    # Pending actions
-    pending_action = Column(String(100), nullable=True)
-    # Example: "PROPOSE_TASK", "PROPOSE_EMAIL", "ASK_CLARIFICATION"
-
-    pending_payload = Column(JSONB, nullable=True)
-    # Example: {"title": "Follow up with John", "due_date": "2025-12-14"}
-
-    # State context (for resuming)
-    state_context = Column(JSONB, nullable=True)
-    # Example: {"coaching_topic": "delegation", "question_count": 2}
+    # Core state machine fields
+    current_state = Column(String, default="IDLE")  # e.g. IDLE, COACHING, CLARIFYING, EXECUTING
+    active_intents = Column(JSONB, default=list)  # List of detected intents with confidence
+    pending_action = Column(String, nullable=True)  # What Alfred is waiting to do
+    pending_payload = Column(JSONB, nullable=True)  # Data for the pending action
+    state_context = Column(JSONB, default=dict)  # Additional context for the current state
 
     # Timestamps
-    last_transition_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    last_transition_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
     def __repr__(self):
         return f"<ConversationState(user={self.user_number}, state={self.current_state})>"
@@ -359,10 +285,10 @@ class JourneyAchievement(Base):
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # -------------------------------
-    # EXECUTIVE HABITS
-    # -------------------------------
 
+# -------------------------------
+# EXECUTIVE HABITS - UPDATED
+# -------------------------------
 
 class Habit(Base):
     __tablename__ = "habits"
@@ -371,13 +297,16 @@ class Habit(Base):
     user_number = Column(String, index=True, nullable=False)
     title = Column(String, nullable=False)
 
-    # 🔗 NEW: optional link to journey goals
+    # 🔗 Link to journey goals
     goal_id = Column(
         Integer,
         ForeignKey("journey_goals.id", ondelete="SET NULL"),
         nullable=True
     )
     goal = relationship("JourneyGoal", backref="habits")
+
+    # 🆕 NEW: Frequency field (daily or weekdays)
+    frequency = Column(String, nullable=False, default="daily")
 
     is_active = Column(Boolean, default=True)
 
@@ -392,16 +321,17 @@ class HabitCompletion(Base):
     habit_id = Column(Integer, ForeignKey("habits.id", ondelete="CASCADE"))
     date = Column(Date, nullable=False)
 
+    # 🆕 NEW: Status field (pending, done, not_done)
+    status = Column(String, nullable=False, default="pending")
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     habit = relationship("Habit", backref="completions")
 
 
-# Replace lines 275-290 in models.py with this:
-
 class OnboardingStep(str, enum.Enum):
     """Onboarding flow steps"""
-    INITIAL = "INITIAL"  # ✅ UPPERCASE
+    INITIAL = "INITIAL"
     NAME = "NAME"
     PROFESSION = "PROFESSION"
     GOAL = "GOAL"
@@ -419,7 +349,7 @@ class OnboardingStep(str, enum.Enum):
 
 class SubscriptionStatus(str, enum.Enum):
     """User subscription status"""
-    TRIAL = "TRIAL"  # ✅ UPPERCASE
+    TRIAL = "TRIAL"
     ACTIVE = "ACTIVE"
     EXPIRED = "EXPIRED"
     CANCELLED = "CANCELLED"

@@ -3,40 +3,82 @@ from sqlalchemy.orm import Session
 from datetime import date, timedelta, datetime
 from typing import List
 from zoneinfo import ZoneInfo
+from pydantic import BaseModel
 
 from app.db import get_db
-from app.models import Habit, HabitCompletion
+from app.models import Habit, HabitCompletion, JourneyGoal
 
 router = APIRouter()
 
 # Eastern Time timezone
 EASTERN_TZ = ZoneInfo("America/New_York")
 
+
 def get_today_eastern() -> date:
     """Get current date in Eastern Time"""
     return datetime.now(EASTERN_TZ).date()
+
+
+# ---------------------------------------------------------
+# Pydantic Models
+# ---------------------------------------------------------
+
+class HabitCreate(BaseModel):
+    title: str
+    goal_id: int | None = None
+    frequency: str = "daily"  # NEW: "daily" or "weekdays"
+
+
+class HabitUpdate(BaseModel):
+    title: str | None = None
+    goal_id: int | None = None
+    frequency: str | None = None  # NEW: can update frequency
+
+
+class DayUpdate(BaseModel):
+    date: str  # Format: "2026-01-10"
+    status: str  # "pending", "done", or "not_done"
+
 
 # ---------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------
 
-def compute_streak(habit: Habit) -> int:
+def calculate_streak(completions: list, frequency: str) -> int:
     """
-    Computes consecutive daily streak up to yesterday or today.
+    Calculate consecutive 'done' days, skipping weekends for weekday habits.
+    Only counts days with status='done'.
     """
-    dates = sorted([c.date for c in habit.completions], reverse=True)
-    if not dates:
+    if not completions:
         return 0
 
-    streak = 0
-    current_day = get_today_eastern()
+    # Filter only 'done' completions
+    done_completions = [c for c in completions if c.status == 'done']
+    if not done_completions:
+        return 0
 
-    for d in dates:
-        if d == current_day or d == current_day - timedelta(days=1):
-            streak += 1
-            current_day = d - timedelta(days=1)
-        else:
-            break
+    # Sort by date descending
+    dates = sorted([c.date for c in done_completions], reverse=True)
+
+    today = get_today_eastern()
+    streak = 0
+
+    # Start from today or yesterday
+    current_date = today if today in dates else (
+        today - timedelta(days=1) if (today - timedelta(days=1)) in dates else None)
+
+    if current_date is None:
+        return 0
+
+    # Count consecutive days
+    while current_date in dates:
+        streak += 1
+        current_date -= timedelta(days=1)
+
+        # Skip weekends for weekday-only habits
+        if frequency == 'weekdays':
+            while current_date.weekday() in [5, 6]:  # Saturday=5, Sunday=6
+                current_date -= timedelta(days=1)
 
     return streak
 
@@ -47,6 +89,8 @@ def compute_streak(habit: Habit) -> int:
 
 @router.get("")
 def get_habits(user_number: str, db: Session = Depends(get_db)):
+    """Get all active habits with today's status and streaks"""
+
     habits = (
         db.query(Habit)
         .filter(Habit.user_number == user_number, Habit.is_active == True)
@@ -57,40 +101,66 @@ def get_habits(user_number: str, db: Session = Depends(get_db)):
     response = []
 
     for h in habits:
-        completed_today = any(c.date == today for c in h.completions)
+        # Get today's completion
+        today_completion = next(
+            (c for c in h.completions if c.date == today),
+            None
+        )
+
+        # Today's status: 'pending', 'done', or 'not_done'
+        today_status = today_completion.status if today_completion else 'pending'
+
+        # Get goal text if linked
+        goal_text = None
+        if h.goal:
+            goal_text = h.goal.title or h.goal.goal_text
+
+        # Calculate streak
+        streak = calculate_streak(h.completions, h.frequency)
+
         response.append({
             "id": h.id,
             "title": h.title,
             "goal_id": h.goal_id,
-            "goal_text": h.goal.goal_text if h.goal else None,
-            "completed_today": completed_today,
-            "streak": compute_streak(h),
+            "goal_text": goal_text,
+            "frequency": h.frequency,  # NEW
+            "today_status": today_status,  # NEW: replaces completed_today
+            "streak": streak,
         })
 
     return response
 
 
 @router.post("")
-def create_habit(payload: dict, user_number: str, db: Session = Depends(get_db)):
-    title = payload.get("title")
-    if not title:
+def create_habit(payload: HabitCreate, user_number: str, db: Session = Depends(get_db)):
+    """Create a new habit"""
+
+    if not payload.title:
         raise HTTPException(status_code=400, detail="Title is required")
 
     habit = Habit(
         user_number=user_number,
-        title=title.strip(),
-        goal_id=payload.get("goal_id")
+        title=payload.title.strip(),
+        goal_id=payload.goal_id,
+        frequency=payload.frequency  # NEW
     )
 
     db.add(habit)
     db.commit()
     db.refresh(habit)
 
-    return habit
+    return {"id": habit.id, "message": "Habit created successfully"}
 
 
 @router.put("/{habit_id}")
-def update_habit(habit_id: int, payload: dict, user_number: str, db: Session = Depends(get_db)):
+def update_habit(
+        habit_id: int,
+        payload: HabitUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Update an existing habit"""
+
     habit = db.query(Habit).filter(
         Habit.id == habit_id,
         Habit.user_number == user_number
@@ -99,14 +169,22 @@ def update_habit(habit_id: int, payload: dict, user_number: str, db: Session = D
     if not habit:
         raise HTTPException(status_code=404, detail="Habit not found")
 
-    habit.title = payload.get("title", habit.title)
-    habit.goal_id = payload.get("goal_id", habit.goal_id)
+    # Update fields if provided
+    if payload.title is not None:
+        habit.title = payload.title
+    if payload.goal_id is not None:
+        habit.goal_id = payload.goal_id
+    if payload.frequency is not None:  # NEW
+        habit.frequency = payload.frequency
+
     db.commit()
-    return habit
+    return {"message": "Habit updated successfully"}
 
 
 @router.delete("/{habit_id}")
 def delete_habit(habit_id: int, user_number: str, db: Session = Depends(get_db)):
+    """Soft delete a habit (set is_active=False)"""
+
     habit = db.query(Habit).filter(
         Habit.id == habit_id,
         Habit.user_number == user_number
@@ -122,6 +200,11 @@ def delete_habit(habit_id: int, user_number: str, db: Session = Depends(get_db))
 
 @router.post("/{habit_id}/toggle_today")
 def toggle_today(habit_id: int, user_number: str, db: Session = Depends(get_db)):
+    """
+    Toggle today's status through 3 states:
+    pending → done → not_done → pending
+    """
+
     habit = db.query(Habit).filter(
         Habit.id == habit_id,
         Habit.user_number == user_number
@@ -132,21 +215,147 @@ def toggle_today(habit_id: int, user_number: str, db: Session = Depends(get_db))
 
     today = get_today_eastern()
 
+    # Get or create today's completion
     existing = (
         db.query(HabitCompletion)
-        .join(Habit)
         .filter(
             HabitCompletion.habit_id == habit_id,
-            HabitCompletion.date == today,
-            Habit.user_number == user_number
+            HabitCompletion.date == today
         )
         .first()
     )
 
-    if existing:
-        db.delete(existing)
-    else:
-        db.add(HabitCompletion(habit_id=habit_id, date=today))
+    if not existing:
+        # Create new completion with 'done' status
+        new_completion = HabitCompletion(
+            habit_id=habit_id,
+            date=today,
+            status='done'
+        )
+        db.add(new_completion)
+        db.commit()
+        return {"status": "done"}
+
+    # Cycle through states
+    if existing.status == 'pending':
+        existing.status = 'done'
+    elif existing.status == 'done':
+        existing.status = 'not_done'
+    else:  # not_done
+        existing.status = 'pending'
 
     db.commit()
-    return {"status": "ok"}
+    return {"status": existing.status}
+
+
+@router.get("/{habit_id}/history")
+def get_habit_history(
+        habit_id: int,
+        user_number: str,
+        days: int = 14,  # Default to 2 weeks
+        db: Session = Depends(get_db)
+):
+    """
+    Get habit completion history for the last N days.
+    Returns list of {date, status} objects.
+    """
+
+    # Verify habit belongs to user
+    habit = db.query(Habit).filter(
+        Habit.id == habit_id,
+        Habit.user_number == user_number
+    ).first()
+
+    if not habit:
+        raise HTTPException(status_code=404, detail="Habit not found")
+
+    # Calculate date range
+    end_date = get_today_eastern()
+    start_date = end_date - timedelta(days=days - 1)
+
+    # Get completions in range
+    completions = (
+        db.query(HabitCompletion)
+        .filter(
+            HabitCompletion.habit_id == habit_id,
+            HabitCompletion.date >= start_date,
+            HabitCompletion.date <= end_date
+        )
+        .all()
+    )
+
+    # Convert to list of dicts
+    result = [
+        {
+            "date": str(c.date),
+            "status": c.status
+        }
+        for c in completions
+    ]
+
+    return result
+
+
+@router.post("/{habit_id}/update_day")
+def update_day(
+        habit_id: int,
+        payload: DayUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """
+    Update status for a specific day.
+    Allows editing history in the calendar view.
+    """
+
+    # Verify habit belongs to user
+    habit = db.query(Habit).filter(
+        Habit.id == habit_id,
+        Habit.user_number == user_number
+    ).first()
+
+    if not habit:
+        raise HTTPException(status_code=404, detail="Habit not found")
+
+    # Parse date
+    try:
+        target_date = date.fromisoformat(payload.date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+
+    # Validate status
+    if payload.status not in ['pending', 'done', 'not_done']:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid status. Must be 'pending', 'done', or 'not_done'"
+        )
+
+    # Get or create completion for this date
+    completion = (
+        db.query(HabitCompletion)
+        .filter(
+            HabitCompletion.habit_id == habit_id,
+            HabitCompletion.date == target_date
+        )
+        .first()
+    )
+
+    if not completion:
+        # Create new completion
+        completion = HabitCompletion(
+            habit_id=habit_id,
+            date=target_date,
+            status=payload.status
+        )
+        db.add(completion)
+    else:
+        # Update existing completion
+        completion.status = payload.status
+
+    db.commit()
+
+    return {
+        "message": "Day updated successfully",
+        "date": str(target_date),
+        "status": payload.status
+    }
