@@ -178,6 +178,23 @@ export default function MyGoals({ apiUrl, userNumber }) {
     }
   };
 
+  const handleReorderGoals = async (updates) => {
+    try {
+      // Update each goal's sort_order
+      for (const update of updates) {
+        await axios.put(`${apiUrl}/api/journey/goals/${update.id}`, {
+          sort_order: update.sort_order,
+          user_number: userNumber
+        });
+      }
+      // Refresh to show new order
+      await fetchGoals();
+    } catch (err) {
+      console.error('Error reordering goals:', err);
+      alert('Failed to reorder goals. Please try again.');
+    }
+  };
+
   /* ---------------- RENDER ---------------- */
 
   const organizedGoals = organizeGoalsByTimeHorizon(goals);
@@ -202,6 +219,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
               onCardClick={handleCardClick}
               allGoals={goals}
               taskCounts={taskCounts}
+              onReorderGoals={handleReorderGoals}
             />
           )}
         </div>
