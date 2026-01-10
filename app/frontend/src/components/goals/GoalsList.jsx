@@ -1,7 +1,7 @@
 import GoalCard from './GoalCard';
 
 /* =========================================================
-   MAIN COMPONENT - TRUE TREE STRUCTURE
+   MAIN COMPONENT - TRUE VISUAL TREE
    ========================================================= */
 
 export default function GoalsList({ goals, onCardClick, allGoals, expandedGoalId, taskCounts = {} }) {
@@ -28,7 +28,7 @@ export default function GoalsList({ goals, onCardClick, allGoals, expandedGoalId
   const tree = buildTree();
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-12">
       {tree.length === 0 ? (
         /* Empty state */
         <div className="text-center py-12">
@@ -46,9 +46,9 @@ export default function GoalsList({ goals, onCardClick, allGoals, expandedGoalId
           const hasChildren = ltGoal.children && ltGoal.children.length > 0;
           
           return (
-            <div key={ltGoal.id} className="mb-8">
-              {/* Long Term Goal */}
-              <div className="mb-6">
+            <div key={ltGoal.id} className="space-y-8">
+              {/* LONG TERM GOAL */}
+              <div>
                 <GoalCard 
                   goal={ltGoal}
                   onClick={onCardClick}
@@ -57,52 +57,93 @@ export default function GoalsList({ goals, onCardClick, allGoals, expandedGoalId
                 />
               </div>
 
-              {/* Expanded Tree View */}
+              {/* EXPANDED TREE */}
               {isExpanded && hasChildren && (
-                <div className="ml-8 pl-8 border-l-2 border-slate-300">
-                  {ltGoal.children.map((mtGoal, mtIndex) => {
-                    const hasSTChildren = mtGoal.children && mtGoal.children.length > 0;
+                <div className="relative">
+                  {/* Vertical line from LT goal down */}
+                  <div className="absolute left-1/2 top-0 w-0.5 h-8 bg-slate-300 -translate-x-1/2" />
+                  
+                  <div className="pt-8">
+                    {/* MEDIUM TERM LABEL */}
+                    <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">
+                      Medium Term
+                    </div>
                     
-                    return (
-                      <div key={mtGoal.id} className="relative mb-6">
-                        {/* Horizontal connector line */}
-                        <div className="absolute left-0 top-6 w-8 border-t-2 border-slate-300" 
-                             style={{ transform: 'translateX(-32px)' }} />
-                        
-                        {/* Medium Term Goal */}
-                        <div className="mb-4">
-                          <GoalCard 
-                            goal={mtGoal}
-                            onClick={onCardClick}
-                            hasChildren={hasSTChildren}
-                            taskCount={taskCounts[mtGoal.id] || 0}
-                          />
-                        </div>
-
-                        {/* Short Term Goals */}
-                        {hasSTChildren && (
-                          <div className="ml-8 pl-8 border-l-2 border-slate-300">
-                            {mtGoal.children.map((stGoal, stIndex) => {
-                              return (
-                                <div key={stGoal.id} className="relative mb-4">
-                                  {/* Horizontal connector line */}
-                                  <div className="absolute left-0 top-6 w-8 border-t-2 border-slate-300" 
-                                       style={{ transform: 'translateX(-32px)' }} />
+                    {/* MEDIUM TERM GOALS IN A ROW */}
+                    <div className="relative">
+                      {/* Horizontal line connecting all MT goals */}
+                      {ltGoal.children.length > 1 && (
+                        <div className="absolute top-0 left-0 right-0 h-0.5 bg-slate-300" 
+                             style={{ 
+                               left: `calc(50% / ${ltGoal.children.length})`,
+                               right: `calc(50% / ${ltGoal.children.length})`,
+                               top: '-16px'
+                             }} 
+                        />
+                      )}
+                      
+                      <div className="grid gap-4" 
+                           style={{ 
+                             gridTemplateColumns: `repeat(${ltGoal.children.length}, 1fr)` 
+                           }}>
+                        {ltGoal.children.map((mtGoal, mtIndex) => {
+                          const hasSTChildren = mtGoal.children && mtGoal.children.length > 0;
+                          
+                          return (
+                            <div key={mtGoal.id} className="relative">
+                              {/* Vertical line down from horizontal connector */}
+                              {ltGoal.children.length > 1 && (
+                                <div className="absolute left-1/2 -top-4 w-0.5 h-4 bg-slate-300 -translate-x-1/2" />
+                              )}
+                              
+                              {/* MEDIUM TERM GOAL */}
+                              <GoalCard 
+                                goal={mtGoal}
+                                onClick={onCardClick}
+                                hasChildren={hasSTChildren}
+                                taskCount={taskCounts[mtGoal.id] || 0}
+                              />
+                              
+                              {/* SHORT TERM GOALS UNDERNEATH THIS MT GOAL */}
+                              {hasSTChildren && (
+                                <div className="mt-6 space-y-6">
+                                  {/* Vertical line from MT goal down */}
+                                  <div className="absolute left-1/2 bottom-0 w-0.5 h-6 bg-slate-300 -translate-x-1/2 translate-y-full" />
                                   
-                                  {/* Short Term Goal */}
-                                  <GoalCard 
-                                    goal={stGoal}
-                                    onClick={onCardClick}
-                                    taskCount={taskCounts[stGoal.id] || 0}
-                                  />
+                                  {/* SHORT TERM LABEL */}
+                                  <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 text-center">
+                                    Short Term
+                                  </div>
+                                  
+                                  {/* SHORT TERM GOALS */}
+                                  <div className="space-y-3">
+                                    {mtGoal.children.map((stGoal, stIndex) => {
+                                      const isFirst = stIndex === 0;
+                                      
+                                      return (
+                                        <div key={stGoal.id} className="relative">
+                                          {/* Connecting line to parent */}
+                                          {isFirst && (
+                                            <div className="absolute left-1/2 -top-3 w-0.5 h-3 bg-slate-300 -translate-x-1/2" />
+                                          )}
+                                          
+                                          <GoalCard 
+                                            goal={stGoal}
+                                            onClick={onCardClick}
+                                            taskCount={taskCounts[stGoal.id] || 0}
+                                          />
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
-                              );
-                            })}
-                          </div>
-                        )}
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
