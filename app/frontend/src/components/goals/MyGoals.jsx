@@ -211,6 +211,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
           <GoalViewPanel
             goal={viewingGoal}
             linkedTasks={linkedTasks[viewingGoal.id] || []}
+            allGoals={goals}
             onClose={handleClosePanel}
             onEdit={handleEditClick}
             onCreateChildGoal={handleCreateChildGoal}

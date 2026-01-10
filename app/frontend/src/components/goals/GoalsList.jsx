@@ -83,15 +83,16 @@ export default function GoalsList({ goals, onCardClick, expandedGoalId, taskCoun
                                   />
                                 </div>
                                 
-                                {/* ST GOALS */}
+                                {/* ST GOALS - narrower than MT */}
                                 <div className="space-y-1 pl-1 border-l border-slate-200">
                                   {mtGoal.children.map((stGoal) => (
-                                    <GoalCard 
-                                      key={stGoal.id}
-                                      goal={stGoal}
-                                      onClick={onCardClick}
-                                      taskCount={taskCounts[stGoal.id] || 0}
-                                    />
+                                    <div key={stGoal.id} className="w-[90%]">
+                                      <GoalCard 
+                                        goal={stGoal}
+                                        onClick={onCardClick}
+                                        taskCount={taskCounts[stGoal.id] || 0}
+                                      />
+                                    </div>
                                   ))}
                                 </div>
                               </div>

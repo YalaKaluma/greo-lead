@@ -17,7 +17,13 @@ const getHorizonLabel = (horizon) => {
    MAIN COMPONENT
    ========================================================= */
 
-export default function GoalViewPanel({ goal, linkedTasks, onClose, onEdit, onCreateChildGoal }) {
+export default function GoalViewPanel({ goal, linkedTasks, allGoals, onClose, onEdit, onCreateChildGoal }) {
+  
+  // Find parent goal if it exists
+  const parentGoal = goal.parent_goal_id 
+    ? allGoals?.find(g => g.id === goal.parent_goal_id)
+    : null;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
@@ -72,6 +78,20 @@ export default function GoalViewPanel({ goal, linkedTasks, onClose, onEdit, onCr
               <p className="text-blue-900 leading-relaxed whitespace-pre-wrap">
                 {goal.why}
               </p>
+            </div>
+          )}
+
+          {/* Parent Goal */}
+          {parentGoal && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                Parent Goal
+              </label>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                <p className="text-sm font-medium text-slate-800">
+                  {parentGoal.title || parentGoal.goal_text?.substring(0, 80) || 'Untitled Goal'}
+                </p>
+              </div>
             </div>
           )}
 
