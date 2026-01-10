@@ -217,6 +217,7 @@ export default function GoalEditPanel({ goal, goals, linkedTasks, onClose, onSav
           Delete Goal
         </button>
       </div>
+      </div>
     </div>
   );
 }
