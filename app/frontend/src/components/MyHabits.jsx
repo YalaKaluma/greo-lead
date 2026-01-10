@@ -43,6 +43,144 @@ const getGoalIndentation = (timeHorizon) => {
 };
 
 /* =========================================================
+   CALENDAR HELPERS
+   ========================================================= */
+
+const isWeekend = (date) => {
+  const day = date.getDay();
+  return day === 0 || day === 6; // Sunday = 0, Saturday = 6
+};
+
+const shouldShowHabit = (habit) => {
+  if (habit.frequency === 'weekdays') {
+    const today = new Date();
+    return !isWeekend(today);
+  }
+  return true;
+};
+
+const getStatusIcon = (status) => {
+  if (status === 'done') return '✅';
+  if (status === 'not_done') return '❌';
+  return '⭕'; // pending or no data
+};
+
+const getStatusColor = (status) => {
+  if (status === 'done') return 'bg-green-100 hover:bg-green-200 text-green-800';
+  if (status === 'not_done') return 'bg-red-100 hover:bg-red-200 text-red-800';
+  return 'bg-slate-100 hover:bg-slate-200 text-slate-400'; // pending
+};
+
+/* =========================================================
+   CALENDAR COMPONENT
+   ========================================================= */
+
+function HabitCalendar({ history, frequency, onUpdateDay }) {
+  // Generate last 30 days
+  const days = [];
+  const today = new Date();
+  
+  for (let i = 29; i >= 0; i--) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    days.push(date);
+  }
+
+  // Create lookup map from history
+  const historyMap = {};
+  if (Array.isArray(history)) {
+    history.forEach(h => {
+      historyMap[h.date] = h.status;
+    });
+  }
+
+  const formatDate = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const handleDayClick = (date, currentStatus) => {
+    const dateStr = formatDate(date);
+    
+    // Cycle: pending → done → not_done → pending
+    let newStatus = 'done';
+    if (currentStatus === 'done') newStatus = 'not_done';
+    else if (currentStatus === 'not_done') newStatus = 'pending';
+    
+    onUpdateDay(dateStr, newStatus);
+  };
+
+  return (
+    <div className="mb-6">
+      <h3 className="text-sm font-semibold text-slate-700 mb-3">
+        Last 30 Days
+      </h3>
+      
+      {/* Calendar Grid */}
+      <div className="grid grid-cols-7 gap-1">
+        {/* Day labels */}
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+          <div key={day} className="text-center text-xs font-medium text-slate-500 pb-1">
+            {day}
+          </div>
+        ))}
+        
+        {/* Empty cells to align first day */}
+        {Array.from({ length: days[0].getDay() }).map((_, i) => (
+          <div key={`empty-${i}`} />
+        ))}
+        
+        {/* Calendar days */}
+        {days.map(date => {
+          const dateStr = formatDate(date);
+          const status = historyMap[dateStr] || 'pending';
+          const isWeekendDay = isWeekend(date);
+          const isToday = formatDate(new Date()) === dateStr;
+          
+          // Gray out weekends for weekday-only habits
+          const isDisabled = frequency === 'weekdays' && isWeekendDay;
+          
+          return (
+            <button
+              key={dateStr}
+              onClick={() => !isDisabled && handleDayClick(date, status)}
+              disabled={isDisabled}
+              className={`
+                aspect-square rounded-lg text-xs font-medium
+                transition-all duration-150
+                ${isToday ? 'ring-2 ring-blue-500' : ''}
+                ${isDisabled 
+                  ? 'bg-slate-50 text-slate-300 cursor-not-allowed' 
+                  : getStatusColor(status) + ' cursor-pointer'
+                }
+              `}
+            >
+              <div>{date.getDate()}</div>
+              <div className="text-lg leading-none">{getStatusIcon(status)}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="flex gap-4 mt-4 text-xs text-slate-600">
+        <div className="flex items-center gap-1">
+          <span>⭕</span> Pending
+        </div>
+        <div className="flex items-center gap-1">
+          <span>✅</span> Done
+        </div>
+        <div className="flex items-center gap-1">
+          <span>❌</span> Failed
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
    MAIN COMPONENT
    ========================================================= */
 
@@ -52,10 +190,12 @@ export default function MyHabits({ apiUrl, userNumber }) {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState(null);
+  const [habitHistory, setHabitHistory] = useState([]);
 
   const [form, setForm] = useState({
     title: '',
-    goal_id: null
+    goal_id: null,
+    frequency: 'daily'
   });
 
   /* ---------------- FETCH HABITS ---------------- */
@@ -66,7 +206,9 @@ export default function MyHabits({ apiUrl, userNumber }) {
         params: { user_number: userNumber }
       });
       if (Array.isArray(res.data)) {
-        setHabits(res.data);
+        // Filter based on weekday/weekend
+        const filtered = res.data.filter(shouldShowHabit);
+        setHabits(filtered);
       }
     } catch (err) {
       console.error('Error fetching habits:', err);
@@ -88,6 +230,25 @@ export default function MyHabits({ apiUrl, userNumber }) {
     }
   };
 
+  /* ---------------- FETCH HABIT HISTORY ---------------- */
+
+  const fetchHabitHistory = async (habitId) => {
+    try {
+      const res = await axios.get(`${apiUrl}/api/habits/${habitId}/history`, {
+        params: { 
+          user_number: userNumber,
+          days: 30 
+        }
+      });
+      if (Array.isArray(res.data)) {
+        setHabitHistory(res.data);
+      }
+    } catch (err) {
+      console.error('Error fetching habit history:', err);
+      setHabitHistory([]);
+    }
+  };
+
   useEffect(() => {
     fetchHabits();
     fetchGoals();
@@ -97,22 +258,28 @@ export default function MyHabits({ apiUrl, userNumber }) {
 
   const openNewHabit = () => {
     setEditingHabit(null);
-    setForm({ title: '', goal_id: null });
+    setHabitHistory([]);
+    setForm({ title: '', goal_id: null, frequency: 'daily' });
     setModalOpen(true);
   };
 
-  const openEditHabit = (habit) => {
+  const openEditHabit = async (habit) => {
     setEditingHabit(habit);
     setForm({
       title: habit.title,
-      goal_id: habit.goal_id ?? null
+      goal_id: habit.goal_id ?? null,
+      frequency: habit.frequency || 'daily'
     });
     setModalOpen(true);
+    
+    // Fetch history for this habit
+    await fetchHabitHistory(habit.id);
   };
 
   const closeModal = () => {
     setModalOpen(false);
     setEditingHabit(null);
+    setHabitHistory([]);
   };
 
   /* ---------------- SAVE HABIT ---------------- */
@@ -142,7 +309,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
     }
   };
 
-  /* ---------------- TOGGLE COMPLETION ---------------- */
+  /* ---------------- TOGGLE COMPLETION (3-STATE CYCLE) ---------------- */
 
   const toggleToday = async (habitId) => {
     try {
@@ -154,6 +321,24 @@ export default function MyHabits({ apiUrl, userNumber }) {
       fetchHabits();
     } catch (err) {
       console.error('Error toggling habit:', err);
+    }
+  };
+
+  /* ---------------- UPDATE SPECIFIC DAY ---------------- */
+
+  const updateDay = async (habitId, date, status) => {
+    try {
+      await axios.post(
+        `${apiUrl}/api/habits/${habitId}/update_day`,
+        { date, status },
+        { params: { user_number: userNumber } }
+      );
+      
+      // Refresh history
+      await fetchHabitHistory(habitId);
+      fetchHabits(); // Also refresh main list to update streak
+    } catch (err) {
+      console.error('Error updating day:', err);
     }
   };
 
@@ -196,64 +381,81 @@ export default function MyHabits({ apiUrl, userNumber }) {
 
       {/* HABIT LIST */}
       <div className="space-y-3">
-        {habits.map((h, index) => (
-          <div
-            key={h.id}
-            draggable
-            onDragStart={(e) => onDragStart(e, index)}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => onDrop(e, index)}
-            className="flex items-center justify-between bg-white border rounded-lg px-4 py-3"
-          >
-            <div className="flex items-center gap-3 flex-1">
+        {habits.map((h, index) => {
+          const todayStatus = h.today_status || 'pending';
+          
+          return (
+            <div
+              key={h.id}
+              draggable
+              onDragStart={(e) => onDragStart(e, index)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => onDrop(e, index)}
+              className="flex items-center justify-between bg-white border rounded-lg px-4 py-3"
+            >
+              <div className="flex items-center gap-3 flex-1">
 
-              {/* DRAG HANDLE */}
-              <span className="cursor-grab text-slate-300">⋮⋮</span>
+                {/* DRAG HANDLE */}
+                <span className="cursor-grab text-slate-300">⋮⋮</span>
 
-              {/* TOGGLE */}
-              <button
-                onClick={() => toggleToday(h.id)}
-                className="text-2xl"
-              >
-                {h.completed_today ? '✅' : '⭕'}
-              </button>
+                {/* TOGGLE (3-state) */}
+                <button
+                  onClick={() => toggleToday(h.id)}
+                  className="text-2xl"
+                >
+                  {getStatusIcon(todayStatus)}
+                </button>
 
-              {/* CONTENT */}
-              <div
-                onClick={() => openEditHabit(h)}
-                className={`cursor-pointer ${
-                  h.completed_today
-                    ? 'line-through text-slate-400'
-                    : 'hover:underline'
+                {/* CONTENT */}
+                <div
+                  onClick={() => openEditHabit(h)}
+                  className={`cursor-pointer ${
+                    todayStatus === 'done'
+                      ? 'line-through text-slate-400'
+                      : todayStatus === 'not_done'
+                      ? 'text-red-400'
+                      : 'hover:underline'
+                  }`}
+                >
+                  <div className="text-lg">
+                    {h.title}
+                    {h.frequency === 'weekdays' && (
+                      <span className="ml-2 text-xs text-slate-500">
+                        (weekdays only)
+                      </span>
+                    )}
+                  </div>
+
+                  {h.goal_text && (
+                    <div className="text-sm text-slate-500">
+                      🎯 {h.goal_text}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* STREAK — ALWAYS VISIBLE */}
+              <span
+                className={`text-sm ${
+                  todayStatus === 'done' 
+                    ? 'text-slate-400' 
+                    : todayStatus === 'not_done'
+                    ? 'text-red-400'
+                    : 'text-slate-600'
                 }`}
               >
-                <div className="text-lg">{h.title}</div>
-
-                {h.goal_text && (
-                  <div className="text-sm text-slate-500">
-                    🎯 {h.goal_text}
-                  </div>
-                )}
-              </div>
+                🔥 {h.streak}-day streak
+              </span>
             </div>
-
-            {/* STREAK — ALWAYS VISIBLE */}
-            <span
-              className={`text-sm ${
-                h.completed_today ? 'text-slate-400' : 'text-slate-600'
-              }`}
-            >
-              🔥 {h.streak}-day streak
-            </span>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* ================= MODAL ================= */}
 
       {modalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg w-full max-w-lg p-6">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
 
             <h2 className="text-xl font-semibold mb-4">
               {editingHabit ? 'Edit Habit' : 'New Habit'}
@@ -269,6 +471,37 @@ export default function MyHabits({ apiUrl, userNumber }) {
               className="w-full px-4 py-2 border rounded-lg mb-4"
               autoFocus
             />
+
+            {/* FREQUENCY TOGGLE */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Frequency
+              </label>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, frequency: 'daily' })}
+                  className={`px-4 py-2 rounded-lg border-2 transition-colors ${
+                    form.frequency === 'daily'
+                      ? 'border-blue-600 bg-blue-50 text-blue-700'
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  Daily
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, frequency: 'weekdays' })}
+                  className={`px-4 py-2 rounded-lg border-2 transition-colors ${
+                    form.frequency === 'weekdays'
+                      ? 'border-blue-600 bg-blue-50 text-blue-700'
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  Weekdays Only
+                </button>
+              </div>
+            </div>
 
             {/* GOAL DROPDOWN — IDENTICAL LOGIC TO TODOLIST */}
             <select
@@ -299,11 +532,20 @@ export default function MyHabits({ apiUrl, userNumber }) {
               })}
             </select>
 
+            {/* CALENDAR (only for editing existing habits) */}
+            {editingHabit && (
+              <HabitCalendar 
+                history={habitHistory}
+                frequency={form.frequency}
+                onUpdateDay={(date, status) => updateDay(editingHabit.id, date, status)}
+              />
+            )}
+
             {/* ACTIONS */}
             <div className="flex justify-end gap-2">
               <button
                 onClick={closeModal}
-                className="px-4 py-2 border rounded-lg"
+                className="px-4 py-2 border rounded-lg hover:bg-slate-50"
               >
                 Cancel
               </button>
