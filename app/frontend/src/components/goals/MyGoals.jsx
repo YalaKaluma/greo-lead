@@ -39,8 +39,8 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const [loading, setLoading] = useState(true);
   
   // UI state
-  const [selectedGoal, setSelectedGoal] = useState(null);     // For view panel
-  const [editingGoal, setEditingGoal] = useState(null);       // For edit panel
+  const [expandedGoalId, setExpandedGoalId] = useState(null);   // For inline tree expansion
+  const [editingGoal, setEditingGoal] = useState(null);         // For side panel (medium/short term only)
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [parentGoalForChild, setParentGoalForChild] = useState(null);
 
@@ -92,17 +92,19 @@ export default function MyGoals({ apiUrl, userNumber }) {
   /* ---------------- EVENT HANDLERS ---------------- */
 
   const handleCardClick = (goal) => {
-    setSelectedGoal(goal);      // Open view panel
-    setEditingGoal(null);       // Close edit panel
-  };
-
-  const handleEditClick = (goal) => {
-    setEditingGoal(goal);       // Open edit panel
-    setSelectedGoal(null);      // Close view panel
+    // If it's a LONG TERM goal, toggle inline tree expansion
+    if (goal.time_horizon === 'long') {
+      setExpandedGoalId(expandedGoalId === goal.id ? null : goal.id);
+      setEditingGoal(null); // Close any open edit panel
+    } 
+    // If it's MEDIUM or SHORT TERM, open edit panel
+    else {
+      setEditingGoal(goal);
+      setExpandedGoalId(null); // Don't collapse tree when opening edit panel
+    }
   };
 
   const handleClosePanel = () => {
-    setSelectedGoal(null);
     setEditingGoal(null);
     setParentGoalForChild(null);
   };
@@ -110,7 +112,6 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const handleCreateChildGoal = (parentGoalId) => {
     setParentGoalForChild(parentGoalId);
     setShowCreateModal(true);
-    setSelectedGoal(null); // Close view panel
   };
 
   /* ---------------- CRUD OPERATIONS ---------------- */
@@ -153,7 +154,6 @@ export default function MyGoals({ apiUrl, userNumber }) {
       });
       await fetchGoals();
       setEditingGoal(null);
-      setSelectedGoal(null);
     } catch (err) {
       console.error('Error deleting goal:', err);
       alert('Failed to delete goal. Please try again.');
@@ -171,9 +171,9 @@ export default function MyGoals({ apiUrl, userNumber }) {
 
       {/* Main content area */}
       <div className="relative flex">
-        {/* Goals list - adjusts margin when panel is open */}
+        {/* Goals list - adjusts margin when edit panel is open */}
         <div className={`flex-1 transition-all duration-300 ${
-          (selectedGoal || editingGoal) ? 'lg:mr-[600px]' : ''
+          editingGoal ? 'lg:mr-[600px]' : ''
         }`}>
           {loading ? (
             <div className="text-center py-12 text-slate-500">
@@ -182,23 +182,14 @@ export default function MyGoals({ apiUrl, userNumber }) {
           ) : (
             <GoalsList 
               goals={organizedGoals}
+              expandedGoalId={expandedGoalId}
               onCardClick={handleCardClick}
+              allGoals={goals}
             />
           )}
         </div>
 
-        {/* Conditional side panels - only one can be open */}
-        {selectedGoal && (
-          <GoalViewPanel
-            goal={selectedGoal}
-            allGoals={goals}
-            linkedTasks={linkedTasks[selectedGoal.id] || []}
-            onClose={handleClosePanel}
-            onEdit={handleEditClick}
-            onCreateChildGoal={handleCreateChildGoal}
-          />
-        )}
-
+        {/* Edit panel - only for MEDIUM/SHORT TERM goals */}
         {editingGoal && (
           <GoalEditPanel
             goal={editingGoal}

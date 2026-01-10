@@ -1,4 +1,5 @@
 import GoalCard from './GoalCard';
+import GoalTree from './GoalTree';
 
 /* =========================================================
    TIME HORIZON LABELS
@@ -17,7 +18,7 @@ const getHorizonLabel = (horizon) => {
    MAIN COMPONENT
    ========================================================= */
 
-export default function GoalsList({ goals, onCardClick }) {
+export default function GoalsList({ goals, expandedGoalId, onCardClick, allGoals }) {
   
   const renderGoalSection = (horizon, goalsList) => {
     if (goalsList.length === 0) return null;
@@ -32,26 +33,23 @@ export default function GoalsList({ goals, onCardClick }) {
         </div>
 
         {/* Goals Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 relative">
-          {goalsList.map((goal, index) => (
-            <div key={goal.id} className="relative">
+        <div className="space-y-6">
+          {goalsList.map((goal) => (
+            <div key={goal.id}>
+              {/* Goal Card */}
               <GoalCard 
                 goal={goal}
                 onClick={onCardClick}
               />
               
-              {/* Arrow between cards (desktop only) */}
-              {index < goalsList.length - 1 && (
-                <div className="hidden lg:flex absolute top-1/2 -right-2 transform translate-x-full -translate-y-1/2 items-center justify-center w-4 h-4 z-10">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path 
-                      d="M6 2L12 8L6 14" 
-                      stroke="#9CA3AF" 
-                      strokeWidth="2" 
-                      strokeLinecap="round" 
-                      strokeLinejoin="round"
-                    />
-                  </svg>
+              {/* Expanded Tree View - shown inline below the clicked card */}
+              {expandedGoalId === goal.id && (
+                <div className="mt-4 ml-4">
+                  <GoalTree 
+                    parentGoal={goal} 
+                    allGoals={allGoals}
+                    onChildClick={onCardClick}
+                  />
                 </div>
               )}
             </div>
