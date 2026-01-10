@@ -216,6 +216,63 @@ class JourneyProcrastinationPattern(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class JourneyExecutionSystem(Base):
+    """User's systems and approaches for getting things done"""
+    __tablename__ = "journey_execution_systems"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True)
+    title = Column(String(200), nullable=True)
+    system_text = Column(Text, nullable=False)
+    category = Column(String, nullable=True)  # prioritization, planning, delegation, automation, etc.
+    effectiveness = Column(String, nullable=True)  # working well, needs improvement, abandoned
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class JourneyInspiration(Base):
+    """How the user inspires and motivates others"""
+    __tablename__ = "journey_inspiration"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True)
+    title = Column(String(200), nullable=True)
+    inspiration_text = Column(Text, nullable=False)
+    approach = Column(Text, nullable=True)  # storytelling, vision-setting, recognition, etc.
+    effectiveness = Column(String, nullable=True)  # what works well
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class JourneyCoachingMoment(Base):
+    """Coaching and delegation experiences"""
+    __tablename__ = "journey_coaching_moments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True)
+    title = Column(String(200), nullable=True)
+    moment_text = Column(Text, nullable=False)
+    person = Column(String, nullable=True)  # who was coached/delegated to
+    outcome = Column(Text, nullable=True)  # what happened
+    learning = Column(Text, nullable=True)  # what was learned
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class JourneyTeamComposition(Base):
+    """Insights about team structure and dynamics"""
+    __tablename__ = "journey_team_composition"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True)
+    title = Column(String(200), nullable=True)
+    composition_text = Column(Text, nullable=False)
+    team_type = Column(String, nullable=True)  # direct reports, cross-functional, board, etc.
+    dynamics = Column(Text, nullable=True)  # what's working, what's not
+    first_seen_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class ConversationState(Base):
     """
     Alfred's Brain - stores conversation state for intent-driven orchestration.
