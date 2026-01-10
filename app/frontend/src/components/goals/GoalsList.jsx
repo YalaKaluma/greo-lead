@@ -1,71 +1,36 @@
 import GoalCard from './GoalCard';
-import GoalTree from './GoalTree';
 
 /* =========================================================
-   TIME HORIZON LABELS
+   MAIN COMPONENT - TRUE TREE STRUCTURE
    ========================================================= */
 
-const getHorizonLabel = (horizon) => {
-  const labels = {
-    long: 'LONG TERM',
-    medium: 'MEDIUM TERM',
-    short: 'SHORT TERM'
-  };
-  return labels[horizon] || 'OTHER';
-};
-
-/* =========================================================
-   MAIN COMPONENT
-   ========================================================= */
-
-export default function GoalsList({ goals, expandedGoalId, onCardClick, allGoals }) {
+export default function GoalsList({ goals, onCardClick, allGoals, expandedGoalId, taskCounts = {} }) {
   
-  const renderGoalSection = (horizon, goalsList) => {
-    if (goalsList.length === 0) return null;
-
-    return (
-      <div key={horizon} className="mb-8">
-        {/* Section Header - ABOVE goals */}
-        <div className="mb-4">
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            {getHorizonLabel(horizon)}
-          </h2>
-        </div>
-
-        {/* Goals Grid */}
-        <div className="space-y-6">
-          {goalsList.map((goal) => (
-            <div key={goal.id}>
-              {/* Goal Card */}
-              <GoalCard 
-                goal={goal}
-                onClick={onCardClick}
-              />
-              
-              {/* Expanded Tree View - shown inline below the clicked card */}
-              {expandedGoalId === goal.id && (
-                <div className="mt-4 ml-4">
-                  <GoalTree 
-                    parentGoal={goal} 
-                    allGoals={allGoals}
-                    onChildClick={onCardClick}
-                  />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
+  // Build hierarchical structure
+  const buildTree = () => {
+    const longTermGoals = goals.long || [];
+    
+    return longTermGoals.map(ltGoal => {
+      // Find medium term children
+      const mediumChildren = (goals.medium || []).filter(g => g.parent_goal_id === ltGoal.id);
+      
+      return {
+        ...ltGoal,
+        children: mediumChildren.map(mtGoal => ({
+          ...mtGoal,
+          // Find short term children
+          children: (goals.short || []).filter(g => g.parent_goal_id === mtGoal.id)
+        }))
+      };
+    });
   };
 
-  // Render ONLY long term goals on main page
+  const tree = buildTree();
+
   return (
     <div className="space-y-8">
-      {renderGoalSection('long', goals.long)}
-      
-      {/* Empty state */}
-      {goals.long.length === 0 && (
+      {tree.length === 0 ? (
+        /* Empty state */
         <div className="text-center py-12">
           <div className="text-slate-400 mb-4">
             <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -75,6 +40,74 @@ export default function GoalsList({ goals, expandedGoalId, onCardClick, allGoals
           <p className="text-slate-500 text-lg">No long term goals yet</p>
           <p className="text-slate-400 text-sm mt-1">Click "+ Add Goal" to get started</p>
         </div>
+      ) : (
+        tree.map(ltGoal => {
+          const isExpanded = expandedGoalId === ltGoal.id;
+          const hasChildren = ltGoal.children && ltGoal.children.length > 0;
+          
+          return (
+            <div key={ltGoal.id} className="mb-8">
+              {/* Long Term Goal */}
+              <div className="mb-6">
+                <GoalCard 
+                  goal={ltGoal}
+                  onClick={onCardClick}
+                  hasChildren={hasChildren}
+                  taskCount={taskCounts[ltGoal.id] || 0}
+                />
+              </div>
+
+              {/* Expanded Tree View */}
+              {isExpanded && hasChildren && (
+                <div className="ml-8 pl-8 border-l-2 border-slate-300">
+                  {ltGoal.children.map((mtGoal, mtIndex) => {
+                    const hasSTChildren = mtGoal.children && mtGoal.children.length > 0;
+                    
+                    return (
+                      <div key={mtGoal.id} className="relative mb-6">
+                        {/* Horizontal connector line */}
+                        <div className="absolute left-0 top-6 w-8 border-t-2 border-slate-300" 
+                             style={{ transform: 'translateX(-32px)' }} />
+                        
+                        {/* Medium Term Goal */}
+                        <div className="mb-4">
+                          <GoalCard 
+                            goal={mtGoal}
+                            onClick={onCardClick}
+                            hasChildren={hasSTChildren}
+                            taskCount={taskCounts[mtGoal.id] || 0}
+                          />
+                        </div>
+
+                        {/* Short Term Goals */}
+                        {hasSTChildren && (
+                          <div className="ml-8 pl-8 border-l-2 border-slate-300">
+                            {mtGoal.children.map((stGoal, stIndex) => {
+                              return (
+                                <div key={stGoal.id} className="relative mb-4">
+                                  {/* Horizontal connector line */}
+                                  <div className="absolute left-0 top-6 w-8 border-t-2 border-slate-300" 
+                                       style={{ transform: 'translateX(-32px)' }} />
+                                  
+                                  {/* Short Term Goal */}
+                                  <GoalCard 
+                                    goal={stGoal}
+                                    onClick={onCardClick}
+                                    taskCount={taskCounts[stGoal.id] || 0}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })
       )}
     </div>
   );

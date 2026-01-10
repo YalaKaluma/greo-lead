@@ -1,5 +1,4 @@
 import LinkedTasksSection from './LinkedTasksSection';
-import GoalTree from './GoalTree';
 
 /* =========================================================
    TIME HORIZON HELPERS
@@ -18,7 +17,7 @@ const getHorizonLabel = (horizon) => {
    MAIN COMPONENT
    ========================================================= */
 
-export default function GoalViewPanel({ goal, allGoals, linkedTasks, onClose, onEdit, onCreateChildGoal }) {
+export default function GoalViewPanel({ goal, linkedTasks, onClose, onEdit }) {
   return (
     <div className="fixed lg:absolute top-0 right-0 bottom-0 w-full lg:w-[600px] bg-white shadow-2xl z-40 flex flex-col">
       {/* Header with close button */}
@@ -47,12 +46,12 @@ export default function GoalViewPanel({ goal, allGoals, linkedTasks, onClose, on
         {/* Title */}
         <div>
           <h3 className="text-2xl font-bold text-slate-800 mb-2">
-            {goal.title || 'Untitled Goal'}
+            {goal.title || goal.goal_text?.substring(0, 100) || 'Untitled Goal'}
           </h3>
         </div>
         
         {/* Description */}
-        {goal.goal_text && (
+        {goal.title && goal.goal_text && (
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
               Description
@@ -75,42 +74,28 @@ export default function GoalViewPanel({ goal, allGoals, linkedTasks, onClose, on
           </div>
         )}
 
-        {/* Goal Tree - NEW */}
-        <div>
-          <GoalTree parentGoal={goal} allGoals={allGoals} />
-        </div>
-
         {/* Linked Tasks */}
-        {linkedTasks.length > 0 && (
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
-              Linked Tasks ({linkedTasks.length})
-            </label>
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+            Linked Tasks {linkedTasks.length > 0 && `(${linkedTasks.length})`}
+          </label>
+          {linkedTasks.length > 0 ? (
             <LinkedTasksSection tasks={linkedTasks} />
-          </div>
-        )}
-
-        {linkedTasks.length === 0 && (
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-center">
-            <p className="text-sm text-slate-500">No tasks linked to this goal yet</p>
-          </div>
-        )}
+          ) : (
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-center">
+              <p className="text-sm text-slate-500">No tasks linked to this goal yet</p>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Footer with action buttons */}
-      <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 space-y-3">
+      {/* Footer with action button */}
+      <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4">
         <button
           onClick={() => onEdit(goal)}
           className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
         >
           Edit Goal
-        </button>
-        
-        <button
-          onClick={() => onCreateChildGoal(goal.id)}
-          className="w-full px-4 py-3 bg-white border-2 border-slate-300 hover:border-slate-400 text-slate-700 rounded-lg font-medium transition-colors"
-        >
-          + Create Child Goal
         </button>
       </div>
     </div>

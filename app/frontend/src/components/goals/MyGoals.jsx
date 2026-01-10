@@ -36,11 +36,13 @@ export default function MyGoals({ apiUrl, userNumber }) {
   // Core data
   const [goals, setGoals] = useState([]);
   const [linkedTasks, setLinkedTasks] = useState({});
+  const [taskCounts, setTaskCounts] = useState({});
   const [loading, setLoading] = useState(true);
   
   // UI state
-  const [expandedGoalId, setExpandedGoalId] = useState(null);   // For inline tree expansion
-  const [editingGoal, setEditingGoal] = useState(null);         // For side panel (medium/short term only)
+  const [expandedGoalId, setExpandedGoalId] = useState(null);   // For tree expansion of LT goals
+  const [viewingGoal, setViewingGoal] = useState(null);         // For view panel (MT/ST only)
+  const [editingGoal, setEditingGoal] = useState(null);         // For edit panel
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [parentGoalForChild, setParentGoalForChild] = useState(null);
 
@@ -68,16 +70,23 @@ export default function MyGoals({ apiUrl, userNumber }) {
       });
       
       if (Array.isArray(res.data)) {
+        // Group by goal_id
         const tasksByGoal = {};
+        const counts = {};
+        
         res.data.forEach(task => {
           if (task.goal_id) {
             if (!tasksByGoal[task.goal_id]) {
               tasksByGoal[task.goal_id] = [];
+              counts[task.goal_id] = 0;
             }
             tasksByGoal[task.goal_id].push(task);
+            counts[task.goal_id]++;
           }
         });
+        
         setLinkedTasks(tasksByGoal);
+        setTaskCounts(counts);
       }
     } catch (err) {
       console.error('Error fetching tasks:', err);
@@ -92,19 +101,26 @@ export default function MyGoals({ apiUrl, userNumber }) {
   /* ---------------- EVENT HANDLERS ---------------- */
 
   const handleCardClick = (goal) => {
-    // If it's a LONG TERM goal, toggle inline tree expansion
+    // If it's a LONG TERM goal, toggle tree expansion
     if (goal.time_horizon === 'long') {
       setExpandedGoalId(expandedGoalId === goal.id ? null : goal.id);
-      setEditingGoal(null); // Close any open edit panel
+      setViewingGoal(null);
+      setEditingGoal(null);
     } 
-    // If it's MEDIUM or SHORT TERM, open edit panel
+    // If it's MEDIUM or SHORT TERM, open VIEW panel (not edit)
     else {
-      setEditingGoal(goal);
-      setExpandedGoalId(null); // Don't collapse tree when opening edit panel
+      setViewingGoal(goal);
+      setEditingGoal(null);
     }
   };
 
+  const handleEditClick = (goal) => {
+    setEditingGoal(goal);
+    setViewingGoal(null);
+  };
+
   const handleClosePanel = () => {
+    setViewingGoal(null);
     setEditingGoal(null);
     setParentGoalForChild(null);
   };
@@ -154,6 +170,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
       });
       await fetchGoals();
       setEditingGoal(null);
+      setViewingGoal(null);
     } catch (err) {
       console.error('Error deleting goal:', err);
       alert('Failed to delete goal. Please try again.');
@@ -171,9 +188,9 @@ export default function MyGoals({ apiUrl, userNumber }) {
 
       {/* Main content area */}
       <div className="relative flex">
-        {/* Goals list - adjusts margin when edit panel is open */}
+        {/* Goals list - adjusts margin when panel is open */}
         <div className={`flex-1 transition-all duration-300 ${
-          editingGoal ? 'lg:mr-[600px]' : ''
+          (viewingGoal || editingGoal) ? 'lg:mr-[600px]' : ''
         }`}>
           {loading ? (
             <div className="text-center py-12 text-slate-500">
@@ -185,11 +202,22 @@ export default function MyGoals({ apiUrl, userNumber }) {
               expandedGoalId={expandedGoalId}
               onCardClick={handleCardClick}
               allGoals={goals}
+              taskCounts={taskCounts}
             />
           )}
         </div>
 
-        {/* Edit panel - only for MEDIUM/SHORT TERM goals */}
+        {/* View panel - for MEDIUM/SHORT TERM goals */}
+        {viewingGoal && (
+          <GoalViewPanel
+            goal={viewingGoal}
+            linkedTasks={linkedTasks[viewingGoal.id] || []}
+            onClose={handleClosePanel}
+            onEdit={handleEditClick}
+          />
+        )}
+
+        {/* Edit panel - opened from View panel */}
         {editingGoal && (
           <GoalEditPanel
             goal={editingGoal}
