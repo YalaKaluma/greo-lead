@@ -21,7 +21,7 @@ export default function GoalsList({ goals, onCardClick, expandedGoalId, taskCoun
   const tree = buildTree();
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 lg:space-y-4">
       {tree.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-slate-500">No goals yet</p>
@@ -44,10 +44,10 @@ export default function GoalsList({ goals, onCardClick, expandedGoalId, taskCoun
                   taskCount={taskCounts[ltGoal.id] || 0}
                 />
               ) : (
-                /* Expanded - ultra compact */
-                <div className="border border-blue-300 rounded p-1 bg-blue-50/20">
+                /* Expanded - responsive padding */
+                <div className="border border-blue-300 rounded p-1 lg:p-6 lg:rounded-xl bg-blue-50/20 lg:bg-blue-50/30">
                   {/* LT GOAL */}
-                  <div className="mb-1">
+                  <div className="mb-1 lg:mb-6">
                     <GoalCard 
                       goal={ltGoal}
                       onClick={onCardClick}
@@ -55,10 +55,10 @@ export default function GoalsList({ goals, onCardClick, expandedGoalId, taskCoun
                     />
                   </div>
 
-                  {/* MT GOALS */}
+                  {/* MT GOALS - responsive grid */}
                   {hasChildren && (
                     <div 
-                      className="grid gap-1"
+                      className="grid gap-1 lg:gap-4"
                       style={{ gridTemplateColumns: `repeat(${ltGoal.children.length}, 1fr)` }}
                     >
                       {ltGoal.children.map((mtGoal) => {
@@ -73,9 +73,9 @@ export default function GoalsList({ goals, onCardClick, expandedGoalId, taskCoun
                                 taskCount={taskCounts[mtGoal.id] || 0}
                               />
                             ) : (
-                              <div className="border border-slate-300 rounded p-1 bg-white">
+                              <div className="border border-slate-300 rounded p-1 lg:p-4 lg:rounded-lg bg-white">
                                 {/* MT GOAL */}
-                                <div className="mb-1">
+                                <div className="mb-1 lg:mb-4">
                                   <GoalCard 
                                     goal={mtGoal}
                                     onClick={onCardClick}
@@ -83,8 +83,8 @@ export default function GoalsList({ goals, onCardClick, expandedGoalId, taskCoun
                                   />
                                 </div>
                                 
-                                {/* ST GOALS - narrower than MT */}
-                                <div className="space-y-1 pl-1 border-l border-slate-200">
+                                {/* ST GOALS - narrower with responsive spacing */}
+                                <div className="space-y-1 lg:space-y-3 pl-1 lg:pl-4 border-l border-slate-200 lg:border-l-2">
                                   {mtGoal.children.map((stGoal) => (
                                     <div key={stGoal.id} className="w-[90%]">
                                       <GoalCard 
