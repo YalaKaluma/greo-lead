@@ -66,21 +66,21 @@ const getStatusIcon = (status) => {
 };
 
 const getStatusColor = (status) => {
-  if (status === 'done') return 'bg-green-100 hover:bg-green-200 text-green-800';
-  if (status === 'not_done') return 'bg-red-100 hover:bg-red-200 text-red-800';
-  return 'bg-slate-100 hover:bg-slate-200 text-slate-400'; // pending
+  if (status === 'done') return 'bg-green-100 hover:bg-green-200 border-green-300';
+  if (status === 'not_done') return 'bg-red-100 hover:bg-red-200 border-red-300';
+  return 'bg-slate-50 hover:bg-slate-100 border-slate-200'; // pending
 };
 
 /* =========================================================
-   CALENDAR COMPONENT
+   CALENDAR COMPONENT - LAST 2 WEEKS
    ========================================================= */
 
 function HabitCalendar({ history, frequency, onUpdateDay }) {
-  // Generate last 30 days
+  // Generate last 14 days (2 weeks)
   const days = [];
   const today = new Date();
   
-  for (let i = 29; i >= 0; i--) {
+  for (let i = 13; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(date.getDate() - i);
     days.push(date);
@@ -112,60 +112,67 @@ function HabitCalendar({ history, frequency, onUpdateDay }) {
     onUpdateDay(dateStr, newStatus);
   };
 
+  // Group days by week
+  const weeks = [];
+  let currentWeek = [];
+  
+  days.forEach((date, index) => {
+    if (index > 0 && date.getDay() === 0) {
+      // Start new week on Sunday
+      weeks.push(currentWeek);
+      currentWeek = [];
+    }
+    currentWeek.push(date);
+  });
+  if (currentWeek.length > 0) {
+    weeks.push(currentWeek);
+  }
+
   return (
     <div className="mb-6">
-      <h3 className="text-sm font-semibold text-slate-700 mb-3">
-        Last 30 Days
+      <h3 className="text-sm font-semibold text-slate-700 mb-2">
+        Last 2 Weeks
       </h3>
       
-      {/* Calendar Grid */}
-      <div className="grid grid-cols-7 gap-1">
-        {/* Day labels */}
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-          <div key={day} className="text-center text-xs font-medium text-slate-500 pb-1">
-            {day}
+      {/* Compact Calendar */}
+      <div className="space-y-2">
+        {weeks.map((week, weekIndex) => (
+          <div key={weekIndex} className="flex gap-1">
+            {week.map(date => {
+              const dateStr = formatDate(date);
+              const status = historyMap[dateStr] || 'pending';
+              const isWeekendDay = isWeekend(date);
+              const isToday = formatDate(new Date()) === dateStr;
+              
+              // Gray out weekends for weekday-only habits
+              const isDisabled = frequency === 'weekdays' && isWeekendDay;
+              
+              return (
+                <button
+                  key={dateStr}
+                  onClick={() => !isDisabled && handleDayClick(date, status)}
+                  disabled={isDisabled}
+                  className={`
+                    flex-1 py-2 rounded-md text-xs font-medium
+                    border transition-all duration-150
+                    ${isToday ? 'ring-2 ring-blue-500 ring-offset-1' : ''}
+                    ${isDisabled 
+                      ? 'bg-slate-50 text-slate-300 cursor-not-allowed border-slate-100' 
+                      : getStatusColor(status) + ' cursor-pointer'
+                    }
+                  `}
+                >
+                  <div className="text-slate-600">{date.getDate()}</div>
+                  <div className="text-base leading-none mt-1">{getStatusIcon(status)}</div>
+                </button>
+              );
+            })}
           </div>
         ))}
-        
-        {/* Empty cells to align first day */}
-        {Array.from({ length: days[0].getDay() }).map((_, i) => (
-          <div key={`empty-${i}`} />
-        ))}
-        
-        {/* Calendar days */}
-        {days.map(date => {
-          const dateStr = formatDate(date);
-          const status = historyMap[dateStr] || 'pending';
-          const isWeekendDay = isWeekend(date);
-          const isToday = formatDate(new Date()) === dateStr;
-          
-          // Gray out weekends for weekday-only habits
-          const isDisabled = frequency === 'weekdays' && isWeekendDay;
-          
-          return (
-            <button
-              key={dateStr}
-              onClick={() => !isDisabled && handleDayClick(date, status)}
-              disabled={isDisabled}
-              className={`
-                aspect-square rounded-lg text-xs font-medium
-                transition-all duration-150
-                ${isToday ? 'ring-2 ring-blue-500' : ''}
-                ${isDisabled 
-                  ? 'bg-slate-50 text-slate-300 cursor-not-allowed' 
-                  : getStatusColor(status) + ' cursor-pointer'
-                }
-              `}
-            >
-              <div>{date.getDate()}</div>
-              <div className="text-lg leading-none">{getStatusIcon(status)}</div>
-            </button>
-          );
-        })}
       </div>
 
-      {/* Legend */}
-      <div className="flex gap-4 mt-4 text-xs text-slate-600">
+      {/* Compact Legend */}
+      <div className="flex gap-3 mt-3 text-xs text-slate-600">
         <div className="flex items-center gap-1">
           <span>⭕</span> Pending
         </div>
@@ -173,7 +180,7 @@ function HabitCalendar({ history, frequency, onUpdateDay }) {
           <span>✅</span> Done
         </div>
         <div className="flex items-center gap-1">
-          <span>❌</span> Failed
+          <span>❌</span> Missed
         </div>
       </div>
     </div>
@@ -237,7 +244,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
       const res = await axios.get(`${apiUrl}/api/habits/${habitId}/history`, {
         params: { 
           user_number: userNumber,
-          days: 30 
+          days: 14  // Last 2 weeks
         }
       });
       if (Array.isArray(res.data)) {
@@ -311,7 +318,9 @@ export default function MyHabits({ apiUrl, userNumber }) {
 
   /* ---------------- TOGGLE COMPLETION (3-STATE CYCLE) ---------------- */
 
-  const toggleToday = async (habitId) => {
+  const toggleToday = async (habitId, e) => {
+    e.stopPropagation(); // Prevent opening modal
+    
     try {
       await axios.post(
         `${apiUrl}/api/habits/${habitId}/toggle_today`,
@@ -391,36 +400,36 @@ export default function MyHabits({ apiUrl, userNumber }) {
               onDragStart={(e) => onDragStart(e, index)}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => onDrop(e, index)}
-              className="flex items-center justify-between bg-white border rounded-lg px-4 py-3"
+              className="flex items-center justify-between bg-white border rounded-lg px-4 py-3 hover:shadow-sm transition-shadow"
             >
               <div className="flex items-center gap-3 flex-1">
 
                 {/* DRAG HANDLE */}
                 <span className="cursor-grab text-slate-300">⋮⋮</span>
 
-                {/* TOGGLE (3-state) */}
+                {/* TOGGLE (3-state) - Larger click area */}
                 <button
-                  onClick={() => toggleToday(h.id)}
-                  className="text-2xl"
+                  onClick={(e) => toggleToday(h.id, e)}
+                  className="text-2xl hover:scale-110 transition-transform"
                 >
                   {getStatusIcon(todayStatus)}
                 </button>
 
-                {/* CONTENT */}
+                {/* CONTENT - Click to edit */}
                 <div
                   onClick={() => openEditHabit(h)}
-                  className={`cursor-pointer ${
+                  className="cursor-pointer flex-1"
+                >
+                  <div className={`text-lg ${
                     todayStatus === 'done'
                       ? 'line-through text-slate-400'
                       : todayStatus === 'not_done'
-                      ? 'text-red-400'
-                      : 'hover:underline'
-                  }`}
-                >
-                  <div className="text-lg">
+                      ? 'text-red-500'
+                      : 'hover:text-blue-600'
+                  }`}>
                     {h.title}
                     {h.frequency === 'weekdays' && (
-                      <span className="ml-2 text-xs text-slate-500">
+                      <span className="ml-2 text-xs text-slate-500 font-normal">
                         (weekdays only)
                       </span>
                     )}
@@ -436,15 +445,15 @@ export default function MyHabits({ apiUrl, userNumber }) {
 
               {/* STREAK — ALWAYS VISIBLE */}
               <span
-                className={`text-sm ${
+                className={`text-sm font-medium ${
                   todayStatus === 'done' 
                     ? 'text-slate-400' 
                     : todayStatus === 'not_done'
                     ? 'text-red-400'
-                    : 'text-slate-600'
+                    : 'text-orange-600'
                 }`}
               >
-                🔥 {h.streak}-day streak
+                🔥 {h.streak}-day
               </span>
             </div>
           );
@@ -454,8 +463,14 @@ export default function MyHabits({ apiUrl, userNumber }) {
       {/* ================= MODAL ================= */}
 
       {modalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+        <div 
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          onClick={closeModal}
+        >
+          <div 
+            className="bg-white rounded-lg w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
 
             <h2 className="text-xl font-semibold mb-4">
               {editingHabit ? 'Edit Habit' : 'New Habit'}
@@ -483,7 +498,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
                   onClick={() => setForm({ ...form, frequency: 'daily' })}
                   className={`px-4 py-2 rounded-lg border-2 transition-colors ${
                     form.frequency === 'daily'
-                      ? 'border-blue-600 bg-blue-50 text-blue-700'
+                      ? 'border-blue-600 bg-blue-50 text-blue-700 font-medium'
                       : 'border-slate-200 hover:border-slate-300'
                   }`}
                 >
@@ -494,7 +509,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
                   onClick={() => setForm({ ...form, frequency: 'weekdays' })}
                   className={`px-4 py-2 rounded-lg border-2 transition-colors ${
                     form.frequency === 'weekdays'
-                      ? 'border-blue-600 bg-blue-50 text-blue-700'
+                      ? 'border-blue-600 bg-blue-50 text-blue-700 font-medium'
                       : 'border-slate-200 hover:border-slate-300'
                   }`}
                 >
@@ -542,7 +557,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
             )}
 
             {/* ACTIONS */}
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 mt-6">
               <button
                 onClick={closeModal}
                 className="px-4 py-2 border rounded-lg hover:bg-slate-50"
