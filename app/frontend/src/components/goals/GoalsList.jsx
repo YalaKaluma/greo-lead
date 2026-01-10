@@ -70,63 +70,65 @@ export default function GoalsList({ goals, onCardClick, allGoals, expandedGoalId
                       onClick={onCardClick}
                       hasChildren={hasChildren}
                       taskCount={taskCounts[ltGoal.id] || 0}
-                      compact={true}
                     />
                   </div>
 
-                  {/* MEDIUM TERM GOALS IN A ROW */}
+                  {/* MEDIUM TERM GOALS - Scrollable on mobile if > 2 */}
                   {hasChildren && (
-                    <div 
-                      className="grid gap-2 lg:gap-4" 
-                      style={{ 
-                        gridTemplateColumns: `repeat(${ltGoal.children.length}, 1fr)` 
-                      }}
-                    >
-                      {ltGoal.children.map((mtGoal) => {
-                        const hasSTChildren = mtGoal.children && mtGoal.children.length > 0;
-                        
-                        return (
-                          <div key={mtGoal.id}>
-                            {!hasSTChildren ? (
-                              /* MT goal without children - just the card */
-                              <GoalCard 
-                                goal={mtGoal}
-                                onClick={onCardClick}
-                                hasChildren={false}
-                                taskCount={taskCounts[mtGoal.id] || 0}
-                                compact={true}
-                              />
-                            ) : (
-                              /* MT goal with container around ST children */
-                              <div className="border-2 border-slate-300 rounded-lg p-2 lg:p-4 bg-white">
-                                {/* MEDIUM TERM GOAL */}
-                                <div className="mb-2 lg:mb-4">
-                                  <GoalCard 
-                                    goal={mtGoal}
-                                    onClick={onCardClick}
-                                    hasChildren={true}
-                                    taskCount={taskCounts[mtGoal.id] || 0}
-                                    compact={true}
-                                  />
-                                </div>
-                                
-                                {/* SHORT TERM GOALS stacked vertically */}
-                                <div className="space-y-2 lg:space-y-3 pl-2 lg:pl-4 border-l-2 border-slate-200">
-                                  {mtGoal.children.map((stGoal) => (
+                    <div className={`
+                      ${ltGoal.children.length > 2 ? 'overflow-x-auto pb-2 -mx-3 px-3' : ''}
+                    `}>
+                      <div 
+                        className="grid gap-2 lg:gap-4"
+                        style={{ 
+                          gridTemplateColumns: ltGoal.children.length > 2 
+                            ? `repeat(${ltGoal.children.length}, minmax(280px, 1fr))` 
+                            : `repeat(${ltGoal.children.length}, 1fr)`
+                        }}
+                      >
+                        {ltGoal.children.map((mtGoal) => {
+                          const hasSTChildren = mtGoal.children && mtGoal.children.length > 0;
+                          
+                          return (
+                            <div key={mtGoal.id} className="min-w-0">
+                              {!hasSTChildren ? (
+                                /* MT goal without children - just the card */
+                                <GoalCard 
+                                  goal={mtGoal}
+                                  onClick={onCardClick}
+                                  hasChildren={false}
+                                  taskCount={taskCounts[mtGoal.id] || 0}
+                                />
+                              ) : (
+                                /* MT goal with container around ST children */
+                                <div className="border-2 border-slate-300 rounded-lg p-3 lg:p-4 bg-white">
+                                  {/* MEDIUM TERM GOAL */}
+                                  <div className="mb-3 lg:mb-4">
                                     <GoalCard 
-                                      key={stGoal.id}
-                                      goal={stGoal}
+                                      goal={mtGoal}
                                       onClick={onCardClick}
-                                      taskCount={taskCounts[stGoal.id] || 0}
-                                      compact={true}
+                                      hasChildren={true}
+                                      taskCount={taskCounts[mtGoal.id] || 0}
                                     />
-                                  ))}
+                                  </div>
+                                  
+                                  {/* SHORT TERM GOALS stacked vertically */}
+                                  <div className="space-y-2 lg:space-y-3 pl-3 lg:pl-4 border-l-2 border-slate-200">
+                                    {mtGoal.children.map((stGoal) => (
+                                      <GoalCard 
+                                        key={stGoal.id}
+                                        goal={stGoal}
+                                        onClick={onCardClick}
+                                        taskCount={taskCounts[stGoal.id] || 0}
+                                      />
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>
