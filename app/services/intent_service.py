@@ -47,6 +47,9 @@ Your task: Classify the user's intent with confidence scores (0.0 to 1.0).
    
 6. META - User is correcting Alfred or teaching preferences
    Signals: "don't do that", "remember that I", "you should", corrections
+   
+7. GOAL_REVIEW - User wants a structured goals performance review session
+   Signals: "review my goals", "goal check-in", "progress review", "performance review", "biweekly review", "review [goal name]"
 
 ===== EXPLICIT EXECUTION DETECTION =====
 Check if the user is EXPLICITLY requesting execution (vs. just mentioning something):

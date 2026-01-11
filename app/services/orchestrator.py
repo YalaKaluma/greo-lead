@@ -1,5 +1,3 @@
-from app.services.prompt_service import load_prompt
-
 # app/services/orchestrator.py
 """
 Orchestration Service for Alfred's Brain
@@ -8,6 +6,7 @@ This is the core decision-making layer that routes to appropriate handlers
 based on conversation state. All behavior flows through this orchestrator.
 """
 
+from app.services.prompt_service import load_prompt
 from sqlalchemy.orm import Session
 from typing import Dict, List, Any, Optional
 from app.services.intent_service import detect_intents, format_recent_context, get_top_intent, has_conflict
@@ -19,7 +18,7 @@ from app.services.message_service import load_conversation_history
 from app.utils.task_context import get_today_tasks, format_tasks_for_context
 from openai import OpenAI
 from app.config import OPENAI_API_KEY, OPENAI_MODEL
-from app.models import Task
+from app.models import Task, JourneyGoal
 from datetime import datetime
 
 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -116,6 +115,7 @@ def orchestrate(
         States.REVIEWING: handle_reviewing,
         States.LEARNING: handle_learning,
         States.PROACTIVE: handle_proactive,
+        States.GOAL_REVIEW: handle_goal_review,
     }
     
     handler = handlers.get(new_state, handle_idle)
@@ -133,7 +133,7 @@ def orchestrate(
     save_state_transition(
         db=db,
         state=state,
-        new_state=new_state,
+        new_state=result.state,
         reason=reason,
         intents=intents,
         pending_action=result.data.get('pending_action'),
@@ -275,8 +275,6 @@ CONTEXT:
 
 
 # Add this import at the top
-from app.models import Task
-from datetime import datetime
 
 def handle_clarifying(
         db: Session,
@@ -513,3 +511,312 @@ Reply concisely and warmly.
     )
     
     return response.choices[0].message.content.strip()
+
+# ============================================================
+# GOAL REVIEW (NEW STATE)
+# ============================================================
+
+def _normalize_text(s: str) -> str:
+    return "".join(ch.lower() for ch in (s or "") if ch.isalnum() or ch.isspace()).strip()
+
+
+def _fetch_goals(db: Session, user_number: str) -> List[JourneyGoal]:
+    return (
+        db.query(JourneyGoal)
+        .filter(JourneyGoal.user_number == user_number)
+        .order_by(JourneyGoal.sort_order.asc(), JourneyGoal.id.asc())
+        .all()
+    )
+
+
+def _build_goal_index(goals: List[JourneyGoal]) -> Dict[str, Any]:
+    by_id = {g.id: g for g in goals}
+    children: Dict[int, List[int]] = {}
+    for g in goals:
+        if g.parent_goal_id is not None:
+            children.setdefault(g.parent_goal_id, []).append(g.id)
+    return {"by_id": by_id, "children": children}
+
+
+def _collect_descendants(index: Dict[str, Any], root_id: int) -> List[int]:
+    out: List[int] = []
+    stack = [root_id]
+    while stack:
+        cur = stack.pop()
+        for cid in index["children"].get(cur, []):
+            out.append(cid)
+            stack.append(cid)
+    return out
+
+
+def _match_long_term_goal(long_goals: List[JourneyGoal], user_text: str) -> List[JourneyGoal]:
+    q = _normalize_text(user_text)
+    if not q:
+        return []
+
+    scored = []
+    q_tokens = set(q.split())
+
+    for g in long_goals:
+        hay = _normalize_text(f"{g.title or ''} {g.goal_text or ''}")
+        score = 0
+        if q in hay:
+            score += 60
+        if q_tokens:
+            h_tokens = set(hay.split())
+            score += int(40 * (len(q_tokens & h_tokens) / max(1, len(q_tokens))))
+        scored.append((score, g))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [g for s, g in scored if s > 0]
+
+
+def _render_long_goal_menu(long_goals: List[JourneyGoal]) -> str:
+    lines = [
+        "Which long-term goal would you like to review?",
+        "Reply with the number or the goal name. (You can type 'cancel' anytime.)"
+    ]
+    for i, g in enumerate(long_goals, start=1):
+        title = g.title or (g.goal_text[:60] + ("…" if g.goal_text and len(g.goal_text) > 60 else ""))
+        lines.append(f"{i}. {title}")
+    return "\n".join(lines)
+
+
+def _format_goal_tree_for_prompt(ctx: Dict[str, Any]) -> str:
+    mg = ctx.get("medium_goals") or []
+    sg = ctx.get("short_goals") or []
+    mg_txt = "\n".join([f"- {x['title']}" for x in mg]) or "- (none)"
+    sg_txt = "\n".join([f"- {x['title']}" for x in sg]) or "- (none)"
+    return f"""LONG-TERM GOAL:
+- {ctx.get('goal_title')}
+
+MEDIUM-TERM GOALS:
+{mg_txt}
+
+SHORT-TERM GOALS:
+{sg_txt}
+"""
+
+
+def _run_goal_review_prompt(
+    prompt_path: str,
+    journey_context: str,
+    goal_tree: str,
+    recent_history: List[Dict[str, str]],
+    user_input: str = ""
+) -> str:
+    prompt = load_prompt(prompt_path)
+
+    system_prompt = f"""{prompt['system_prompt']}
+
+GOAL TREE:
+{goal_tree}
+
+JOURNEY MEMORY:
+{journey_context}
+"""
+
+    messages = [{"role": "system", "content": system_prompt}]
+
+    def _normalize_history(history):
+        out = []
+        for h in history:
+            if isinstance(h, dict) and "role" in h and "content" in h:
+                out.append(h)
+        return out
+
+
+    if recent_history:
+        history_msgs = _normalize_history(recent_history)
+        messages.extend(recent_history[-10:])
+
+    if user_input:
+        messages.append({"role": "user", "content": user_input})
+
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=messages,
+        temperature=0.6,
+        max_tokens=260
+    )
+    return (resp.choices[0].message.content or "").strip()
+
+
+def handle_goal_review(
+    db: Session,
+    user_number: str,
+    user_message: str,
+    intents: List[Dict],
+    explicit_execution: bool,
+    current_state: Any,
+    reason: str
+) -> OrchestrationResult:
+    """
+    Multi-turn Goal Performance Review session anchored on ONE long-term goal.
+    User selects goal via text. Alfred runs phases:
+      select_goal -> framing -> reflection (Alfred synthesis) -> diagnosis -> adjustment -> closure
+    No task creation.
+    """
+
+    state_ctx = current_state.state_context or {}
+    phase = state_ctx.get("phase") or "select_goal"
+    msg_lower = (user_message or "").lower()
+
+    # Cancel anytime
+    if any(w in msg_lower for w in ["cancel", "stop", "exit", "nevermind", "never mind"]):
+        return OrchestrationResult(
+            response="Got it — stopping the goal review. Want to do anything else?",
+            state=States.IDLE,
+            data={"state_context": None}
+        )
+
+    goals = _fetch_goals(db, user_number)
+    long_goals = [g for g in goals if (g.time_horizon or "").lower() == "long"]
+
+    if not long_goals:
+        return OrchestrationResult(
+            response="I don’t see any long-term goals yet. Add one in My Vision & Goals, then we can do a review.",
+            state=States.IDLE,
+            data={"state_context": None}
+        )
+
+    # Phase 0: Select goal
+    if phase == "select_goal":
+        chosen: Optional[JourneyGoal] = None
+        stripped = (user_message or "").strip()
+
+        # Allow numeric selection
+        if stripped.isdigit():
+            idx = int(stripped)
+            if 1 <= idx <= len(long_goals):
+                chosen = long_goals[idx - 1]
+
+        # Try text match
+        if chosen is None and stripped:
+            candidates = _match_long_term_goal(long_goals, user_message)
+
+            if len(candidates) == 1:
+                chosen = candidates[0]
+            elif len(candidates) > 1:
+                options = "\n".join([f"- {c.title or c.goal_text[:60]}" for c in candidates[:5]])
+                return OrchestrationResult(
+                    response=f"I found multiple matches. Which one do you mean?\n{options}",
+                    state=States.GOAL_REVIEW,
+                    data={"state_context": {"phase": "select_goal"}}
+                )
+
+        # If still no goal chosen, show menu
+        if chosen is None:
+            return OrchestrationResult(
+                response=_render_long_goal_menu(long_goals),
+                state=States.GOAL_REVIEW,
+                data={"state_context": {"phase": "select_goal"}}
+            )
+
+        # Build goal tree in context
+        index = _build_goal_index(goals)
+        descendants = _collect_descendants(index, chosen.id)
+        medium, short = [], []
+
+        for gid in descendants:
+            g = index["by_id"].get(gid)
+            if not g:
+                continue
+            th = (g.time_horizon or "").lower()
+            if th == "medium":
+                medium.append({"id": g.id, "title": g.title or (g.goal_text or "")[:80]})
+            elif th == "short":
+                short.append({"id": g.id, "title": g.title or (g.goal_text or "")[:80]})
+
+        state_ctx = {
+            "phase": "framing",
+            "goal_id": chosen.id,
+            "goal_title": chosen.title or (chosen.goal_text or "")[:80],
+            "time_window": "last_2_weeks",
+            "medium_goals": medium,
+            "short_goals": short,
+        }
+        phase = "framing"
+
+    journey_context = build_journey_context(db, user_number)
+    history = load_conversation_history(db, user_number) or []
+    goal_tree = _format_goal_tree_for_prompt(state_ctx)
+
+    prompt_base = "app/prompts/coaching/goal_review"
+
+    if phase == "framing":
+        text = _run_goal_review_prompt(
+            f"{prompt_base}/framing.yaml",
+            journey_context=journey_context,
+            goal_tree=goal_tree,
+            recent_history=history
+        )
+        state_ctx["phase"] = "reflection"
+        return OrchestrationResult(
+            response=text,
+            state=States.GOAL_REVIEW,
+            data={"state_context": state_ctx}
+        )
+
+    if phase == "reflection":
+        # User speaks -> Alfred takes space + connects dots + 1 question
+        state_ctx["user_reflection"] = user_message
+        text = _run_goal_review_prompt(
+            f"{prompt_base}/reflection.yaml",
+            journey_context=journey_context,
+            goal_tree=goal_tree,
+            recent_history=history,
+            user_input=user_message
+        )
+        state_ctx["phase"] = "diagnosis"
+        return OrchestrationResult(
+            response=text,
+            state=States.GOAL_REVIEW,
+            data={"state_context": state_ctx}
+        )
+
+    if phase == "diagnosis":
+        state_ctx["diagnosis_input"] = user_message
+        text = _run_goal_review_prompt(
+            f"{prompt_base}/diagnosis.yaml",
+            journey_context=journey_context,
+            goal_tree=goal_tree,
+            recent_history=history,
+            user_input=user_message
+        )
+        state_ctx["phase"] = "adjustment"
+        return OrchestrationResult(
+            response=text,
+            state=States.GOAL_REVIEW,
+            data={"state_context": state_ctx}
+        )
+
+    if phase == "adjustment":
+        state_ctx["adjustment_input"] = user_message
+        text = _run_goal_review_prompt(
+            f"{prompt_base}/adjustment.yaml",
+            journey_context=journey_context,
+            goal_tree=goal_tree,
+            recent_history=history,
+            user_input=user_message
+        )
+        state_ctx["phase"] = "closure"
+        return OrchestrationResult(
+            response=text,
+            state=States.GOAL_REVIEW,
+            data={"state_context": state_ctx}
+        )
+
+    # closure
+    text = _run_goal_review_prompt(
+        f"{prompt_base}/closure.yaml",
+        journey_context=journey_context,
+        goal_tree=goal_tree,
+        recent_history=history,
+        user_input=user_message
+    )
+    return OrchestrationResult(
+        response=text,
+        state=States.IDLE,
+        data={"state_context": None}
+    )
