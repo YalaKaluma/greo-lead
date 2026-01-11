@@ -1,11 +1,19 @@
-# app/services/journey_context.py
-
-#from app.services import journey_service
 import app.services.journey_service as journey_service
 
 
+def _bullets(lines, empty="None logged yet."):
+    if not lines:
+        return empty
+    return "\n".join([f"- {x}" for x in lines])
+
+
 def build_journey_context(db, user_number):
-    """Returns a multi-line string summarizing the user’s structured memory."""
+    """
+    Returns a multi-line string summarizing the user’s structured memory.
+
+    NOTE: Format is intentionally structured with labeled sections to improve
+    prompt adherence and make memory easier for the model to use explicitly.
+    """
 
     strengths = journey_service.get_strengths(db, user_number)
     projects = journey_service.get_projects(db, user_number)
@@ -14,45 +22,57 @@ def build_journey_context(db, user_number):
     failures = journey_service.get_failures(db, user_number)
     dev_areas = journey_service.get_development_areas(db, user_number)
 
-    # Convert to readable text
-    strengths_txt = ", ".join([s.strength for s in strengths]) if strengths else "None logged yet."
-    projects_txt = "\n".join([f"- {p.project_name} (goal: {p.goal or 'not defined'})" for p in projects]) if projects else "None."
-    people_txt = "\n".join([f"- {p.name} (email: {p.email}, phone: {p.phone})" for p in people]) if people else "None."
-#    goals_txt = "\n".join([f"- {g.goal} (why: {g.why or 'not provided'})" for g in goals]) if goals else "None."
-    goals_txt = "\n".join([f"- {g.goal_text} (why: {g.why or 'not provided'})" for g in goals]) if goals else "None."
-    dev_areas_txt = ", ".join([d.skill for d in dev_areas]) if dev_areas else "None."
+    strengths_lines = [s.strength for s in strengths] if strengths else []
+    dev_area_lines = [d.skill for d in dev_areas] if dev_areas else []
 
+    goals_lines = []
+    if goals:
+        for g in goals:
+            why = g.why or "not provided"
+            goals_lines.append(f"{g.goal_text} (why: {why})")
+
+    projects_lines = []
+    if projects:
+        for p in projects:
+            goal = p.goal or "not defined"
+            projects_lines.append(f"{p.project_name} (goal: {goal})")
+
+    people_lines = []
+    if people:
+        for p in people:
+            # Avoid "None" spam in the text
+            email = p.email or "n/a"
+            phone = p.phone or "n/a"
+            people_lines.append(f"{p.name} (email: {email}, phone: {phone})")
+
+    failures_lines = []
     if failures:
-        failures_txt = "\n".join([
-#            f"- {f.event} | learning: {f.learning or 'none'} | scar: {f.scar or 'none'}"
-            f"- {f.failure_text} | learning: {f.learning or 'none'} | scar: {f.scar or 'none'}"
-            for f in failures
-        ])
-    else:
-        failures_txt = "No failures logged yet."
+        for f in failures:
+            learning = f.learning or "none"
+            scar = f.scar or "none"
+            failures_lines.append(f"{f.failure_text} | learning: {learning} | scar: {scar}")
 
-    # Build unified context
     context = f"""
-USER JOURNEY CONTEXT
-====================
+CONTEXT (User Journey Memory)
+============================
+
+RELEVANT GOALS:
+{_bullets(goals_lines, empty="None logged yet.")}
+
+ACTIVE PROJECTS:
+{_bullets(projects_lines, empty="None logged yet.")}
 
 STRENGTHS:
-{strengths_txt}
+{_bullets(strengths_lines, empty="None logged yet.")}
 
 DEVELOPMENT AREAS:
-{dev_areas_txt}
-
-GOALS:
-{goals_txt}
-
-PROJECTS:
-{projects_txt}
+{_bullets(dev_area_lines, empty="None logged yet.")}
 
 IMPORTANT PEOPLE:
-{people_txt}
+{_bullets(people_lines, empty="None logged yet.")}
 
 FAILURES / LEARNINGS / SCARS:
-{failures_txt}
+{_bullets(failures_lines, empty="None logged yet.")}
 """
 
     return context.strip()

@@ -198,79 +198,73 @@ def handle_coaching(
 ) -> OrchestrationResult:
     """
     Handle COACHING state - reflective, developmental mode.
-
-    Goals for this handler (Phase 1):
-    - Use externalized prompt (versioned YAML)
-    - Inject structured journey context
-    - Enforce non-generic, memory-anchored coaching
-    - Keep response short (WhatsApp-friendly)
+    
+    CRITICAL RULES:
+    1. Do NOT create tasks unless explicitly asked
+    2. Do NOT solve problems unprompted
+    3. DO mirror emotions
+    4. DO ask ONE reflective question max
+    5. DO capture journey signals
     """
-
+    
     print(f"💭 COACHING MODE ACTIVE")
-
-    # If user explicitly requests action, do NOT execute immediately.
-    # Keep current design: ask for approval / propose a task.
+    
+    # Check if user explicitly requests action
     if explicit_execution and any(i['name'] == 'EXECUTE' for i in intents if i['confidence'] > 0.7):
         return OrchestrationResult(
             response="Would you like me to capture this as a task?",
             state=States.AWAITING_APPROVAL,
             data={'pending_action': 'PROPOSE_TASK'}
         )
-
-    # Load prompt from YAML
-    prompt = load_prompt("app/prompts/coaching/coaching_v1.yaml")
-    prompt_version = prompt.get("version", "unknown")
-    system_rules = prompt["system_prompt"]
-    style_guidelines = prompt.get("style_guidelines", "").strip()
-
-    # Build structured journey context
+    
+    # Generate coaching response
     journey_context = build_journey_context(db, user_number)
+    
+    coaching_prompt = f"""You are Alfred in COACHING mode.
 
-    # Optional: include a small amount of recent chat history to avoid "stateless" coaching
-    history = load_conversation_history(db, user_number)
-    recent = history[-6:] if history else []
+User said: "{user_message}"
 
-    # Compose system prompt with explicit context usage requirement
-    system_prompt = f"""{system_rules}
-
-{style_guidelines}
-
-HARD REQUIREMENTS:
-- You MUST explicitly reference at least ONE item from the CONTEXT below.
-- Ask EXACTLY ONE question.
-- Keep the final answer under 320 characters if possible (hard max: 450).
-
-CONTEXT:
+Journey context:
 {journey_context}
-"""
 
+Your role (CRITICAL RULES):
+1. MIRROR their emotion/experience first
+2. ASK one reflective question (max)
+3. NO solutions, NO task creation, NO optimization
+4. Keep response under 280 characters
+5. Use their exact language, not business jargon
+
+Examples:
+
+User: "I felt overwhelmed in that board meeting"
+Alfred: "Board meetings can be intense, especially when you're carrying a lot. What specifically felt overwhelming?"
+
+User: "I'm struggling to delegate to my team"
+Alfred: "It sounds like letting go is hard right now. What would need to be true for you to feel comfortable delegating?"
+
+Generate response:
+"""
+    
     response = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
-            {"role": "system", "content": system_prompt},
-            *recent,
-            {"role": "user", "content": user_message},
+            {"role": "system", "content": coaching_prompt},
+            {"role": "user", "content": user_message}
         ],
-        temperature=0.6,
-        max_tokens=180
+        temperature=0.7,
+        max_tokens=150
     )
-
-    coaching_response = (response.choices[0].message.content or "").strip()
-
-    # Enforce a hard length cap (WhatsApp readability). If the model exceeds,
-    # we cut at a safe boundary rather than sending long rambles.
-    HARD_MAX = 450
-    if len(coaching_response) > HARD_MAX:
-        coaching_response = coaching_response[:HARD_MAX].rsplit(" ", 1)[0].strip() + "…"
-
-    # Log prompt version so we can correlate with ratings later (no DB change needed)
-    print(f"🏷️ Coaching prompt version: {prompt_version}")
-
+    
+    coaching_response = response.choices[0].message.content.strip()
+    
+    # Extract journey signals (implement in Phase 3)
+    # For now, log that we would capture signals
+    print(f"📝 Would extract journey signals here")
+    
     return OrchestrationResult(
         response=coaching_response,
         state=States.COACHING,
-        actions=['capture_journey_signals'],
-        data={"prompt_version": prompt_version}
+        actions=['capture_journey_signals']
     )
 
 
