@@ -15,7 +15,7 @@ CLIENT_SECRET = os.environ["GMAIL_CLIENT_SECRET"]
 # Paste the FULL redirect URL you got in the browser below
 # Example:
 # REDIRECT_RESPONSE = "http://localhost:8000/api/gmail/oauth/callback?code=XXXX&scope=YYYY"
-REDIRECT_RESPONSE = "http://localhost:8000/api/gmail/oauth/callback?state=Ew9E3Zlqf9RagQoJlspvvfFKLdo93b&code=4/0ATX87lMbLzxoIvVmg31bRPeRHsWYi_sLAu3xBKj9i2bZM20NWub2je-QjEI-JF5qkvNpQQ&scope=https://www.googleapis.com/auth/gmail.modify%20https://www.googleapis.com/auth/gmail.send"
+REDIRECT_RESPONSE = "http://localhost:8000/api/gmail/oauth/callback?state=NVUeqIzvuYLtoLxUsYp82FzMxZvfI7&code=4/0ASc3gC1kHAnBHerQgCFtFuNMWaKMPdPlPKhgZa4Z_ilclsZJHBUs68ArppEPSG-z1GYldQ&scope=https://www.googleapis.com/auth/gmail.send%20https://www.googleapis.com/auth/gmail.modify"
 
 flow = Flow.from_client_config(
     {

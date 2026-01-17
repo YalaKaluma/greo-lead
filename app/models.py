@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Text, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 from datetime import datetime, timedelta
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Date
@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.mutable import MutableDict, MutableList  # ← ADDED FOR FIX
 import enum
 import secrets
+from database import Base
 
 
 class JournalEntry(Base):
@@ -506,3 +507,42 @@ class EmailVerification(Base):
     def generate_code():
         """Generate a 6-digit verification code"""
         return f"{secrets.randbelow(1000000):06d}"
+
+# models.py
+# Existing models omitted for brevity
+
+
+
+class GoalReviewSession(Base):
+    """
+    Stores a distilled summary of a completed goal review coaching session.
+    This is Alfred's internal coaching memory (not user-facing).
+    """
+
+    __tablename__ = "goal_review_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    user_number = Column(String, index=True, nullable=False)
+    goal_id = Column(Integer, ForeignKey("goals.id"), nullable=False)
+    goal_title = Column(String, nullable=False)
+
+    session_started_at = Column(DateTime(timezone=True), nullable=False)
+    session_ended_at = Column(DateTime(timezone=True), nullable=False)
+
+    # Core coaching memory
+    summary = Column(Text, nullable=False)
+    key_progress = Column(Text)
+    key_blockers = Column(Text)
+    key_pattern = Column(Text)
+    chosen_adjustment = Column(Text)
+
+    # Optional structured signals (future-proofing)
+    momentum_direction = Column(String)  # 'up', 'flat', 'down'
+    confidence_level = Column(Integer)  # 1–5 if inferred later
+
+    # Traceability
+    created_tasks = Column(JSON)  # list of {task_id, title}
+    prompt_version = Column(String)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
