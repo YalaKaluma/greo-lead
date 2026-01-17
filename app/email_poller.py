@@ -1,3 +1,4 @@
+from google.auth.exceptions import RefreshError
 import time
 import logging
 
@@ -12,13 +13,14 @@ POLL_INTERVAL_SECONDS = 60
 MAX_EMAILS_PER_CYCLE = 5
 
 log = logging.getLogger(__name__)
-
 def run_email_loop():
     log.info("📧 Alfred email loop started")
 
     while True:
         try:
-            message_ids = list_unread_message_ids(max_results=MAX_EMAILS_PER_CYCLE)
+            message_ids = list_unread_message_ids(
+                max_results=MAX_EMAILS_PER_CYCLE
+            )
 
             for message_id in message_ids:
                 msg = fetch_message(message_id)
@@ -31,7 +33,21 @@ def run_email_loop():
                 process_email(msg)
                 mark_as_read(message_id)
 
-        except Exception as e:
-            log.exception("Email loop error")
+            # normal cadence
+            time.sleep(POLL_INTERVAL_SECONDS)
 
-        time.sleep(POLL_INTERVAL_SECONDS)
+        except RefreshError:
+            # 🚨 OAuth token invalid or revoked
+            log.error(
+                "🚨 Gmail OAuth token invalid or revoked. "
+                "Email polling paused until re-authorization."
+            )
+
+            # HARD backoff — do NOT hammer Google or spam logs
+            time.sleep(3600)  # 1 hour
+            continue
+
+        except Exception:
+            # Any other unexpected error
+            log.exception("Email loop error")
+            time.sleep(POLL_INTERVAL_SECONDS)
