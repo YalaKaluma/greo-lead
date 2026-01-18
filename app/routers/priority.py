@@ -1,25 +1,20 @@
 # app/routers/priority.py
 """
 Priority API Router: Endpoints for task prioritization system.
-
-Endpoints:
-- POST /api/priority/run - Run full prioritization (context → scoring → recommendations)
-- POST /api/priority/decision - Record user decision on recommendation
-- POST /api/priority/apply - Apply user-approved changes to Top 10
-- GET /api/priority/history - View past prioritization runs
-- GET /api/priority/learning-insights - Analytics on user decisions
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel, Field
-from app.db import get_db 
+
+from app.db import get_db
 from app.services.priority_service import PriorityService
 from app.services.priority_llm_service import PriorityLLMService
 from app.models import Task
 
-router = APIRouter(prefix="/api/priority", tags=["priority"])
+# ⚠️ IMPORTANT: No prefix here - it's added during registration
+router = APIRouter(tags=["priority"])
 
 
 # ============================================================================
@@ -72,59 +67,40 @@ class ApplyChangesResponse(BaseModel):
 
 @router.post("/run", response_model=PriorityRunResponse)
 def run_prioritization(
-    request: PriorityRunRequest,
-    db: Session = Depends(get_db)
+        request: PriorityRunRequest,
+        db: Session = Depends(get_db)
 ):
-    """
-    Run complete prioritization: context → scoring → recommendations.
-    
-    Process:
-    1. Create immutable context snapshot
-    2. Get all open tasks for scoring
-    3. Score tasks with LLM (GPT-4o)
-    4. Generate recommendations (add/remove/keep)
-    5. Return results for user review
-    
-    Returns:
-        Complete recommendation with LLM scores and suggested changes
-    """
+    """Run complete prioritization: context → scoring → recommendations."""
     priority_service = PriorityService(db)
     llm_service = PriorityLLMService()
-    
+
     try:
-        # Step 1: Create context snapshot
         context = priority_service.create_context_snapshot(request.user_number)
-        
-        # Step 2: Get tasks to score
         tasks = priority_service.get_tasks_for_scoring(request.user_number)
-        
+
         if not tasks:
             raise HTTPException(
-                status_code=404, 
+                status_code=404,
                 detail="No open tasks found. Create some tasks first!"
             )
-        
-        # Step 3: Score tasks with LLM
+
         llm_result = llm_service.score_tasks(tasks, context)
-        
-        # Step 4: Save scores to database
+
         scores = priority_service.save_priority_scores(
             context_id=context.id,
             scores=llm_result["scores"],
             llm_model="gpt-4o",
             tokens_used=llm_result["tokens_used"]
         )
-        
-        # Step 5: Generate recommendations
+
         recommendation = priority_service.generate_recommendations(
             context_id=context.id,
             scores=scores
         )
-        
-        # Step 6: Format response
+
         changes = recommendation.changes_from_current
         num_changes = len(changes["add"]) + len(changes["remove"])
-        
+
         return PriorityRunResponse(
             context_id=context.id,
             recommendation_id=recommendation.id,
@@ -134,7 +110,7 @@ def run_prioritization(
             tokens_used=llm_result["tokens_used"],
             message=f"Analyzed {len(tasks)} tasks. Suggesting {num_changes} changes to your Top 10."
         )
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -144,49 +120,34 @@ def run_prioritization(
 
 @router.post("/decision")
 def record_decision(
-    request: UserDecisionRequest,
-    db: Session = Depends(get_db)
+        request: UserDecisionRequest,
+        db: Session = Depends(get_db)
 ):
-    """
-    Record user's decision on a recommendation.
-    
-    This is CRITICAL for learning user preferences.
-    Every accept/reject teaches us about their prioritization criteria.
-    
-    Args:
-        request: Contains recommendation_id, task_id, user_action, optional reason
-    
-    Returns:
-        Confirmation with decision ID
-    """
+    """Record user's decision on a recommendation."""
     priority_service = PriorityService(db)
-    
-    # Validate user_action
+
     valid_actions = {"accept", "reject", "replace", "skip"}
     if request.user_action not in valid_actions:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid user_action. Must be one of: {valid_actions}"
         )
-    
+
     try:
-        # Get the recommendation to find the LLM's reasoning
         from app.models import TaskPriorityRecommendation
         recommendation = db.query(TaskPriorityRecommendation).get(request.recommendation_id)
-        
+
         if not recommendation:
             raise HTTPException(status_code=404, detail="Recommendation not found")
-        
-        # Find this task in the recommendation
+
         task_rec = next(
             (t for t in recommendation.recommended_top10 if t["task_id"] == request.task_id),
             None
         )
-        
+
         if not task_rec:
             raise HTTPException(status_code=404, detail="Task not in recommendation")
-        
-        # Determine what action was recommended
+
         changes = recommendation.changes_from_current
         if request.task_id in changes["add"]:
             action_recommended = "add"
@@ -196,8 +157,7 @@ def record_decision(
             action_recommended = "keep"
         else:
             action_recommended = "unknown"
-        
-        # Record decision
+
         decision = priority_service.record_user_decision(
             recommendation_id=request.recommendation_id,
             task_id=request.task_id,
@@ -208,13 +168,13 @@ def record_decision(
             user_action=request.user_action,
             user_reason=request.user_reason
         )
-        
+
         return {
             "decision_id": decision.id,
             "message": "Decision recorded successfully",
             "action": request.user_action
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -226,39 +186,26 @@ def record_decision(
 
 @router.post("/apply", response_model=ApplyChangesResponse)
 def apply_changes(
-    request: ApplyChangesRequest,
-    db: Session = Depends(get_db)
+        request: ApplyChangesRequest,
+        db: Session = Depends(get_db)
 ):
-    """
-    Apply user-approved changes to Top 10.
-    
-    Updates:
-    - task.in_top10 (True/False)
-    - task.top10_position (1-10 or NULL)
-    - task.last_prioritized_at (timestamp)
-    
-    Args:
-        request: Lists of task IDs to add and remove
-    
-    Returns:
-        Summary of changes applied
-    """
+    """Apply user-approved changes to Top 10."""
     priority_service = PriorityService(db)
-    
+
     try:
         result = priority_service.apply_approved_changes(
             user_number=request.user_number,
             approved_adds=request.approved_adds,
             approved_removes=request.approved_removes
         )
-        
+
         return ApplyChangesResponse(
             message="Top 10 updated successfully",
             added=result["added"],
             removed=result["removed"],
             current_top10_count=result["current_top10_count"]
         )
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -268,29 +215,19 @@ def apply_changes(
 
 @router.get("/history")
 def get_prioritization_history(
-    user_number: str = Query(..., description="User identifier"),
-    limit: int = Query(10, ge=1, le=50, description="Number of runs to return"),
-    db: Session = Depends(get_db)
+        user_number: str = Query(..., description="User identifier"),
+        limit: int = Query(10, ge=1, le=50, description="Number of runs to return"),
+        db: Session = Depends(get_db)
 ):
-    """
-    Get recent prioritization runs for a user.
-    
-    Useful for showing:
-    - "Last reviewed: X days ago"
-    - History of prioritization sessions
-    - Frequency of use
-    
-    Returns:
-        List of context snapshots with timestamps
-    """
+    """Get recent prioritization runs for a user."""
     priority_service = PriorityService(db)
-    
+
     try:
         contexts = priority_service.get_recent_context_snapshots(
             user_number=user_number,
             limit=limit
         )
-        
+
         return {
             "runs": [
                 {
@@ -305,7 +242,7 @@ def get_prioritization_history(
             ],
             "total_runs": len(contexts)
         }
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -315,28 +252,16 @@ def get_prioritization_history(
 
 @router.get("/learning-insights")
 def get_learning_insights(
-    user_number: str = Query(..., description="User identifier"),
-    db: Session = Depends(get_db)
+        user_number: str = Query(..., description="User identifier"),
+        db: Session = Depends(get_db)
 ):
-    """
-    Get insights from user decisions (for debugging/future ML).
-    
-    Returns analytics on:
-    - Acceptance vs rejection rates
-    - Average LLM scores for accepted/rejected tasks
-    - Decision patterns
-    
-    This data is crucial for:
-    - Iterating on LLM prompts
-    - Understanding user preferences
-    - Planning ML features
-    """
+    """Get insights from user decisions for debugging/future ML."""
     priority_service = PriorityService(db)
-    
+
     try:
         analytics = priority_service.get_decision_analytics(user_number)
         return analytics
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
