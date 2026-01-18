@@ -306,14 +306,9 @@ function TaskRecommendation({ task, action, decision, onAccept, onReject, onWhy 
           <div className="flex items-center gap-2 mb-1">
             <span className="text-lg">{actionIcon}</span>
             <p className="font-semibold text-gray-800">
-              {task.title || `Task #${task.task_id}`}
+              Task #{task.task_id}
             </p>
           </div>
-          {task.notes && (
-            <p className="text-xs text-gray-500 mb-2 italic">
-              {task.notes}
-            </p>
-          )}
           <p className="text-gray-700 mb-2">
             {task.reason}
           </p>

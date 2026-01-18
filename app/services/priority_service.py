@@ -222,18 +222,23 @@ class PriorityService:
         to_remove = current_top10_ids - recommended_ids
         to_keep = current_top10_ids & recommended_ids
 
-        # Format recommendation data
-        recommended_top10 = [
-            {
+        # Format recommendation data with task details
+        recommended_top10 = []
+        for idx, s in enumerate(recommended):
+            # Fetch task details
+            task = self.db.query(Task).get(s.task_id)
+            recommended_top10.append({
                 "task_id": s.task_id,
+                "title": task.title if task else f"Task #{s.task_id}",
+                "notes": task.notes if task else None,
+                "priority": task.priority if task else None,
+                "project": task.project if task else None,
                 "score": float(s.top10_likelihood),
                 "reason": s.primary_reason,
                 "risk_if_ignored": s.risk_if_ignored,
                 "confidence": s.confidence,
                 "position": idx + 1
-            }
-            for idx, s in enumerate(recommended)
-        ]
+            })
 
         changes = {
             "add": list(to_add),
