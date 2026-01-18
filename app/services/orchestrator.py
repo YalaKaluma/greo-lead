@@ -19,8 +19,8 @@ from app.utils.task_context import get_today_tasks, format_tasks_for_context
 from openai import OpenAI
 from app.config import OPENAI_API_KEY, OPENAI_MODEL
 from app.models import Task, JourneyGoal
+from app.models import GoalReviewSession
 from datetime import datetime
-from models import GoalReviewSession
 from services.prompt_service import run_prompt
 from services.task_service import create_task
 
