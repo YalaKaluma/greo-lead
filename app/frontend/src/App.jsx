@@ -6,6 +6,7 @@ import MyLeadershipJourney from './components/MyLeadershipJourney';
 import MyTeam from './components/MyTeam';
 import MyJournal from './components/MyJournal';
 import MyHabits from './components/MyHabits';
+import PriorityReview from './components/PriorityReview';
 import TourOverlay from './components/TourOverlay';
 import AlfredChat from './components/AlfredChat';
 import { useEffect, useState } from "react";
@@ -192,6 +193,7 @@ function App() {
             {currentPage === 'my-journey' && 'My Leadership Journey'}
             {currentPage === 'my-habits' && 'My Habits'}
             {currentPage === 'my-journal' && 'My Journal'}
+            {currentPage === 'priority-review' && 'Priority Review'}
           </h1>
         </div>
       )}
@@ -222,6 +224,9 @@ function App() {
         )}
         {currentPage === 'my-journal' && (
           <MyJournal apiUrl={API_URL} userNumber={userNumber} />
+        )}
+        {currentPage === 'priority-review' && (
+          <PriorityReview userNumber={userNumber} onComplete={() => handleNavigate('todo-list')} />
         )}
       </main>
 
