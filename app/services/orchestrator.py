@@ -99,14 +99,36 @@ def orchestrate(
         print(f"   - {intent['name']}: {intent['confidence']:.2f}")
     print(f"   Explicit execution: {explicit_execution}")
 
-    # Step 3: Determine state transition
-    new_state, reason = transition_state(
-        db=db,
-        state=state,
-        intents=intents,
-        explicit_execution=explicit_execution,
-        user_message=user_message
-    )
+    # CRITICAL: Check for explicit goal review request - override any state
+    top_intent = intents[0] if intents else None
+    if top_intent and top_intent['name'] == 'GOAL_REVIEW' and top_intent['confidence'] > 0.7:
+        # Check if user is explicitly starting a NEW goal review
+        keywords = ["goal review", "review session", "review my goal", "do a review"]
+        if any(kw in user_message.lower() for kw in keywords):
+            print(f"🔄 FORCING STATE TRANSITION: {state.current_state} → GOAL_REVIEW")
+            print(f"   Reason: Explicit goal review request detected")
+            # Clear any existing state context to start fresh
+            state.state_context = None
+            new_state = States.GOAL_REVIEW
+            reason = "explicit_goal_review_request"
+        else:
+            # Normal state transition
+            new_state, reason = transition_state(
+                db=db,
+                state=state,
+                intents=intents,
+                explicit_execution=explicit_execution,
+                user_message=user_message
+            )
+    else:
+        # Step 3: Determine state transition
+        new_state, reason = transition_state(
+            db=db,
+            state=state,
+            intents=intents,
+            explicit_execution=explicit_execution,
+            user_message=user_message
+        )
 
     # Step 4: Route to appropriate handler
     handlers = {
@@ -737,9 +759,10 @@ def handle_goal_review(
     # --------------------------------------------------------------
     # Cancel anytime
     # --------------------------------------------------------------
-    if any(w in msg_lower for w in ["cancel", "stop", "exit", "nevermind", "never mind"]):
+    if any(w in msg_lower for w in ["cancel", "stop", "exit", "nevermind", "never mind", "quit"]):
+        print(f"🛑 User cancelled goal review session")
         return OrchestrationResult(
-            response="Got it — stopping the goal review. Want to do anything else?",
+            response="✅ Goal review cancelled. I've stopped the session. What would you like to do instead?",
             state=States.IDLE,
             data={"state_context": None}
         )
@@ -1015,9 +1038,13 @@ def handle_goal_review(
     print(f"   - Goal: {session.goal_title}")
     print(f"   - Tasks created: {len(created_tasks)}")
     print(f"   - Has summary: {'Yes' if session.summary else 'No'}")
+    print(f"🎉 GOAL REVIEW SESSION COMPLETE - Returning to IDLE state")
+
+    # Add completion message to the closure text
+    completion_msg = f"\n\n✅ **Session complete!** I've created {len(created_tasks)} task{'s' if len(created_tasks) != 1 else ''} and saved our review. You can find your new tasks in your todo list."
 
     return OrchestrationResult(
-        response=closure_text,
+        response=closure_text + completion_msg,
         state=States.IDLE,
         data={"state_context": None}
     )
