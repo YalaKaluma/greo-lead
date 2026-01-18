@@ -809,7 +809,7 @@ def handle_goal_review(
             "medium_goals": medium,
             "short_goals": short,
             "session_id": str(uuid4()),
-            "session_started_at": datetime.utcnow()
+            "session_started_at": datetime.utcnow().isoformat()  # Convert to ISO string for JSON
         }
         phase = "framing"
 
@@ -972,11 +972,17 @@ def handle_goal_review(
             continue
 
     # >>> NEW: persist session memory
+    # Parse session_started_at back from ISO string
+    from dateutil import parser as date_parser
+    session_started = date_parser.parse(state_ctx["session_started_at"]) if isinstance(state_ctx["session_started_at"],
+                                                                                       str) else state_ctx[
+        "session_started_at"]
+
     session = GoalReviewSession(
         user_number=user_number,
         goal_id=state_ctx["goal_id"],
         goal_title=state_ctx["goal_title"],
-        session_started_at=state_ctx["session_started_at"],
+        session_started_at=session_started,
         session_ended_at=datetime.utcnow(),
         summary=summary.get("summary"),
         key_progress=summary.get("key_progress"),
