@@ -8,8 +8,10 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.mutable import MutableDict, MutableList  # ← ADDED FOR FIX
 import enum
 import secrets
-#from app.database import Base
-#from database import Base
+
+
+# from app.database import Base
+# from database import Base
 
 
 class JournalEntry(Base):
@@ -51,6 +53,13 @@ class Task(Base):
     goal = relationship("JourneyGoal", backref="tasks")
     #    deadline = Column(Date, nullable=True)
     priority = Column(String, nullable=True)  # Can be 'low', 'medium', or 'high'
+
+    # Priority system fields (added for Step 1: Task Prioritization)
+    times_postponed = Column(Integer, default=0)
+    current_bucket = Column(String, nullable=True)  # "today", "this_week", "later", "someday"
+    in_top10 = Column(Boolean, default=False)
+    top10_position = Column(Integer, nullable=True)  # 1-10 or null
+    last_prioritized_at = Column(DateTime(timezone=True), nullable=True)
 
 
 # ---------------------------------------------------------
@@ -508,9 +517,9 @@ class EmailVerification(Base):
         """Generate a 6-digit verification code"""
         return f"{secrets.randbelow(1000000):06d}"
 
+
 # models.py
 # Existing models omitted for brevity
-
 
 
 class GoalReviewSession(Base):
@@ -524,7 +533,7 @@ class GoalReviewSession(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     user_number = Column(String, index=True, nullable=False)
-#    goal_id = Column(Integer, ForeignKey("goals.id"), nullable=False)
+    #    goal_id = Column(Integer, ForeignKey("goals.id"), nullable=False)
     goal_id = Column(Integer, ForeignKey("journey_goals.id"), nullable=False)
 
     goal_title = Column(String, nullable=False)
@@ -552,8 +561,6 @@ class GoalReviewSession(Base):
 
 # Priority System Database Models
 # Add these to your existing app/models.py file
-
-
 
 
 # Add these models to your existing models.py file
