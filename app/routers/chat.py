@@ -6,8 +6,8 @@ from datetime import datetime
 
 from app.db import get_db
 from app.models import User, OnboardingStep
-from app.routers.webhook import process_message
-from app.services.message_service import load_conversation_history
+from app.services.orchestrator import orchestrate
+from app.services.message_service import load_conversation_history, save_message
 
 router = APIRouter()
 
@@ -40,12 +40,30 @@ async def send_chat_message(
     # Get user to check onboarding status
     user = db.query(User).filter(User.phone_number == chat_msg.user_number).first()
 
-    # Process message using shared brain
-    reply = process_message(
-        channel="web_app",
-        sender=chat_msg.user_number,
-        incoming_msg=chat_msg.message,
-        db=db
+    # Save user message to history
+    save_message(
+        db=db,
+        sender="user",
+        user_number=chat_msg.user_number,
+        content=chat_msg.message
+    )
+
+    # Process message using brain orchestrator (same as WhatsApp/Email)
+    result = orchestrate(
+        db=db,
+        user_number=chat_msg.user_number,
+        user_message=chat_msg.message,
+        channel="chat"
+    )
+
+    reply = result.response
+
+    # Save assistant response to history
+    save_message(
+        db=db,
+        sender="assistant",
+        user_number=chat_msg.user_number,
+        content=reply
     )
 
     print(f"   Alfred Response: {reply}")
@@ -59,7 +77,9 @@ async def send_chat_message(
     return {
         "reply": reply,
         "tour_action": tour_action,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
+        "state": result.state,  # Include state for debugging
+        "actions": result.actions  # Include actions taken
     }
 
 
@@ -103,7 +123,6 @@ async def get_chat_history(
 
     except Exception as e:
         print(f"Error loading chat history: {e}")
-        return {"messages": []}
         return {"messages": []}
 
 
@@ -186,8 +205,6 @@ async def notify_user(
 
     # This endpoint allows backend to push messages to the chat
     # The message is saved to the conversation history
-    from app.services.message_service import save_message
-
     save_message(
         db=db,
         sender="assistant",
