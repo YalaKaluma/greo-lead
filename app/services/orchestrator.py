@@ -5,7 +5,7 @@ Orchestration Service for Alfred's Brain
 This is the core decision-making layer that routes to appropriate handlers
 based on conversation state. All behavior flows through this orchestrator.
 """
-
+from uuid import uuid4
 from app.services.prompt_service import load_prompt
 from sqlalchemy.orm import Session
 from typing import Dict, List, Any, Optional
@@ -23,6 +23,10 @@ from app.models import GoalReviewSession
 from datetime import datetime
 from app.services.prompt_service import run_prompt
 from app.services.task_service import create_task
+from app.states import States
+from app.orchestration import OrchestrationResult
+from app.models import GoalReviewSession
+from app.services.tasks import create_task
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -644,15 +648,7 @@ JOURNEY MEMORY:
     )
     return (resp.choices[0].message.content or "").strip()
 
-from datetime import datetime
-from uuid import uuid4
-from typing import Any, Dict, List, Optional
-from sqlalchemy.orm import Session
 
-from app.states import States
-from app.orchestration import OrchestrationResult
-from app.models import GoalReviewSession
-from app.services.tasks import create_task
 
 # ------------------------------------------------------------------
 # GOAL REVIEW HANDLER (FULL, SAFE REPLACEMENT)
@@ -912,3 +908,50 @@ def handle_goal_review(
         state=States.IDLE,
         data={"state_context": None}
     )
+
+
+def _run_internal_prompt(
+        prompt_path: str,
+        journey_context: str,
+        goal_tree: str,
+        state_context: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Run internal prompt for session summary or task synthesis.
+    Returns parsed JSON/dict response.
+    """
+    prompt = load_prompt(prompt_path)
+
+    system_prompt = f"""{prompt['system_prompt']}
+
+GOAL TREE:
+{goal_tree}
+
+JOURNEY MEMORY:
+{journey_context}
+
+SESSION CONTEXT:
+{json.dumps(state_context, indent=2)}
+"""
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": "Generate the output based on the session context."}
+    ]
+
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=messages,
+        temperature=0.3,
+        max_tokens=500
+    )
+
+    content = (resp.choices[0].message.content or "").strip()
+
+    # Try to parse as JSON
+    try:
+        import json
+        return json.loads(content)
+    except:
+        # If not valid JSON, return as dict with single key
+        return {"raw_output": content}
