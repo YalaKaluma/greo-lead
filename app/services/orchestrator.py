@@ -21,8 +21,8 @@ from app.config import OPENAI_API_KEY, OPENAI_MODEL
 from app.models import Task, JourneyGoal
 from app.models import GoalReviewSession
 from datetime import datetime
-from services.prompt_service import run_prompt
-from services.task_service import create_task
+from app.services.prompt_service import run_prompt
+from app.services.task_service import create_task
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
