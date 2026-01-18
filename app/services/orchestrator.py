@@ -916,14 +916,19 @@ def handle_goal_review(
 
     created_tasks = []
     for t in tasks or []:
+        # Calculate due_date from due_in_days
+        from datetime import timedelta
+        due_in_days = t.get("due_in_days", 7)
+        due_date = datetime.utcnow() + timedelta(days=due_in_days) if due_in_days else None
+
+        # Create task using correct parameters
         task = create_task(
             db=db,
             user_number=user_number,
             title=t["title"],
-            description=t.get("description"),
+            notes=t.get("description"),  # Maps to "notes" parameter
             priority=t.get("priority", "medium"),
-            due_in_days=t.get("due_in_days", 7),
-            source="goal_review",
+            due_date=due_date,  # Calculated from due_in_days
             goal_id=state_ctx["goal_id"]
         )
         created_tasks.append({"task_id": task.id, "title": task.title})
