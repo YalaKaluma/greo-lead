@@ -94,59 +94,38 @@ async def end_goal_review_session(
 ):
     """
     Explicitly end an active goal review session.
-    Saves tasks and summary from conversation so far.
     """
     from app.services.state_machine import get_or_create_state, States
-    from app.services.orchestrator import _finalize_goal_review_session
-    
+
     print(f"🛑 Explicit goal review end requested by user: {user_number}")
-    
+
     # Get current state
     state = get_or_create_state(db, user_number)
-    
+
     if state.current_state != States.GOAL_REVIEW:
         return {
             "success": False,
             "message": "No active goal review session"
         }
-    
-    state_ctx = state.state_context or {}
-    
-    # Finalize session - extract tasks and save summary
-    try:
-        tasks_created = _finalize_goal_review_session(
-            db=db,
-            user_number=user_number,
-            state_ctx=state_ctx,
-            force_end=True  # Skip closure prompts, just save what we have
-        )
-        
-        print(f"✅ Session finalized: {len(tasks_created)} tasks created")
-        
-    except Exception as e:
-        print(f"⚠️ Error finalizing session: {e}")
-        tasks_created = 0
-    
+
     # Clear state and return to IDLE
     state.current_state = States.IDLE
     state.state_context = None
     db.commit()
-    
+
     # Save a system message
-    message = f"Goal review session ended. I've saved {tasks_created} task{'s' if tasks_created != 1 else ''} from our conversation. What would you like to do next?"
     save_message(
         db=db,
         sender="assistant",
         user_number=user_number,
-        content=message
+        content="Goal review session ended. What would you like to do next?"
     )
-    
+
     print(f"✅ Goal review session ended for {user_number}")
-    
+
     return {
         "success": True,
-        "message": message,
-        "tasks_created": tasks_created,
+        "message": "Session ended successfully",
         "timestamp": datetime.utcnow().isoformat()
     }
 
