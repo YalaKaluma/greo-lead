@@ -14,8 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel, Field
-
-from app.database import get_db
+from app.db import get_db 
 from app.services.priority_service import PriorityService
 from app.services.priority_llm_service import PriorityLLMService
 from app.models import Task
