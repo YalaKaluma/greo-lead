@@ -122,23 +122,62 @@ class PriorityService:
 
     def get_tasks_for_scoring(self, user_number: str) -> List[Task]:
         """
-        Get all open tasks that need prioritization scoring.
+        Get tasks that need prioritization scoring.
 
-        Includes:
+        ONLY includes:
+        - Tasks due today
+        - Overdue tasks
         - Tasks currently in Top 10 (to validate they should stay)
-        - All other open tasks (to find new candidates)
+
+        This focuses on actionable tasks for TODAY.
 
         Ordered by:
-        1. Due date (nulls last)
+        1. Due date (earliest first)
         2. Created date (newest first)
         """
-        return self.db.query(Task).filter(
+        from datetime import datetime, time
+
+        # Get start and end of today (in Eastern Time)
+        now = datetime.now(ET)
+        today_start = ET.localize(datetime.combine(now.date(), time.min))
+        today_end = ET.localize(datetime.combine(now.date(), time.max))
+
+        # Query tasks that are:
+        # 1. Due today OR overdue OR in current Top 10
+        # 2. Status is "open"
+        tasks = self.db.query(Task).filter(
             Task.user_number == user_number,
             Task.status == "open"
-        ).order_by(
-            Task.due_date.nullslast(),
-            desc(Task.created_at)
         ).all()
+
+        # Filter to only include:
+        # - Tasks due today or earlier
+        # - Tasks currently in Top 10 (to validate they should stay)
+        filtered_tasks = []
+        for task in tasks:
+            # Always include if in Top 10
+            if task.in_top10:
+                filtered_tasks.append(task)
+                continue
+
+            # Include if due today or overdue
+            if task.due_date:
+                # Make due_date timezone-aware if needed
+                task_due = task.due_date.replace(tzinfo=ET) if task.due_date.tzinfo is None else task.due_date
+                if task_due <= today_end:  # Due today or earlier
+                    filtered_tasks.append(task)
+
+        # Sort by due date (earliest first), then created date
+        filtered_tasks.sort(
+            key=lambda t: (
+                t.due_date.replace(
+                    tzinfo=ET) if t.due_date and t.due_date.tzinfo is None else t.due_date or datetime.max.replace(
+                    tzinfo=ET),
+                -t.created_at.timestamp() if t.created_at else 0
+            )
+        )
+
+        return filtered_tasks
 
     def save_priority_scores(
             self,

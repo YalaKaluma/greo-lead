@@ -33,7 +33,7 @@ const isTodayET = (dateString) => {
 
 // Helper function to get next Monday
 const getNextMonday = () => {
-  const date = new Date();
+  const date = getETDate();  // Use ET instead of new Date()
   const day = date.getDay();
   const daysUntilMonday = day === 0 ? 1 : 8 - day; // If Sunday, 1 day. Otherwise, days until next Monday
   date.setDate(date.getDate() + daysUntilMonday);
@@ -116,6 +116,28 @@ export default function TodoList({ apiUrl, userNumber }) {
     };
   }, []);
 
+  // Read goal filter from URL parameter on mount AND when URL changes
+  useEffect(() => {
+    const readUrlParams = () => {
+      const params = new URLSearchParams(window.location.search);
+      const goalParam = params.get('goal');
+      if (goalParam) {
+        setSelectedGoal(goalParam);
+        setFiltersCollapsed(false); // Expand filters to show the active goal filter
+      }
+    };
+
+    // Read on mount
+    readUrlParams();
+
+    // Listen for URL changes (custom event dispatched by MyGoals)
+    window.addEventListener('urlchange', readUrlParams);
+
+    return () => {
+      window.removeEventListener('urlchange', readUrlParams);
+    };
+  }, []);
+
   useEffect(() => {
     const saved = localStorage.getItem('taskSortOrder');
     if (saved) {
@@ -165,18 +187,19 @@ export default function TodoList({ apiUrl, userNumber }) {
     try {
       const params = {
         user_number: userNumber,
-        filter_type: filterType
+        // If a goal is selected, show ALL tasks for that goal, not just due today
+        filter_type: selectedGoal ? 'all' : filterType
       };
       if (selectedProject) params.project = selectedProject;
       if (selectedDelegate) params.delegated_to = selectedDelegate;
+      if (selectedGoal) params.goal_id = parseInt(selectedGoal);  // ← Send goal_id to backend
 
       const response = await axios.get(`${apiUrl}/api/tasks/`, { params });
       if (response.data && Array.isArray(response.data)) {
+        // Filter out completed tasks
         let activeTasks = response.data.filter(t => t.status !== 'completed');
         
-        if (selectedGoal) {
-          activeTasks = activeTasks.filter(t => t.goal_id === parseInt(selectedGoal));
-        }
+        // No need to filter by goal here anymore - backend does it
         
         setTasks(activeTasks);
       }
@@ -952,7 +975,7 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   const setTomorrow = () => {
-    const tomorrow = new Date();
+    const tomorrow = getETDate();  // Use ET instead of new Date()
     tomorrow.setDate(tomorrow.getDate() + 1);
     setEditData({ ...editData, due_date: tomorrow.toISOString().split('T')[0] });
     setShowDatePicker(false);
@@ -964,7 +987,7 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
   };
 
   const setNextMonth = () => {
-    const nextMonth = new Date();
+    const nextMonth = getETDate();  // Use ET instead of new Date()
     nextMonth.setMonth(nextMonth.getMonth() + 1);
     setEditData({ ...editData, due_date: nextMonth.toISOString().split('T')[0] });
     setShowDatePicker(false);
@@ -1184,7 +1207,7 @@ function BulkActionModal({ selectedCount, onApply, onCancel, delegates, goals })
   };
 
   const setTomorrow = () => {
-    const tomorrow = new Date();
+    const tomorrow = getETDate();  // Use ET instead of new Date()
     tomorrow.setDate(tomorrow.getDate() + 1);
     setBulkData({ ...bulkData, due_date: tomorrow.toISOString().split('T')[0] });
     setShowDatePicker(false);
@@ -1196,7 +1219,7 @@ function BulkActionModal({ selectedCount, onApply, onCancel, delegates, goals })
   };
 
   const setNextMonth = () => {
-    const nextMonth = new Date();
+    const nextMonth = getETDate();  // Use ET instead of new Date()
     nextMonth.setMonth(nextMonth.getMonth() + 1);
     setBulkData({ ...bulkData, due_date: nextMonth.toISOString().split('T')[0] });
     setShowDatePicker(false);

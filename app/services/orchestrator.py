@@ -592,25 +592,44 @@ def _finalize_goal_review_session(
     created_tasks = []
     for i, t in enumerate(tasks, 1):
         try:
-            if not isinstance(t, dict) or "title" not in t:
-                print(f"⚠️ Skipping invalid task #{i}: {t}")
+            if not isinstance(t, dict):
+                print(f"⚠️ Skipping invalid task #{i}: not a dict")
                 continue
 
-            due_in_days = t.get("due_in_days", 7)
-            due_date = datetime.utcnow() + timedelta(days=due_in_days) if due_in_days else None
+            # Support both 'title' and 'task' field names
+            title = t.get("title") or t.get("task")
+            if not title:
+                print(f"⚠️ Skipping invalid task #{i}: missing title/task - {t}")
+                continue
+
+            # Calculate due_date - support both formats
+            due_date = None
+            if "due_in_days" in t:
+                due_in_days = t.get("due_in_days", 7)
+                due_date = datetime.utcnow() + timedelta(days=due_in_days)
+            elif "deadline" in t:
+                try:
+                    from dateutil import parser as date_parser
+                    due_date = date_parser.parse(t["deadline"])
+                except:
+                    due_date = datetime.utcnow() + timedelta(days=7)
+            else:
+                due_date = datetime.utcnow() + timedelta(days=7)
+
+            notes = t.get("notes") or t.get("description")
 
             task = create_task(
                 db=db,
                 user_number=user_number,
-                title=t["title"],
-                notes=t.get("notes"),
+                title=title,
+                notes=notes,
                 due_date=due_date,
                 priority=t.get("priority", "Medium"),
                 goal_id=state_ctx.get("goal_id")
             )
 
             created_tasks.append(task.id)
-            print(f"✅ Created task #{i}: {t['title']} (ID: {task.id})")
+            print(f"✅ Created task #{i}: {title} (ID: {task.id})")
 
         except Exception as e:
             print(f"❌ Failed to create task #{i}: {e}")
@@ -621,17 +640,20 @@ def _finalize_goal_review_session(
     session_started = date_parser.parse(state_ctx["session_started_at"]) if isinstance(
         state_ctx.get("session_started_at"), str) else state_ctx.get("session_started_at", datetime.utcnow())
 
+    # Ensure summary is never NULL (database constraint)
+    summary_text = summary.get("summary") or "Session completed early - summary not generated"
+
     session = GoalReviewSession(
         user_number=user_number,
         goal_id=state_ctx.get("goal_id"),
         goal_title=state_ctx.get("goal_title", ""),
         session_started_at=session_started,
         session_ended_at=datetime.utcnow(),
-        summary=summary.get("summary"),
-        key_progress=summary.get("key_progress"),
-        key_blockers=summary.get("key_blockers"),
-        key_pattern=summary.get("key_pattern"),
-        chosen_adjustment=summary.get("chosen_adjustment"),
+        summary=summary_text,  # Never NULL
+        key_progress=summary.get("key_progress") or "Not captured",
+        key_blockers=summary.get("key_blockers") or "Not captured",
+        key_pattern=summary.get("key_pattern") or "Not captured",
+        chosen_adjustment=summary.get("chosen_adjustment") or "Not captured",
         created_tasks=created_tasks,
         prompt_version="goal_review_v2"
         # Note: ended_early field not added yet - requires DB migration

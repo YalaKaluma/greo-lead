@@ -217,6 +217,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const getSortedTasks = () => {
+    // If manual drag-and-drop order exists, use it
     if (sortOrder.length > 0) {
       return [...tasks].sort((a, b) => {
         const indexA = sortOrder.indexOf(a.id);
@@ -231,8 +232,21 @@ export default function TodoList({ apiUrl, userNumber }) {
       });
     }
     
-    const priorityOrder = { 'high': 0, 'medium': 1, 'low': 2 };
+    // Default sorting: Top 10 first, then by priority
     return [...tasks].sort((a, b) => {
+      // 1. Top 10 tasks always come first
+      if (a.in_top10 && !b.in_top10) return -1;
+      if (!a.in_top10 && b.in_top10) return 1;
+      
+      // 2. Within Top 10, sort by position
+      if (a.in_top10 && b.in_top10) {
+        const posA = a.top10_position ?? 999;
+        const posB = b.top10_position ?? 999;
+        return posA - posB;
+      }
+      
+      // 3. For non-Top 10 tasks, sort by priority
+      const priorityOrder = { 'high': 0, 'medium': 1, 'low': 2 };
       const aPriority = priorityOrder[a.priority?.toLowerCase()] ?? 3;
       const bPriority = priorityOrder[b.priority?.toLowerCase()] ?? 3;
       return aPriority - bPriority;
