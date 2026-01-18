@@ -30,13 +30,13 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 class OrchestrationResult:
     """Result from orchestration with response and metadata."""
-
+    
     def __init__(
-            self,
-            response: str,
-            state: str,
-            actions: List[str] = None,
-            data: Dict = None
+        self,
+        response: str,
+        state: str,
+        actions: List[str] = None,
+        data: Dict = None
     ):
         self.response = response
         self.state = state
@@ -45,14 +45,14 @@ class OrchestrationResult:
 
 
 def orchestrate(
-        db: Session,
-        user_number: str,
-        user_message: str,
-        channel: str = "whatsapp"
+    db: Session,
+    user_number: str,
+    user_message: str,
+    channel: str = "whatsapp"
 ) -> OrchestrationResult:
     """
     Main orchestration entry point.
-
+    
     This function:
     1. Loads/creates conversation state
     2. Detects intents
@@ -60,45 +60,45 @@ def orchestrate(
     4. Routes to appropriate handler
     5. Saves new state
     6. Returns response
-
+    
     Args:
         db: Database session
         user_number: User identifier
         user_message: The user's message
         channel: Communication channel (whatsapp/email)
-
+        
     Returns:
         OrchestrationResult with response and metadata
     """
-
-    print(f"\n{'=' * 60}")
+    
+    print(f"\n{'='*60}")
     print(f"🧠 BRAIN ORCHESTRATION")
     print(f"User: {user_number}")
     print(f"Message: {user_message[:100]}...")
-    print(f"{'=' * 60}")
-
+    print(f"{'='*60}")
+    
     # Step 1: Load conversation state
     state = get_or_create_state(db, user_number)
     print(f"📍 Current state: {state.current_state}")
-
+    
     # Step 2: Detect intents
     history = load_conversation_history(db, user_number)
     recent_context = format_recent_context(history, limit=3)
-
+    
     intent_result = detect_intents(
         user_message=user_message,
         recent_context=recent_context,
         current_state=state.current_state
     )
-
+    
     intents = intent_result["intents"]
     explicit_execution = intent_result["explicit_execution"]
-
+    
     print(f"🎯 Intents detected:")
     for intent in intents[:2]:  # Show top 2
         print(f"   - {intent['name']}: {intent['confidence']:.2f}")
     print(f"   Explicit execution: {explicit_execution}")
-
+    
     # Step 3: Determine state transition
     new_state, reason = transition_state(
         db=db,
@@ -107,7 +107,7 @@ def orchestrate(
         explicit_execution=explicit_execution,
         user_message=user_message
     )
-
+    
     # Step 4: Route to appropriate handler
     handlers = {
         States.IDLE: handle_idle,
@@ -121,7 +121,7 @@ def orchestrate(
         States.PROACTIVE: handle_proactive,
         States.GOAL_REVIEW: handle_goal_review,
     }
-
+    
     handler = handlers.get(new_state, handle_idle)
     result = handler(
         db=db,
@@ -132,7 +132,7 @@ def orchestrate(
         current_state=state,
         reason=reason
     )
-
+    
     # Step 5: Save state transition
     save_state_transition(
         db=db,
@@ -144,10 +144,10 @@ def orchestrate(
         pending_payload=result.data.get('pending_payload'),
         state_context=result.data.get('state_context')
     )
-
+    
     print(f"✅ Response generated ({len(result.response)} chars)")
-    print(f"{'=' * 60}\n")
-
+    print(f"{'='*60}\n")
+    
     return result
 
 
@@ -156,26 +156,26 @@ def orchestrate(
 # ============================================================
 
 def handle_idle(
-        db: Session,
-        user_number: str,
-        user_message: str,
-        intents: List[Dict],
-        explicit_execution: bool,
-        current_state: Any,
-        reason: str
+    db: Session,
+    user_number: str,
+    user_message: str,
+    intents: List[Dict],
+    explicit_execution: bool,
+    current_state: Any,
+    reason: str
 ) -> OrchestrationResult:
     """
     Handle IDLE state - default listening mode.
     """
-
+    
     top_intent = get_top_intent(intents)
-
+    
     if not top_intent or top_intent['confidence'] < 0.3:
         return OrchestrationResult(
             response="I'm not sure I understand. Could you clarify?",
             state=States.IDLE
         )
-
+    
     # Generate contextual response
     response = _generate_gpt_response(
         db=db,
@@ -184,7 +184,7 @@ def handle_idle(
         state=States.IDLE,
         system_context="You are in listening mode. Respond naturally and helpfully."
     )
-
+    
     return OrchestrationResult(
         response=response,
         state=States.IDLE
@@ -192,13 +192,13 @@ def handle_idle(
 
 
 def handle_coaching(
-        db: Session,
-        user_number: str,
-        user_message: str,
-        intents: List[Dict],
-        explicit_execution: bool,
-        current_state: Any,
-        reason: str
+    db: Session,
+    user_number: str,
+    user_message: str,
+    intents: List[Dict],
+    explicit_execution: bool,
+    current_state: Any,
+    reason: str
 ) -> OrchestrationResult:
     """
     Handle COACHING state - reflective, developmental mode.
@@ -338,23 +338,22 @@ def handle_executing(
         state=States.IDLE
     )
 
-
 def handle_drafting(
-        db: Session,
-        user_number: str,
-        user_message: str,
-        intents: List[Dict],
-        explicit_execution: bool,
-        current_state: Any,
-        reason: str
+    db: Session,
+    user_number: str,
+    user_message: str,
+    intents: List[Dict],
+    explicit_execution: bool,
+    current_state: Any,
+    reason: str
 ) -> OrchestrationResult:
     """
     Handle DRAFTING state - proposing action before executing.
     """
-
+    
     # Generate a draft proposal
     proposal = f"I can help with that. Would you like me to create a task for: '{user_message}'?"
-
+    
     return OrchestrationResult(
         response=proposal,
         state=States.AWAITING_APPROVAL,
@@ -366,25 +365,25 @@ def handle_drafting(
 
 
 def handle_awaiting_approval(
-        db: Session,
-        user_number: str,
-        user_message: str,
-        intents: List[Dict],
-        explicit_execution: bool,
-        current_state: Any,
-        reason: str
+    db: Session,
+    user_number: str,
+    user_message: str,
+    intents: List[Dict],
+    explicit_execution: bool,
+    current_state: Any,
+    reason: str
 ) -> OrchestrationResult:
     """
     Handle AWAITING_APPROVAL state - user is confirming/rejecting proposal.
     """
-
+    
     message_lower = user_message.lower()
-
+    
     if any(word in message_lower for word in ["yes", "correct", "go ahead", "do it"]):
         # User approved - execute the pending action
         pending_action = current_state.pending_action
         pending_payload = current_state.pending_payload
-
+        
         # For now, just confirm (actual task creation in Phase 2)
         return OrchestrationResult(
             response=f"Task created! ✅",
@@ -392,13 +391,13 @@ def handle_awaiting_approval(
             actions=['execute_pending_action'],
             data={'action': pending_action, 'payload': pending_payload}
         )
-
+    
     elif any(word in message_lower for word in ["no", "don't", "cancel"]):
         return OrchestrationResult(
             response="No problem, I won't create that.",
             state=States.IDLE
         )
-
+    
     else:
         return OrchestrationResult(
             response="I'm not sure - should I create this task? (Yes/No)",
@@ -407,41 +406,41 @@ def handle_awaiting_approval(
 
 
 def handle_reviewing(
-        db: Session,
-        user_number: str,
-        user_message: str,
-        intents: List[Dict],
-        explicit_execution: bool,
-        current_state: Any,
-        reason: str
+    db: Session,
+    user_number: str,
+    user_message: str,
+    intents: List[Dict],
+    explicit_execution: bool,
+    current_state: Any,
+    reason: str
 ) -> OrchestrationResult:
     """
     Handle REVIEWING state - end-of-day/week reflection.
     """
-
+    
     # For now, treat like coaching
     return handle_coaching(
-        db, user_number, user_message, intents,
+        db, user_number, user_message, intents, 
         explicit_execution, current_state, reason
     )
 
 
 def handle_learning(
-        db: Session,
-        user_number: str,
-        user_message: str,
-        intents: List[Dict],
-        explicit_execution: bool,
-        current_state: Any,
-        reason: str
+    db: Session,
+    user_number: str,
+    user_message: str,
+    intents: List[Dict],
+    explicit_execution: bool,
+    current_state: Any,
+    reason: str
 ) -> OrchestrationResult:
     """
     Handle LEARNING state - user is correcting Alfred.
     """
-
+    
     # Store user preference (implement in Phase 3)
     print(f"📚 Would store user preference: {user_message}")
-
+    
     return OrchestrationResult(
         response="Got it. I'll remember that.",
         state=States.IDLE,
@@ -450,18 +449,18 @@ def handle_learning(
 
 
 def handle_proactive(
-        db: Session,
-        user_number: str,
-        user_message: str,
-        intents: List[Dict],
-        explicit_execution: bool,
-        current_state: Any,
-        reason: str
+    db: Session,
+    user_number: str,
+    user_message: str,
+    intents: List[Dict],
+    explicit_execution: bool,
+    current_state: Any,
+    reason: str
 ) -> OrchestrationResult:
     """
     Handle PROACTIVE state - system-initiated nudge.
     """
-
+    
     # Nudge should have already been sent
     # This handles the user's response to the nudge
     return handle_coaching(
@@ -475,19 +474,19 @@ def handle_proactive(
 # ============================================================
 
 def _generate_gpt_response(
-        db: Session,
-        user_number: str,
-        user_message: str,
-        state: str,
-        system_context: str
+    db: Session,
+    user_number: str,
+    user_message: str,
+    state: str,
+    system_context: str
 ) -> str:
     """Generate GPT response with full context."""
-
+    
     journey_context = build_journey_context(db, user_number)
     tasks = get_today_tasks(user_number)
     tasks_context = format_tasks_for_context(tasks) or "No tasks scheduled for today."
     history = load_conversation_history(db, user_number)
-
+    
     system_prompt = f"""You are Alfred, an AI Chief of Staff.
 
 Current mode: {state}
@@ -501,18 +500,17 @@ Today's Tasks:
 
 Reply concisely and warmly.
 """
-
+    
     messages = [{"role": "system", "content": system_prompt}, *history[-10:]]
-
+    
     response = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=messages,
         temperature=0.7,
         max_tokens=200
     )
-
+    
     return response.choices[0].message.content.strip()
-
 
 # ============================================================
 # GOAL REVIEW (NEW STATE)
@@ -601,11 +599,11 @@ SHORT-TERM GOALS:
 
 
 def _run_goal_review_prompt(
-        prompt_path: str,
-        journey_context: str,
-        goal_tree: str,
-        recent_history: List[Dict[str, str]],
-        user_input: str = ""
+    prompt_path: str,
+    journey_context: str,
+    goal_tree: str,
+    recent_history: List[Dict[str, str]],
+    user_input: str = ""
 ) -> str:
     """
     Run a goal review prompt phase.
@@ -648,17 +646,17 @@ JOURNEY MEMORY:
 
 
 def _run_internal_prompt(
-        prompt_path: str,
-        journey_context: str,
-        goal_tree: str,
-        state_context: Dict[str, Any]
+    prompt_path: str,
+    journey_context: str,
+    goal_tree: str,
+    state_context: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
     Run internal prompt for session summary or task synthesis.
     Returns parsed JSON/dict response.
     """
     prompt = load_prompt(prompt_path)
-
+    
     system_prompt = f"""{prompt['system_prompt']}
 
 GOAL TREE:
@@ -670,21 +668,21 @@ JOURNEY MEMORY:
 SESSION CONTEXT:
 {json.dumps(state_context, indent=2)}
 """
-
+    
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": "Generate the output based on the session context."}
     ]
-
+    
     resp = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=messages,
         temperature=0.3,
         max_tokens=500
     )
-
+    
     content = (resp.choices[0].message.content or "").strip()
-
+    
     # Try to parse as JSON
     try:
         return json.loads(content)
@@ -694,13 +692,13 @@ SESSION CONTEXT:
 
 
 def handle_goal_review(
-        db: Session,
-        user_number: str,
-        user_message: str,
-        intents: List[Dict],
-        explicit_execution: bool,
-        current_state: Any,
-        reason: str
+    db: Session,
+    user_number: str,
+    user_message: str,
+    intents: List[Dict],
+    explicit_execution: bool,
+    current_state: Any,
+    reason: str
 ) -> OrchestrationResult:
     """
     Multi-phase goal review conversation.
@@ -764,7 +762,7 @@ def handle_goal_review(
                 chosen = candidates[0]
             elif len(candidates) > 1:
                 options = "\n".join(
-                    [f"{i + 1}. {c.title or c.goal_text[:60]}" for i, c in enumerate(candidates[:5])]
+                    [f"{i+1}. {c.title or c.goal_text[:60]}" for i, c in enumerate(candidates[:5])]
                 )
                 return OrchestrationResult(
                     response=f"I found multiple matches. Which one do you mean?\n{options}",
@@ -920,7 +918,7 @@ def handle_goal_review(
         from datetime import timedelta
         due_in_days = t.get("due_in_days", 7)
         due_date = datetime.utcnow() + timedelta(days=due_in_days) if due_in_days else None
-
+        
         # Create task using correct parameters
         task = create_task(
             db=db,
