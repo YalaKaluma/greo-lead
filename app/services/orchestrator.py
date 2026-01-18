@@ -540,6 +540,31 @@ Reply concisely and warmly.
 # GOAL REVIEW (NEW STATE)
 # ============================================================
 
+def _build_goal_review_status(phase: str, state_ctx: Dict[str, Any]) -> Dict[str, Any]:
+    """Build goal review status metadata for frontend display."""
+    phase_map = {
+        "select_goal": {"number": 0, "name": "Select Goal"},
+        "framing": {"number": 1, "name": "Framing"},
+        "reflection": {"number": 2, "name": "Reflection"},
+        "diagnosis": {"number": 3, "name": "Diagnosis"},
+        "adjustment": {"number": 4, "name": "Adjustment"},
+        "closure": {"number": 5, "name": "Creating Tasks"}
+    }
+
+    phase_info = phase_map.get(phase, {"number": 0, "name": "Unknown"})
+
+    return {
+        "active": True,
+        "phase": phase,
+        "phase_name": phase_info["name"],
+        "phase_number": phase_info["number"],
+        "total_phases": 5,
+        "goal_title": state_ctx.get("goal_title", ""),
+        "goal_id": state_ctx.get("goal_id"),
+        "session_id": state_ctx.get("session_id")
+    }
+
+
 def _normalize_text(s: str) -> str:
     return "".join(ch.lower() for ch in (s or "") if ch.isalnum() or ch.isspace()).strip()
 
@@ -757,9 +782,22 @@ def handle_goal_review(
     print(f"{'=' * 60}")
 
     # --------------------------------------------------------------
-    # Cancel anytime
+    # Cancel anytime - MUST be explicit whole words/phrases
     # --------------------------------------------------------------
-    if any(w in msg_lower for w in ["cancel", "stop", "exit", "nevermind", "never mind", "quit"]):
+    import re
+    cancel_patterns = [
+        r'\bcancel\b',
+        r'\bstop\b',
+        r'\bexit\b',
+        r'\bquit\b',
+        r'\bnever\s*mind\b',
+        r'\bforget\s*it\b'
+    ]
+    is_cancel = any(re.search(pattern, msg_lower) for pattern in cancel_patterns)
+
+    # Additional check: message must be SHORT (< 50 chars) to be a cancel
+    # Long reflective messages shouldn't trigger cancel even if they contain the word
+    if is_cancel and len(user_message.strip()) < 50:
         print(f"🛑 User cancelled goal review session")
         return OrchestrationResult(
             response="✅ Goal review cancelled. I've stopped the session. What would you like to do instead?",
@@ -800,18 +838,26 @@ def handle_goal_review(
                 options = "\n".join(
                     [f"{i + 1}. {c.title or c.goal_text[:60]}" for i, c in enumerate(candidates[:5])]
                 )
+                select_ctx = {"phase": "select_goal"}
                 return OrchestrationResult(
                     response=f"I found multiple matches. Which one do you mean?\n{options}",
                     state=States.GOAL_REVIEW,
-                    data={"state_context": {"phase": "select_goal"}}
+                    data={
+                        "state_context": select_ctx,
+                        "goal_review_status": _build_goal_review_status("select_goal", select_ctx)
+                    }
                 )
 
         # Still no goal → show menu
         if chosen is None:
+            select_ctx = {"phase": "select_goal"}
             return OrchestrationResult(
                 response=_render_long_goal_menu(long_goals),
                 state=States.GOAL_REVIEW,
-                data={"state_context": {"phase": "select_goal"}}
+                data={
+                    "state_context": select_ctx,
+                    "goal_review_status": _build_goal_review_status("select_goal", select_ctx)
+                }
             )
 
         # Build goal tree
@@ -863,7 +909,10 @@ def handle_goal_review(
         return OrchestrationResult(
             response=text,
             state=States.GOAL_REVIEW,
-            data={"state_context": state_ctx}
+            data={
+                "state_context": state_ctx,
+                "goal_review_status": _build_goal_review_status("framing", state_ctx)
+            }
         )
 
     # --------------------------------------------------------------
@@ -884,7 +933,10 @@ def handle_goal_review(
         return OrchestrationResult(
             response=text,
             state=States.GOAL_REVIEW,
-            data={"state_context": state_ctx}
+            data={
+                "state_context": state_ctx,
+                "goal_review_status": _build_goal_review_status("reflection", state_ctx)
+            }
         )
 
     # --------------------------------------------------------------
@@ -905,7 +957,10 @@ def handle_goal_review(
         return OrchestrationResult(
             response=text,
             state=States.GOAL_REVIEW,
-            data={"state_context": state_ctx}
+            data={
+                "state_context": state_ctx,
+                "goal_review_status": _build_goal_review_status("diagnosis", state_ctx)
+            }
         )
 
     # --------------------------------------------------------------
@@ -926,7 +981,10 @@ def handle_goal_review(
         return OrchestrationResult(
             response=text,
             state=States.GOAL_REVIEW,
-            data={"state_context": state_ctx}
+            data={
+                "state_context": state_ctx,
+                "goal_review_status": _build_goal_review_status("adjustment", state_ctx)
+            }
         )
 
     # --------------------------------------------------------------

@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import GoalReviewBanner from './GoalReviewBanner';
 
 export default function AlfredChat({ apiUrl, userNumber, onTourStep }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -8,7 +7,6 @@ export default function AlfredChat({ apiUrl, userNumber, onTourStep }) {
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [goalReviewStatus, setGoalReviewStatus] = useState(null); // Track goal review status
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -73,9 +71,6 @@ export default function AlfredChat({ apiUrl, userNumber, onTourStep }) {
 
       setMessages(prev => [...prev, assistantMessage]);
 
-      // Update goal review status from response
-      setGoalReviewStatus(response.data.goal_review_status);
-
       // Check if this is a tour-related message
       if (onTourStep && response.data.tour_action) {
         onTourStep(response.data.tour_action);
@@ -108,18 +103,6 @@ export default function AlfredChat({ apiUrl, userNumber, onTourStep }) {
     }
   };
 
-  // Handle session end from banner
-  const handleSessionEnd = () => {
-    setGoalReviewStatus(null);
-    // Add a system message
-    const systemMessage = {
-      role: 'assistant',
-      content: 'Goal review session ended. What would you like to do next?',
-      timestamp: new Date().toISOString()
-    };
-    setMessages(prev => [...prev, systemMessage]);
-  };
-
   // Simulate Alfred sending a message (for onboarding triggers)
   const sendAlfredMessage = (content) => {
     const message = {
@@ -145,13 +128,10 @@ export default function AlfredChat({ apiUrl, userNumber, onTourStep }) {
     <>
       {/* Chat Window */}
       <div
-        className={`fixed bottom-24 right-6 w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col transition-all duration-300 ease-out z-50 ${
+        className={`fixed bottom-24 right-6 w-96 h-[600px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col transition-all duration-300 ease-out z-50 ${
           isOpen ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'
         }`}
-        style={{ 
-          transformOrigin: 'bottom right',
-          height: goalReviewStatus ? '640px' : '600px'
-        }}
+        style={{ transformOrigin: 'bottom right' }}
       >
         {/* Header */}
         <div className="bg-gradient-to-r from-slate-800 to-slate-700 text-white p-4 rounded-t-2xl flex items-center justify-between">
@@ -182,13 +162,6 @@ export default function AlfredChat({ apiUrl, userNumber, onTourStep }) {
             </svg>
           </button>
         </div>
-
-        {/* Goal Review Banner */}
-        <GoalReviewBanner 
-          status={goalReviewStatus}
-          userNumber={userNumber}
-          onSessionEnd={handleSessionEnd}
-        />
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
@@ -279,13 +252,6 @@ export default function AlfredChat({ apiUrl, userNumber, onTourStep }) {
         {unreadCount > 0 && !isOpen && (
           <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center animate-bounce">
             {unreadCount}
-          </div>
-        )}
-
-        {/* Goal Review Indicator on Floating Button */}
-        {goalReviewStatus && !isOpen && (
-          <div className="absolute -top-2 -left-2 bg-blue-500 text-white text-xs font-bold rounded-full w-8 h-8 flex items-center justify-center shadow-lg">
-            🎯
           </div>
         )}
       </button>

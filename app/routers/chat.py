@@ -74,6 +74,87 @@ async def send_chat_message(
     if user and user.onboarding_step != OnboardingStep.COMPLETED:
         tour_action = check_tour_trigger(chat_msg.message, user.onboarding_step)
 
+    # Extract goal review status from result data
+    goal_review_status = result.data.get('goal_review_status')
+
+    return {
+        "reply": reply,
+        "tour_action": tour_action,
+        "timestamp": datetime.utcnow().isoformat(),
+        "state": result.state,
+        "actions": result.actions,
+        "goal_review_status": goal_review_status  # NEW: Include goal review status
+    }
+
+
+@router.post("/goal-review/end")
+async def end_goal_review_session(
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """
+    Explicitly end an active goal review session.
+    """
+    from app.services.state_machine import get_or_create_state, States
+
+    print(f"🛑 Explicit goal review end requested by user: {user_number}")
+
+    # Get current state
+    state = get_or_create_state(db, user_number)
+
+    if state.current_state != States.GOAL_REVIEW:
+        return {
+            "success": False,
+            "message": "No active goal review session"
+        }
+
+    # Clear state and return to IDLE
+    state.current_state = States.IDLE
+    state.state_context = None
+    db.commit()
+
+    # Save a system message
+    save_message(
+        db=db,
+        sender="assistant",
+        user_number=user_number,
+        content="Goal review session ended. What would you like to do next?"
+    )
+
+    print(f"✅ Goal review session ended for {user_number}")
+
+    return {
+        "success": True,
+        "message": "Session ended successfully",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+    # Process message using brain orchestrator (same as WhatsApp/Email)
+    result = orchestrate(
+        db=db,
+        user_number=chat_msg.user_number,
+        user_message=chat_msg.message,
+        channel="chat"
+    )
+
+    reply = result.response
+
+    # Save assistant response to history
+    save_message(
+        db=db,
+        sender="assistant",
+        user_number=chat_msg.user_number,
+        content=reply
+    )
+
+    print(f"   Alfred Response: {reply}")
+    print(f"🔵 WEB CHAT MESSAGE COMPLETE\n")
+
+    # Check if this triggers any tour actions (for onboarding)
+    tour_action = None
+    if user and user.onboarding_step != OnboardingStep.COMPLETED:
+        tour_action = check_tour_trigger(chat_msg.message, user.onboarding_step)
+
     return {
         "reply": reply,
         "tour_action": tour_action,
