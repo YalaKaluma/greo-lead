@@ -728,6 +728,12 @@ def handle_goal_review(
     phase = state_ctx.get("phase") or "select_goal"
     msg_lower = (user_message or "").lower()
 
+    print(f"\n{'=' * 60}")
+    print(f"🎯 GOAL REVIEW SESSION")
+    print(f"Current phase: {phase}")
+    print(f"User message: {user_message[:100]}...")
+    print(f"{'=' * 60}")
+
     # --------------------------------------------------------------
     # Cancel anytime
     # --------------------------------------------------------------
@@ -822,6 +828,7 @@ def handle_goal_review(
     # Phase 1 — Framing
     # --------------------------------------------------------------
     if phase == "framing":
+        print(f"📍 PHASE 1: FRAMING")
         text = _run_goal_review_prompt(
             f"{prompt_base}/framing.yaml",
             journey_context=journey_context,
@@ -829,6 +836,7 @@ def handle_goal_review(
             recent_history=history
         )
         state_ctx["phase"] = "reflection"
+        print(f"✅ Phase transition: framing → reflection")
         return OrchestrationResult(
             response=text,
             state=States.GOAL_REVIEW,
@@ -839,6 +847,7 @@ def handle_goal_review(
     # Phase 2 — Reflection
     # --------------------------------------------------------------
     if phase == "reflection":
+        print(f"📍 PHASE 2: REFLECTION")
         state_ctx["user_reflection"] = user_message
         text = _run_goal_review_prompt(
             f"{prompt_base}/reflection.yaml",
@@ -848,6 +857,7 @@ def handle_goal_review(
             user_input=user_message
         )
         state_ctx["phase"] = "diagnosis"
+        print(f"✅ Phase transition: reflection → diagnosis")
         return OrchestrationResult(
             response=text,
             state=States.GOAL_REVIEW,
@@ -858,6 +868,7 @@ def handle_goal_review(
     # Phase 3 — Diagnosis
     # --------------------------------------------------------------
     if phase == "diagnosis":
+        print(f"📍 PHASE 3: DIAGNOSIS")
         state_ctx["diagnosis_input"] = user_message
         text = _run_goal_review_prompt(
             f"{prompt_base}/diagnosis.yaml",
@@ -867,6 +878,7 @@ def handle_goal_review(
             user_input=user_message
         )
         state_ctx["phase"] = "adjustment"
+        print(f"✅ Phase transition: diagnosis → adjustment")
         return OrchestrationResult(
             response=text,
             state=States.GOAL_REVIEW,
@@ -877,6 +889,7 @@ def handle_goal_review(
     # Phase 4 — Adjustment
     # --------------------------------------------------------------
     if phase == "adjustment":
+        print(f"📍 PHASE 4: ADJUSTMENT")
         state_ctx["adjustment_input"] = user_message
         text = _run_goal_review_prompt(
             f"{prompt_base}/adjustment.yaml",
@@ -886,6 +899,7 @@ def handle_goal_review(
             user_input=user_message
         )
         state_ctx["phase"] = "closure"
+        print(f"✅ Phase transition: adjustment → closure")
         return OrchestrationResult(
             response=text,
             state=States.GOAL_REVIEW,
@@ -895,6 +909,8 @@ def handle_goal_review(
     # --------------------------------------------------------------
     # Phase 5 — Closure (DECISIVE)
     # --------------------------------------------------------------
+    print(f"📍 PHASE 5: CLOSURE - Creating tasks and saving session")
+
     closure_text = _run_goal_review_prompt(
         f"{prompt_base}/closure.yaml",
         journey_context=journey_context,
