@@ -38,3 +38,6 @@ def load_prompt(prompt_path: str) -> Dict[str, Any]:
         _PROMPT_CACHE[prompt_path] = data
 
     return data
+
+def run_prompt(*args, **kwargs):
+    return PromptService().run_prompt(*args, **kwargs)
