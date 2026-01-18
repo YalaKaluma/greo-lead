@@ -4,12 +4,12 @@ from datetime import datetime, timedelta
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Date
 from sqlalchemy.sql import func
 from app.db import Base
-from .db import Base  # use your existing Base
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.mutable import MutableDict, MutableList  # ← ADDED FOR FIX
 import enum
 import secrets
-from database import Base
+#from app.database import Base
+#from database import Base
 
 
 class JournalEntry(Base):
@@ -524,7 +524,9 @@ class GoalReviewSession(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     user_number = Column(String, index=True, nullable=False)
-    goal_id = Column(Integer, ForeignKey("goals.id"), nullable=False)
+#    goal_id = Column(Integer, ForeignKey("goals.id"), nullable=False)
+    goal_id = Column(Integer, ForeignKey("journey_goals.id"), nullable=False)
+
     goal_title = Column(String, nullable=False)
 
     session_started_at = Column(DateTime(timezone=True), nullable=False)
