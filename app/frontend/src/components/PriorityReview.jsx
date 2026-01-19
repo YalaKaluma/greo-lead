@@ -232,8 +232,8 @@ export default function PriorityReview({ userNumber, onComplete }) {
                   action={action}
                   decision={decisions[task.task_id]}
                   onAccept={() => handleDecision(task.task_id, 'accept')}
-                  onReject={() => handleDecision(task.task_id, 'reject')}
-                  onWhy={() => setShowReasonModal(task)}
+                  onReject={() => setShowReasonModal(task)}
+                  onWhy={() => alert(`Alfred's Reasoning:\n\n${task.reason}\n\n${task.risk_if_ignored ? 'Risk if ignored: ' + task.risk_if_ignored : ''}`)}
                   isInTop10={isInTop10}
                 />
               );
@@ -366,8 +366,9 @@ function TaskRecommendation({ task, action, decision, onAccept, onReject, onWhy,
           <button
             onClick={onWhy}
             className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+            title="Show Alfred's reasoning"
           >
-            Why?
+            💡 Why?
           </button>
         </div>
       )}
@@ -383,24 +384,28 @@ function TaskRecommendation({ task, action, decision, onAccept, onReject, onWhy,
   );
 }
 
-function ReasonModal({ taskId, onSubmit, onClose }) {
+function ReasonModal({ task, onSubmit, onClose }) {
   const [reason, setReason] = useState('');
   
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-2xl">
-        <h3 className="text-xl font-semibold mb-3 text-gray-800">
-          Why reject this recommendation?
+        <h3 className="text-xl font-semibold mb-2 text-gray-800">
+          Why reject this task?
         </h3>
+        <p className="text-sm font-medium text-gray-700 mb-3">
+          {task.title}
+        </p>
         <p className="text-sm text-gray-600 mb-4">
-          Optional: Help Alfred learn your preferences by explaining why you disagree.
+          Your feedback helps Alfred learn your priorities. This is optional but valuable for improving recommendations.
         </p>
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="E.g., This isn't strategic right now, I need to focus on revenue first..."
+          placeholder="E.g., 'Not strategic right now', 'Need to focus on revenue first', 'Can delegate this'..."
           className="w-full p-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           rows={4}
+          autoFocus
         />
         <div className="flex justify-end gap-3">
           <button
@@ -410,10 +415,10 @@ function ReasonModal({ taskId, onSubmit, onClose }) {
             Cancel
           </button>
           <button
-            onClick={() => onSubmit(reason || null)}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+            onClick={() => onSubmit(reason.trim() || null)}
+            className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
           >
-            Submit
+            {reason.trim() ? 'Reject with Feedback' : 'Reject'}
           </button>
         </div>
       </div>
