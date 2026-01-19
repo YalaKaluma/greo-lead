@@ -39,6 +39,7 @@ class PriorityRunResponse(BaseModel):
     current_top10: List[int]
     recommended_changes: dict
     recommended_top10: List[dict]
+    all_scored_tasks: List[dict]  # NEW: All tasks scored, sorted by score
     tokens_used: int
     message: str
 
@@ -122,7 +123,23 @@ def run_prioritization(
             scores=scores
         )
 
-        # Step 6: Format response
+        # Step 6: Format ALL scored tasks (not just top 10)
+        all_scored = []
+        for s in sorted(scores, key=lambda x: x.top10_likelihood, reverse=True):
+            task = db.query(Task).get(s.task_id)
+            all_scored.append({
+                "task_id": s.task_id,
+                "title": task.title if task else f"Task #{s.task_id}",
+                "notes": task.notes if task else None,
+                "priority": task.priority if task else None,
+                "project": task.project if task else None,
+                "score": float(s.top10_likelihood),
+                "reason": s.primary_reason,
+                "risk_if_ignored": s.risk_if_ignored,
+                "confidence": s.confidence,
+                "in_current_top10": s.task_id in (context.tasks_in_top10 or [])
+            })
+
         changes = recommendation.changes_from_current
         num_changes = len(changes["add"]) + len(changes["remove"])
 
@@ -132,6 +149,7 @@ def run_prioritization(
             current_top10=context.tasks_in_top10 or [],
             recommended_changes=changes,
             recommended_top10=recommendation.recommended_top10,
+            all_scored_tasks=all_scored,
             tokens_used=llm_result["tokens_used"],
             message=f"Analyzed {len(tasks)} tasks. Suggesting {num_changes} changes to your Top 10."
         )
