@@ -71,26 +71,26 @@ export default function PriorityReview({ userNumber, onComplete }) {
   };
   
   const applyApprovedChanges = async () => {
-    const changes = recommendation.recommended_changes;
+    // Get all tasks that user accepted
+    const acceptedTasks = Object.entries(decisions)
+      .filter(([taskId, decision]) => decision === 'accept')
+      .map(([taskId]) => parseInt(taskId));
     
-    // Filter based on user decisions (default to accept if not decided)
-    const approvedAdds = changes.add.filter(id => 
-      decisions[id] === 'accept' || decisions[id] === undefined
-    );
-    const approvedRemoves = changes.remove.filter(id =>
-      decisions[id] === 'accept' || decisions[id] === undefined
-    );
+    if (acceptedTasks.length === 0) {
+      alert('Please accept at least one task for your Top 10');
+      return;
+    }
     
     setApplying(true);
     
     try {
       const res = await axios.post(`${API_BASE}/api/priority/apply`, {
         user_number: userNumber,
-        approved_adds: approvedAdds,
-        approved_removes: approvedRemoves
+        approved_adds: acceptedTasks,
+        approved_removes: [] // We'll let the system figure out what to remove
       });
       
-      alert(`Success! Added ${res.data.added} tasks, removed ${res.data.removed} tasks.`);
+      alert(`Success! Updated Top 10 with ${acceptedTasks.length} tasks.`);
       
       // Call completion callback
       if (onComplete) {
@@ -159,6 +159,36 @@ export default function PriorityReview({ userNumber, onComplete }) {
   // Get all scored tasks sorted by score
   const allTasks = recommendation.all_scored_tasks || [];
   
+  // Debug logging
+  console.log('Recommendation data:', recommendation);
+  console.log('All tasks:', allTasks);
+  console.log('Changes:', changes);
+  
+  // Fallback if all_scored_tasks is not available
+  if (allTasks.length === 0) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="bg-white rounded-lg shadow-lg p-8">
+          <div className="text-center">
+            <div className="text-6xl mb-4">⚠️</div>
+            <h3 className="text-2xl font-semibold text-gray-800 mb-2">
+              No Tasks to Review
+            </h3>
+            <p className="text-gray-600 mb-6">
+              No tasks due today or overdue. Check back later!
+            </p>
+            <button
+              onClick={() => setRecommendation(null)}
+              className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       {/* Header */}
@@ -189,24 +219,28 @@ export default function PriorityReview({ userNumber, onComplete }) {
         
         <div className="space-y-3">
           {allTasks.map((task) => {
-            const isInTop10 = task.in_current_top10;
-            const shouldBeInTop10 = changes.add.includes(task.task_id) || changes.keep.includes(task.task_id);
-            const action = changes.add.includes(task.task_id) ? 'add' : 
-                          changes.remove.includes(task.task_id) ? 'remove' : 
-                          'keep';
-            
-            return (
-              <TaskRecommendation
-                key={task.task_id}
-                task={task}
-                action={action}
-                decision={decisions[task.task_id]}
-                onAccept={() => handleDecision(task.task_id, 'accept')}
-                onReject={() => handleDecision(task.task_id, 'reject')}
-                onWhy={() => setShowReasonModal(task)}
-                isInTop10={isInTop10}
-              />
-            );
+            try {
+              const isInTop10 = task.in_current_top10 || false;
+              const action = changes.add?.includes(task.task_id) ? 'add' : 
+                            changes.remove?.includes(task.task_id) ? 'remove' : 
+                            'keep';
+              
+              return (
+                <TaskRecommendation
+                  key={task.task_id}
+                  task={task}
+                  action={action}
+                  decision={decisions[task.task_id]}
+                  onAccept={() => handleDecision(task.task_id, 'accept')}
+                  onReject={() => handleDecision(task.task_id, 'reject')}
+                  onWhy={() => setShowReasonModal(task)}
+                  isInTop10={isInTop10}
+                />
+              );
+            } catch (err) {
+              console.error('Error rendering task:', task, err);
+              return null;
+            }
           })}
         </div>
       </div>
@@ -227,7 +261,7 @@ export default function PriorityReview({ userNumber, onComplete }) {
               Cancel
             </button>
             <button
-              onClick={applyChanges}
+              onClick={applyApprovedChanges}
               disabled={applying || Object.keys(decisions).length === 0}
               className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
