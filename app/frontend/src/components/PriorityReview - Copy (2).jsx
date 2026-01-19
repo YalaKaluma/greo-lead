@@ -156,9 +156,6 @@ export default function PriorityReview({ userNumber, onComplete }) {
   const changes = recommendation.recommended_changes;
   const hasChanges = changes.add.length > 0 || changes.remove.length > 0;
   
-  // Get all scored tasks sorted by score
-  const allTasks = recommendation.all_scored_tasks || [];
-  
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       {/* Header */}
@@ -166,7 +163,7 @@ export default function PriorityReview({ userNumber, onComplete }) {
         <div className="flex justify-between items-center">
           <div>
             <h2 className="text-2xl font-semibold text-gray-800">
-              Prioritization Results
+              Prioritization Recommendations
             </h2>
             <p className="text-sm text-gray-500 mt-1">
               {recommendation.message}
@@ -178,70 +175,107 @@ export default function PriorityReview({ userNumber, onComplete }) {
         </div>
       </div>
       
-      {/* All Scored Tasks */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">
-          All Tasks Due Today (Scored)
-        </h3>
-        <p className="text-sm text-gray-600 mb-4">
-          Review scores for all tasks due today or overdue. Accept tasks for your Top 10 focus list.
-        </p>
-        
-        <div className="space-y-3">
-          {allTasks.map((task) => {
-            const isInTop10 = task.in_current_top10;
-            const shouldBeInTop10 = changes.add.includes(task.task_id) || changes.keep.includes(task.task_id);
-            const action = changes.add.includes(task.task_id) ? 'add' : 
-                          changes.remove.includes(task.task_id) ? 'remove' : 
-                          'keep';
-            
-            return (
-              <TaskRecommendation
-                key={task.task_id}
-                task={task}
-                action={action}
-                decision={decisions[task.task_id]}
-                onAccept={() => handleDecision(task.task_id, 'accept')}
-                onReject={() => handleDecision(task.task_id, 'reject')}
-                onWhy={() => setShowReasonModal(task)}
-                isInTop10={isInTop10}
-              />
-            );
-          })}
-        </div>
-      </div>
-      
-      {/* Apply Changes Button */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <p className="text-sm text-gray-600">
-              Review all tasks above and accept those you want in your Top 10
+      {/* No Changes */}
+      {!hasChanges && (
+        <div className="bg-white rounded-lg shadow-lg p-8">
+          <div className="text-center">
+            <div className="text-6xl mb-4">✅</div>
+            <h3 className="text-2xl font-semibold text-gray-800 mb-2">
+              Your Top 10 Looks Great!
+            </h3>
+            <p className="text-gray-600 mb-6">
+              No changes recommended at this time.
             </p>
-          </div>
-          <div className="flex gap-3">
             <button
               onClick={() => setRecommendation(null)}
-              className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+              className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* Additions */}
+      {changes.add.length > 0 && (
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <h3 className="text-xl font-semibold mb-4 text-gray-800">
+            ➕ Recommended Additions
+          </h3>
+          <p className="text-sm text-gray-600 mb-4">
+            These tasks should be in your Top 10 focus list
+          </p>
+          <div className="space-y-3">
+            {recommendation.recommended_top10
+              .filter(t => changes.add.includes(t.task_id))
+              .map(task => (
+                <TaskRecommendation
+                  key={task.task_id}
+                  task={task}
+                  action="add"
+                  decision={decisions[task.task_id]}
+                  onAccept={() => handleDecision(task.task_id, 'accept')}
+                  onReject={() => setShowReasonModal(task.task_id)}
+                  onWhy={() => alert(`${task.reason}\n\nRisk if ignored: ${task.risk_if_ignored || 'Unknown'}`)}
+                />
+              ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Removals */}
+      {changes.remove.length > 0 && (
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <h3 className="text-xl font-semibold mb-4 text-gray-800">
+            ➖ Recommended Removals
+          </h3>
+          <p className="text-sm text-gray-600 mb-4">
+            These tasks can be deprioritized for now
+          </p>
+          <div className="space-y-3">
+            {recommendation.recommended_top10
+              .filter(t => changes.remove.includes(t.task_id))
+              .map(task => (
+                <TaskRecommendation
+                  key={task.task_id}
+                  task={task}
+                  action="remove"
+                  decision={decisions[task.task_id]}
+                  onAccept={() => handleDecision(task.task_id, 'accept')}
+                  onReject={() => setShowReasonModal(task.task_id)}
+                  onWhy={() => alert(`${task.reason}\n\nRisk if ignored: ${task.risk_if_ignored || 'Unknown'}`)}
+                />
+              ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Action Buttons */}
+      {hasChanges && (
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="flex justify-between items-center">
+            <button
+              onClick={() => setRecommendation(null)}
+              className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
             >
               Cancel
             </button>
             <button
-              onClick={applyChanges}
-              disabled={applying || Object.keys(decisions).length === 0}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={applyApprovedChanges}
+              disabled={applying}
+              className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
             >
-              {applying ? 'Applying...' : `Apply ${Object.values(decisions).filter(d => d === 'accept').length} Changes`}
+              {applying ? 'Applying Changes...' : 'Apply Changes'}
             </button>
           </div>
         </div>
-      </div>
+      )}
       
       {/* Reason Modal */}
       {showReasonModal && (
         <ReasonModal
-          task={showReasonModal}
-          onSubmit={(reason) => handleDecision(showReasonModal.task_id, 'reject', reason)}
+          taskId={showReasonModal}
+          onSubmit={(reason) => handleDecision(showReasonModal, 'reject', reason)}
           onClose={() => setShowReasonModal(null)}
         />
       )}
@@ -249,28 +283,10 @@ export default function PriorityReview({ userNumber, onComplete }) {
   );
 }
 
-function TaskRecommendation({ task, action, decision, onAccept, onReject, onWhy, isInTop10 }) {
-  const actionIcons = {
-    add: '➕',
-    remove: '➖',
-    keep: '✓'
-  };
-  
-  const actionColors = {
-    add: 'green',
-    remove: 'orange',
-    keep: 'blue'
-  };
-  
-  const actionLabels = {
-    add: 'Recommended for Top 10',
-    remove: 'Remove from Top 10',
-    keep: 'Already in Top 10'
-  };
-  
-  const actionColor = actionColors[action];
-  const actionIcon = actionIcons[action];
-  const actionLabel = actionLabels[action];
+function TaskRecommendation({ task, action, decision, onAccept, onReject, onWhy }) {
+  const isAddition = action === 'add';
+  const actionColor = isAddition ? 'green' : 'orange';
+  const actionIcon = isAddition ? '➕' : '➖';
   
   // Get confidence badge color
   const confidenceColors = {
@@ -292,9 +308,6 @@ function TaskRecommendation({ task, action, decision, onAccept, onReject, onWhy,
             <p className="font-semibold text-gray-800">
               {task.title || `Task #${task.task_id}`}
             </p>
-            <span className={`text-xs px-2 py-1 rounded bg-${actionColor}-100 text-${actionColor}-800`}>
-              {actionLabel}
-            </span>
           </div>
           {task.notes && (
             <p className="text-xs text-gray-500 mb-2 italic">

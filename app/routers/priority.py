@@ -1,6 +1,13 @@
 # app/routers/priority.py
 """
 Priority API Router: Endpoints for task prioritization system.
+
+Endpoints:
+- POST /api/priority/run - Run full prioritization (context → scoring → recommendations)
+- POST /api/priority/decision - Record user decision on recommendation
+- POST /api/priority/apply - Apply user-approved changes to Top 10
+- GET /api/priority/history - View past prioritization runs
+- GET /api/priority/learning-insights - Analytics on user decisions
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -8,13 +15,12 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
-from app.db import get_db
+from app.database import get_db
 from app.services.priority_service import PriorityService
 from app.services.priority_llm_service import PriorityLLMService
 from app.models import Task
 
-# ⚠️ IMPORTANT: No prefix here - it's added during registration
-router = APIRouter(tags=["priority"])
+router = APIRouter(prefix="/api/priority", tags=["priority"])
 
 
 # ============================================================================
@@ -70,12 +76,27 @@ def run_prioritization(
         request: PriorityRunRequest,
         db: Session = Depends(get_db)
 ):
-    """Run complete prioritization: context → scoring → recommendations."""
+    """
+    Run complete prioritization: context → scoring → recommendations.
+
+    Process:
+    1. Create immutable context snapshot
+    2. Get all open tasks for scoring
+    3. Score tasks with LLM (GPT-4o)
+    4. Generate recommendations (add/remove/keep)
+    5. Return results for user review
+
+    Returns:
+        Complete recommendation with LLM scores and suggested changes
+    """
     priority_service = PriorityService(db)
     llm_service = PriorityLLMService()
 
     try:
+        # Step 1: Create context snapshot
         context = priority_service.create_context_snapshot(request.user_number)
+
+        # Step 2: Get tasks to score
         tasks = priority_service.get_tasks_for_scoring(request.user_number)
 
         if not tasks:
@@ -84,8 +105,10 @@ def run_prioritization(
                 detail="No open tasks found. Create some tasks first!"
             )
 
+        # Step 3: Score tasks with LLM
         llm_result = llm_service.score_tasks(tasks, context)
 
+        # Step 4: Save scores to database
         scores = priority_service.save_priority_scores(
             context_id=context.id,
             scores=llm_result["scores"],
@@ -93,11 +116,13 @@ def run_prioritization(
             tokens_used=llm_result["tokens_used"]
         )
 
+        # Step 5: Generate recommendations
         recommendation = priority_service.generate_recommendations(
             context_id=context.id,
             scores=scores
         )
 
+        # Step 6: Format response
         changes = recommendation.changes_from_current
         num_changes = len(changes["add"]) + len(changes["remove"])
 
@@ -123,9 +148,21 @@ def record_decision(
         request: UserDecisionRequest,
         db: Session = Depends(get_db)
 ):
-    """Record user's decision on a recommendation."""
+    """
+    Record user's decision on a recommendation.
+
+    This is CRITICAL for learning user preferences.
+    Every accept/reject teaches us about their prioritization criteria.
+
+    Args:
+        request: Contains recommendation_id, task_id, user_action, optional reason
+
+    Returns:
+        Confirmation with decision ID
+    """
     priority_service = PriorityService(db)
 
+    # Validate user_action
     valid_actions = {"accept", "reject", "replace", "skip"}
     if request.user_action not in valid_actions:
         raise HTTPException(
@@ -134,12 +171,14 @@ def record_decision(
         )
 
     try:
+        # Get the recommendation to find the LLM's reasoning
         from app.models import TaskPriorityRecommendation
         recommendation = db.query(TaskPriorityRecommendation).get(request.recommendation_id)
 
         if not recommendation:
             raise HTTPException(status_code=404, detail="Recommendation not found")
 
+        # Find this task in the recommendation
         task_rec = next(
             (t for t in recommendation.recommended_top10 if t["task_id"] == request.task_id),
             None
@@ -148,6 +187,7 @@ def record_decision(
         if not task_rec:
             raise HTTPException(status_code=404, detail="Task not in recommendation")
 
+        # Determine what action was recommended
         changes = recommendation.changes_from_current
         if request.task_id in changes["add"]:
             action_recommended = "add"
@@ -158,6 +198,7 @@ def record_decision(
         else:
             action_recommended = "unknown"
 
+        # Record decision
         decision = priority_service.record_user_decision(
             recommendation_id=request.recommendation_id,
             task_id=request.task_id,
@@ -189,7 +230,20 @@ def apply_changes(
         request: ApplyChangesRequest,
         db: Session = Depends(get_db)
 ):
-    """Apply user-approved changes to Top 10."""
+    """
+    Apply user-approved changes to Top 10.
+
+    Updates:
+    - task.in_top10 (True/False)
+    - task.top10_position (1-10 or NULL)
+    - task.last_prioritized_at (timestamp)
+
+    Args:
+        request: Lists of task IDs to add and remove
+
+    Returns:
+        Summary of changes applied
+    """
     priority_service = PriorityService(db)
 
     try:
@@ -219,7 +273,17 @@ def get_prioritization_history(
         limit: int = Query(10, ge=1, le=50, description="Number of runs to return"),
         db: Session = Depends(get_db)
 ):
-    """Get recent prioritization runs for a user."""
+    """
+    Get recent prioritization runs for a user.
+
+    Useful for showing:
+    - "Last reviewed: X days ago"
+    - History of prioritization sessions
+    - Frequency of use
+
+    Returns:
+        List of context snapshots with timestamps
+    """
     priority_service = PriorityService(db)
 
     try:
@@ -255,7 +319,19 @@ def get_learning_insights(
         user_number: str = Query(..., description="User identifier"),
         db: Session = Depends(get_db)
 ):
-    """Get insights from user decisions for debugging/future ML."""
+    """
+    Get insights from user decisions (for debugging/future ML).
+
+    Returns analytics on:
+    - Acceptance vs rejection rates
+    - Average LLM scores for accepted/rejected tasks
+    - Decision patterns
+
+    This data is crucial for:
+    - Iterating on LLM prompts
+    - Understanding user preferences
+    - Planning ML features
+    """
     priority_service = PriorityService(db)
 
     try:
