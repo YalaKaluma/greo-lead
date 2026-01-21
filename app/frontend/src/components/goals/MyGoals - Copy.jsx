@@ -135,13 +135,10 @@ export default function MyGoals({ apiUrl, userNumber }) {
 
   const handleCreateGoal = async (goalData) => {
     try {
-      await axios.post(
-        `${apiUrl}/api/journey/goals`,
-        goalData,  // Send ONLY the goal data in body
-        {
-          params: { user_number: userNumber }  // Send user_number as query param
-        }
-      );
+      await axios.post(`${apiUrl}/api/journey/goals`, {
+        ...goalData,
+        user_number: userNumber
+      });
       await fetchGoals();
       setShowCreateModal(false);
       setParentGoalForChild(null);
@@ -153,13 +150,10 @@ export default function MyGoals({ apiUrl, userNumber }) {
 
   const handleUpdateGoal = async (goalId, updates) => {
     try {
-      await axios.put(
-        `${apiUrl}/api/journey/goals/${goalId}`,
-        updates,  // Send ONLY the goal data in body
-        {
-          params: { user_number: userNumber }  // Send user_number as query param
-        }
-      );
+      await axios.put(`${apiUrl}/api/journey/goals/${goalId}`, {
+        ...updates,
+        user_number: userNumber
+      });
       await fetchGoals();
       setEditingGoal(null);
     } catch (err) {

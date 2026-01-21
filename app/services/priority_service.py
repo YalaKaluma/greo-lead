@@ -137,21 +137,19 @@ class PriorityService:
         """
         from datetime import datetime, time
 
-        # Get start and end of today (in Eastern Time)
+        # Get today's date as string (YYYY-MM-DD) in Eastern Time
+        # This matches how the frontend TodoList filters
         now = datetime.now(ET)
-        today_start = ET.localize(datetime.combine(now.date(), time.min))
-        today_end = ET.localize(datetime.combine(now.date(), time.max))
+        today_str = now.strftime('%Y-%m-%d')  # e.g., "2026-01-18"
 
-        # Query tasks that are:
-        # 1. Due today OR overdue OR in current Top 10
-        # 2. Status is "open"
+        # Query all open tasks
         tasks = self.db.query(Task).filter(
             Task.user_number == user_number,
             Task.status == "open"
         ).all()
 
         # Filter to only include:
-        # - Tasks due today or earlier
+        # - Tasks due today or earlier (date-only comparison)
         # - Tasks currently in Top 10 (to validate they should stay)
         filtered_tasks = []
         for task in tasks:
@@ -160,22 +158,27 @@ class PriorityService:
                 filtered_tasks.append(task)
                 continue
 
-            # Include if due today or overdue
+            # Include if due today or overdue (date-only comparison)
             if task.due_date:
-                # Make due_date timezone-aware if needed
-                task_due = task.due_date.replace(tzinfo=ET) if task.due_date.tzinfo is None else task.due_date
-                if task_due <= today_end:  # Due today or earlier
+                # Extract date part as string (handles both date and datetime)
+                if isinstance(task.due_date, str):
+                    task_date_str = task.due_date.split('T')[0]
+                else:
+                    task_date_str = task.due_date.strftime('%Y-%m-%d')
+
+                # String comparison: "2026-01-18" <= "2026-01-18"
+                if task_date_str <= today_str:
                     filtered_tasks.append(task)
 
         # Sort by due date (earliest first), then created date
         filtered_tasks.sort(
             key=lambda t: (
-                t.due_date.replace(
-                    tzinfo=ET) if t.due_date and t.due_date.tzinfo is None else t.due_date or datetime.max.replace(
-                    tzinfo=ET),
+                t.due_date.strftime('%Y-%m-%d') if t.due_date else '9999-12-31',
                 -t.created_at.timestamp() if t.created_at else 0
             )
         )
+
+        return filtered_tasks
 
         return filtered_tasks
 
