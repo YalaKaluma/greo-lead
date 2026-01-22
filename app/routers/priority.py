@@ -196,14 +196,16 @@ def record_decision(
         if not recommendation:
             raise HTTPException(status_code=404, detail="Recommendation not found")
 
-        # Find this task in the recommendation
-        task_rec = next(
-            (t for t in recommendation.recommended_top10 if t["task_id"] == request.task_id),
-            None
-        )
+        # Find this task in ALL scored tasks (not just top 10)
+        # We now show all tasks, so we need to check all_scored_tasks
+        from app.models import TaskPriorityScore
+        task_score = db.query(TaskPriorityScore).filter(
+            TaskPriorityScore.context_id == recommendation.context_id,
+            TaskPriorityScore.task_id == request.task_id
+        ).first()
 
-        if not task_rec:
-            raise HTTPException(status_code=404, detail="Task not in recommendation")
+        if not task_score:
+            raise HTTPException(status_code=404, detail="Task not in this prioritization run")
 
         # Determine what action was recommended
         changes = recommendation.changes_from_current
@@ -222,8 +224,8 @@ def record_decision(
             task_id=request.task_id,
             user_number=request.user_number,
             action_recommended=action_recommended,
-            llm_score=task_rec["score"],
-            llm_reason=task_rec["reason"],
+            llm_score=float(task_score.top10_likelihood),
+            llm_reason=task_score.primary_reason,
             user_action=request.user_action,
             user_reason=request.user_reason
         )
