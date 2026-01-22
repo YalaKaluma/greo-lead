@@ -71,15 +71,10 @@ export default function PriorityReview({ userNumber, onComplete }) {
   };
   
   const applyApprovedChanges = async () => {
-    console.log('applyApprovedChanges called');
-    console.log('Current decisions:', decisions);
-    
     // Get all tasks that user accepted
     const acceptedTasks = Object.entries(decisions)
       .filter(([taskId, decision]) => decision === 'accept')
       .map(([taskId]) => parseInt(taskId));
-    
-    console.log('Accepted tasks:', acceptedTasks);
     
     if (acceptedTasks.length === 0) {
       alert('Please accept at least one task for your Top 10');
@@ -89,15 +84,13 @@ export default function PriorityReview({ userNumber, onComplete }) {
     setApplying(true);
     
     try {
-      console.log('Sending request to /api/priority/apply');
       const res = await axios.post(`${API_BASE}/api/priority/apply`, {
         user_number: userNumber,
         approved_adds: acceptedTasks,
         approved_removes: [] // We'll let the system figure out what to remove
       });
       
-      console.log('Apply response:', res.data);
-      alert(`Success! Updated Top 10 with ${res.data.added} tasks.`);
+      alert(`Success! Updated Top 10 with ${acceptedTasks.length} tasks.`);
       
       // Call completion callback
       if (onComplete) {
@@ -110,8 +103,7 @@ export default function PriorityReview({ userNumber, onComplete }) {
       
     } catch (err) {
       console.error('Failed to apply changes:', err);
-      console.error('Error details:', err.response?.data);
-      alert(`Failed to update Top 10: ${err.response?.data?.detail || err.message}`);
+      alert('Failed to update Top 10. Please try again.');
     } finally {
       setApplying(false);
     }
@@ -272,19 +264,11 @@ export default function PriorityReview({ userNumber, onComplete }) {
               onClick={applyApprovedChanges}
               disabled={applying || Object.keys(decisions).length === 0}
               className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              title={Object.keys(decisions).length === 0 ? "Accept at least one task first" : ""}
             >
               {applying ? 'Applying...' : `Apply ${Object.values(decisions).filter(d => d === 'accept').length} Changes`}
             </button>
           </div>
         </div>
-        
-        {/* Show message if no decisions made */}
-        {Object.keys(decisions).length === 0 && (
-          <div className="mt-2 text-sm text-amber-600">
-            💡 Click "✓ Accept" or "✗ Reject" on tasks above to enable the Apply button
-          </div>
-        )}
       </div>
       
       {/* Reason Modal */}

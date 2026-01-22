@@ -4,8 +4,7 @@ import TodoList from './components/TodoList';
 import MyGoals from './components/goals/MyGoals'
 import MyLeadershipJourney from './components/MyLeadershipJourney';
 import MyTeam from './components/MyTeam';
-// REMOVED: import MyJournal from './components/MyJournal';
-import MyCoachingSessions from './components/MyCoachingSessions'; // NEW: Replace MyJournal
+import MyJournal from './components/MyJournal';
 import MyHabits from './components/MyHabits';
 import PriorityReview from './components/PriorityReview';
 import TourOverlay from './components/TourOverlay';
@@ -15,6 +14,7 @@ import Login from "./Login";
 import Welcome from "./Welcome";
 import Waitlist from "./Waitlist";
 import AutoTour from './components/AutoTour';
+import MyCoachingSessions from './components/MyCoachingSessions';
 
 // API URL handling
 const API_URL = import.meta.env.PROD
@@ -32,7 +32,7 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  // 🔍 Check login on app load
+  // 🔐 Check login on app load
   useEffect(() => {
     const storedUser = localStorage.getItem("user_number");
     const storedTour = localStorage.getItem("needs_tour");
@@ -193,8 +193,7 @@ function App() {
             {currentPage === 'my-team' && 'My Team'}
             {currentPage === 'my-journey' && 'My Leadership Journey'}
             {currentPage === 'my-habits' && 'My Habits'}
-            {/* CHANGED: my-journal -> coaching-sessions */}
-            {currentPage === 'coaching-sessions' && 'Coaching Sessions'}
+            {currentPage === 'my-journal' && 'My Journal'}
             {currentPage === 'priority-review' && 'Priority Review'}
           </h1>
         </div>
@@ -224,9 +223,8 @@ function App() {
         {currentPage === 'my-habits' && (
           <MyHabits apiUrl={API_URL} userNumber={userNumber} />
         )}
-        {/* CHANGED: Replace my-journal with coaching-sessions */}
-        {currentPage === 'coaching-sessions' && (
-          <MyCoachingSessions userNumber={userNumber} />
+        {currentPage === 'my-journal' && (
+          <MyJournal apiUrl={API_URL} userNumber={userNumber} />
         )}
         {currentPage === 'priority-review' && (
           <PriorityReview userNumber={userNumber} onComplete={() => handleNavigate('todo-list')} />
@@ -244,8 +242,6 @@ function App() {
           if (action === 'navigate_team') setCurrentPage('my-team');
           if (action === 'navigate_journey') setCurrentPage('my-journey');
           if (action === 'navigate_habits') setCurrentPage('my-habits');
-          // NEW: Add coaching sessions navigation
-          if (action === 'navigate_coaching') setCurrentPage('coaching-sessions');
         }}
       />
 

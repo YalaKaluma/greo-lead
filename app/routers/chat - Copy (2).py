@@ -23,11 +23,6 @@ class ChatHistoryResponse(BaseModel):
     timestamp: str
 
 
-class JumpToStageRequest(BaseModel):
-    user_number: str
-    stage: str
-
-
 @router.post("/chat")
 async def send_chat_message(
         chat_msg: ChatMessage,
@@ -88,72 +83,7 @@ async def send_chat_message(
         "timestamp": datetime.utcnow().isoformat(),
         "state": result.state,
         "actions": result.actions,
-        "goal_review_status": goal_review_status
-    }
-
-
-@router.post("/goal-review/jump-to-stage")
-async def jump_to_stage(
-        request: JumpToStageRequest,
-        db: Session = Depends(get_db)
-):
-    """
-    Manually jump to a specific stage in an active goal review session.
-    Allows users to click on progress dots to navigate stages.
-    """
-    from app.services.state_machine import get_or_create_state, States
-    
-    print(f"🎯 Stage jump requested: {request.user_number} -> {request.stage}")
-    
-    # Get current state
-    state = get_or_create_state(db, request.user_number)
-    
-    # Verify user is in goal review
-    if state.current_state != States.GOAL_REVIEW:
-        return {
-            "success": False,
-            "message": "No active goal review session. Start a session first."
-        }
-    
-    # Valid stages
-    valid_stages = ['framing', 'reflection', 'diagnosis', 'adjustment', 'closure']
-    
-    if request.stage not in valid_stages:
-        raise HTTPException(status_code=400, detail=f"Invalid stage: {request.stage}")
-    
-    # Update state context
-    state_ctx = state.state_context or {}
-    old_stage = state_ctx.get('stage', 'framing')
-    state_ctx['stage'] = request.stage
-    state.state_context = state_ctx
-    db.commit()
-    
-    print(f"✅ Stage jumped: {old_stage} -> {request.stage}")
-    
-    # Generate stage-specific prompt
-    stage_messages = {
-        'framing': "Let's start fresh. What goal would you like to review?",
-        'reflection': "Tell me about your progress over the last two weeks. What went well? What didn't?",
-        'diagnosis': "Based on what you've shared, let's identify what's really getting in the way.",
-        'adjustment': "Now let's figure out what concrete adjustments would help most.",
-        'closure': "Let's wrap this up and create your action plan for the week."
-    }
-    
-    message = stage_messages.get(request.stage, f"Moved to {request.stage} stage.")
-    
-    # Save system message
-    save_message(
-        db=db,
-        sender="assistant",
-        user_number=request.user_number,
-        content=message
-    )
-    
-    return {
-        "success": True,
-        "message": message,
-        "stage": request.stage,
-        "timestamp": datetime.utcnow().isoformat()
+        "goal_review_status": goal_review_status  # NEW: Include goal review status
     }
 
 
@@ -220,11 +150,45 @@ async def end_goal_review_session(
         "timestamp": datetime.utcnow().isoformat()
     }
 
+    # Process message using brain orchestrator (same as WhatsApp/Email)
+    result = orchestrate(
+        db=db,
+        user_number=chat_msg.user_number,
+        user_message=chat_msg.message,
+        channel="chat"
+    )
+
+    reply = result.response
+
+    # Save assistant response to history
+    save_message(
+        db=db,
+        sender="assistant",
+        user_number=chat_msg.user_number,
+        content=reply
+    )
+
+    print(f"   Alfred Response: {reply}")
+    print(f"🔵 WEB CHAT MESSAGE COMPLETE\n")
+
+    # Check if this triggers any tour actions (for onboarding)
+    tour_action = None
+    if user and user.onboarding_step != OnboardingStep.COMPLETED:
+        tour_action = check_tour_trigger(chat_msg.message, user.onboarding_step)
+
+    return {
+        "reply": reply,
+        "tour_action": tour_action,
+        "timestamp": datetime.utcnow().isoformat(),
+        "state": result.state,  # Include state for debugging
+        "actions": result.actions  # Include actions taken
+    }
+
 
 @router.get("/chat/history")
 async def get_chat_history(
         user_number: str,
-        limit: int = 50,
+        limit: int = 50,  # Increased from 10 to 50 for better context
         db: Session = Depends(get_db)
 ):
     """
