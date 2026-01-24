@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
 // Session stage configurations
 const GOAL_REVIEW_STAGES = [
   { id: 'framing', label: 'Framing', description: 'Setting up the review' },
@@ -16,7 +18,7 @@ const SESSION_TYPES = [
   { id: 'leadership_coaching', label: 'Leadership Coaching Session', enabled: false }
 ];
 
-const MyCoachingSessions = ({ apiUrl, userNumber }) => {
+const MyCoachingSessions = ({ userNumber }) => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -42,7 +44,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
 
   const loadChatHistory = async () => {
     try {
-      const response = await axios.get(`${apiUrl}/api/chat/history`, {
+      const response = await axios.get(`${API_BASE_URL}/api/chat/history`, {
         params: { user_number: userNumber, limit: 50 }
       });
       setMessages(response.data.messages || []);
@@ -54,10 +56,6 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   const startSession = async (sessionType) => {
     if (sessionType !== 'goal_review') return; // Only goal review enabled for now
 
-    console.log('Starting session:', sessionType);
-    console.log('API URL:', apiUrl);
-    console.log('User Number:', userNumber);
-
     setActiveSession(sessionType);
     setCurrentStage('framing');
     setStageIndex(0);
@@ -65,13 +63,10 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
 
     try {
       // Send message to start goal review session
-      console.log('Sending POST to:', `${apiUrl}/api/chat`);
-      const response = await axios.post(`${apiUrl}/api/chat`, {
+      const response = await axios.post(`${API_BASE_URL}/api/chat`, {
         user_number: userNumber,
         message: 'Start goal review session'
       });
-
-      console.log('Response received:', response.data);
 
       const newMessage = {
         role: 'assistant',
@@ -87,20 +82,13 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
       // Update stage from response if available
       if (response.data.goal_review_status) {
         const status = response.data.goal_review_status;
-        console.log('Goal review status:', status);
         setCurrentStage(status.stage);
         const idx = GOAL_REVIEW_STAGES.findIndex(s => s.id === status.stage);
         setStageIndex(idx >= 0 ? idx : 0);
       }
     } catch (error) {
       console.error('Error starting session:', error);
-      console.error('Error details:', error.response?.data);
-      alert(`Failed to start session: ${error.message}\n\nCheck console for details.`);
-      
-      // Reset state on error
-      setActiveSession(null);
-      setCurrentStage(null);
-      setStageIndex(0);
+      alert('Failed to start session. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -109,16 +97,12 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   const jumpToStage = async (stageId, index) => {
     if (!activeSession) return;
 
-    console.log('Jumping to stage:', stageId, 'index:', index);
-
     setIsLoading(true);
     try {
-      const response = await axios.post(`${apiUrl}/api/goal-review/jump-to-stage`, {
+      const response = await axios.post(`${API_BASE_URL}/api/goal-review/jump-to-stage`, {
         user_number: userNumber,
         stage: stageId
       });
-
-      console.log('Jump response:', response.data);
 
       if (response.data.success) {
         setCurrentStage(stageId);
@@ -134,8 +118,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
       }
     } catch (error) {
       console.error('Error jumping to stage:', error);
-      console.error('Error details:', error.response?.data);
-      alert(`Failed to change stage: ${error.message}\n\nCheck console for details.`);
+      alert('Failed to change stage. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -158,7 +141,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
     setMessages(prev => [...prev, newUserMessage]);
 
     try {
-      const response = await axios.post(`${apiUrl}/api/chat`, {
+      const response = await axios.post(`${API_BASE_URL}/api/chat`, {
         user_number: userNumber,
         message: userMsg
       });
@@ -209,7 +192,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
 
     setIsLoading(true);
     try {
-      const response = await axios.post(`${apiUrl}/api/goal-review/end`, null, {
+      const response = await axios.post(`${API_BASE_URL}/api/goal-review/end`, null, {
         params: { user_number: userNumber }
       });
 

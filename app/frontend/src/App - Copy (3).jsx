@@ -226,7 +226,7 @@ function App() {
         )}
         {/* CHANGED: Replace my-journal with coaching-sessions */}
         {currentPage === 'coaching-sessions' && (
-          <MyCoachingSessions apiUrl={API_URL} userNumber={userNumber} />
+          <MyCoachingSessions userNumber={userNumber} />
         )}
         {currentPage === 'priority-review' && (
           <PriorityReview userNumber={userNumber} onComplete={() => handleNavigate('todo-list')} />
