@@ -296,10 +296,9 @@ def save_state_transition(
     state.state_context = state_context  # CRITICAL: Must be saved
     state.last_transition_at = datetime.now(timezone.utc)  # FIXED: Use timezone-aware datetime
     
-    # Force flush to database, then commit and refresh
-    db.flush()  # Write changes to DB immediately
-    db.commit()  # Commit transaction
-    db.refresh(state)  # Reload from DB to confirm persistence
+    # Force commit and refresh
+    db.commit()
+    db.refresh(state)
     
     print(f"🔄 State transition: {old_state} → {new_state} (reason: {reason})")
     if state_context:
