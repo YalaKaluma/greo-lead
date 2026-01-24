@@ -1,4 +1,5 @@
 # app/services/state_machine.py
+from sqlalchemy.orm.attributes import flag_modified
 """
 State Machine Service for Alfred's Brain
 
@@ -260,20 +261,27 @@ def _transition_from_awaiting_approval(message: str) -> tuple[str, str]:
     
     return States.AWAITING_APPROVAL, "awaiting_clear_response"
 
+"""
+CRITICAL FIX for state_machine.py
+Fixes JSONB state_context not persisting between requests
+"""
+
+# Then modify the save_state_transition function
+# Replace lines 291-296 with this:
 
 def save_state_transition(
-    db: Session,
-    state: ConversationState,
-    new_state: str,
-    reason: str,
-    intents: List[Dict],
-    pending_action: Optional[str] = None,
-    pending_payload: Optional[Dict] = None,
-    state_context: Optional[Dict] = None
+        db: Session,
+        state: ConversationState,
+        new_state: str,
+        reason: str,
+        intents: List[Dict],
+        pending_action: Optional[str] = None,
+        pending_payload: Optional[Dict] = None,
+        state_context: Optional[Dict] = None
 ):
     """
     Save state transition to database.
-    
+
     Args:
         db: Database session
         state: ConversationState object
@@ -285,28 +293,58 @@ def save_state_transition(
         state_context: Additional context (optional)
     """
     from datetime import timezone
-    
+
     old_state = state.current_state
-    
+
     # Update all state fields
     state.current_state = new_state
     state.active_intents = intents if intents else None
     state.pending_action = pending_action
     state.pending_payload = pending_payload
-    state.state_context = state_context  # CRITICAL: Must be saved
-    state.last_transition_at = datetime.now(timezone.utc)  # FIXED: Use timezone-aware datetime
-    
+
+    # CRITICAL FIX: Force SQLAlchemy to detect JSONB field changes
+    # Without this, SQLAlchemy doesn't track nested dict modifications
+    if state_context is not None:
+        state.state_context = dict(state_context)  # Create NEW dict object
+        flag_modified(state, 'state_context')  # Explicitly mark as modified
+    else:
+        state.state_context = None
+        flag_modified(state, 'state_context')
+
+    state.last_transition_at = datetime.now(timezone.utc)
+
     # Force flush to database, then commit and refresh
     db.flush()  # Write changes to DB immediately
     db.commit()  # Commit transaction
     db.refresh(state)  # Reload from DB to confirm persistence
-    
-    print(f"🔄 State transition: {old_state} → {new_state} (reason: {reason})")
+
+    # VERIFICATION: Confirm state_context was actually saved
     if state_context:
-        print(f"   💾 Saved state_context: {state_context.get('phase', 'N/A')}")
-    
+        saved_phase = state.state_context.get('phase') if state.state_context else None
+        expected_phase = state_context.get('phase')
+        if saved_phase != expected_phase:
+            print(f"⚠️ WARNING: Phase mismatch! Expected '{expected_phase}', got '{saved_phase}'")
+
+    print(f"🔄 State transition: {old_state} → {new_state} (reason: {reason})")
+    if state.state_context:
+        print(f"   💾 Saved state_context: {state.state_context.get('phase', 'N/A')}")
+
     # Log for debugging
     _log_transition(state.user_number, old_state, new_state, reason, intents)
+
+
+# EXPLANATION:
+#
+# The bug was that when you modify a JSONB dict in-place like:
+#   state.state_context["phase"] = "diagnosis"
+#
+# SQLAlchemy doesn't detect the change because it's the same dict object.
+#
+# The fix does two things:
+# 1. Create a NEW dict object: dict(state_context) forces reassignment
+# 2. Explicitly mark modified: flag_modified() tells SQLAlchemy to track it
+#
+# This ensures PostgreSQL receives the UPDATE statement with the new JSONB value.
 
 
 def _log_transition(user: str, old: str, new: str, reason: str, intents: List[Dict]):
