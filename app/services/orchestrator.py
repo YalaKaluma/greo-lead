@@ -677,26 +677,33 @@ def _finalize_goal_review_session(
 
 def _build_goal_review_status(phase: str, state_ctx: Dict[str, Any]) -> Dict[str, Any]:
     """Build goal review status metadata for frontend display."""
-    phase_map = {
-        "select_goal": {"number": 0, "name": "Select Goal"},
-        "framing": {"number": 1, "name": "Framing"},
-        "reflection": {"number": 2, "name": "Reflection"},
-        "diagnosis": {"number": 3, "name": "Diagnosis"},
-        "adjustment": {"number": 4, "name": "Adjustment"},
-        "closure": {"number": 5, "name": "Creating Tasks"}
+    # Map backend phases to frontend stages (0-indexed for 5 progress dots)
+    # Frontend stages: framing(0), reflection(1), diagnosis(2), adjustment(3), closure(4)
+    # Backend phases: select_goal(0), framing(1), reflection(2), diagnosis(3), adjustment(4), closure(5)
+
+    phase_to_stage_map = {
+        "select_goal": {"stage": "framing", "stage_index": 0, "name": "Framing"},  # Map to framing
+        "framing": {"stage": "framing", "stage_index": 0, "name": "Framing"},
+        "reflection": {"stage": "reflection", "stage_index": 1, "name": "Reflection"},
+        "diagnosis": {"stage": "diagnosis", "stage_index": 2, "name": "Diagnosis"},
+        "adjustment": {"stage": "adjustment", "stage_index": 3, "name": "Adjustment"},
+        "closure": {"stage": "closure", "stage_index": 4, "name": "Closure"}
     }
 
-    phase_info = phase_map.get(phase, {"number": 0, "name": "Unknown"})
+    stage_info = phase_to_stage_map.get(phase, {"stage": "framing", "stage_index": 0, "name": "Framing"})
 
     return {
         "active": True,
-        "phase": phase,
-        "phase_name": phase_info["name"],
-        "phase_number": phase_info["number"],
-        "total_phases": 5,
+        "stage": stage_info["stage"],  # Frontend expects 'stage' not 'phase'
+        "stage_index": stage_info["stage_index"],  # Frontend expects 'stage_index' not 'phase_number'
+        "stage_name": stage_info["name"],
+        "total_stages": 5,
         "goal_title": state_ctx.get("goal_title", ""),
         "goal_id": state_ctx.get("goal_id"),
-        "session_id": state_ctx.get("session_id")
+        "session_id": state_ctx.get("session_id"),
+        # Keep backend fields for compatibility
+        "phase": phase,
+        "phase_number": stage_info["stage_index"]
     }
 
 
