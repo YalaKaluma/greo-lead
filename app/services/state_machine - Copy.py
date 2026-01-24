@@ -284,25 +284,19 @@ def save_state_transition(
         pending_payload: Data for pending action (optional)
         state_context: Additional context (optional)
     """
-    from datetime import timezone
     
     old_state = state.current_state
     
-    # Update all state fields
     state.current_state = new_state
     state.active_intents = intents if intents else None
     state.pending_action = pending_action
     state.pending_payload = pending_payload
-    state.state_context = state_context  # CRITICAL: Must be saved
-    state.last_transition_at = datetime.now(timezone.utc)  # FIXED: Use timezone-aware datetime
+    state.state_context = state_context
+    state.last_transition_at = datetime.now()
     
-    # Force commit and refresh
     db.commit()
-    db.refresh(state)
     
     print(f"🔄 State transition: {old_state} → {new_state} (reason: {reason})")
-    if state_context:
-        print(f"   💾 Saved state_context: {state_context.get('phase', 'N/A')}")
     
     # Log for debugging
     _log_transition(state.user_number, old_state, new_state, reason, intents)
