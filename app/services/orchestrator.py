@@ -874,7 +874,7 @@ Just the raw JSON object or array. Your response should start with {{ or [.
         messages=messages,
         temperature=0.3,
         max_tokens=1000,  # Increased from 500 to allow for more tasks
-        response_format={"type": "json_object"} if "summary" in prompt_path else None  # Force JSON for summary
+        response_format={"type": "json_object"}  # FIXED: Always force JSON for reliable parsing
     )
 
     content = (resp.choices[0].message.content or "").strip()
@@ -1064,7 +1064,7 @@ def handle_goal_review(
             state=States.GOAL_REVIEW,
             data={
                 "state_context": state_ctx,
-                "goal_review_status": _build_goal_review_status("framing", state_ctx)
+                "goal_review_status": _build_goal_review_status("reflection", state_ctx)  # FIXED: Report NEW stage
             }
         )
 
@@ -1088,7 +1088,7 @@ def handle_goal_review(
             state=States.GOAL_REVIEW,
             data={
                 "state_context": state_ctx,
-                "goal_review_status": _build_goal_review_status("reflection", state_ctx)
+                "goal_review_status": _build_goal_review_status("diagnosis", state_ctx)  # FIXED: Report NEW stage
             }
         )
 
@@ -1112,7 +1112,7 @@ def handle_goal_review(
             state=States.GOAL_REVIEW,
             data={
                 "state_context": state_ctx,
-                "goal_review_status": _build_goal_review_status("diagnosis", state_ctx)
+                "goal_review_status": _build_goal_review_status("adjustment", state_ctx)  # FIXED: Report NEW stage
             }
         )
 
@@ -1136,7 +1136,7 @@ def handle_goal_review(
             state=States.GOAL_REVIEW,
             data={
                 "state_context": state_ctx,
-                "goal_review_status": _build_goal_review_status("adjustment", state_ctx)
+                "goal_review_status": _build_goal_review_status("closure", state_ctx)  # FIXED: Report NEW stage
             }
         )
 
