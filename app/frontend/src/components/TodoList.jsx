@@ -5,7 +5,6 @@ import axios from 'axios';
 // Eastern Time timezone helper
 const getETDate = () => {
   const now = new Date();
-  // Convert to ET (UTC-5)
   const etDate = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
   return etDate;
 };
@@ -17,30 +16,26 @@ const getTodayET = () => {
 
 const isOverdueET = (dateString) => {
   if (!dateString) return false;
-  // Parse date string as YYYY-MM-DD and compare directly (no timezone conversion)
-  const taskDateStr = dateString.split('T')[0]; // Get just the date part
+  const taskDateStr = dateString.split('T')[0];
   const todayStr = getTodayET();
   return taskDateStr < todayStr;
 };
 
 const isTodayET = (dateString) => {
   if (!dateString) return false;
-  // Compare date strings directly (no timezone conversion)
-  const taskDateStr = dateString.split('T')[0]; // Get just the date part
+  const taskDateStr = dateString.split('T')[0];
   const todayStr = getTodayET();
   return taskDateStr === todayStr;
 };
 
-// Helper function to get next Monday
 const getNextMonday = () => {
-  const date = getETDate();  // Use ET instead of new Date()
+  const date = getETDate();
   const day = date.getDay();
-  const daysUntilMonday = day === 0 ? 1 : 8 - day; // If Sunday, 1 day. Otherwise, days until next Monday
+  const daysUntilMonday = day === 0 ? 1 : 8 - day;
   date.setDate(date.getDate() + daysUntilMonday);
   return date.toISOString().split('T')[0];
 };
 
-// Helper function to sort goals hierarchically
 const getSortedGoals = (goals) => {
   const longTerm = goals.filter(g => g.time_horizon === 'long');
   const mediumTerm = goals.filter(g => g.time_horizon === 'medium');
@@ -72,7 +67,6 @@ const getSortedGoals = (goals) => {
   return result;
 };
 
-// Helper function to get goal indentation
 const getGoalIndentation = (timeHorizon) => {
   const h = timeHorizon?.toLowerCase();
   if (h === 'long') return '';
@@ -105,6 +99,14 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [selectionMode, setSelectionMode] = useState(false);
   const [showBulkActionModal, setShowBulkActionModal] = useState(false);
 
+  // Priority Review state
+  const [priorityMode, setPriorityMode] = useState(false);
+  const [priorityLoading, setPriorityLoading] = useState(false);
+  const [priorityRecommendation, setPriorityRecommendation] = useState(null);
+  const [priorityDecisions, setPriorityDecisions] = useState({});
+  const [showReasonModal, setShowReasonModal] = useState(null);
+  const [applyingPriority, setApplyingPriority] = useState(false);
+
   useEffect(() => {
     return () => {
       setFilterType('due_today');
@@ -113,24 +115,21 @@ export default function TodoList({ apiUrl, userNumber }) {
       setSelectedGoal('');
       setSelectedTasks([]);
       setSelectionMode(false);
+      setPriorityMode(false);
     };
   }, []);
 
-  // Read goal filter from URL parameter on mount AND when URL changes
   useEffect(() => {
     const readUrlParams = () => {
       const params = new URLSearchParams(window.location.search);
       const goalParam = params.get('goal');
       if (goalParam) {
         setSelectedGoal(goalParam);
-        setFiltersCollapsed(false); // Expand filters to show the active goal filter
+        setFiltersCollapsed(false);
       }
     };
 
-    // Read on mount
     readUrlParams();
-
-    // Listen for URL changes (custom event dispatched by MyGoals)
     window.addEventListener('urlchange', readUrlParams);
 
     return () => {
@@ -187,20 +186,15 @@ export default function TodoList({ apiUrl, userNumber }) {
     try {
       const params = {
         user_number: userNumber,
-        // If a goal is selected, show ALL tasks for that goal, not just due today
         filter_type: selectedGoal ? 'all' : filterType
       };
       if (selectedProject) params.project = selectedProject;
       if (selectedDelegate) params.delegated_to = selectedDelegate;
-      if (selectedGoal) params.goal_id = parseInt(selectedGoal);  // ← Send goal_id to backend
+      if (selectedGoal) params.goal_id = parseInt(selectedGoal);
 
       const response = await axios.get(`${apiUrl}/api/tasks/`, { params });
       if (response.data && Array.isArray(response.data)) {
-        // Filter out completed tasks
         let activeTasks = response.data.filter(t => t.status !== 'completed');
-        
-        // No need to filter by goal here anymore - backend does it
-        
         setTasks(activeTasks);
       }
     } catch (err) {
@@ -217,385 +211,499 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const getSortedTasks = () => {
-    // If manual drag-and-drop order exists, use it
+    // In priority mode, use LLM scoring
+    if (priorityMode && priorityRecommendation) {
+      const scoredTasks = priorityRecommendation.all_scored_tasks || [];
+      
+      // Separate accepted (top 10) from rest
+      const acceptedIds = Object.entries(priorityDecisions)
+        .filter(([_, decision]) => decision === 'accept')
+        .map(([taskId]) => parseInt(taskId));
+      
+      const top10 = scoredTasks.filter(st => acceptedIds.includes(st.task_id));
+      const rest = scoredTasks.filter(st => !acceptedIds.includes(st.task_id));
+      
+      // Map back to full task objects
+      const top10Tasks = top10.map(st => tasks.find(t => t.id === st.task_id)).filter(Boolean);
+      const restTasks = rest.map(st => tasks.find(t => t.id === st.task_id)).filter(Boolean);
+      
+      return [...top10Tasks, ...restTasks];
+    }
+
+    // Normal mode: use existing sort logic
     if (sortOrder.length > 0) {
-      return [...tasks].sort((a, b) => {
-        const indexA = sortOrder.indexOf(a.id);
-        const indexB = sortOrder.indexOf(b.id);
+      const orderMap = new Map(sortOrder.map((id, index) => [id, index]));
+      const sorted = [...tasks].sort((a, b) => {
+        const orderA = orderMap.get(a.id);
+        const orderB = orderMap.get(b.id);
         
-        if (indexA !== -1 && indexB !== -1) {
-          return indexA - indexB;
+        if (orderA !== undefined && orderB !== undefined) {
+          return orderA - orderB;
         }
-        if (indexA !== -1) return -1;
-        if (indexB !== -1) return 1;
+        if (orderA !== undefined) return -1;
+        if (orderB !== undefined) return 1;
+        
         return 0;
       });
+      return sorted;
     }
+
+    const priorityOrder = { high: 0, medium: 1, low: 2 };
     
-    // Default sorting: Top 10 first, then by priority
     return [...tasks].sort((a, b) => {
-      // 1. Top 10 tasks always come first
-      if (a.in_top10 && !b.in_top10) return -1;
-      if (!a.in_top10 && b.in_top10) return 1;
-      
-      // 2. Within Top 10, sort by position
-      if (a.in_top10 && b.in_top10) {
-        const posA = a.top10_position ?? 999;
-        const posB = b.top10_position ?? 999;
-        return posA - posB;
-      }
-      
-      // 3. For non-Top 10 tasks, sort by priority
-      const priorityOrder = { 'high': 0, 'medium': 1, 'low': 2 };
       const aPriority = priorityOrder[a.priority?.toLowerCase()] ?? 3;
       const bPriority = priorityOrder[b.priority?.toLowerCase()] ?? 3;
-      return aPriority - bPriority;
+      
+      if (aPriority !== bPriority) {
+        return aPriority - bPriority;
+      }
+      
+      if (a.due_date && b.due_date) {
+        return new Date(a.due_date) - new Date(b.due_date);
+      }
+      if (a.due_date) return -1;
+      if (b.due_date) return 1;
+      
+      return 0;
     });
   };
 
   const handleDragEnd = (result) => {
-    if (!result.destination) return;
-
-    const items = Array.from(getSortedTasks());
+    if (!result.destination || priorityMode) return;
+    
+    const items = getSortedTasks();
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
-
-    const newOrder = items.map(task => task.id);
+    
+    const newOrder = items.map(item => item.id);
     saveSortOrder(newOrder);
   };
 
-  const toggleTaskComplete = async (taskId) => {
+  const toggleComplete = async (taskId) => {
     setCompletingTasks(prev => [...prev, taskId]);
     
     try {
-      await axios.patch(
-        `${apiUrl}/api/tasks/${taskId}/toggle`,
-        {},
-        { params: { user_number: userNumber } }
-      );
+      await axios.patch(`${apiUrl}/api/tasks/${taskId}/toggle`, {}, {
+        params: { user_number: userNumber }
+      });
       
       setTimeout(() => {
-        setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
+        setTasks(prev => prev.filter(t => t.id !== taskId));
         setCompletingTasks(prev => prev.filter(id => id !== taskId));
-      }, 1500);
+      }, 300);
+      
     } catch (err) {
       console.error('Error toggling task:', err);
       setCompletingTasks(prev => prev.filter(id => id !== taskId));
-      alert('Failed to update task');
     }
   };
 
   const deleteTask = async (taskId) => {
-    if (!confirm('Delete this task?')) return;
+    if (!confirm('Are you sure you want to delete this task?')) return;
     
     try {
       await axios.delete(`${apiUrl}/api/tasks/${taskId}`, {
         params: { user_number: userNumber }
       });
-      setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
-      setSortOrder(sortOrder.filter(id => id !== taskId));
+      setTasks(prev => prev.filter(t => t.id !== taskId));
+      setSortOrder(prev => prev.filter(id => id !== taskId));
     } catch (err) {
       console.error('Error deleting task:', err);
       alert('Failed to delete task');
     }
   };
 
-  const updateTask = async (taskId, updates) => {
+  const saveTask = async (taskData) => {
     try {
-      await axios.put(
-        `${apiUrl}/api/tasks/${taskId}`,
-        updates,
-        { params: { user_number: userNumber } }
-      );
-      await fetchTasks();
+      if (editingTask) {
+        await axios.put(`${apiUrl}/api/tasks/${editingTask.id}`, taskData, {
+          params: { user_number: userNumber }
+        });
+      } else {
+        await axios.post(`${apiUrl}/api/tasks/`, {
+          ...taskData,
+          user_number: userNumber
+        });
+      }
+      
       setShowTaskModal(false);
       setEditingTask(null);
+      fetchTasks();
+      fetchFilters();
+      
     } catch (err) {
-      console.error('Error updating task:', err);
-      alert('Failed to update task');
+      console.error('Error saving task:', err);
+      alert('Failed to save task');
     }
   };
 
-  const addTask = async (taskData) => {
-    try {
-      await axios.post(
-        `${apiUrl}/api/tasks/`,
-        taskData,
-        { params: { user_number: userNumber } }
-      );
-      await fetchTasks();
-      setShowTaskModal(false);
-    } catch (err) {
-      console.error('Error adding task:', err);
-      alert('Failed to add task');
-    }
-  };
-
-  const clearFilters = () => {
-    setFilterType('due_today');
-    setSelectedProject('');
-    setSelectedDelegate('');
-    setSelectedGoal('');
-  };
-
-  const resetSortOrder = () => {
-    localStorage.removeItem('taskSortOrder');
-    setSortOrder([]);
-  };
-
-  const setOverdueToToday = async () => {
-    const overdueTasks = tasks.filter(t => isOverdueET(t.due_date));
-    if (overdueTasks.length === 0) {
-      alert('No overdue tasks found');
-      return;
-    }
-
-    if (!confirm(`Set ${overdueTasks.length} overdue task(s) to today?`)) return;
-
-    const today = getTodayET();
-    try {
-      await Promise.all(
-        overdueTasks.map(task =>
-          axios.put(
-            `${apiUrl}/api/tasks/${task.id}`,
-            { due_date: today },
-            { params: { user_number: userNumber } }
-          )
-        )
-      );
-      await fetchTasks();
-    } catch (err) {
-      console.error('Error updating overdue tasks:', err);
-      alert('Failed to update some tasks');
-    }
-  };
-
-  // Multi-select functions
   const toggleTaskSelection = (taskId) => {
-    setSelectedTasks(prev => {
-      if (prev.includes(taskId)) {
-        return prev.filter(id => id !== taskId);
-      } else {
-        return [...prev, taskId];
-      }
-    });
+    setSelectedTasks(prev => 
+      prev.includes(taskId) 
+        ? prev.filter(id => id !== taskId)
+        : [...prev, taskId]
+    );
   };
 
-  const enterSelectionMode = (taskId) => {
-    setSelectionMode(true);
-    setSelectedTasks([taskId]);
-  };
-
-  const exitSelectionMode = () => {
-    setSelectionMode(false);
-    setSelectedTasks([]);
+  const selectAllTasks = () => {
+    if (selectedTasks.length === tasks.length) {
+      setSelectedTasks([]);
+    } else {
+      setSelectedTasks(tasks.map(t => t.id));
+    }
   };
 
   const applyBulkAction = async (updates) => {
     try {
       await Promise.all(
         selectedTasks.map(taskId =>
-          axios.put(
-            `${apiUrl}/api/tasks/${taskId}`,
-            updates,
-            { params: { user_number: userNumber } }
-          )
+          axios.put(`${apiUrl}/api/tasks/${taskId}`, updates, {
+            params: { user_number: userNumber }
+          })
         )
       );
-      await fetchTasks();
-      exitSelectionMode();
+      
       setShowBulkActionModal(false);
+      setSelectedTasks([]);
+      setSelectionMode(false);
+      fetchTasks();
+      
     } catch (err) {
       console.error('Error applying bulk action:', err);
-      alert('Failed to update some tasks');
+      alert('Failed to update tasks');
     }
   };
 
-  const hasActiveFilters = selectedProject || selectedDelegate || selectedGoal || filterType !== 'due_today';
-  const sortedTasks = getSortedTasks();
+  // Priority Review Functions
+  const runPrioritization = async () => {
+    setPriorityLoading(true);
+    setError(null);
+    
+    try {
+      const res = await axios.post(`${apiUrl}/api/priority/run`, {
+        user_number: userNumber
+      });
+      
+      setPriorityRecommendation(res.data);
+      setPriorityDecisions({});
+      setPriorityMode(true);
+      
+    } catch (err) {
+      console.error('Prioritization failed:', err);
+      setError(err.response?.data?.detail || 'Failed to generate recommendations');
+    } finally {
+      setPriorityLoading(false);
+    }
+  };
+
+  const handlePriorityDecision = async (taskId, action, reason = null) => {
+    if (!priorityRecommendation) return;
+    
+    try {
+      await axios.post(`${apiUrl}/api/priority/decision`, {
+        recommendation_id: priorityRecommendation.recommendation_id,
+        task_id: taskId,
+        user_number: userNumber,
+        user_action: action,
+        user_reason: reason
+      });
+      
+      setPriorityDecisions(prev => ({
+        ...prev,
+        [taskId]: action
+      }));
+      
+      setShowReasonModal(null);
+      
+    } catch (err) {
+      console.error('Failed to record decision:', err);
+      alert('Failed to record decision. Please try again.');
+    }
+  };
+
+  const applyPriorityChanges = async () => {
+    const acceptedTasks = Object.entries(priorityDecisions)
+      .filter(([_, decision]) => decision === 'accept')
+      .map(([taskId]) => parseInt(taskId));
+    
+    if (acceptedTasks.length === 0) {
+      alert('Please accept at least one task for your Top 10');
+      return;
+    }
+    
+    setApplyingPriority(true);
+    
+    try {
+      const res = await axios.post(`${apiUrl}/api/priority/apply`, {
+        user_number: userNumber,
+        approved_adds: acceptedTasks,
+        approved_removes: []
+      });
+      
+      alert(`Success! Updated Top 10 with ${res.data.added} tasks.`);
+      
+      // Exit priority mode
+      setPriorityMode(false);
+      setPriorityRecommendation(null);
+      setPriorityDecisions({});
+      fetchTasks();
+      
+    } catch (err) {
+      console.error('Failed to apply changes:', err);
+      alert(`Failed to update Top 10: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setApplyingPriority(false);
+    }
+  };
+
+  const cancelPriorityMode = () => {
+    setPriorityMode(false);
+    setPriorityRecommendation(null);
+    setPriorityDecisions({});
+  };
+
+  const getTaskScore = (taskId) => {
+    if (!priorityRecommendation) return null;
+    const scoredTask = priorityRecommendation.all_scored_tasks?.find(st => st.task_id === taskId);
+    return scoredTask;
+  };
+
+  // Filter rendering
+  const renderFilters = () => (
+    <div className="bg-white border-b border-gray-200">
+      <div className="px-6 py-4">
+        <button
+          onClick={() => setFiltersCollapsed(!filtersCollapsed)}
+          className="flex items-center justify-between w-full text-left"
+        >
+          <span className="text-sm font-medium text-gray-700">Filters</span>
+          <span className="text-gray-400">{filtersCollapsed ? '▼' : '▲'}</span>
+        </button>
+        
+        {!filtersCollapsed && (
+          <div className="mt-4 space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">View</label>
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                disabled={priorityMode}
+              >
+                <option value="all">All Tasks</option>
+                <option value="due_today">Due Today</option>
+                <option value="next_7_days">Next 7 Days</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Project</label>
+              <select
+                value={selectedProject}
+                onChange={(e) => setSelectedProject(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                disabled={priorityMode}
+              >
+                <option value="">All Projects</option>
+                {projects.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Delegated To</label>
+              <select
+                value={selectedDelegate}
+                onChange={(e) => setSelectedDelegate(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                disabled={priorityMode}
+              >
+                <option value="">All Delegates</option>
+                {delegates.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Goal</label>
+              <select
+                value={selectedGoal}
+                onChange={(e) => setSelectedGoal(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                disabled={priorityMode}
+              >
+                <option value="">All Goals</option>
+                {getSortedGoals(goals).map(g => {
+                  const displayText = g.title || g.goal_text;
+                  const truncatedText = displayText.length > 50 ? displayText.substring(0, 50) + '...' : displayText;
+                  const indentation = getGoalIndentation(g.time_horizon);
+                  return <option key={g.id} value={g.id}>{indentation}{truncatedText}</option>;
+                })}
+              </select>
+            </div>
+
+            {(selectedProject || selectedDelegate || selectedGoal) && (
+              <button
+                onClick={() => {
+                  setSelectedProject('');
+                  setSelectedDelegate('');
+                  setSelectedGoal('');
+                }}
+                className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                disabled={priorityMode}
+              >
+                Clear all filters
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   if (loading) {
     return (
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="flex items-center justify-center h-64">
+        <div className="text-gray-500">Loading tasks...</div>
       </div>
     );
   }
 
+  const sortedTasks = getSortedTasks();
+
   return (
-    <div className="h-full overflow-auto">
-      <div className="max-w-7xl mx-auto p-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-800 hidden lg:block">
-              Your To-Do List
-            </h1>
-            <p className="text-slate-600 mt-1">
-              {selectionMode ? (
-                <span className="text-blue-600 font-medium">
-                  {selectedTasks.length} task(s) selected
-                </span>
-              ) : (
-                <>
-                  {filterType === 'due_today' && 'Tasks due today'}
-                  {filterType === 'next_7_days' && 'Tasks due in the next 7 days'}
-                  {filterType === 'all' && 'All active tasks'}
-                  {selectedProject && ` • Project: ${selectedProject}`}
-                  {selectedDelegate && ` • Delegated to: ${selectedDelegate}`}
-                  {selectedGoal && ` • Goal: ${goals.find(g => g.id === parseInt(selectedGoal))?.title || 'Selected'}`}
-                </>
-              )}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            {sortOrder.length > 0 && !selectionMode && (
+    <div className="h-full flex flex-col bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-gray-800">Todo List</h1>
+        
+        <div className="flex gap-2">
+          {!priorityMode && !selectionMode && (
+            <>
               <button
-                onClick={resetSortOrder}
-                className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-lg font-medium transition-colors text-sm"
-                title="Reset to priority sorting"
+                onClick={runPrioritization}
+                disabled={priorityLoading || tasks.length === 0}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                ↻ Reset Sort
+                {priorityLoading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <span>⚡</span>
+                    Prioritize
+                  </>
+                )}
               </button>
-            )}
-            {!selectionMode && (
-              <>
-                <button
-                  onClick={setOverdueToToday}
-                  className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-lg font-medium transition-colors text-sm hidden sm:inline-block"
-                  title="Set all overdue tasks to today"
-                >
-                   Overdue → Today
-                </button>
-                <button
-                  onClick={setOverdueToToday}
-                  className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-lg font-medium transition-colors text-sm sm:hidden"
-                  title="Set all overdue tasks to today"
-                >
-                  📅
-                </button>
-                <button
-                  onClick={() => {
-                    setEditingTask(null);
-                    setShowTaskModal(true);
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-                >
-                  <span className="hidden sm:inline">+ Add Task</span>
-                  <span className="sm:hidden">+</span>
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Filters Section */}
-        {!selectionMode && (
-          <div className="bg-white border border-gray-200 rounded-lg mb-6">
+              
+              <button
+                onClick={() => setSelectionMode(true)}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Select Multiple
+              </button>
+            </>
+          )}
+          
+          {priorityMode && (
+            <>
+              <button
+                onClick={cancelPriorityMode}
+                className="px-4 py-2 border border-gray-300 hover:bg-gray-50 rounded-lg font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={applyPriorityChanges}
+                disabled={applyingPriority || Object.keys(priorityDecisions).length === 0}
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {applyingPriority ? 'Applying...' : `Apply ${Object.values(priorityDecisions).filter(d => d === 'accept').length} Changes`}
+              </button>
+            </>
+          )}
+          
+          {selectionMode && (
+            <>
+              <button
+                onClick={selectAllTasks}
+                className="px-4 py-2 border border-gray-300 hover:bg-gray-50 rounded-lg font-medium transition-colors"
+              >
+                {selectedTasks.length === tasks.length ? 'Deselect All' : 'Select All'}
+              </button>
+              <button
+                onClick={() => setShowBulkActionModal(true)}
+                disabled={selectedTasks.length === 0}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                Edit ({selectedTasks.length})
+              </button>
+              <button
+                onClick={() => {
+                  setSelectionMode(false);
+                  setSelectedTasks([]);
+                }}
+                className="px-4 py-2 border border-gray-300 hover:bg-gray-50 rounded-lg font-medium transition-colors"
+              >
+                Cancel
+              </button>
+            </>
+          )}
+          
+          {!priorityMode && !selectionMode && (
             <button
-              onClick={() => setFiltersCollapsed(!filtersCollapsed)}
-              className="w-full px-4 py-3 flex items-center justify-between text-slate-700 hover:bg-slate-50 transition-colors rounded-lg"
+              onClick={() => {
+                setEditingTask(null);
+                setShowTaskModal(true);
+              }}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
             >
-              <span className="font-semibold">Filters</span>
-              <span className="text-xl">{filtersCollapsed ? '▼' : '▲'}</span>
+              + Add Task
             </button>
-            
-            {!filtersCollapsed && (
-              <div className="border-t border-gray-200 p-4">
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex-shrink-0">
-                    <label className="text-xs font-medium text-slate-600 mb-1 block">Due Date</label>
-                    <select
-                      value={filterType}
-                      onChange={(e) => setFilterType(e.target.value)}
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                    >
-                      <option value="due_today">Due Today</option>
-                      <option value="next_7_days">Next 7 Days</option>
-                      <option value="all">All Tasks</option>
-                    </select>
-                  </div>
+          )}
+        </div>
+      </div>
 
-                  {projects.length > 0 && (
-                    <div className="flex-shrink-0">
-                      <label className="text-xs font-medium text-slate-600 mb-1 block">Project</label>
-                      <select
-                        value={selectedProject}
-                        onChange={(e) => setSelectedProject(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                      >
-                        <option value="">All Projects</option>
-                        {projects.map(p => (
-                          <option key={p} value={p}>{p}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {delegates.length > 0 && (
-                    <div className="flex-shrink-0">
-                      <label className="text-xs font-medium text-slate-600 mb-1 block">Delegated To</label>
-                      <select
-                        value={selectedDelegate}
-                        onChange={(e) => setSelectedDelegate(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                      >
-                        <option value="">All Delegates</option>
-                        {delegates.map(d => (
-                          <option key={d} value={d}>{d}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {goals.length > 0 && (
-                    <div className="flex-shrink-0">
-                      <label className="text-xs font-medium text-slate-600 mb-1 block">Goal</label>
-                      <select
-                        value={selectedGoal}
-                        onChange={(e) => setSelectedGoal(e.target.value)}
-                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                      >
-                        <option value="">All Goals</option>
-                        {getSortedGoals(goals).map(g => {
-                          const displayText = g.title || g.goal_text;
-                          const truncatedText = displayText.length > 30 ? displayText.substring(0, 30) + '...' : displayText;
-                          const indentation = getGoalIndentation(g.time_horizon);
-                          return <option key={g.id} value={g.id}>{indentation}{truncatedText}</option>;
-                        })}
-                      </select>
-                    </div>
-                  )}
-
-                  {hasActiveFilters && (
-                    <div className="flex-shrink-0 mt-auto">
-                      <button
-                        onClick={clearFilters}
-                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
-                      >
-                        ✕ Clear Filters
-                      </button>
-                    </div>
-                  )}
-                </div>
+      {/* Priority mode info banner */}
+      {priorityMode && (
+        <div className="bg-purple-50 border-b border-purple-200 px-6 py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-purple-800">
+                Priority Review Mode - Select your Top 10 tasks
+              </p>
+              <p className="text-xs text-purple-600 mt-1">
+                Click ✓ Accept or ✗ Reject on each task. Accepted tasks will form your Top 10 focus list.
+              </p>
+            </div>
+            {Object.keys(priorityDecisions).length === 0 && (
+              <div className="text-xs text-purple-600 bg-purple-100 px-3 py-1 rounded">
+                💡 Start by clicking buttons on the right of each task
               </div>
             )}
           </div>
-        )}
+        </div>
+      )}
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4">
-            {error}
-          </div>
-        )}
+      {error && (
+        <div className="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-red-800 text-sm">{error}</p>
+        </div>
+      )}
 
-        {/* Tasks List */}
+      {/* Filters */}
+      {renderFilters()}
+
+      {/* Task List */}
+      <div className="flex-1 overflow-y-auto px-6 py-4">
         {sortedTasks.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-slate-600 text-lg">No tasks found</p>
-            <p className="text-slate-500 text-sm mt-2">
-              {hasActiveFilters ? 'Try adjusting your filters' : 'Add a new task to get started!'}
-            </p>
+            <div className="text-6xl mb-4">✅</div>
+            <p className="text-gray-500 text-lg">No tasks to show</p>
+            <p className="text-gray-400 text-sm mt-2">Add a task to get started</p>
           </div>
         ) : (
           <DragDropContext onDragEnd={handleDragEnd}>
@@ -604,26 +712,189 @@ export default function TodoList({ apiUrl, userNumber }) {
                 <div
                   {...provided.droppableProps}
                   ref={provided.innerRef}
-                  className="space-y-1"
+                  className="space-y-2"
                 >
-                  {sortedTasks.map((task, index) => (
-                    <TaskItem
-                      key={task.id}
-                      task={task}
-                      index={index}
-                      isCompleting={completingTasks.includes(task.id)}
-                      isSelected={selectedTasks.includes(task.id)}
-                      selectionMode={selectionMode}
-                      onToggle={() => toggleTaskComplete(task.id)}
-                      onStartEdit={() => {
-                        setEditingTask(task);
-                        setShowTaskModal(true);
-                      }}
-                      onLongPress={() => enterSelectionMode(task.id)}
-                      onSelectToggle={() => toggleTaskSelection(task.id)}
-                      goals={goals}
-                    />
-                  ))}
+                  {sortedTasks.map((task, index) => {
+                    const isCompleting = completingTasks.includes(task.id);
+                    const isSelected = selectedTasks.includes(task.id);
+                    const scoreData = getTaskScore(task.id);
+                    const decision = priorityDecisions[task.id];
+
+                    return (
+                      <Draggable
+                        key={task.id}
+                        draggableId={String(task.id)}
+                        index={index}
+                        isDragDisabled={selectionMode || priorityMode}
+                      >
+                        {(provided, snapshot) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            {...provided.dragHandleProps}
+                            className={`
+                              bg-white border rounded-lg transition-all
+                              ${snapshot.isDragging ? 'shadow-lg' : 'shadow-sm'}
+                              ${isCompleting ? 'opacity-50 scale-95' : ''}
+                              ${isSelected ? 'ring-2 ring-blue-500' : ''}
+                              ${decision === 'accept' ? 'border-green-300 bg-green-50' : ''}
+                              ${decision === 'reject' ? 'border-red-300 bg-red-50' : ''}
+                              ${!decision && priorityMode ? 'hover:border-gray-300' : ''}
+                            `}
+                          >
+                            <div className="p-4">
+                              <div className="flex items-start gap-3">
+                                {/* Checkbox/Selection */}
+                                {selectionMode ? (
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleTaskSelection(task.id)}
+                                    className="mt-1 h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                ) : (
+                                  <button
+                                    onClick={() => toggleComplete(task.id)}
+                                    className="mt-1 flex-shrink-0 w-5 h-5 rounded border-2 border-gray-300 hover:border-blue-500 focus:outline-none transition-colors"
+                                    disabled={priorityMode}
+                                  >
+                                    {isCompleting && (
+                                      <div className="w-full h-full flex items-center justify-center">
+                                        <div className="w-3 h-3 bg-blue-500 rounded-sm"></div>
+                                      </div>
+                                    )}
+                                  </button>
+                                )}
+
+                                {/* Task Content */}
+                                <div className="flex-1 min-w-0">
+                                  {/* Title and Priority */}
+                                  <div className="flex items-start gap-2 mb-1">
+                                    <h3 className="font-medium text-gray-800 flex-1">
+                                      {task.title}
+                                    </h3>
+                                    {task.priority && (
+                                      <span className="text-xs flex-shrink-0">
+                                        {task.priority.toLowerCase() === 'high' && '🔴'}
+                                        {task.priority.toLowerCase() === 'medium' && '🟠'}
+                                        {task.priority.toLowerCase() === 'low' && '🟢'}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Notes */}
+                                  {task.notes && (
+                                    <p className="text-xs text-gray-500 mb-2 italic">
+                                      {task.notes}
+                                    </p>
+                                  )}
+
+                                  {/* Priority Score and Reasoning (in priority mode) */}
+                                  {priorityMode && scoreData && (
+                                    <div className="mb-2 p-2 bg-gray-50 rounded border border-gray-200">
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-xs font-medium text-blue-600">
+                                          Score: {(scoreData.score * 100).toFixed(0)}%
+                                        </span>
+                                        <span className={`text-xs px-2 py-0.5 rounded ${
+                                          scoreData.confidence === 'high' ? 'bg-green-100 text-green-800' :
+                                          scoreData.confidence === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                          'bg-gray-100 text-gray-800'
+                                        }`}>
+                                          {scoreData.confidence} confidence
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-gray-700">
+                                        {scoreData.reason}
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {/* Metadata */}
+                                  <div className="flex flex-wrap gap-2 text-xs text-gray-500">
+                                    {task.due_date && (
+                                      <span className={`
+                                        ${isOverdueET(task.due_date) ? 'text-red-600 font-medium' : ''}
+                                        ${isTodayET(task.due_date) ? 'text-blue-600 font-medium' : ''}
+                                      `}>
+                                        📅 {new Date(task.due_date).toLocaleDateString('en-US', {
+                                          month: 'short',
+                                          day: 'numeric'
+                                        })}
+                                      </span>
+                                    )}
+                                    {task.project && <span>📁 {task.project}</span>}
+                                    {task.delegated_to && <span>👤 {task.delegated_to}</span>}
+                                    {task.goal_id && (
+                                      <span>
+                                        🎯 {goals.find(g => g.id === task.goal_id)?.title || 'Goal'}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Decision indicator */}
+                                  {decision && (
+                                    <div className={`mt-2 text-xs font-semibold ${
+                                      decision === 'accept' ? 'text-green-700' : 'text-red-700'
+                                    }`}>
+                                      {decision === 'accept' ? '✓ Accepted for Top 10' : '✗ Rejected'}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="flex-shrink-0">
+                                  {priorityMode && !decision ? (
+                                    <div className="flex gap-1">
+                                      <button
+                                        onClick={() => handlePriorityDecision(task.id, 'accept')}
+                                        className="px-3 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded font-medium transition-colors"
+                                        title="Accept for Top 10"
+                                      >
+                                        ✓
+                                      </button>
+                                      <button
+                                        onClick={() => setShowReasonModal(scoreData)}
+                                        className="px-3 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded font-medium transition-colors"
+                                        title="Reject"
+                                      >
+                                        ✗
+                                      </button>
+                                      <button
+                                        onClick={() => alert(`Alfred's Reasoning:\n\n${scoreData.reason}\n\n${scoreData.risk_if_ignored ? 'Risk if ignored: ' + scoreData.risk_if_ignored : ''}`)}
+                                        className="px-3 py-1 text-xs border border-gray-300 hover:bg-gray-50 rounded font-medium transition-colors"
+                                        title="Why?"
+                                      >
+                                        💡
+                                      </button>
+                                    </div>
+                                  ) : !priorityMode && !selectionMode ? (
+                                    <div className="flex gap-1">
+                                      <button
+                                        onClick={() => {
+                                          setEditingTask(task);
+                                          setShowTaskModal(true);
+                                        }}
+                                        className="px-2 py-1 text-gray-600 hover:bg-gray-100 rounded text-sm"
+                                      >
+                                        ✏️
+                                      </button>
+                                      <button
+                                        onClick={() => deleteTask(task.id)}
+                                        className="px-2 py-1 text-gray-600 hover:bg-red-50 rounded text-sm"
+                                      >
+                                        🗑️
+                                      </button>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </Draggable>
+                    );
+                  })}
                   {provided.placeholder}
                 </div>
               )}
@@ -632,47 +903,18 @@ export default function TodoList({ apiUrl, userNumber }) {
         )}
       </div>
 
-      {/* Floating Action Bar */}
-      {selectionMode && selectedTasks.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-blue-500 shadow-2xl z-50">
-          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <span className="text-slate-700 font-medium">
-                {selectedTasks.length} selected
-              </span>
-              <button
-                onClick={exitSelectionMode}
-                className="text-slate-600 hover:text-slate-800 text-sm"
-              >
-                Cancel
-              </button>
-            </div>
-            <button
-              onClick={() => setShowBulkActionModal(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
-            >
-              Edit Selected
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Task Modal */}
       {showTaskModal && (
         <TaskModal
           task={editingTask}
-          onSave={editingTask ? (updates) => updateTask(editingTask.id, updates) : addTask}
-          onCancel={() => {
+          goals={goals}
+          projects={projects}
+          delegates={delegates}
+          onSave={saveTask}
+          onClose={() => {
             setShowTaskModal(false);
             setEditingTask(null);
           }}
-          onDelete={editingTask ? () => {
-            deleteTask(editingTask.id);
-            setShowTaskModal(false);
-            setEditingTask(null);
-          } : null}
-          delegates={delegates}
-          goals={getSortedGoals(goals)}
         />
       )}
 
@@ -680,390 +922,142 @@ export default function TodoList({ apiUrl, userNumber }) {
       {showBulkActionModal && (
         <BulkActionModal
           selectedCount={selectedTasks.length}
-          onApply={applyBulkAction}
-          onCancel={() => setShowBulkActionModal(false)}
           delegates={delegates}
           goals={getSortedGoals(goals)}
+          onApply={applyBulkAction}
+          onCancel={() => setShowBulkActionModal(false)}
         />
       )}
-    </div>
-  );
-}
 
-// Helper Functions
-function getPriorityIcon(priority) {
-  const p = priority?.toLowerCase();
-  if (p === 'high') return '🔴';
-  if (p === 'medium') return '🟠';
-  if (p === 'low') return '🟢';
-  return '🟢';
-}
-
-function formatDueDate(dateString) {
-  if (!dateString) return '';
-  
-  // Parse date parts directly from string to avoid timezone issues
-  const taskDateStr = dateString.split('T')[0]; // YYYY-MM-DD
-  const todayStr = getTodayET(); // YYYY-MM-DD
-  
-  // Calculate difference in days using string parsing
-  const taskParts = taskDateStr.split('-').map(Number);
-  const todayParts = todayStr.split('-').map(Number);
-  
-  const taskDate = new Date(taskParts[0], taskParts[1] - 1, taskParts[2]);
-  const todayDate = new Date(todayParts[0], todayParts[1] - 1, todayParts[2]);
-  
-  const diffTime = taskDate - todayDate;
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  
-  if (diffDays < 0) return `Overdue ${Math.abs(diffDays)}d`;
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Tomorrow';
-  if (diffDays <= 7) return `In ${diffDays}d`;
-  
-  return taskDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-function getDueDateColor(dateString) {
-  if (!dateString) return 'bg-gray-100 text-gray-700';
-  
-  if (isOverdueET(dateString)) {
-    return 'bg-red-100 text-red-700 font-semibold';
-  }
-  if (isTodayET(dateString)) {
-    return 'bg-orange-100 text-orange-700 font-semibold';
-  }
-  
-  // Parse date parts directly from string to avoid timezone issues
-  const taskDateStr = dateString.split('T')[0];
-  const todayStr = getTodayET();
-  
-  const taskParts = taskDateStr.split('-').map(Number);
-  const todayParts = todayStr.split('-').map(Number);
-  
-  const taskDate = new Date(taskParts[0], taskParts[1] - 1, taskParts[2]);
-  const todayDate = new Date(todayParts[0], todayParts[1] - 1, todayParts[2]);
-  
-  const diffTime = taskDate - todayDate;
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  
-  if (diffDays <= 3) {
-    return 'bg-amber-100 text-amber-700';
-  }
-  
-  return 'bg-green-100 text-green-700';
-}
-
-// Task Item Component
-function TaskItem({
-  task,
-  index,
-  isCompleting,
-  isSelected,
-  selectionMode,
-  onToggle,
-  onStartEdit,
-  onLongPress,
-  onSelectToggle,
-  goals
-}) {
-  const [swipeDistance, setSwipeDistance] = useState(0);
-  const [touchStartX, setTouchStartX] = useState(0);
-  const [longPressTimer, setLongPressTimer] = useState(null);
-
-  const onTouchStart = (e) => {
-    setTouchStartX(e.touches[0].clientX);
-    
-    const timer = setTimeout(() => {
-      if (!selectionMode) {
-        onLongPress();
-        if (navigator.vibrate) {
-          navigator.vibrate(50);
-        }
-      }
-    }, 750);
-    setLongPressTimer(timer);
-  };
-
-  const onTouchMove = (e) => {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      setLongPressTimer(null);
-    }
-    
-    const currentX = e.touches[0].clientX;
-    const distance = Math.max(0, touchStartX - currentX);
-    setSwipeDistance(Math.min(distance, 100));
-  };
-
-  const onTouchEnd = () => {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      setLongPressTimer(null);
-    }
-    setSwipeDistance(0);
-  };
-
-  return (
-    <Draggable draggableId={String(task.id)} index={index} isDragDisabled={selectionMode}>
-      {(provided, snapshot) => (
-        <TaskCard
-          task={task}
-          index={index}
-          provided={provided}
-          snapshot={snapshot}
-          isCompleting={isCompleting}
-          isSelected={isSelected}
-          selectionMode={selectionMode}
-          swipeDistance={swipeDistance}
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-          onToggle={onToggle}
-          onStartEdit={onStartEdit}
-          onLongPress={onLongPress}
-          onSelectToggle={onSelectToggle}
-          goals={goals}
+      {/* Reason Modal for Rejecting */}
+      {showReasonModal && (
+        <ReasonModal
+          task={showReasonModal}
+          onSubmit={(reason) => handlePriorityDecision(showReasonModal.task_id, 'reject', reason)}
+          onClose={() => setShowReasonModal(null)}
         />
       )}
-    </Draggable>
-  );
-}
-
-// Task Card Component
-function TaskCard({
-  task,
-  index,
-  provided,
-  snapshot,
-  isCompleting,
-  isSelected,
-  selectionMode,
-  swipeDistance,
-  onTouchStart,
-  onTouchMove,
-  onTouchEnd,
-  onToggle,
-  onStartEdit,
-  onLongPress,
-  onSelectToggle,
-  goals
-}) {
-  const goalLabel =
-    goals.find(g => g.id === task.goal_id)?.title ||
-    goals.find(g => g.id === task.goal_id)?.goal_text ||
-    'Goal';
-
-  const handleClick = (e) => {
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!selectionMode) {
-        onLongPress();
-      } else {
-        onSelectToggle();
-      }
-      return;
-    }
-
-    if (selectionMode) {
-      e.preventDefault();
-      e.stopPropagation();
-      onSelectToggle();
-      return;
-    }
-
-    onStartEdit();
-  };
-
-  return (
-    <div
-      ref={provided.innerRef}
-      {...provided.draggableProps}
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
-      style={{
-        ...provided.draggableProps.style,
-        transform: `${provided.draggableProps.style?.transform || ''} translateX(-${swipeDistance}px)`,
-      }}
-      className={`
-        bg-white border-2 rounded px-3 py-2
-        hover:border-gray-300 transition-all cursor-pointer
-        ${snapshot.isDragging ? 'opacity-50 scale-98 shadow-lg' : ''}
-        ${isCompleting ? 'opacity-60' : ''}
-        ${index >= 10 ? 'opacity-40' : ''}
-        ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}
-      `}
-      onClick={handleClick}
-    >
-      <div className={`flex items-start gap-2 ${isCompleting ? 'line-through' : ''}`}>
-        {isSelected && (
-          <div className="flex-shrink-0 mt-0.5">
-            <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
-              <span className="text-white text-xs">✓</span>
-            </div>
-          </div>
-        )}
-
-        {!selectionMode && (
-          <div
-            {...provided.dragHandleProps}
-            className="text-slate-300 cursor-grab active:cursor-grabbing mt-0.5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            ⋮⋮
-          </div>
-        )}
-
-        {!selectionMode && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggle();
-            }}
-            className="flex-shrink-0 text-2xl hover:scale-110 transition-transform"
-            title={`${task.priority} priority - Click to complete`}
-          >
-            {getPriorityIcon(task.priority)}
-          </button>
-        )}
-
-        <div className="flex-1 min-w-0">
-          <div className="font-medium text-slate-800 text-base break-words leading-tight">
-            {task.title}
-          </div>
-
-          <div className="flex items-center justify-between mt-1">
-            <div>
-              {task.due_date && (
-                <span
-                  className={`px-2 py-0.5 rounded text-xs font-medium ${getDueDateColor(
-                    task.due_date
-                  )}`}
-                >
-                  {formatDueDate(task.due_date)}
-                </span>
-              )}
-            </div>
-
-            {task.goal_id && (
-              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-medium">
-                🎯 {goalLabel}
-              </span>
-            )}
-          </div>
-
-          {task.notes && (
-            <p className="text-sm text-slate-600 leading-snug mt-1">
-              {task.notes}
-            </p>
-          )}
-
-          {task.delegated_to && (
-            <div className="mt-1">
-              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
-                👤 {task.delegated_to}
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
 
 // Task Modal Component
-function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
+function TaskModal({ task, goals, projects, delegates, onSave, onClose }) {
   const isEditing = !!task;
   
-  const [editData, setEditData] = useState({
+  const [formData, setFormData] = useState({
     title: task?.title || '',
-    delegated_to: task?.delegated_to || '',
-    due_date: task?.due_date || getTodayET(),
-    priority: task?.priority?.toLowerCase() || 'medium',
     notes: task?.notes || '',
-    goal_id: task?.goal_id || null
+    due_date: task?.due_date?.split('T')[0] || '',
+    priority: task?.priority?.toLowerCase() || 'medium',
+    project: task?.project || '',
+    delegated_to: task?.delegated_to || '',
+    goal_id: task?.goal_id || ''
   });
 
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  const setTomorrow = () => {
-    const tomorrow = getETDate();  // Use ET instead of new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    setEditData({ ...editData, due_date: tomorrow.toISOString().split('T')[0] });
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!formData.title.trim()) {
+      alert('Task title is required');
+      return;
+    }
+    
+    const submitData = { ...formData };
+    if (submitData.goal_id) {
+      submitData.goal_id = parseInt(submitData.goal_id);
+    } else {
+      delete submitData.goal_id;
+    }
+    
+    onSave(submitData);
+  };
+
+  const setToday = () => {
+    setFormData({ ...formData, due_date: getTodayET() });
     setShowDatePicker(false);
   };
 
-  const setNextWeek = () => {
-    setEditData({ ...editData, due_date: getNextMonday() });
+  const setTomorrow = () => {
+    const tomorrow = getETDate();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    setFormData({ ...formData, due_date: tomorrow.toISOString().split('T')[0] });
+    setShowDatePicker(false);
+  };
+
+  const setNextMonday = () => {
+    setFormData({ ...formData, due_date: getNextMonday() });
     setShowDatePicker(false);
   };
 
   const setNextMonth = () => {
-    const nextMonth = getETDate();  // Use ET instead of new Date()
+    const nextMonth = getETDate();
     nextMonth.setMonth(nextMonth.getMonth() + 1);
-    setEditData({ ...editData, due_date: nextMonth.toISOString().split('T')[0] });
+    setFormData({ ...formData, due_date: nextMonth.toISOString().split('T')[0] });
     setShowDatePicker(false);
-  };
-
-  const handleSave = () => {
-    if (!editData.title.trim()) {
-      alert('Please enter a task title');
-      return;
-    }
-    onSave(editData);
-  };
-
-  const handleDelete = () => {
-    if (confirm('Delete this task?')) {
-      onDelete();
-    }
   };
 
   return (
     <>
       <div 
         className="fixed inset-0 bg-black bg-opacity-50 z-40"
-        onClick={onCancel}
+        onClick={onClose}
       />
       
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto">
           <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
             <h2 className="text-xl font-semibold text-slate-800">
-              {isEditing ? 'Edit Task' : 'Add Task'}
+              {isEditing ? 'Edit Task' : 'New Task'}
             </h2>
             <button
-              onClick={onCancel}
+              onClick={onClose}
               className="text-slate-400 hover:text-slate-600 text-2xl leading-none"
             >
               ×
             </button>
           </div>
 
-          <div className="p-4 space-y-3">
+          <form onSubmit={handleSubmit} className="p-6 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Task Title</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Task Title *
+              </label>
               <input
                 type="text"
-                value={editData.title}
-                onChange={(e) => setEditData({ ...editData, title: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+                value={formData.title}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 placeholder="What needs to be done?"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 autoFocus
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Due Date</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Notes
+              </label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                placeholder="Additional context or details..."
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Due Date
+              </label>
               <div className="relative">
                 <div 
                   onClick={() => setShowDatePicker(!showDatePicker)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white cursor-pointer hover:border-blue-400 transition-colors flex items-center justify-between"
                 >
-                  <span className={editData.due_date ? 'text-slate-800' : 'text-slate-400'}>
-                    {editData.due_date ? new Date(editData.due_date).toLocaleDateString('en-US', { 
+                  <span className={formData.due_date ? 'text-slate-800' : 'text-slate-400'}>
+                    {formData.due_date ? new Date(formData.due_date).toLocaleDateString('en-US', { 
                       weekday: 'short', 
                       month: 'short', 
                       day: 'numeric',
@@ -1080,18 +1074,28 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
                   >
                     <div className="p-2 space-y-1">
                       <button
+                        type="button"
+                        onClick={setToday}
+                        className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded text-sm text-slate-700"
+                      >
+                        📅 Today
+                      </button>
+                      <button
+                        type="button"
                         onClick={setTomorrow}
                         className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded text-sm text-slate-700"
                       >
                         🗓️ Tomorrow
                       </button>
                       <button
-                        onClick={setNextWeek}
+                        type="button"
+                        onClick={setNextMonday}
                         className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded text-sm text-slate-700"
                       >
                         📆 Next Monday
                       </button>
                       <button
+                        type="button"
                         onClick={setNextMonth}
                         className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded text-sm text-slate-700"
                       >
@@ -1102,9 +1106,9 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
                     <div className="border-t border-gray-200 p-2">
                       <input
                         type="date"
-                        value={editData.due_date}
+                        value={formData.due_date}
                         onChange={(e) => {
-                          setEditData({ ...editData, due_date: e.target.value });
+                          setFormData({ ...formData, due_date: e.target.value });
                           setShowDatePicker(false);
                         }}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1116,10 +1120,12 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Priority</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Priority
+              </label>
               <select
-                value={editData.priority}
-                onChange={(e) => setEditData({ ...editData, priority: e.target.value })}
+                value={formData.priority}
+                onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
                 <option value="high">🔴 High Priority</option>
@@ -1129,14 +1135,50 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Goal</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Project
+              </label>
+              <input
+                type="text"
+                value={formData.project}
+                onChange={(e) => setFormData({ ...formData, project: e.target.value })}
+                list="project-list"
+                placeholder="Project name..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <datalist id="project-list">
+                {projects.map(p => <option key={p} value={p} />)}
+              </datalist>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Delegate To
+              </label>
+              <input
+                type="text"
+                value={formData.delegated_to}
+                onChange={(e) => setFormData({ ...formData, delegated_to: e.target.value })}
+                list="delegate-list"
+                placeholder="Person's name..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <datalist id="delegate-list">
+                {delegates.map(d => <option key={d} value={d} />)}
+              </datalist>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Link to Goal
+              </label>
               <select
-                value={editData.goal_id || ''}
-                onChange={(e) => setEditData({ ...editData, goal_id: e.target.value ? parseInt(e.target.value) : null })}
+                value={formData.goal_id}
+                onChange={(e) => setFormData({ ...formData, goal_id: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
                 <option value="">No goal</option>
-                {goals.map(g => {
+                {getSortedGoals(goals).map(g => {
                   const displayText = g.title || g.goal_text;
                   const truncatedText = displayText.length > 50 ? displayText.substring(0, 50) + '...' : displayText;
                   const indentation = getGoalIndentation(g.time_horizon);
@@ -1145,59 +1187,22 @@ function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Delegate To</label>
-              <input
-                type="text"
-                value={editData.delegated_to}
-                onChange={(e) => setEditData({ ...editData, delegated_to: e.target.value })}
-                list="modal-delegate-list"
-                placeholder="No one"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <datalist id="modal-delegate-list">
-                {delegates.map(d => <option key={d} value={d} />)}
-              </datalist>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
-              <textarea
-                value={editData.notes}
-                onChange={(e) => setEditData({ ...editData, notes: e.target.value })}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                placeholder="Add any additional details..."
-              />
-            </div>
-          </div>
-
-          <div className="sticky bottom-0 bg-slate-50 border-t border-gray-200 px-4 py-3 flex items-center justify-between">
-            {isEditing ? (
+            <div className="flex justify-end gap-3 pt-4">
               <button
-                onClick={handleDelete}
-                className="px-4 py-2 bg-white border border-red-300 hover:bg-red-50 text-red-600 rounded-lg font-medium transition-colors"
-              >
-                Delete
-              </button>
-            ) : (
-              <div></div>
-            )}
-            <div className="flex gap-2">
-              <button
-                onClick={onCancel}
+                type="button"
+                onClick={onClose}
                 className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg font-medium transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={handleSave}
+                type="submit"
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
               >
                 {isEditing ? 'Save Changes' : 'Add Task'}
               </button>
             </div>
-          </div>
+          </form>
         </div>
       </div>
     </>
@@ -1221,7 +1226,7 @@ function BulkActionModal({ selectedCount, onApply, onCancel, delegates, goals })
   };
 
   const setTomorrow = () => {
-    const tomorrow = getETDate();  // Use ET instead of new Date()
+    const tomorrow = getETDate();
     tomorrow.setDate(tomorrow.getDate() + 1);
     setBulkData({ ...bulkData, due_date: tomorrow.toISOString().split('T')[0] });
     setShowDatePicker(false);
@@ -1233,7 +1238,7 @@ function BulkActionModal({ selectedCount, onApply, onCancel, delegates, goals })
   };
 
   const setNextMonth = () => {
-    const nextMonth = getETDate();  // Use ET instead of new Date()
+    const nextMonth = getETDate();
     nextMonth.setMonth(nextMonth.getMonth() + 1);
     setBulkData({ ...bulkData, due_date: nextMonth.toISOString().split('T')[0] });
     setShowDatePicker(false);
@@ -1410,5 +1415,48 @@ function BulkActionModal({ selectedCount, onApply, onCancel, delegates, goals })
         </div>
       </div>
     </>
+  );
+}
+
+// Reason Modal for rejecting priority recommendations
+function ReasonModal({ task, onSubmit, onClose }) {
+  const [reason, setReason] = useState('');
+  
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-2xl">
+        <h3 className="text-xl font-semibold mb-2 text-gray-800">
+          Why reject this task?
+        </h3>
+        <p className="text-sm font-medium text-gray-700 mb-3">
+          {task.title}
+        </p>
+        <p className="text-sm text-gray-600 mb-4">
+          Your feedback helps Alfred learn your priorities. This is optional but valuable for improving recommendations.
+        </p>
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="E.g., 'Not strategic right now', 'Need to focus on revenue first', 'Can delegate this'..."
+          className="w-full p-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          rows={4}
+          autoFocus
+        />
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onSubmit(reason.trim() || null)}
+            className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+          >
+            {reason.trim() ? 'Reject with Feedback' : 'Reject'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
