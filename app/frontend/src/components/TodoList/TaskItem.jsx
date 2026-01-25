@@ -24,7 +24,14 @@ export default function TaskItem({
   onStartEdit,
   onLongPress,
   onSelectToggle,
-  goals
+  goals,
+  // Priority mode props
+  priorityMode = false,
+  priorityDecision = null,
+  priorityScore = null,
+  onPriorityAccept = null,
+  onPriorityReject = null,
+  onPriorityWhy = null
 }) {
   const [swipeDistance, setSwipeDistance] = useState(0);
   const [touchStartX, setTouchStartX] = useState(0);
@@ -64,7 +71,7 @@ export default function TaskItem({
   };
 
   return (
-    <Draggable draggableId={String(task.id)} index={index} isDragDisabled={selectionMode}>
+    <Draggable draggableId={String(task.id)} index={index} isDragDisabled={selectionMode || priorityMode}>
       {(provided, snapshot) => (
         <TaskCard
           task={task}
@@ -83,6 +90,12 @@ export default function TaskItem({
           onLongPress={onLongPress}
           onSelectToggle={onSelectToggle}
           goals={goals}
+          priorityMode={priorityMode}
+          priorityDecision={priorityDecision}
+          priorityScore={priorityScore}
+          onPriorityAccept={onPriorityAccept}
+          onPriorityReject={onPriorityReject}
+          onPriorityWhy={onPriorityWhy}
         />
       )}
     </Draggable>
@@ -106,7 +119,13 @@ function TaskCard({
   onStartEdit,
   onLongPress,
   onSelectToggle,
-  goals
+  goals,
+  priorityMode,
+  priorityDecision,
+  priorityScore,
+  onPriorityAccept,
+  onPriorityReject,
+  onPriorityWhy
 }) {
   const goalLabel =
     goals.find(g => g.id === task.goal_id)?.title ||
@@ -114,6 +133,13 @@ function TaskCard({
     'Goal';
 
   const handleClick = (e) => {
+    // Priority mode: clicking does nothing (use buttons instead)
+    if (priorityMode) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
       e.stopPropagation();
@@ -148,11 +174,14 @@ function TaskCard({
       }}
       className={`
         bg-white border-2 rounded px-3 py-2
-        hover:border-gray-300 transition-all cursor-pointer
+        hover:border-gray-300 transition-all
         ${snapshot.isDragging ? 'opacity-50 scale-98 shadow-lg' : ''}
         ${isCompleting ? 'opacity-60' : ''}
         ${index >= 10 ? 'opacity-40' : ''}
         ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}
+        ${priorityMode && !priorityDecision ? 'cursor-default' : 'cursor-pointer'}
+        ${priorityDecision === 'accept' ? 'border-green-300 bg-green-50' : ''}
+        ${priorityDecision === 'reject' ? 'border-red-300 bg-red-50' : ''}
       `}
       onClick={handleClick}
     >
@@ -165,7 +194,7 @@ function TaskCard({
           </div>
         )}
 
-        {!selectionMode && (
+        {!selectionMode && !priorityMode && (
           <div
             {...provided.dragHandleProps}
             className="text-slate-300 cursor-grab active:cursor-grabbing mt-0.5"
@@ -175,7 +204,7 @@ function TaskCard({
           </div>
         )}
 
-        {!selectionMode && (
+        {!selectionMode && !priorityMode && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -226,7 +255,73 @@ function TaskCard({
               </span>
             </div>
           )}
+
+          {/* Priority Score Display */}
+          {priorityMode && priorityScore && (
+            <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-medium text-blue-600">
+                  Score: {(priorityScore.score * 100).toFixed(0)}%
+                </span>
+                <span className={`text-xs px-2 py-0.5 rounded ${
+                  priorityScore.confidence === 'high' ? 'bg-green-100 text-green-800' :
+                  priorityScore.confidence === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>
+                  {priorityScore.confidence} confidence
+                </span>
+              </div>
+              <p className="text-xs text-gray-700">
+                {priorityScore.reason}
+              </p>
+            </div>
+          )}
+
+          {/* Decision Indicator */}
+          {priorityDecision && (
+            <div className={`mt-2 text-xs font-semibold ${
+              priorityDecision === 'accept' ? 'text-green-700' : 'text-red-700'
+            }`}>
+              {priorityDecision === 'accept' ? '✓ Accepted for Top 10' : '✗ Rejected'}
+            </div>
+          )}
         </div>
+
+        {/* Priority Mode Buttons - Right side */}
+        {priorityMode && !priorityDecision && (
+          <div className="flex-shrink-0 flex gap-1 ml-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onPriorityAccept?.();
+              }}
+              className="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded font-medium transition-colors"
+              title="Accept for Top 10"
+            >
+              Accept
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onPriorityReject?.();
+              }}
+              className="px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded font-medium transition-colors"
+              title="Reject"
+            >
+              Reject
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onPriorityWhy?.();
+              }}
+              className="px-3 py-1.5 text-xs border border-gray-300 hover:bg-gray-50 rounded font-medium transition-colors"
+              title="See Alfred's reasoning"
+            >
+              Why?
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

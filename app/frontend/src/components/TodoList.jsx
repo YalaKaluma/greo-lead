@@ -6,7 +6,9 @@ import TaskItem from './TodoList/TaskItem';
 import TaskModal from './TodoList/TaskModal';
 import BulkActionModal from './TodoList/BulkActionModal';
 import FilterSection from './TodoList/FilterSection';
+import ReasonModal from './TodoList/ReasonModal';
 import { getTodayET, isOverdueET, getSortedGoals } from '../utils/taskHelpers';
+import { usePriority } from '../hooks/usePriority';
 
 /**
  * TodoList Component - Main Task Management Interface
@@ -46,6 +48,22 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [selectedTasks, setSelectedTasks] = useState([]);
   const [selectionMode, setSelectionMode] = useState(false);
   const [showBulkActionModal, setShowBulkActionModal] = useState(false);
+
+  // Priority review state
+  const {
+    priorityMode,
+    priorityLoading,
+    priorityRecommendation,
+    priorityDecisions,
+    applyingPriority,
+    runPrioritization,
+    recordDecision,
+    applyPriorityChanges,
+    cancelPriorityMode,
+    getTaskScore
+  } = usePriority(apiUrl, userNumber);
+
+  const [showReasonModal, setShowReasonModal] = useState(null);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -372,6 +390,39 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   // ============================================================================
+  // PRIORITY REVIEW OPERATIONS
+  // ============================================================================
+
+  const handleRunPrioritization = async () => {
+    const result = await runPrioritization();
+    if (!result.success) {
+      setError(result.error);
+    }
+  };
+
+  const handlePriorityDecision = async (taskId, action, reason = null) => {
+    const result = await recordDecision(taskId, action, reason);
+    if (!result.success) {
+      alert(result.error);
+    }
+    setShowReasonModal(null);
+  };
+
+  const handleApplyPriority = async () => {
+    const result = await applyPriorityChanges();
+    if (result.success) {
+      alert(result.message);
+      await fetchTasks(); // Refresh task list
+    } else {
+      alert(result.error);
+    }
+  };
+
+  const handleCancelPriority = () => {
+    cancelPriorityMode();
+  };
+
+  // ============================================================================
   // COMPUTED VALUES
   // ============================================================================
 
@@ -417,7 +468,7 @@ export default function TodoList({ apiUrl, userNumber }) {
             </p>
           </div>
           <div className="flex gap-2">
-            {sortOrder.length > 0 && !selectionMode && (
+            {sortOrder.length > 0 && !selectionMode && !priorityMode && (
               <button
                 onClick={resetSortOrder}
                 className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-lg font-medium transition-colors text-sm"
@@ -426,7 +477,7 @@ export default function TodoList({ apiUrl, userNumber }) {
                 ↻ Reset Sort
               </button>
             )}
-            {!selectionMode && (
+            {!selectionMode && !priorityMode && (
               <>
                 <button
                   onClick={setOverdueToToday}
@@ -443,6 +494,24 @@ export default function TodoList({ apiUrl, userNumber }) {
                   📅
                 </button>
                 <button
+                  onClick={handleRunPrioritization}
+                  disabled={priorityLoading || tasks.length === 0}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {priorityLoading ? (
+                    <span className="flex items-center gap-2">
+                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span className="hidden sm:inline">Analyzing...</span>
+                    </span>
+                  ) : (
+                    <span className="hidden sm:inline">⚡ Prioritize</span>
+                  )}
+                  {!priorityLoading && <span className="sm:hidden">⚡</span>}
+                </button>
+                <button
                   onClick={() => {
                     setEditingTask(null);
                     setShowTaskModal(true);
@@ -454,11 +523,28 @@ export default function TodoList({ apiUrl, userNumber }) {
                 </button>
               </>
             )}
+            {priorityMode && (
+              <>
+                <button
+                  onClick={handleCancelPriority}
+                  className="px-4 py-2 border border-gray-300 hover:bg-gray-50 rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleApplyPriority}
+                  disabled={applyingPriority || Object.keys(priorityDecisions).length === 0}
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {applyingPriority ? 'Applying...' : `Apply ${Object.values(priorityDecisions).filter(d => d === 'accept').length} Changes`}
+                </button>
+              </>
+            )}
           </div>
         </div>
 
         {/* Filters Section */}
-        {!selectionMode && (
+        {!selectionMode && !priorityMode && (
           <FilterSection
             filtersCollapsed={filtersCollapsed}
             setFiltersCollapsed={setFiltersCollapsed}
@@ -501,24 +587,38 @@ export default function TodoList({ apiUrl, userNumber }) {
                   ref={provided.innerRef}
                   className="space-y-1"
                 >
-                  {sortedTasks.map((task, index) => (
-                    <TaskItem
-                      key={task.id}
-                      task={task}
-                      index={index}
-                      isCompleting={completingTasks.includes(task.id)}
-                      isSelected={selectedTasks.includes(task.id)}
-                      selectionMode={selectionMode}
-                      onToggle={() => toggleTaskComplete(task.id)}
-                      onStartEdit={() => {
-                        setEditingTask(task);
-                        setShowTaskModal(true);
-                      }}
-                      onLongPress={() => enterSelectionMode(task.id)}
-                      onSelectToggle={() => toggleTaskSelection(task.id)}
-                      goals={goals}
-                    />
-                  ))}
+                  {sortedTasks.map((task, index) => {
+                    const scoreData = getTaskScore(task.id);
+                    const decision = priorityDecisions[task.id];
+
+                    return (
+                      <TaskItem
+                        key={task.id}
+                        task={task}
+                        index={index}
+                        isCompleting={completingTasks.includes(task.id)}
+                        isSelected={selectedTasks.includes(task.id)}
+                        selectionMode={selectionMode}
+                        onToggle={() => toggleTaskComplete(task.id)}
+                        onStartEdit={() => {
+                          setEditingTask(task);
+                          setShowTaskModal(true);
+                        }}
+                        onLongPress={() => enterSelectionMode(task.id)}
+                        onSelectToggle={() => toggleTaskSelection(task.id)}
+                        goals={goals}
+                        priorityMode={priorityMode}
+                        priorityDecision={decision}
+                        priorityScore={scoreData}
+                        onPriorityAccept={() => handlePriorityDecision(task.id, 'accept')}
+                        onPriorityReject={() => setShowReasonModal(scoreData)}
+                        onPriorityWhy={() => {
+                          const message = `Alfred's Reasoning:\n\n${scoreData.reason}${scoreData.risk_if_ignored ? '\n\nRisk if ignored: ' + scoreData.risk_if_ignored : ''}`;
+                          alert(message);
+                        }}
+                      />
+                    );
+                  })}
                   {provided.placeholder}
                 </div>
               )}
@@ -579,6 +679,15 @@ export default function TodoList({ apiUrl, userNumber }) {
           onCancel={() => setShowBulkActionModal(false)}
           delegates={delegates}
           goals={getSortedGoals(goals)}
+        />
+      )}
+
+      {/* Reason Modal for Priority Reject */}
+      {showReasonModal && (
+        <ReasonModal
+          task={showReasonModal}
+          onSubmit={(reason) => handlePriorityDecision(showReasonModal.task_id, 'reject', reason)}
+          onClose={() => setShowReasonModal(null)}
         />
       )}
     </div>
