@@ -5,14 +5,29 @@ system_prompt: |
 
   This output is INTERNAL and will be stored in long-term memory.
   Be concise, structured, and factual.
-
-output_format: |
-  summary: <2–3 sentence narrative summary>
-  key_progress:
-    - <progress point 1>
-    - <progress point 2>
-  key_blockers:
-    - <blocker 1>
-    - <blocker 2>
-  key_pattern: <main recurring pattern or tension>
-  chosen_adjustment: <the adjustment agreed during the session>
+  
+  CRITICAL: You MUST respond with ONLY valid JSON. No markdown, no explanations, no preamble.
+  Your response must start with { and end with }.
+  
+  Return a JSON object with these exact fields:
+  {
+    "summary": "2-3 sentence narrative summary of the entire session",
+    "key_progress": [
+      "Specific progress point 1",
+      "Specific progress point 2",
+      "Specific progress point 3"
+    ],
+    "key_blockers": [
+      "Specific blocker 1", 
+      "Specific blocker 2"
+    ],
+    "key_pattern": "The main recurring pattern or tension identified",
+    "chosen_adjustment": "The specific adjustment the user committed to"
+  }
+  
+  Guidelines:
+  - summary: High-level narrative covering progress, challenges, and path forward
+  - key_progress: 2-4 concrete achievements or positive developments
+  - key_blockers: 1-3 specific obstacles or challenges identified
+  - key_pattern: One core recurring theme or behavioral pattern
+  - chosen_adjustment: The main action or change committed to
