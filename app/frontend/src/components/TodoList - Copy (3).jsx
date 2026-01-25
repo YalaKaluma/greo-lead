@@ -183,13 +183,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const getSortedTasks = () => {
-    // PRIORITY MODE ALWAYS OVERRIDES: Use LLM scoring when in priority review
-    // (This will be implemented when we add priority mode)
-    // if (priorityMode && priorityRecommendation) {
-    //   return sortByPriorityScore(tasks, priorityRecommendation);
-    // }
-    
-    // If manual drag-and-drop order exists, use it (unless in priority mode)
+    // If manual drag-and-drop order exists, use it
     if (sortOrder.length > 0) {
       return [...tasks].sort((a, b) => {
         const indexA = sortOrder.indexOf(a.id);
@@ -204,7 +198,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       });
     }
     
-    // Default sorting: Top 10 first, then by priority (High > Medium > Low)
+    // Default sorting: Top 10 first, then by priority
     return [...tasks].sort((a, b) => {
       // 1. Top 10 tasks always come first
       if (a.in_top10 && !b.in_top10) return -1;
@@ -217,23 +211,11 @@ export default function TodoList({ apiUrl, userNumber }) {
         return posA - posB;
       }
       
-      // 3. For non-Top 10 tasks, sort by priority (High=0, Medium=1, Low=2)
+      // 3. For non-Top 10 tasks, sort by priority
       const priorityOrder = { 'high': 0, 'medium': 1, 'low': 2 };
       const aPriority = priorityOrder[a.priority?.toLowerCase()] ?? 3;
       const bPriority = priorityOrder[b.priority?.toLowerCase()] ?? 3;
-      
-      if (aPriority !== bPriority) {
-        return aPriority - bPriority;
-      }
-      
-      // 4. If same priority, sort by due date (earlier first)
-      if (a.due_date && b.due_date) {
-        return new Date(a.due_date) - new Date(b.due_date);
-      }
-      if (a.due_date) return -1;
-      if (b.due_date) return 1;
-      
-      return 0;
+      return aPriority - bPriority;
     });
   };
 
