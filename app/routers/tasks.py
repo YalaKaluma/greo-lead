@@ -45,7 +45,7 @@ class TaskResponse(BaseModel):
     user_number: str
     title: str
     notes: Optional[str]
-    due_date: Optional[date]
+    due_date: Optional[datetime]  # ← FIXED: Changed from date to datetime to match database column
     priority: Optional[str]
     status: str
     project: Optional[str]
@@ -68,7 +68,7 @@ def get_tasks(
         filter_type: str = "all",
         project: Optional[str] = None,
         delegated_to: Optional[str] = None,
-        goal_id: Optional[int] = None,  # ← ADD THIS
+        goal_id: Optional[int] = None,
         db: Session = Depends(get_db)
 ):
     """
@@ -78,47 +78,72 @@ def get_tasks(
     delegated_to: filter by delegate name
     goal_id: filter by goal ID
     """
-    query = db.query(Task).filter(Task.user_number == user_number)
-    today = get_today_et()  # ← CHANGED: Use Eastern Time instead of date.today()
+    try:
+        print(f"[TASKS API] Fetching tasks for user: {user_number}")
+        print(
+            f"[TASKS API] Filters - type: {filter_type}, project: {project}, delegate: {delegated_to}, goal_id: {goal_id}")
 
-    # Date filters
-    if filter_type == "due_today":
-        # Only tasks due today or overdue
-        query = query.filter(
-            Task.due_date.isnot(None),
-            Task.due_date <= today
+        query = db.query(Task).filter(Task.user_number == user_number)
+        today = get_today_et()
+
+        # Date filters
+        if filter_type == "due_today":
+            print(f"[TASKS API] Applying due_today filter (today: {today})")
+            query = query.filter(
+                Task.due_date.isnot(None),
+                Task.due_date <= today
+            )
+        elif filter_type == "next_7_days":
+            next_week = today + timedelta(days=7)
+            print(f"[TASKS API] Applying next_7_days filter (today: {today}, next_week: {next_week})")
+            query = query.filter(
+                Task.due_date.isnot(None),
+                Task.due_date <= next_week
+            )
+        else:
+            print(f"[TASKS API] No date filter (showing all tasks)")
+
+        # Project filter
+        if project:
+            print(f"[TASKS API] Filtering by project: {project}")
+            query = query.filter(Task.project == project)
+
+        # Delegate filter
+        if delegated_to:
+            print(f"[TASKS API] Filtering by delegate: {delegated_to}")
+            query = query.filter(Task.delegated_to == delegated_to)
+
+        # Goal filter
+        if goal_id is not None:
+            print(f"[TASKS API] Filtering by goal_id: {goal_id}")
+            query = query.filter(Task.goal_id == goal_id)
+
+        tasks = query.all()
+        print(f"[TASKS API] Found {len(tasks)} tasks before sorting")
+
+        # Sort by: status (open first), then priority, then due date
+        def sort_key(task):
+            status_order = 0 if task.status == 'open' else 1
+            priority_value = PRIORITY_ORDER.get(task.priority, 2)
+            # Handle both DateTime and Date objects
+            if task.due_date:
+                due_value = task.due_date if isinstance(task.due_date, date) else task.due_date.date()
+            else:
+                due_value = date(9999, 12, 31)
+            return (status_order, priority_value, due_value)
+
+        sorted_tasks = sorted(tasks, key=sort_key)
+        print(f"[TASKS API] Successfully returning {len(sorted_tasks)} sorted tasks")
+        return sorted_tasks
+
+    except Exception as e:
+        print(f"[TASKS API ERROR] Exception occurred: {type(e).__name__}: {str(e)}")
+        import traceback
+        print(f"[TASKS API ERROR] Traceback:\n{traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching tasks: {str(e)}"
         )
-    elif filter_type == "next_7_days":
-        # Tasks due in the next 7 days
-        next_week = today + timedelta(days=7)
-        query = query.filter(
-            Task.due_date.isnot(None),
-            Task.due_date <= next_week
-        )
-
-    # Project filter
-    if project:
-        query = query.filter(Task.project == project)
-
-    # Delegate filter
-    if delegated_to:
-        query = query.filter(Task.delegated_to == delegated_to)
-
-    # Goal filter
-    if goal_id is not None:  # ← ADD THIS
-        query = query.filter(Task.goal_id == goal_id)
-
-    tasks = query.all()
-
-    # Sort by: status (open first), then priority, then due date
-    def sort_key(task):
-        status_order = 0 if task.status == 'open' else 1
-        priority_value = PRIORITY_ORDER.get(task.priority, 2)
-        due_value = task.due_date if task.due_date else date(9999, 12, 31)
-        return (status_order, priority_value, due_value)
-
-    sorted_tasks = sorted(tasks, key=sort_key)
-    return sorted_tasks
 
 
 @router.get("/filters")
