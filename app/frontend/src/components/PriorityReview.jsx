@@ -164,12 +164,12 @@ export default function PriorityReview({ userNumber, onComplete }) {
   const changes = recommendation.recommended_changes;
   const hasChanges = changes.add.length > 0 || changes.remove.length > 0;
   
-  // Get all scored tasks sorted by score
-  const allTasks = recommendation.all_scored_tasks || [];
+  // Get all scored tasks and SORT BY SCORE (highest first)
+  const allTasks = (recommendation.all_scored_tasks || []).sort((a, b) => b.score - a.score);
   
   // Debug logging
   console.log('Recommendation data:', recommendation);
-  console.log('All tasks:', allTasks);
+  console.log('All tasks (sorted by score):', allTasks);
   console.log('Changes:', changes);
   
   // Fallback if all_scored_tasks is not available
