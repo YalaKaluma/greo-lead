@@ -81,8 +81,7 @@ logger.info("⚙️  Initializing FastAPI application...")
 app = FastAPI(
     title="Leadership OS API",
     version="3.0",
-    description="AI-powered Chief of Staff for busy executives",
-    redirect_slashes=True  # ← ADDED: Handle both /api/tasks and /api/tasks/
+    description="AI-powered Chief of Staff for busy executives"
 )
 logger.info("✓ FastAPI app created")
 
