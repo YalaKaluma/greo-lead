@@ -10,19 +10,22 @@ RUN apt-get update && \
 WORKDIR /app
 
 # --------------------
-# 1️⃣ Python deps
+# 1️⃣ Python dependencies
 # --------------------
 COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # --------------------
-# 2️⃣ Frontend deps + build (isolated)
+# 2️⃣ Frontend dependencies + build (Vite)
 # --------------------
 WORKDIR /app/app/frontend
-COPY app/frontend/package.json app/frontend/package-lock.json ./
+
+# copy only what npm needs first (cache-safe)
+COPY app/frontend/package.json ./
 RUN npm install
 
+# copy the rest of the frontend
 COPY app/frontend/ ./
 RUN npm run build
 
