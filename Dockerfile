@@ -10,10 +10,9 @@ RUN apt-get update && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # --------------------
-# Backend
+# Backend setup
 # --------------------
 WORKDIR /app
-
 COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
@@ -22,10 +21,8 @@ RUN pip install --upgrade pip && \
 # Frontend build
 # --------------------
 WORKDIR /app/frontend
-
-COPY app/frontend/package.json app/frontend/package-lock.json ./
-RUN npm ci
-
+COPY app/frontend/package.json ./
+RUN npm install
 COPY app/frontend/ ./
 RUN npm run build
 
@@ -42,4 +39,3 @@ RUN mkdir -p /app/static && \
 COPY app/ ./app
 
 EXPOSE 8080
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
