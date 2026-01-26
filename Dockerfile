@@ -34,10 +34,11 @@ WORKDIR /app
 COPY app/ ./app
 
 # --------------------
-# Move static files from /static to /app/static
+# REPLACE static files: delete old, move new from /static to /app/static
 # --------------------
-RUN mkdir -p /app/static && \
-    cp -r /static/* /app/static/ 2>/dev/null || true
+RUN rm -rf /app/static && \
+    mkdir -p /app/static && \
+    mv /static/* /app/static/ 2>/dev/null || true
 
 EXPOSE 8080
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
