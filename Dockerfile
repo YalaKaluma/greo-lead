@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
 # --------------------
-# System deps + Node 20 LTS
+# System deps + Node
 # --------------------
 RUN apt-get update && \
     apt-get install -y curl gnupg && \
@@ -10,9 +10,10 @@ RUN apt-get update && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # --------------------
-# Backend dependencies
+# Backend
 # --------------------
 WORKDIR /app
+
 COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
@@ -20,25 +21,25 @@ RUN pip install --upgrade pip && \
 # --------------------
 # Frontend build
 # --------------------
-WORKDIR /app/app/frontend
+WORKDIR /app/frontend
 
-# ✅ FIXED PATHS (extra app/)
-COPY app/app/frontend/package.json app/app/frontend/package-lock.json ./
+COPY app/frontend/package.json app/frontend/package-lock.json ./
 RUN npm ci
 
-COPY app/app/frontend/ ./
+COPY app/frontend/ ./
 RUN npm run build
 
 # --------------------
-# Copy frontend build output
+# Move frontend build to static
 # --------------------
 WORKDIR /app
 RUN mkdir -p /app/static && \
-    cp -r /app/app/frontend/dist/* /app/static/
+    cp -r /app/frontend/dist/* /app/static/
 
 # --------------------
-# Copy backend code last
+# Copy backend code
 # --------------------
 COPY app/ ./app
 
 EXPOSE 8080
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
