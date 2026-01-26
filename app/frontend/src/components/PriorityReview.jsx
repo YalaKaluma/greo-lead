@@ -240,6 +240,24 @@ export default function PriorityReview({ userNumber, onComplete }) {
         </div>
       </div>
       
+      {/* DEBUG INFO */}
+      <div className="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4 mb-4">
+        <h3 className="text-sm font-bold text-yellow-900 mb-2">🐛 DEBUG INFO</h3>
+        <div className="text-xs text-yellow-800 space-y-1">
+          <p><strong>Total tasks:</strong> {allTasks.length}</p>
+          <p><strong>Scores (in display order):</strong></p>
+          <ul className="ml-4 list-disc">
+            {allTasks.map((task, idx) => (
+              <li key={task.task_id}>
+                #{idx + 1}: {task.title?.substring(0, 30) || 'Untitled'} - 
+                Score: {task.score} ({typeof task.score}) - 
+                Score*100: {(task.score * 100).toFixed(0)}%
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      
       {/* All Scored Tasks */}
       <div className="bg-white rounded-lg shadow-lg p-6">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">
