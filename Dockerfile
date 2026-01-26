@@ -18,14 +18,8 @@ RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # --------------------
-# Backend code (COPY FIRST, before frontend build)
-# --------------------
-COPY app/ ./app
-
-# --------------------
-# Frontend build (Vite)
-# Vite builds directly to /app/static via vite.config.js outDir setting
-# This must come AFTER backend code copy so static files don't get overwritten
+# Frontend build FIRST
+# Vite builds to /static (via ../../static from /app/frontend)
 # --------------------
 WORKDIR /app/frontend
 COPY app/frontend/package.json ./
@@ -33,7 +27,17 @@ RUN npm install
 COPY app/frontend/ ./
 RUN npm run build
 
+# --------------------
+# Copy backend code AFTER frontend build
+# --------------------
 WORKDIR /app
+COPY app/ ./app
+
+# --------------------
+# Move static files from /static to /app/static
+# --------------------
+RUN mkdir -p /app/static && \
+    cp -r /static/* /app/static/ 2>/dev/null || true
 
 EXPOSE 8080
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
