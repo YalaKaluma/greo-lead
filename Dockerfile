@@ -31,8 +31,8 @@ RUN npm run build
 # --------------------
 WORKDIR /app
 RUN mkdir -p /app/static && \
-    cp -r /app/frontend/index.html /app/static/ && \
-    cp -r /app/frontend/assets /app/static/ || true
+    cp /app/frontend/dist/index.html /app/static/ && \
+    cp -r /app/frontend/dist/assets /app/static/
 
 # --------------------
 # Backend code
