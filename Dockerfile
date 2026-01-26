@@ -7,10 +7,10 @@ RUN apt-get update && \
     apt-get install -y curl gnupg && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs && \
-    apt-get clean
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # --------------------
-# Backend setup
+# Backend dependencies
 # --------------------
 WORKDIR /app
 COPY requirements.txt .
@@ -21,14 +21,16 @@ RUN pip install --upgrade pip && \
 # Frontend build
 # --------------------
 WORKDIR /app/app/frontend
-COPY app/frontend/package.json app/frontend/package-lock.json ./
+
+# ✅ FIXED PATHS (extra app/)
+COPY app/app/frontend/package.json app/app/frontend/package-lock.json ./
 RUN npm ci
 
-COPY app/frontend/ ./
+COPY app/app/frontend/ ./
 RUN npm run build
 
 # --------------------
-# Copy frontend build to static
+# Copy frontend build output
 # --------------------
 WORKDIR /app
 RUN mkdir -p /app/static && \
