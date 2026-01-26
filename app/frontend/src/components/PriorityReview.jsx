@@ -165,11 +165,35 @@ export default function PriorityReview({ userNumber, onComplete }) {
   const hasChanges = changes.add.length > 0 || changes.remove.length > 0;
   
   // Get all scored tasks and SORT BY SCORE (highest first)
-  const allTasks = (recommendation.all_scored_tasks || []).sort((a, b) => b.score - a.score);
+  const rawTasks = recommendation.all_scored_tasks || [];
   
-  // Debug logging
+  // DEBUG: Log before sorting
+  console.log('===== PRIORITY REVIEW DEBUG =====');
+  console.log('Raw tasks from API:', rawTasks);
+  console.log('Raw tasks count:', rawTasks.length);
+  console.log('Raw tasks scores:', rawTasks.map(t => ({ 
+    id: t.task_id, 
+    title: t.title, 
+    score: t.score,
+    scoreType: typeof t.score
+  })));
+  
+  // Sort by score (highest first)
+  const allTasks = [...rawTasks].sort((a, b) => {
+    console.log(`Comparing: "${a.title}" (${a.score}) vs "${b.title}" (${b.score})`);
+    return b.score - a.score;
+  });
+  
+  // DEBUG: Log after sorting
+  console.log('Sorted tasks:', allTasks);
+  console.log('Sorted tasks scores:', allTasks.map(t => ({ 
+    id: t.task_id, 
+    title: t.title, 
+    score: t.score 
+  })));
+  console.log('=================================');
+  
   console.log('Recommendation data:', recommendation);
-  console.log('All tasks (sorted by score):', allTasks);
   console.log('Changes:', changes);
   
   // Fallback if all_scored_tasks is not available
