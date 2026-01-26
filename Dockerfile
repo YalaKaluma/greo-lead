@@ -10,14 +10,14 @@ RUN apt-get update && \
 WORKDIR /app
 
 # --------------------
-# 1️⃣ Python deps first (cache-safe)
+# 1️⃣ Python deps
 # --------------------
 COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # --------------------
-# 2️⃣ Frontend deps + build (ISOLATED)
+# 2️⃣ Frontend deps + build (isolated)
 # --------------------
 WORKDIR /app/app/frontend
 COPY app/frontend/package.json app/frontend/package-lock.json ./
@@ -27,13 +27,12 @@ COPY app/frontend/ ./
 RUN npm run build
 
 # --------------------
-# 3️⃣ Backend code LAST
+# 3️⃣ Backend code
 # --------------------
 WORKDIR /app
 COPY app/ ./app
-COPY static/ ./static  # only if you have static assets outside React
 
-# Debug proof (keep for 1 deploy)
+# Debug proof (keep for this deploy)
 RUN ls -lh /app/static && \
     echo "Frontend build timestamp:" && date
 
