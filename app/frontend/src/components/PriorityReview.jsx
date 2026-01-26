@@ -283,7 +283,6 @@ export default function PriorityReview({ userNumber, onComplete }) {
                   decision={decisions[task.task_id]}
                   onAccept={() => handleDecision(task.task_id, 'accept')}
                   onReject={() => setShowReasonModal(task)}
-                  onWhy={() => alert(`Alfred's Reasoning:\n\n${task.reason}\n\n${task.risk_if_ignored ? 'Risk if ignored: ' + task.risk_if_ignored : ''}`)}
                   isInTop10={isInTop10}
                 />
               );
@@ -341,7 +340,9 @@ export default function PriorityReview({ userNumber, onComplete }) {
   );
 }
 
-function TaskRecommendation({ task, action, decision, onAccept, onReject, onWhy, isInTop10 }) {
+function TaskRecommendation({ task, action, decision, onAccept, onReject, isInTop10 }) {
+  const [showEditModal, setShowEditModal] = React.useState(false);
+  
   const actionIcons = {
     add: '➕',
     remove: '➖',
@@ -371,6 +372,42 @@ function TaskRecommendation({ task, action, decision, onAccept, onReject, onWhy,
     low: 'bg-gray-100 text-gray-800'
   };
   
+  // Get priority icon
+  const getPriorityIcon = (priority) => {
+    const p = priority?.toLowerCase();
+    if (p === 'high') return '🔴';
+    if (p === 'medium') return '🟠';
+    if (p === 'low') return '🟢';
+    return '🟢';
+  };
+  
+  // Handle task completion
+  const handleComplete = async (e) => {
+    e.stopPropagation();
+    if (!confirm('Mark this task as complete?')) return;
+    
+    try {
+      const apiUrl = window.location.origin;
+      await fetch(`${apiUrl}/api/tasks/${task.task_id}/toggle`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      // Reload the page to refresh the task list
+      window.location.reload();
+    } catch (err) {
+      console.error('Failed to complete task:', err);
+      alert('Failed to complete task. Please try again.');
+    }
+  };
+  
+  // Handle edit (open modal or navigate)
+  const handleEdit = (e) => {
+    e.stopPropagation();
+    // For now, just show an alert. You can integrate with your task edit modal later
+    alert(`Edit task: ${task.title}\n\nIntegrate this with your TodoList edit modal to reschedule or modify the task.`);
+  };
+  
   return (
     <div className={`p-4 border-2 rounded-lg transition-all ${
       decision === 'accept' ? 'bg-green-50 border-green-300' :
@@ -378,31 +415,52 @@ function TaskRecommendation({ task, action, decision, onAccept, onReject, onWhy,
       'bg-white border-gray-200 hover:border-gray-300'
     }`}>
       <div className="flex justify-between items-start mb-3">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-lg">{actionIcon}</span>
-            <p className="font-semibold text-gray-800">
-              {task.title || `Task #${task.task_id}`}
+        <div className="flex items-center gap-3 flex-1">
+          {/* Priority Icon - Click to Complete */}
+          <button
+            onClick={handleComplete}
+            className="flex-shrink-0 text-2xl hover:scale-110 transition-transform"
+            title={`${task.priority || 'Medium'} priority - Click to mark complete`}
+          >
+            {getPriorityIcon(task.priority)}
+          </button>
+          
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-lg">{actionIcon}</span>
+              {/* Task Title - Click to Edit */}
+              <p 
+                className="font-semibold text-gray-800 cursor-pointer hover:text-blue-600 transition-colors"
+                onClick={handleEdit}
+                title="Click to edit/reschedule task"
+              >
+                {task.title || `Task #${task.task_id}`}
+              </p>
+              <span className={`text-xs px-2 py-1 rounded bg-${actionColor}-100 text-${actionColor}-800`}>
+                {actionLabel}
+              </span>
+            </div>
+            {task.notes && (
+              <p className="text-xs text-gray-500 mb-2 italic">
+                {task.notes}
+              </p>
+            )}
+            <p className="text-gray-700 mb-2">
+              {task.reason}
             </p>
-            <span className={`text-xs px-2 py-1 rounded bg-${actionColor}-100 text-${actionColor}-800`}>
-              {actionLabel}
-            </span>
-          </div>
-          {task.notes && (
-            <p className="text-xs text-gray-500 mb-2 italic">
-              {task.notes}
-            </p>
-          )}
-          <p className="text-gray-700 mb-2">
-            {task.reason}
-          </p>
-          <div className="flex gap-2 items-center">
-            <span className={`px-2 py-1 text-xs rounded font-medium ${confidenceColors[task.confidence] || confidenceColors.medium}`}>
-              {task.confidence} confidence
-            </span>
-            <span className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-800 font-medium">
-              Score: {(task.score * 100).toFixed(0)}%
-            </span>
+            {task.risk_if_ignored && (
+              <p className="text-sm text-red-600 font-medium mb-2">
+                Risk: {task.risk_if_ignored}
+              </p>
+            )}
+            <div className="flex gap-2 items-center">
+              <span className={`px-2 py-1 text-xs rounded font-medium ${confidenceColors[task.confidence] || confidenceColors.medium}`}>
+                {task.confidence} confidence
+              </span>
+              <span className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-800 font-medium">
+                Score: {(task.score * 100).toFixed(0)}%
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -413,20 +471,13 @@ function TaskRecommendation({ task, action, decision, onAccept, onReject, onWhy,
             onClick={onAccept}
             className="flex-1 px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors"
           >
-            ✓ Accept
+            ✓ Accept for Top 10
           </button>
           <button
             onClick={onReject}
             className="flex-1 px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors"
           >
             ✗ Reject
-          </button>
-          <button
-            onClick={onWhy}
-            className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
-            title="Show Alfred's reasoning"
-          >
-            💡 Why?
           </button>
         </div>
       )}
@@ -435,7 +486,7 @@ function TaskRecommendation({ task, action, decision, onAccept, onReject, onWhy,
         <div className={`mt-3 text-sm font-semibold ${
           decision === 'accept' ? 'text-green-700' : 'text-red-700'
         }`}>
-          {decision === 'accept' ? '✓ Accepted' : '✗ Rejected'}
+          {decision === 'accept' ? '✓ Accepted for Top 10' : '✗ Rejected'}
         </div>
       )}
     </div>
