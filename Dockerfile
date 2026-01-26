@@ -8,21 +8,33 @@ RUN apt-get update && \
     apt-get clean
 
 WORKDIR /app
-COPY . .
 
-# Install Python dependencies
+# --------------------
+# 1️⃣ Python deps first (cache-safe)
+# --------------------
+COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Build frontend
+# --------------------
+# 2️⃣ Frontend deps + build (ISOLATED)
+# --------------------
 WORKDIR /app/app/frontend
+COPY app/frontend/package.json app/frontend/package-lock.json ./
 RUN npm install
+
+COPY app/frontend/ ./
 RUN npm run build
 
-# Verify build succeeded
-RUN ls -lh /app/static/index.html && \
-    ls -lh /app/static/assets/ && \
-    echo "✓ Frontend built successfully"
-
+# --------------------
+# 3️⃣ Backend code LAST
+# --------------------
 WORKDIR /app
+COPY app/ ./app
+COPY static/ ./static  # only if you have static assets outside React
+
+# Debug proof (keep for 1 deploy)
+RUN ls -lh /app/static && \
+    echo "Frontend build timestamp:" && date
+
 EXPOSE 8080

@@ -66,7 +66,7 @@ export default function PriorityReview({ userNumber, onComplete }) {
       
     } catch (err) {
       console.error('Failed to record decision:', err);
-      alert('Failed to record decision. Please try again.');
+      alert('Failed to record decision. Please try again!');
     }
   };
   
@@ -82,7 +82,7 @@ export default function PriorityReview({ userNumber, onComplete }) {
     console.log('Accepted tasks:', acceptedTasks);
     
     if (acceptedTasks.length === 0) {
-      alert('Please accept at least one task for your Top 10');
+      alert('Please accept at least one task for your Top 10!');
       return;
     }
     
