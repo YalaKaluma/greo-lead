@@ -13,40 +13,26 @@ RUN apt-get update && \
 # Backend deps
 # --------------------
 WORKDIR /app
-
 COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # --------------------
-# Frontend build
+# Frontend build (Vite)
 # --------------------
 WORKDIR /app/frontend
-
-# Only copy what ACTUALLY exists
 COPY app/frontend/package.json ./
 RUN npm install
-
 COPY app/frontend/ ./
 RUN npm run build
 
 # --------------------
-# Detect frontend output
+# Serve frontend from backend
 # --------------------
 WORKDIR /app
-
-RUN echo "🔍 Detecting frontend build output..." && \
-    ls -lh /app/frontend && \
-    if [ -d /app/frontend/dist ]; then \
-        echo "✅ Using dist/"; \
-        mkdir -p /app/static && cp -r /app/frontend/dist/* /app/static/; \
-    elif [ -d /app/frontend/build ]; then \
-        echo "✅ Using build/"; \
-        mkdir -p /app/static && cp -r /app/frontend/build/* /app/static/; \
-    else \
-        echo "❌ No frontend build output found"; \
-        exit 1; \
-    fi
+RUN mkdir -p /app/static && \
+    cp -r /app/frontend/index.html /app/static/ && \
+    cp -r /app/frontend/assets /app/static/ || true
 
 # --------------------
 # Backend code
