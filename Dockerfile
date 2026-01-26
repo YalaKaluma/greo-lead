@@ -19,6 +19,7 @@ RUN pip install --upgrade pip && \
 
 # --------------------
 # Frontend build (Vite)
+# Vite builds directly to /app/static via vite.config.js outDir setting
 # --------------------
 WORKDIR /app/frontend
 COPY app/frontend/package.json ./
@@ -27,16 +28,9 @@ COPY app/frontend/ ./
 RUN npm run build
 
 # --------------------
-# Serve frontend from backend
-# --------------------
-WORKDIR /app
-RUN mkdir -p /app/static && \
-    cp /app/frontend/dist/index.html /app/static/ && \
-    cp -r /app/frontend/dist/assets /app/static/
-
-# --------------------
 # Backend code
 # --------------------
+WORKDIR /app
 COPY app/ ./app
 
 EXPOSE 8080
