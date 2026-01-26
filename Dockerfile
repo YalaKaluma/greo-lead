@@ -23,15 +23,15 @@ RUN pip install --upgrade pip && \
 # --------------------
 WORKDIR /app/frontend
 
+# Only copy what ACTUALLY exists
 COPY app/frontend/package.json ./
-COPY app/frontend/package-lock.json ./
 RUN npm install
 
 COPY app/frontend/ ./
 RUN npm run build
 
 # --------------------
-# Detect frontend output reliably
+# Detect frontend output
 # --------------------
 WORKDIR /app
 
@@ -45,8 +45,6 @@ RUN echo "🔍 Detecting frontend build output..." && \
         mkdir -p /app/static && cp -r /app/frontend/build/* /app/static/; \
     else \
         echo "❌ No frontend build output found"; \
-        echo "Contents of /app/frontend:"; \
-        ls -lh /app/frontend; \
         exit 1; \
     fi
 
