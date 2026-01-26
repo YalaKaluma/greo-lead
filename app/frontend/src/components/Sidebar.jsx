@@ -11,7 +11,7 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onC
     // CHANGED: Replace 'my-journal' with 'coaching-sessions'
     { id: 'coaching-sessions', label: 'My Coaching Sessions', disabled: false },
     { id: 'my-feedback', label: 'My Feedback', disabled: true },
-    { id: 'my-calendar', label: 'My xxCalendar', disabled: true },  
+    { id: 'my-calendar', label: 'My Calendar', disabled: true },  
   ];
 
   return (

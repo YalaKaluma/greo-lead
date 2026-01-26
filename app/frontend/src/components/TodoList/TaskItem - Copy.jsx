@@ -30,7 +30,8 @@ export default function TaskItem({
   priorityDecision = null,
   priorityScore = null,
   onPriorityAccept = null,
-  onPriorityReject = null
+  onPriorityReject = null,
+  onPriorityWhy = null
 }) {
   const [swipeDistance, setSwipeDistance] = useState(0);
   const [touchStartX, setTouchStartX] = useState(0);
@@ -123,7 +124,8 @@ function TaskCard({
   priorityDecision,
   priorityScore,
   onPriorityAccept,
-  onPriorityReject
+  onPriorityReject,
+  onPriorityWhy
 }) {
   const goalLabel =
     goals.find(g => g.id === task.goal_id)?.title ||
@@ -202,7 +204,7 @@ function TaskCard({
           </div>
         )}
 
-        {!selectionMode && (
+        {!selectionMode && !priorityMode && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -216,14 +218,7 @@ function TaskCard({
         )}
 
         <div className="flex-1 min-w-0">
-          <div 
-            className="font-medium text-slate-800 text-base break-words leading-tight cursor-pointer hover:text-blue-600 transition-colors"
-            onClick={(e) => {
-              e.stopPropagation();
-              onStartEdit();
-            }}
-            title="Click to edit/reschedule"
-          >
+          <div className="font-medium text-slate-800 text-base break-words leading-tight">
             {task.title}
           </div>
 
@@ -294,7 +289,7 @@ function TaskCard({
 
         {/* Priority Mode Buttons - Right side */}
         {priorityMode && !priorityDecision && (
-          <div className="flex-shrink-0 flex gap-1.5 ml-2">
+          <div className="flex-shrink-0 flex gap-1 ml-2">
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -303,7 +298,7 @@ function TaskCard({
               className="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded font-medium transition-colors"
               title="Accept for Top 10"
             >
-              ✓ Accept
+              Accept
             </button>
             <button
               onClick={(e) => {
@@ -313,7 +308,17 @@ function TaskCard({
               className="px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded font-medium transition-colors"
               title="Reject"
             >
-              ✗ Reject
+              Reject
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onPriorityWhy?.();
+              }}
+              className="px-3 py-1.5 text-xs border border-gray-300 hover:bg-gray-50 rounded font-medium transition-colors"
+              title="See Alfred's reasoning"
+            >
+              Why?
             </button>
           </div>
         )}

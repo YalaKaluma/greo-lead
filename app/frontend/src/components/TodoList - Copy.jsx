@@ -184,17 +184,10 @@ export default function TodoList({ apiUrl, userNumber }) {
 
   const getSortedTasks = () => {
     // PRIORITY MODE ALWAYS OVERRIDES: Use LLM scoring when in priority review
-    if (priorityMode && priorityRecommendation && priorityRecommendation.all_scored_tasks) {
-      const scoredTasks = priorityRecommendation.all_scored_tasks;
-      
-      // Sort by score (highest first)
-      const sortedByScore = [...scoredTasks].sort((a, b) => b.score - a.score);
-      
-      // Map back to full task objects
-      return sortedByScore
-        .map(st => tasks.find(t => t.id === st.task_id))
-        .filter(Boolean);
-    }
+    // (This will be implemented when we add priority mode)
+    // if (priorityMode && priorityRecommendation) {
+    //   return sortByPriorityScore(tasks, priorityRecommendation);
+    // }
     
     // If manual drag-and-drop order exists, use it (unless in priority mode)
     if (sortOrder.length > 0) {
@@ -637,6 +630,10 @@ export default function TodoList({ apiUrl, userNumber }) {
                         priorityScore={scoreData}
                         onPriorityAccept={() => handlePriorityDecision(task.id, 'accept')}
                         onPriorityReject={() => setShowReasonModal(scoreData)}
+                        onPriorityWhy={() => {
+                          const message = `Alfred's Reasoning:\n\n${scoreData.reason}${scoreData.risk_if_ignored ? '\n\nRisk if ignored: ' + scoreData.risk_if_ignored : ''}`;
+                          alert(message);
+                        }}
                       />
                     );
                   })}
