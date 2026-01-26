@@ -1,11 +1,6 @@
-# ================================
-# Base image
-# ================================
 FROM python:3.11-slim
 
-# ================================
-# Install system dependencies
-# ================================
+# Install Node.js (18.x) + system deps
 RUN apt-get update && \
     apt-get install -y curl gnupg && \
     curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
@@ -13,55 +8,30 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# ================================
 # Backend setup
-# ================================
 WORKDIR /app
-
-# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# ================================
-# Frontend build (Vite)
-# ================================
+# Frontend build
 WORKDIR /app/app/frontend
-
-# Install frontend deps
 COPY app/frontend/package.json ./
 RUN npm install
-
-# Copy frontend source
 COPY app/frontend/ ./
-
-# Build frontend
 RUN npm run build
 
-# ================================
-# Move Vite build → backend static
-# ================================
+# Copy backend app
 WORKDIR /app
+COPY app/ ./app
+
+# Move frontend build to static
 RUN rm -rf /app/static && \
     mkdir -p /app/static && \
     cp -r /app/app/frontend/dist/* /app/static/
 
-# ================================
-# Copy backend code
-# ================================
-COPY app/ ./app
-
-# ================================
-# Debug proof (keep for 1 deploy)
-# ================================
+# Debug / visibility (matches your logs)
 RUN echo "==== STATIC CONTENT ====" && \
     ls -lh /app/static && \
     echo "==== BUILD TIMESTAMP ====" && \
     date
-
-# ================================
-# Runtime
-# ================================
-EXPOSE 8080
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
