@@ -94,7 +94,6 @@ export default function TaskItem({
           priorityScore={priorityScore}
           onPriorityAccept={onPriorityAccept}
           onPriorityReject={onPriorityReject}
-          onPriorityWhy={onPriorityWhy}
         />
       )}
     </Draggable>
