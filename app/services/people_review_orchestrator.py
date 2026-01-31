@@ -1,8 +1,8 @@
 # app/services/people_review_orchestrator.py
 """
-People Review Orchestrator - Rewritten to match Goal Review pattern
+People Review Orchestrator - v2 Simplified
 
-Uses GPT-generated adaptive questions via YAML prompts instead of hardcoded question sequences.
+Uses GPT-generated adaptive questions with INLINE prompts (no YAML dependency).
 Each phase asks ONE thoughtful question that reacts to what the user said.
 """
 
@@ -12,7 +12,6 @@ from openai import OpenAI
 from app.services.people_review_service import PeopleReviewService
 from app.services.journey_context import build_journey_context
 from app.services.message_service import load_conversation_history
-from app.services.prompt_service import load_prompt
 from app.models import RelationshipReview, JourneyPerson
 from app.config import OPENAI_API_KEY, OPENAI_MODEL
 
@@ -233,21 +232,20 @@ def _handle_reflection(
     journey_context = build_journey_context(db, user_number)
     history = load_conversation_history(db, user_number)
     
-    # Build previous review summary if exists
-    prev_review = state_context.get('previous_review')
-    prev_summary = ""
-    if prev_review:
-        prev_summary = f"Last review: {prev_review.get('review_date', 'N/A')}, strength {prev_review.get('relationship_strength', 'N/A')}/5"
-    
-    text = _run_people_review_prompt(
-        "app/prompts/coaching/people_review/reflection.yaml",
-        person_name=person['name'],
-        relation=person.get('relation', 'colleague'),
-        previous_review_summary=prev_summary,
-        user_input=user_message,
-        journey_context=journey_context,
-        recent_conversation=_format_recent_history(history, limit=5)
-    )
+    try:
+        text = _generate_reflection_question(
+            person_name=person['name'],
+            relation=person.get('relation', 'colleague'),
+            user_input=user_message,
+            journey_context=journey_context,
+            recent_history=history
+        )
+    except Exception as e:
+        print(f"❌ Error generating reflection question: {e}")
+        import traceback
+        traceback.print_exc()
+        # Fallback to simple question
+        text = f"What's the real issue underneath what you just shared about {person['name']}?"
     
     # Move to diagnostics
     state_context['phase'] = 'diagnostics'
@@ -268,7 +266,6 @@ def _handle_diagnostics(
 ) -> Dict[str, Any]:
     """
     Handle diagnostics phase - ONE GPT-generated diagnostic question.
-    Like goal review's diagnosis phase.
     """
     
     print(f"📍 PHASE: DIAGNOSTICS")
@@ -286,19 +283,22 @@ def _handle_diagnostics(
     # Generate ONE diagnostic question using GPT
     journey_context = build_journey_context(db, user_number)
     history = load_conversation_history(db, user_number)
+    reflection_summary = state_context.get('user_reflection', '')
     
-    # Build reflection summary
-    reflection_summary = state_context.get('user_reflection', 'No reflection captured')
-    
-    text = _run_people_review_prompt(
-        "app/prompts/coaching/people_review/diagnostics.yaml",
-        person_name=person['name'],
-        relation=person.get('relation', 'colleague'),
-        reflection_summary=reflection_summary,
-        user_input=user_message,
-        journey_context=journey_context,
-        recent_conversation=_format_recent_history(history, limit=5)
-    )
+    try:
+        text = _generate_diagnostics_question(
+            person_name=person['name'],
+            relation=person.get('relation', 'colleague'),
+            reflection_summary=reflection_summary,
+            user_input=user_message,
+            journey_context=journey_context,
+            recent_history=history
+        )
+    except Exception as e:
+        print(f"❌ Error generating diagnostics question: {e}")
+        import traceback
+        traceback.print_exc()
+        text = f"What pattern have you noticed in how you and {person['name']} interact?"
     
     # Move to planning
     state_context['phase'] = 'planning'
@@ -319,7 +319,6 @@ def _handle_planning(
 ) -> Dict[str, Any]:
     """
     Handle planning phase - ONE GPT-generated action question.
-    Like goal review's adjustment phase.
     """
     
     print(f"📍 PHASE: PLANNING")
@@ -338,21 +337,24 @@ def _handle_planning(
     # Generate ONE planning question using GPT
     journey_context = build_journey_context(db, user_number)
     history = load_conversation_history(db, user_number)
-    
-    # Build summaries
     reflection_summary = state_context.get('user_reflection', '')
     diagnosis_summary = state_context.get('diagnosis_input', '')
     
-    text = _run_people_review_prompt(
-        "app/prompts/coaching/people_review/planning.yaml",
-        person_name=person['name'],
-        relation=person.get('relation', 'colleague'),
-        reflection_summary=reflection_summary,
-        diagnosis_summary=diagnosis_summary,
-        user_input=user_message,
-        journey_context=journey_context,
-        recent_conversation=_format_recent_history(history, limit=5)
-    )
+    try:
+        text = _generate_planning_question(
+            person_name=person['name'],
+            relation=person.get('relation', 'colleague'),
+            reflection_summary=reflection_summary,
+            diagnosis_summary=diagnosis_summary,
+            user_input=user_message,
+            journey_context=journey_context,
+            recent_history=history
+        )
+    except Exception as e:
+        print(f"❌ Error generating planning question: {e}")
+        import traceback
+        traceback.print_exc()
+        text = f"What's the ONE action you need to take with {person['name']} this week?"
     
     # Move to closure
     state_context['phase'] = 'closure'
@@ -373,7 +375,6 @@ def _handle_closure(
 ) -> Dict[str, Any]:
     """
     Handle closure phase - GPT-generated summary.
-    Like goal review's closure phase.
     """
     
     print(f"📍 PHASE: CLOSURE")
@@ -401,19 +402,26 @@ def _handle_closure(
             "state_context": None
         }
     
-    # Build comprehensive review summary
-    review_summary = _build_review_summary_for_prompt(review, state_context, person)
+    # Build summary
+    strength_text = f"{review.relationship_strength}/5" if review.relationship_strength else "not rated"
     
-    # Generate closure summary using GPT
-    text = _run_people_review_prompt(
-        "app/prompts/coaching/people_review/closure.yaml",
-        person_name=person['name'],
-        relation=person.get('relation', 'colleague'),
-        review_summary=review_summary,
-        user_input=user_message,
-        journey_context="",  # Not needed for closure
-        recent_conversation=""  # Not needed for closure
-    )
+    summary_parts = [
+        f"We reviewed your relationship with {person['name']}:",
+        f"\n📊 Strength: {strength_text}"
+    ]
+    
+    # Extract key insight from reflection
+    reflection = state_context.get('user_reflection', '')
+    if reflection and len(reflection) > 20:
+        insight = reflection[:150] + "..." if len(reflection) > 150 else reflection
+        summary_parts.append(f"\n💡 Key insight: {insight}")
+    
+    # Add next steps
+    if combined_plan:
+        next_step = combined_plan[:150] + "..." if len(combined_plan) > 150 else combined_plan
+        summary_parts.append(f"\n✅ Next: {next_step}")
+    
+    summary_parts.append("\n\nI've saved this review. Would you like me to create any tasks related to this relationship?")
     
     # Complete the review
     PeopleReviewService.complete_review(db, review_id)
@@ -421,111 +429,163 @@ def _handle_closure(
     print(f"✅ PEOPLE REVIEW SESSION COMPLETE")
     
     return {
-        "response": text,
+        "response": "".join(summary_parts),
         "next_phase": "completed",
         "state_context": None
     }
 
 
 # ============================================================
-# HELPER FUNCTIONS
+# GPT QUESTION GENERATORS - INLINE PROMPTS
 # ============================================================
 
-def _run_people_review_prompt(
-    prompt_path: str,
+def _generate_reflection_question(
     person_name: str,
     relation: str,
     user_input: str,
     journey_context: str,
-    recent_conversation: str,
-    **kwargs
+    recent_history: List[Dict]
 ) -> str:
-    """
-    Run a people review prompt phase using GPT.
-    Similar to _run_goal_review_prompt in orchestrator.py
-    """
-    prompt = load_prompt(prompt_path)
+    """Generate ONE adaptive reflection question based on what user said"""
     
-    # Build system prompt with all context
-    system_prompt = prompt['system_prompt'].format(
-        person_name=person_name,
-        relation=relation,
-        user_input=user_input,
-        recent_conversation=recent_conversation,
-        **kwargs  # Additional context like reflection_summary, etc.
-    )
+    system_prompt = f"""You are Alfred, an executive coach helping reflect on a relationship with {person_name} ({relation}).
+
+The user just said: "{user_input}"
+
+Your task: Ask ONE thoughtful follow-up question that goes deeper into what they just shared.
+
+CRITICAL RULES:
+- Ask ONLY ONE question (not multiple)
+- Keep under 250 characters
+- React to what they actually said (don't ignore their answer)
+- If they mention tension/conflict → probe that specifically
+- If they mention positive aspects → explore what makes that work
+- If they mention mixed feelings → help them untangle that
+- Don't ask rating scales or frequency questions yet
+- Make it conversational, not mechanical
+
+Examples:
+If they mention tension: "That tension you mentioned - what does that actually look like when it shows up?"
+If they mention daily contact: "With daily contact, what's the difference between a good day and a tough day with {person_name}?"
+If they mention supervision: "As your supervisor, where does the relationship feel most/least effective?"
+
+Generate ONE question now that builds on what they said."""
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_input}
+    ]
     
-    if journey_context:
-        system_prompt += f"\n\nJOURNEY CONTEXT:\n{journey_context}"
-    
-    messages = [{"role": "system", "content": system_prompt}]
-    
-    # Add recent conversation history
-    if recent_conversation:
-        # Recent conversation is already formatted, just use it for context
-        # Don't add to messages array to avoid duplication
-        pass
-    
-    # Add current user input
-    if user_input:
-        messages.append({"role": "user", "content": user_input})
-    
-    # Call GPT
     resp = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=messages,
         temperature=0.6,
-        max_tokens=260
+        max_tokens=100
     )
     
     return (resp.choices[0].message.content or "").strip()
 
 
-def _format_recent_history(history: List[Dict], limit: int = 5) -> str:
-    """Format recent conversation history for prompt context"""
-    if not history:
-        return "No recent history"
-    
-    recent = history[-limit * 2:]  # Get last N exchanges
-    formatted = []
-    
-    for msg in recent:
-        role = "User" if msg.get("role") == "user" else "Alfred"
-        content = msg.get("content", "")
-        formatted.append(f"{role}: {content}")
-    
-    return "\n".join(formatted)
-
-
-def _build_review_summary_for_prompt(
-    review: RelationshipReview,
-    state_context: Dict[str, Any],
-    person: Dict[str, Any]
+def _generate_diagnostics_question(
+    person_name: str,
+    relation: str,
+    reflection_summary: str,
+    user_input: str,
+    journey_context: str,
+    recent_history: List[Dict]
 ) -> str:
-    """Build comprehensive review summary for closure prompt"""
+    """Generate ONE diagnostic question about patterns/dynamics"""
     
-    summary_parts = [
-        f"Person: {person['name']} ({person.get('relation', 'colleague')})",
+    system_prompt = f"""You are Alfred, helping diagnose relationship dynamics with {person_name} ({relation}).
+
+Earlier they said: "{reflection_summary}"
+Just now they said: "{user_input}"
+
+Your task: Ask ONE strategic question about patterns, importance, or underlying dynamics.
+
+CRITICAL RULES:
+- Ask ONLY ONE question
+- Keep under 250 characters
+- Focus on WHY things are this way, not just WHAT is happening
+- Help them see patterns they might not have noticed
+- Build on what you now know from reflection
+- Be specific to this relationship
+
+Examples:
+"You talk every day but feel tension - is that tension about what you discuss or how you discuss it?"
+"As your supervisor, what happens when you need to push back on her direction?"
+"Where does this relationship work best - in crisis or in routine?"
+
+Generate ONE diagnostic question."""
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_input}
     ]
     
-    # Add relationship strength if captured
-    if review.relationship_strength:
-        summary_parts.append(f"Strength rating: {review.relationship_strength}/5")
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=messages,
+        temperature=0.6,
+        max_tokens=100
+    )
     
-    # Add reflection insights
-    if state_context.get('user_reflection'):
-        summary_parts.append(f"\nReflection: {state_context['user_reflection'][:200]}")
-    
-    # Add diagnostic insights
-    if state_context.get('diagnosis_input'):
-        summary_parts.append(f"\nDiagnosis: {state_context['diagnosis_input'][:200]}")
-    
-    # Add planning
-    if review.next_steps:
-        summary_parts.append(f"\nPlanned actions: {review.next_steps[:200]}")
-    
-    return "\n".join(summary_parts)
+    return (resp.choices[0].message.content or "").strip()
 
+
+def _generate_planning_question(
+    person_name: str,
+    relation: str,
+    reflection_summary: str,
+    diagnosis_summary: str,
+    user_input: str,
+    journey_context: str,
+    recent_history: List[Dict]
+) -> str:
+    """Generate ONE action-oriented planning question"""
+    
+    system_prompt = f"""You are Alfred, helping plan actions to improve the relationship with {person_name} ({relation}).
+
+What we've learned:
+Reflection: {reflection_summary[:200]}
+Diagnosis: {diagnosis_summary[:200]}
+Just now: {user_input}
+
+Your task: Ask ONE action-oriented question that leads to concrete next steps.
+
+CRITICAL RULES:
+- Ask ONLY ONE question
+- Keep under 250 characters
+- Make it specific to THIS relationship
+- Focus on what THEY can control
+- Force clarity on the single most important action
+- Be direct and clear
+
+Examples:
+"What's the ONE conversation you need to have with {person_name} this week?"
+"If you could only change one thing about how you work together, what would it be?"
+"What boundary would reduce the most tension if you set it clearly?"
+
+Generate ONE planning question."""
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_input}
+    ]
+    
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=messages,
+        temperature=0.6,
+        max_tokens=100
+    )
+    
+    return (resp.choices[0].message.content or "").strip()
+
+
+# ============================================================
+# HELPER FUNCTIONS
+# ============================================================
 
 def _parse_selection(user_message: str, candidates: List[Dict]) -> Optional[Dict]:
     """Parse user's selection from message"""
