@@ -26,7 +26,6 @@ class PeopleReviewService:
         1. needs_attention flag
         2. Never reviewed
         3. Longest time since last review
-        4. Strategic importance (if we had that field)
         """
         query = db.query(JourneyPerson).filter(
             JourneyPerson.user_number == user_number
@@ -34,7 +33,8 @@ class PeopleReviewService:
         
         all_people = query.all()
         
-        candidates = []
+        # Build candidate list with metadata
+        all_candidates = []
         for person in all_people:
             days_since = None
             if person.last_reviewed_at:
@@ -58,23 +58,23 @@ class PeopleReviewService:
                 
                 needs_review = days_since > threshold_days
             
-            if include_all or needs_review:
-                candidates.append({
-                    "id": person.id,
-                    "name": person.name,
-                    "relation": person.relation,
-                    "email": person.email,
-                    "phone": person.phone,
-                    "context": person.context,
-                    "last_reviewed_at": person.last_reviewed_at.isoformat() if person.last_reviewed_at else None,
-                    "days_since_review": days_since,
-                    "needs_attention": person.needs_attention or False,
-                    "relationship_health": person.relationship_health,
-                    "review_frequency": person.review_frequency
-                })
+            all_candidates.append({
+                "id": person.id,
+                "name": person.name,
+                "relation": person.relation,
+                "email": person.email,
+                "phone": person.phone,
+                "context": person.context,
+                "last_reviewed_at": person.last_reviewed_at.isoformat() if person.last_reviewed_at else None,
+                "days_since_review": days_since,
+                "needs_attention": person.needs_attention or False,
+                "relationship_health": person.relationship_health,
+                "review_frequency": person.review_frequency,
+                "needs_review": needs_review
+            })
         
         # Sort by priority: needs_attention first, then never reviewed, then oldest review
-        candidates.sort(
+        all_candidates.sort(
             key=lambda x: (
                 not x["needs_attention"],  # False (needs attention) comes first
                 x["last_reviewed_at"] is not None,  # None (never reviewed) comes first
@@ -82,10 +82,17 @@ class PeopleReviewService:
             )
         )
         
+        # Return all or top candidates based on flag
+        if include_all:
+            candidates = all_candidates
+        else:
+            candidates = all_candidates[:5]  # Top 5 priorities
+        
         stats = {
             "total_people": len(all_people),
-            "needs_review": len([c for c in candidates if c.get("needs_attention")]),
-            "never_reviewed": len([c for c in candidates if c["last_reviewed_at"] is None])
+            "showing": len(candidates),
+            "needs_review": len([c for c in all_candidates if c.get("needs_attention")]),
+            "never_reviewed": len([c for c in all_candidates if c["last_reviewed_at"] is None])
         }
         
         return {

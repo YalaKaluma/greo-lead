@@ -10,14 +10,6 @@ const GOAL_REVIEW_STAGES = [
   { id: 'closure', label: 'Closure', description: 'Summary and next steps' }
 ];
 
-const PEOPLE_REVIEW_STAGES = [
-  { id: 'select_person', label: 'Selection', description: 'Choose who to review' },
-  { id: 'reflection', label: 'Reflection', description: 'Current relationship state' },
-  { id: 'diagnostics', label: 'Diagnostics', description: 'Patterns and dynamics' },
-  { id: 'planning', label: 'Planning', description: 'Actions and next steps' },
-  { id: 'closure', label: 'Closure', description: 'Summary and tasks' }
-];
-
 const SESSION_TYPES = [
   { id: 'goal_review', label: 'Goal Review Session', enabled: true },
   { id: 'people_review', label: 'People Review Session', enabled: true },
@@ -333,45 +325,6 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
                   <div className={`
                     w-12 h-0.5 mb-6
                     ${index < stageIndex ? 'bg-green-500' : 'bg-gray-200'}
-                  `} />
-                )}
-              </React.Fragment>
-            ))}
-          </div>
-        )}
-
-        {/* Progress Dots - People Review */}
-        {activeSession === 'people_review' && (
-          <div className="mt-6 flex items-center justify-center gap-2">
-            {PEOPLE_REVIEW_STAGES.map((stage, index) => (
-              <React.Fragment key={stage.id}>
-                <div className="flex flex-col items-center">
-                  <div
-                    className={`
-                      w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold
-                      transition-all
-                      ${currentStage === stage.id
-                        ? 'bg-purple-600 text-white shadow-lg scale-110'
-                        : PEOPLE_REVIEW_STAGES.findIndex(s => s.id === currentStage) > index
-                          ? 'bg-green-500 text-white'
-                          : 'bg-gray-200 text-gray-500'
-                      }
-                    `}
-                    title={`${stage.label}: ${stage.description}`}
-                  >
-                    {PEOPLE_REVIEW_STAGES.findIndex(s => s.id === currentStage) > index ? '✓' : index + 1}
-                  </div>
-                  <span className={`
-                    mt-2 text-xs font-medium
-                    ${currentStage === stage.id ? 'text-purple-600' : 'text-gray-500'}
-                  `}>
-                    {stage.label}
-                  </span>
-                </div>
-                {index < PEOPLE_REVIEW_STAGES.length - 1 && (
-                  <div className={`
-                    w-12 h-0.5 mb-6
-                    ${PEOPLE_REVIEW_STAGES.findIndex(s => s.id === currentStage) > index ? 'bg-green-500' : 'bg-gray-200'}
                   `} />
                 )}
               </React.Fragment>

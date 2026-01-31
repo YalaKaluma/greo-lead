@@ -1,15 +1,22 @@
 # app/services/people_review_orchestrator.py
 """
-People Review Orchestrator
+People Review Orchestrator - Rewritten to match Goal Review pattern
 
-Manages the conversation flow for relationship reviews.
-Similar to goal review but focused on relationship dynamics.
+Uses GPT-generated adaptive questions via YAML prompts instead of hardcoded question sequences.
+Each phase asks ONE thoughtful question that reacts to what the user said.
 """
 
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
+from openai import OpenAI
 from app.services.people_review_service import PeopleReviewService
+from app.services.journey_context import build_journey_context
+from app.services.message_service import load_conversation_history
+from app.services.prompt_service import load_prompt
 from app.models import RelationshipReview, JourneyPerson
+from app.config import OPENAI_API_KEY, OPENAI_MODEL
+
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 
 def handle_people_review_session(
@@ -22,11 +29,11 @@ def handle_people_review_session(
     Main entry point for people review sessions.
     Routes to appropriate phase handler.
     
-    Phases:
+    Phases (like goal review):
     - select_person: Choose who to review
-    - reflection: Recent interactions and current state
-    - diagnostics: Deeper analysis of dynamics
-    - planning: Action steps and improvements
+    - reflection: ONE question about current state
+    - diagnostics: ONE question about patterns/dynamics
+    - planning: ONE question about actions
     - closure: Summary and task creation
     """
     
@@ -47,16 +54,28 @@ def handle_people_review_session(
         }
     
     # Route to phase handler
-    handlers = {
-        'select_person': _handle_selection,
-        'reflection': _handle_reflection,
-        'diagnostics': _handle_diagnostics,
-        'planning': _handle_planning,
-        'closure': _handle_closure
-    }
+    if phase == 'select_person':
+        return _handle_selection(db, user_number, user_message, state_context)
     
-    handler = handlers.get(phase, _handle_selection)
-    return handler(db, user_number, user_message, state_context)
+    # All other phases use GPT-generated questions
+    if phase == 'reflection':
+        return _handle_reflection(db, user_number, user_message, state_context)
+    
+    if phase == 'diagnostics':
+        return _handle_diagnostics(db, user_number, user_message, state_context)
+    
+    if phase == 'planning':
+        return _handle_planning(db, user_number, user_message, state_context)
+    
+    if phase == 'closure':
+        return _handle_closure(db, user_number, user_message, state_context)
+    
+    # Fallback
+    return {
+        "response": "Something went wrong. Let's start over.",
+        "next_phase": "completed",
+        "state_context": None
+    }
 
 
 def _is_cancel_request(message: str) -> bool:
@@ -90,7 +109,12 @@ def _handle_selection(
     
     # If no candidates loaded yet, load them
     if 'candidates' not in state_context:
-        candidates_data = PeopleReviewService.get_review_candidates(db, user_number)
+        # Check if user wants to see all
+        show_all = 'all' in user_message.lower()
+        
+        candidates_data = PeopleReviewService.get_review_candidates(
+            db, user_number, include_all=show_all
+        )
         candidates = candidates_data['people']
         stats = candidates_data['stats']
         
@@ -103,9 +127,11 @@ def _handle_selection(
                 "state_context": None
             }
         
-        # Format candidates for display (top 5)
+        # Format candidates for display
         people_list = []
-        for i, person in enumerate(candidates[:5], 1):
+        display_count = min(len(candidates), 5) if not show_all else len(candidates)
+        
+        for i, person in enumerate(candidates[:display_count], 1):
             flag = "⚠️ " if person.get('needs_attention') else ""
             
             if person['days_since_review'] is None:
@@ -122,12 +148,18 @@ def _handle_selection(
             relation = f" ({person['relation']})" if person.get('relation') else ""
             people_list.append(f"{i}. {flag}{person['name']}{relation} - {time_desc}")
         
-        response = (
-            f"I see {stats['total_people']} people in your network. "
-            f"Here are some relationships that might benefit from reflection:\n\n"
-            + "\n".join(people_list) +
-            "\n\nWho would you like to focus on? (Say their name or number)"
-        )
+        # Build response
+        if show_all or len(candidates) <= 5:
+            intro = f"I see {stats['total_people']} people in your network:"
+        else:
+            intro = f"I see {stats['total_people']} people in your network. Here are 5 who might benefit from reflection:"
+        
+        response = intro + "\n\n" + "\n".join(people_list)
+        
+        if not show_all and len(candidates) > 5:
+            response += "\n\nWho would you like to focus on? (Say their name, pick a number, or type 'all' to see everyone)"
+        else:
+            response += "\n\nWho would you like to focus on? (Say their name or number)"
         
         return {
             "response": response,
@@ -156,7 +188,9 @@ def _handle_selection(
         state_context['active_review_id'] = review_session['review_id']
         state_context['person'] = review_session['person']
         state_context['previous_review'] = review_session.get('previous_review')
-        state_context['reflection_step'] = 0
+        
+        # Move to reflection phase
+        state_context['phase'] = 'reflection'
         
         return {
             "response": review_session['conversation_starter'],
@@ -178,58 +212,49 @@ def _handle_reflection(
     user_message: str,
     state_context: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Handle reflection phase - understanding current state"""
+    """
+    Handle reflection phase - ONE GPT-generated question.
+    Like goal review's reflection phase.
+    """
+    
+    print(f"📍 PHASE: REFLECTION")
     
     review_id = state_context['active_review_id']
     person = state_context['person']
-    step = state_context.get('reflection_step', 0)
     
-    # Save user's response
-    if step == 0:
-        PeopleReviewService.update_review(db, review_id, {
-            'last_meaningful_interaction': user_message
-        })
-    elif step == 1:
-        PeopleReviewService.update_review(db, review_id, {
-            'current_dynamics': user_message
-        })
-    elif step == 2:
-        PeopleReviewService.update_review(db, review_id, {
-            'recent_interactions': user_message
-        })
-    elif step == 3:
-        # Extract strength rating
-        strength = _extract_rating(user_message)
-        PeopleReviewService.update_review(db, review_id, {
-            'relationship_strength': strength
-        })
-    elif step == 4:
-        # Extract frequency
-        freq = _extract_frequency(user_message)
-        PeopleReviewService.update_review(db, review_id, {
-            'communication_frequency': freq
-        })
+    # Save user's reflection
+    PeopleReviewService.update_review(db, review_id, {
+        'recent_interactions': user_message,
+        'current_dynamics': user_message
+    })
+    state_context['user_reflection'] = user_message
     
-    # Progress through reflection questions
-    questions = [
-        f"How would you describe the current state of your relationship with {person['name']}?",
-        f"What's working well? What's challenging?",
-        f"On a scale of 1-5, how strong is this relationship right now?",
-        f"How frequently are you currently in touch? (daily/weekly/monthly/occasionally)"
-    ]
+    # Generate ONE adaptive question using GPT
+    journey_context = build_journey_context(db, user_number)
+    history = load_conversation_history(db, user_number)
     
-    if step < len(questions):
-        state_context['reflection_step'] = step + 1
-        return {
-            "response": questions[step],
-            "next_phase": "reflection",
-            "state_context": state_context
-        }
+    # Build previous review summary if exists
+    prev_review = state_context.get('previous_review')
+    prev_summary = ""
+    if prev_review:
+        prev_summary = f"Last review: {prev_review.get('review_date', 'N/A')}, strength {prev_review.get('relationship_strength', 'N/A')}/5"
+    
+    text = _run_people_review_prompt(
+        "app/prompts/coaching/people_review/reflection.yaml",
+        person_name=person['name'],
+        relation=person.get('relation', 'colleague'),
+        previous_review_summary=prev_summary,
+        user_input=user_message,
+        journey_context=journey_context,
+        recent_conversation=_format_recent_history(history, limit=5)
+    )
     
     # Move to diagnostics
-    state_context['diagnostic_step'] = 0
+    state_context['phase'] = 'diagnostics'
+    print(f"✅ Phase transition: reflection → diagnostics")
+    
     return {
-        "response": f"Thank you for that reflection. Now let's go a bit deeper. What value do you and {person['name']} provide each other?",
+        "response": text,
         "next_phase": "diagnostics",
         "state_context": state_context
     }
@@ -241,37 +266,46 @@ def _handle_diagnostics(
     user_message: str,
     state_context: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Handle diagnostic phase - deeper analysis"""
+    """
+    Handle diagnostics phase - ONE GPT-generated diagnostic question.
+    Like goal review's diagnosis phase.
+    """
+    
+    print(f"📍 PHASE: DIAGNOSTICS")
     
     review_id = state_context['active_review_id']
     person = state_context['person']
-    step = state_context.get('diagnostic_step', 0)
     
     # Save diagnostic insights
-    field_mapping = ['mutual_value', 'strategic_importance', 'unresolved_issues', 'patterns_noticed']
-    if step < len(field_mapping):
-        PeopleReviewService.update_review(db, review_id, {
-            field_mapping[step]: user_message
-        })
+    PeopleReviewService.update_review(db, review_id, {
+        'unresolved_issues': user_message,
+        'patterns_noticed': user_message
+    })
+    state_context['diagnosis_input'] = user_message
     
-    questions = [
-        f"How strategically important is this relationship to your current goals?",
-        f"Are there any unresolved issues or tensions with {person['name']}?",
-        f"What patterns have you noticed in your interactions?"
-    ]
+    # Generate ONE diagnostic question using GPT
+    journey_context = build_journey_context(db, user_number)
+    history = load_conversation_history(db, user_number)
     
-    if step < len(questions):
-        state_context['diagnostic_step'] = step + 1
-        return {
-            "response": questions[step],
-            "next_phase": "diagnostics",
-            "state_context": state_context
-        }
+    # Build reflection summary
+    reflection_summary = state_context.get('user_reflection', 'No reflection captured')
+    
+    text = _run_people_review_prompt(
+        "app/prompts/coaching/people_review/diagnostics.yaml",
+        person_name=person['name'],
+        relation=person.get('relation', 'colleague'),
+        reflection_summary=reflection_summary,
+        user_input=user_message,
+        journey_context=journey_context,
+        recent_conversation=_format_recent_history(history, limit=5)
+    )
     
     # Move to planning
-    state_context['planning_step'] = 0
+    state_context['phase'] = 'planning'
+    print(f"✅ Phase transition: diagnostics → planning")
+    
     return {
-        "response": f"Great insights. Now let's think about action. What specific steps could strengthen your relationship with {person['name']}?",
+        "response": text,
         "next_phase": "planning",
         "state_context": state_context
     }
@@ -283,36 +317,49 @@ def _handle_planning(
     user_message: str,
     state_context: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Handle action planning phase"""
+    """
+    Handle planning phase - ONE GPT-generated action question.
+    Like goal review's adjustment phase.
+    """
+    
+    print(f"📍 PHASE: PLANNING")
     
     review_id = state_context['active_review_id']
     person = state_context['person']
-    step = state_context.get('planning_step', 0)
     
     # Save action plans
-    field_mapping = ['how_to_strengthen', 'what_to_appreciate', 'what_to_address', 'communication_plan']
-    if step < len(field_mapping):
-        PeopleReviewService.update_review(db, review_id, {
-            field_mapping[step]: user_message
-        })
+    PeopleReviewService.update_review(db, review_id, {
+        'how_to_strengthen': user_message,
+        'communication_plan': user_message,
+        'next_steps': user_message
+    })
+    state_context['planning_input'] = user_message
     
-    questions = [
-        f"Is there anything you'd like to appreciate or acknowledge with {person['name']}?",
-        f"Are there any difficult conversations you need to have?",
-        f"When and how should you next reach out to {person['name']}?"
-    ]
+    # Generate ONE planning question using GPT
+    journey_context = build_journey_context(db, user_number)
+    history = load_conversation_history(db, user_number)
     
-    if step < len(questions):
-        state_context['planning_step'] = step + 1
-        return {
-            "response": questions[step],
-            "next_phase": "planning",
-            "state_context": state_context
-        }
+    # Build summaries
+    reflection_summary = state_context.get('user_reflection', '')
+    diagnosis_summary = state_context.get('diagnosis_input', '')
+    
+    text = _run_people_review_prompt(
+        "app/prompts/coaching/people_review/planning.yaml",
+        person_name=person['name'],
+        relation=person.get('relation', 'colleague'),
+        reflection_summary=reflection_summary,
+        diagnosis_summary=diagnosis_summary,
+        user_input=user_message,
+        journey_context=journey_context,
+        recent_conversation=_format_recent_history(history, limit=5)
+    )
     
     # Move to closure
+    state_context['phase'] = 'closure'
+    print(f"✅ Phase transition: planning → closure")
+    
     return {
-        "response": "Let me summarize what we discussed...",
+        "response": text,
         "next_phase": "closure",
         "state_context": state_context
     }
@@ -324,12 +371,25 @@ def _handle_closure(
     user_message: str,
     state_context: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Handle review closure and summary"""
+    """
+    Handle closure phase - GPT-generated summary.
+    Like goal review's closure phase.
+    """
+    
+    print(f"📍 PHASE: CLOSURE")
     
     review_id = state_context['active_review_id']
     person = state_context['person']
     
-    # Get full review
+    # Save final input
+    current_plan = state_context.get('planning_input', '')
+    combined_plan = f"{current_plan}\n{user_message}" if current_plan else user_message
+    
+    PeopleReviewService.update_review(db, review_id, {
+        'next_steps': combined_plan
+    })
+    
+    # Get full review for summary
     review = db.query(RelationshipReview).filter(
         RelationshipReview.id == review_id
     ).first()
@@ -341,33 +401,130 @@ def _handle_closure(
             "state_context": None
         }
     
-    # Generate summary
-    strength_text = f"{review.relationship_strength}/5" if review.relationship_strength else "not rated"
+    # Build comprehensive review summary
+    review_summary = _build_review_summary_for_prompt(review, state_context, person)
     
-    summary_parts = [
-        f"We reviewed your relationship with {person['name']}:",
-        f"\n📊 Strength: {strength_text}"
-    ]
-    
-    if review.how_to_strengthen:
-        summary_parts.append(f"\n💪 To strengthen: {review.how_to_strengthen[:100]}")
-    
-    if review.what_to_appreciate:
-        summary_parts.append(f"\n🙏 To appreciate: {review.what_to_appreciate[:100]}")
-    
-    if review.communication_plan:
-        summary_parts.append(f"\n📅 Next steps: {review.communication_plan[:100]}")
-    
-    summary_parts.append("\n\nI've saved this review. Would you like me to create any tasks related to this relationship?")
+    # Generate closure summary using GPT
+    text = _run_people_review_prompt(
+        "app/prompts/coaching/people_review/closure.yaml",
+        person_name=person['name'],
+        relation=person.get('relation', 'colleague'),
+        review_summary=review_summary,
+        user_input=user_message,
+        journey_context="",  # Not needed for closure
+        recent_conversation=""  # Not needed for closure
+    )
     
     # Complete the review
     PeopleReviewService.complete_review(db, review_id)
     
+    print(f"✅ PEOPLE REVIEW SESSION COMPLETE")
+    
     return {
-        "response": "".join(summary_parts),
+        "response": text,
         "next_phase": "completed",
         "state_context": None
     }
+
+
+# ============================================================
+# HELPER FUNCTIONS
+# ============================================================
+
+def _run_people_review_prompt(
+    prompt_path: str,
+    person_name: str,
+    relation: str,
+    user_input: str,
+    journey_context: str,
+    recent_conversation: str,
+    **kwargs
+) -> str:
+    """
+    Run a people review prompt phase using GPT.
+    Similar to _run_goal_review_prompt in orchestrator.py
+    """
+    prompt = load_prompt(prompt_path)
+    
+    # Build system prompt with all context
+    system_prompt = prompt['system_prompt'].format(
+        person_name=person_name,
+        relation=relation,
+        user_input=user_input,
+        recent_conversation=recent_conversation,
+        **kwargs  # Additional context like reflection_summary, etc.
+    )
+    
+    if journey_context:
+        system_prompt += f"\n\nJOURNEY CONTEXT:\n{journey_context}"
+    
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # Add recent conversation history
+    if recent_conversation:
+        # Recent conversation is already formatted, just use it for context
+        # Don't add to messages array to avoid duplication
+        pass
+    
+    # Add current user input
+    if user_input:
+        messages.append({"role": "user", "content": user_input})
+    
+    # Call GPT
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=messages,
+        temperature=0.6,
+        max_tokens=260
+    )
+    
+    return (resp.choices[0].message.content or "").strip()
+
+
+def _format_recent_history(history: List[Dict], limit: int = 5) -> str:
+    """Format recent conversation history for prompt context"""
+    if not history:
+        return "No recent history"
+    
+    recent = history[-limit * 2:]  # Get last N exchanges
+    formatted = []
+    
+    for msg in recent:
+        role = "User" if msg.get("role") == "user" else "Alfred"
+        content = msg.get("content", "")
+        formatted.append(f"{role}: {content}")
+    
+    return "\n".join(formatted)
+
+
+def _build_review_summary_for_prompt(
+    review: RelationshipReview,
+    state_context: Dict[str, Any],
+    person: Dict[str, Any]
+) -> str:
+    """Build comprehensive review summary for closure prompt"""
+    
+    summary_parts = [
+        f"Person: {person['name']} ({person.get('relation', 'colleague')})",
+    ]
+    
+    # Add relationship strength if captured
+    if review.relationship_strength:
+        summary_parts.append(f"Strength rating: {review.relationship_strength}/5")
+    
+    # Add reflection insights
+    if state_context.get('user_reflection'):
+        summary_parts.append(f"\nReflection: {state_context['user_reflection'][:200]}")
+    
+    # Add diagnostic insights
+    if state_context.get('diagnosis_input'):
+        summary_parts.append(f"\nDiagnosis: {state_context['diagnosis_input'][:200]}")
+    
+    # Add planning
+    if review.next_steps:
+        summary_parts.append(f"\nPlanned actions: {review.next_steps[:200]}")
+    
+    return "\n".join(summary_parts)
 
 
 def _parse_selection(user_message: str, candidates: List[Dict]) -> Optional[Dict]:
@@ -380,49 +537,12 @@ def _parse_selection(user_message: str, candidates: List[Dict]) -> Optional[Dict
         if 1 <= idx <= len(candidates):
             return candidates[idx - 1]
     
-    # Check for name match
+    # Check for name match (partial matching)
     for person in candidates:
         if person['name'].lower() in msg_lower:
             return person
-    
-    return None
-
-
-def _extract_rating(message: str) -> Optional[int]:
-    """Extract 1-5 rating from message"""
-    import re
-    # Look for numbers 1-5
-    matches = re.findall(r'\b([1-5])\b', message)
-    if matches:
-        return int(matches[0])
-    
-    # Look for words
-    word_map = {
-        'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
-        'poor': 1, 'weak': 2, 'okay': 3, 'good': 4, 'strong': 5,
-        'excellent': 5, 'great': 4
-    }
-    
-    for word, rating in word_map.items():
-        if word in message.lower():
-            return rating
-    
-    return None
-
-
-def _extract_frequency(message: str) -> Optional[str]:
-    """Extract communication frequency from message"""
-    msg_lower = message.lower()
-    
-    if 'daily' in msg_lower or 'every day' in msg_lower:
-        return 'daily'
-    elif 'weekly' in msg_lower or 'once a week' in msg_lower:
-        return 'weekly'
-    elif 'monthly' in msg_lower or 'once a month' in msg_lower:
-        return 'monthly'
-    elif 'occasional' in msg_lower or 'sometimes' in msg_lower:
-        return 'occasional'
-    elif 'rarely' in msg_lower or 'seldom' in msg_lower:
-        return 'rare'
+        # Also check if user's message is IN the person's name
+        if msg_lower in person['name'].lower():
+            return person
     
     return None
