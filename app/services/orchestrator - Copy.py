@@ -680,7 +680,7 @@ def _build_goal_review_status(phase: str, state_ctx: Dict[str, Any]) -> Dict[str
     # Map backend phases to frontend stages (0-indexed for 5 progress dots)
     # Frontend stages: framing(0), reflection(1), diagnosis(2), adjustment(3), closure(4)
     # Backend phases: select_goal(0), framing(1), reflection(2), diagnosis(3), adjustment(4), closure(5)
-
+    
     phase_to_stage_map = {
         "select_goal": {"stage": "framing", "stage_index": 0, "name": "Framing"},  # Map to framing
         "framing": {"stage": "framing", "stage_index": 0, "name": "Framing"},
@@ -869,12 +869,15 @@ Just the raw JSON object or array. Your response should start with {{ or [.
          "content": "Generate the JSON output based on the session context. Return ONLY the JSON, nothing else."}
     ]
 
+    # Determine if we need json_object or json_array based on the prompt
+    use_json_object = "task_synthesis" not in prompt_path
+    
     resp = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=messages,
         temperature=0.3,
         max_tokens=1000,  # Increased from 500 to allow for more tasks
-        response_format={"type": "json_object"}  # FIXED: Always force JSON for reliable parsing
+        response_format={"type": "json_object"} if use_json_object else None  # Only force object for summary
     )
 
     content = (resp.choices[0].message.content or "").strip()
@@ -888,6 +891,11 @@ Just the raw JSON object or array. Your response should start with {{ or [.
     # Try to parse as JSON (could be dict or list)
     try:
         parsed = json.loads(content)
+        
+        # If task_synthesis returned a dict with a "tasks" key, extract the array
+        if "task_synthesis" in prompt_path and isinstance(parsed, dict) and "tasks" in parsed:
+            return parsed["tasks"]
+        
         return parsed
     except Exception as e:
         print(f"⚠️ Failed to parse JSON from internal prompt: {e}")

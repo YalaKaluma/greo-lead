@@ -12,7 +12,7 @@ const GOAL_REVIEW_STAGES = [
 
 const SESSION_TYPES = [
   { id: 'goal_review', label: 'Goal Review Session', enabled: true },
-  { id: 'people_review', label: 'People Review Session', enabled: true },
+  { id: 'people_review', label: 'People Review Session', enabled: false },
   { id: 'leadership_coaching', label: 'Leadership Coaching Session', enabled: false }
 ];
 
@@ -52,35 +52,23 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   };
 
   const startSession = async (sessionType) => {
-    if (!['goal_review', 'people_review'].includes(sessionType)) return; // Only these enabled for now
+    if (sessionType !== 'goal_review') return; // Only goal review enabled for now
 
     console.log('Starting session:', sessionType);
     console.log('API URL:', apiUrl);
     console.log('User Number:', userNumber);
 
     setActiveSession(sessionType);
-    
-    // Set appropriate initial stage
-    if (sessionType === 'goal_review') {
-      setCurrentStage('framing');
-      setStageIndex(0);
-    } else if (sessionType === 'people_review') {
-      setCurrentStage('select_person');
-      setStageIndex(0);
-    }
-    
+    setCurrentStage('framing');
+    setStageIndex(0);
     setIsLoading(true);
 
     try {
-      // Send message to start session
-      const startMessage = sessionType === 'goal_review' 
-        ? 'Start goal review session'
-        : 'Start people review session';
-        
+      // Send message to start goal review session
       console.log('Sending POST to:', `${apiUrl}/api/chat`);
       const response = await axios.post(`${apiUrl}/api/chat`, {
         user_number: userNumber,
-        message: startMessage
+        message: 'Start goal review session'
       });
 
       console.log('Response received:', response.data);
@@ -92,22 +80,17 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
       };
 
       setMessages(prev => [...prev, 
-        { role: 'user', content: startMessage, timestamp: new Date().toISOString() },
+        { role: 'user', content: 'Start goal review session', timestamp: new Date().toISOString() },
         newMessage
       ]);
 
       // Update stage from response if available
-      if (sessionType === 'goal_review' && response.data.goal_review_status) {
+      if (response.data.goal_review_status) {
         const status = response.data.goal_review_status;
         console.log('Goal review status:', status);
         setCurrentStage(status.stage);
         const idx = GOAL_REVIEW_STAGES.findIndex(s => s.id === status.stage);
         setStageIndex(idx >= 0 ? idx : 0);
-      } else if (sessionType === 'people_review' && response.data.people_review_status) {
-        const status = response.data.people_review_status;
-        console.log('People review status:', status);
-        setCurrentStage(status.phase);
-        // People review doesn't have fixed stages like goal review
       }
     } catch (error) {
       console.error('Error starting session:', error);
@@ -201,19 +184,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
           setCurrentStage(null);
           setStageIndex(0);
         }
-      } else if (response.data.people_review_status) {
-        // Handle people review status
-        const status = response.data.people_review_status;
-        if (status.active) {
-          setActiveSession('people_review');
-          setCurrentStage(status.phase);
-        } else {
-          // Session ended
-          setActiveSession(null);
-          setCurrentStage(null);
-          setStageIndex(0);
-        }
-      } else if (response.data.state !== 'GOAL_REVIEW' && response.data.state !== 'PEOPLE_REVIEW') {
+      } else if (response.data.state !== 'GOAL_REVIEW') {
         // Session ended or not active
         setActiveSession(null);
         setCurrentStage(null);
@@ -290,7 +261,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
           </div>
         </div>
 
-        {/* Progress Dots - Only show when goal review session is active */}
+        {/* Progress Dots - Only show when session is active */}
         {activeSession === 'goal_review' && (
           <div className="mt-6 flex items-center justify-center gap-2">
             {GOAL_REVIEW_STAGES.map((stage, index) => (

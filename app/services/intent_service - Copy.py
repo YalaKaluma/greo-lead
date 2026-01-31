@@ -51,9 +51,6 @@ Your task: Classify the user's intent with confidence scores (0.0 to 1.0).
 7. GOAL_REVIEW - User wants a structured goals performance review session
    Signals: "review my goals", "goal check-in", "progress review", "performance review", "biweekly review", "review [goal name]"
 
-8. PEOPLE_REVIEW - User wants a structured relationship review session
-   Signals: "review my relationships", "people review", "relationship check-in", "review my relationship with [name]", "reflect on [person]"
-
 ===== EXPLICIT EXECUTION DETECTION =====
 Check if the user is EXPLICITLY requesting execution (vs. just mentioning something):
 - Explicit: "Add this as a task", "Create a reminder for", "Send email"

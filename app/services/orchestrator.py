@@ -24,6 +24,7 @@ from app.utils.task_context import get_today_tasks, format_tasks_for_context
 from app.config import OPENAI_API_KEY, OPENAI_MODEL
 from app.models import Task, JourneyGoal, GoalReviewSession
 from app.services.task_service import create_task
+from app.services.people_review_orchestrator import handle_people_review_session
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -120,6 +121,23 @@ def orchestrate(
                 explicit_execution=explicit_execution,
                 user_message=user_message
             )
+    # CRITICAL: Check for explicit people review request - override any state
+    elif top_intent and top_intent['name'] == 'PEOPLE_REVIEW' and top_intent['confidence'] > 0.7:
+        keywords = ["people review", "relationship review", "review my relationship", "review my people"]
+        if any(kw in user_message.lower() for kw in keywords):
+            print(f"🔄 FORCING STATE TRANSITION: {state.current_state} → PEOPLE_REVIEW")
+            print(f"   Reason: Explicit people review request detected")
+            state.state_context = None
+            new_state = States.PEOPLE_REVIEW
+            reason = "explicit_people_review_request"
+        else:
+            new_state, reason = transition_state(
+                db=db,
+                state=state,
+                intents=intents,
+                explicit_execution=explicit_execution,
+                user_message=user_message
+            )
     else:
         # Step 3: Determine state transition
         new_state, reason = transition_state(
@@ -142,6 +160,7 @@ def orchestrate(
         States.LEARNING: handle_learning,
         States.PROACTIVE: handle_proactive,
         States.GOAL_REVIEW: handle_goal_review,
+        States.PEOPLE_REVIEW: handle_people_review,
     }
 
     handler = handlers.get(new_state, handle_idle)
@@ -1178,4 +1197,60 @@ def handle_goal_review(
         response=closure_text + completion_msg,
         state=States.IDLE,
         data={"state_context": None}
+    )
+
+
+def handle_people_review(
+        db: Session,
+        user_number: str,
+        user_message: str,
+        intents: List[Dict],
+        explicit_execution: bool,
+        current_state: Any,
+        reason: str
+) -> OrchestrationResult:
+    """
+    Handle PEOPLE_REVIEW state - structured relationship review sessions.
+    
+    Delegates to people_review_orchestrator for phase management.
+    """
+    
+    state_ctx = current_state.state_context or {}
+    
+    # If no phase set, start with select_person
+    if 'phase' not in state_ctx:
+        state_ctx['phase'] = 'select_person'
+    
+    # Delegate to orchestrator
+    result = handle_people_review_session(
+        db=db,
+        user_number=user_number,
+        user_message=user_message,
+        state_context=state_ctx
+    )
+    
+    # Extract response and next state
+    response = result['response']
+    next_phase = result['next_phase']
+    updated_context = result['state_context']
+    
+    # Determine next state
+    if next_phase == 'completed':
+        next_state = States.IDLE
+        updated_context = None
+    else:
+        next_state = States.PEOPLE_REVIEW
+        if updated_context:
+            updated_context['phase'] = next_phase
+    
+    return OrchestrationResult(
+        response=response,
+        state=next_state,
+        data={
+            'state_context': updated_context,
+            'people_review_status': {
+                'active': next_phase != 'completed',
+                'phase': next_phase
+            } if next_phase != 'completed' else None
+        }
     )

@@ -81,6 +81,59 @@ class JourneyPerson(Base):
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # People Review fields (add after updated_at field)
+    last_reviewed_at = Column(DateTime, nullable=True)
+    review_frequency = Column(String, default='monthly', nullable=True)
+    relationship_health = Column(Integer, nullable=True)
+    needs_attention = Column(Boolean, default=False)
+
+
+class RelationshipReview(Base):
+    __tablename__ = "relationship_reviews"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True, nullable=False)
+    person_id = Column(Integer, ForeignKey('journey_people.id', ondelete='CASCADE'), nullable=False)
+
+    # Review metadata
+    review_date = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    review_type = Column(String, default='regular', nullable=True)
+
+    # Relationship health assessment
+    relationship_strength = Column(Integer, nullable=True)
+    communication_frequency = Column(String, nullable=True)
+    last_meaningful_interaction = Column(Text, nullable=True)
+
+    # Strategic alignment
+    mutual_value = Column(Text, nullable=True)
+    alignment_level = Column(String, nullable=True)
+    strategic_importance = Column(String, nullable=True)
+
+    # Current state
+    recent_interactions = Column(Text, nullable=True)
+    current_dynamics = Column(Text, nullable=True)
+    unresolved_issues = Column(Text, nullable=True)
+
+    # Action planning
+    next_steps = Column(Text, nullable=True)
+    communication_plan = Column(Text, nullable=True)
+    boundaries_to_set = Column(Text, nullable=True)
+
+    # Growth opportunities
+    how_to_strengthen = Column(Text, nullable=True)
+    what_to_appreciate = Column(Text, nullable=True)
+    what_to_address = Column(Text, nullable=True)
+
+    # Reflection
+    insights = Column(Text, nullable=True)
+    patterns_noticed = Column(Text, nullable=True)
+    personal_growth_needed = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationship
+    person = relationship("JourneyPerson", backref="reviews")
 
 class JourneyGoal(Base):
     __tablename__ = "journey_goals"

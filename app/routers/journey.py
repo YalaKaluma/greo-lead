@@ -23,6 +23,7 @@ from app.models import (
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
+from app.services.people_review_service import PeopleReviewService
 
 
 # Pydantic request models for Goals
@@ -2198,3 +2199,103 @@ Keep responses warm, direct, and actionable. No pleasantries needed."""
             status_code=500,
             detail="Failed to generate coaching feedback"
         )
+
+
+@router.get("/people/review-candidates")
+def get_people_review_candidates(
+    user_number: str,
+    include_all: bool = False,
+    db: Session = Depends(get_db)
+):
+    """Get list of people who could benefit from a review"""
+    try:
+        result = PeopleReviewService.get_review_candidates(db, user_number, include_all)
+        return result
+    except Exception as e:
+        print(f"Error getting review candidates: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/people/{person_id}/start-review")
+def start_people_review(
+    person_id: int,
+    user_number: str,
+    review_type: str = "regular",
+    db: Session = Depends(get_db)
+):
+    """Initialize a new review session for a person"""
+    try:
+        result = PeopleReviewService.start_review(db, user_number, person_id, review_type)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        print(f"Error starting review: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/people/{person_id}/review-history")
+def get_people_review_history(
+    person_id: int,
+    user_number: str,
+    db: Session = Depends(get_db)
+):
+    """Get all past reviews for a person"""
+    try:
+        result = PeopleReviewService.get_review_history(db, person_id, user_number)
+        return result
+    except Exception as e:
+        print(f"Error getting review history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/people/reviews/{review_id}")
+def update_people_review(
+    review_id: int,
+    updates: dict,
+    db: Session = Depends(get_db)
+):
+    """Update a review in progress"""
+    try:
+        review = PeopleReviewService.update_review(db, review_id, updates)
+        return {"success": True, "review_id": review.id}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        print(f"Error updating review: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/people/reviews/{review_id}/complete")
+def complete_people_review(
+    review_id: int,
+    db: Session = Depends(get_db)
+):
+    """Mark review as complete and update person record"""
+    try:
+        result = PeopleReviewService.complete_review(db, review_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        print(f"Error completing review: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/people/active-review")
+def get_active_people_review(
+    user_number: str,
+    db: Session = Depends(get_db)
+):
+    """Get the active review session if any"""
+    try:
+        result = PeopleReviewService.get_active_review(db, user_number)
+        if result:
+            return result
+        else:
+            return {"active": False}
+    except Exception as e:
+        print(f"Error getting active review: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+

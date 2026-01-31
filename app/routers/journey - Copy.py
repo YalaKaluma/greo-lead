@@ -2016,3 +2016,185 @@ def delete_team_composition(
     db.delete(composition)
     db.commit()
     return {"success": True, "message": "Team composition deleted"}
+
+# ============================================================
+# JOURNEY COACHING ENDPOINT
+# ============================================================
+
+from app.config import OPENAI_API_KEY, OPENAI_MODEL
+from openai import OpenAI
+
+openai_client_journey = OpenAI(api_key=OPENAI_API_KEY)
+
+
+class JourneyCoachRequest(BaseModel):
+    user_number: str
+    journey_type: str  # "strength", "goal", "failure", etc.
+    current_data: dict  # The form data being edited
+    action: Optional[str] = "initial_feedback"
+    user_message: Optional[str] = None
+    conversation_history: Optional[list] = None
+
+
+@router.post("/coach")
+def get_journey_coaching(
+    coach_request: JourneyCoachRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Provide contextual AI coaching for journey items.
+    Alfred gives feedback on how to improve the current entry.
+    """
+    
+    # Build full journey context
+    from app.services.journey_context import build_journey_context
+    journey_context = build_journey_context(db, coach_request.user_number)
+    
+    # Create coaching prompt based on journey type
+    coaching_prompts = {
+        "strength": """You are Alfred, coaching the user on articulating their strengths more powerfully.
+
+Current strength entry:
+{current_data}
+
+Your role:
+- Help them make it more specific and tangible
+- Encourage concrete examples of impact
+- Connect to measurable outcomes when possible
+- Keep it authentic to who they are
+
+Give direct, actionable feedback in 2-3 sentences.""",
+
+        "goal": """You are Alfred, helping the user clarify their goals.
+
+Current goal entry:
+{current_data}
+
+Your role:
+- Help define clear success metrics
+- Deepen the 'why' behind the goal
+- Ensure it's specific and time-bound
+- Connect to their broader vision
+
+Give direct, actionable feedback in 2-3 sentences.""",
+
+        "failure": """You are Alfred, helping the user extract wisdom from setbacks.
+
+Current failure entry:
+{current_data}
+
+Your role:
+- Help identify the deeper learning
+- Surface the emotional residue (the 'scar')
+- Connect to future growth opportunities
+- Be empathetic but move toward insight
+
+Give direct, actionable feedback in 2-3 sentences.""",
+
+        "value": """You are Alfred, helping the user articulate their core values.
+
+Current value entry:
+{current_data}
+
+Your role:
+- Help them get to the essence of why this matters
+- Encourage specific examples of when this value guided decisions
+- Connect to their leadership identity
+- Keep it authentic and personal
+
+Give direct, actionable feedback in 2-3 sentences.""",
+
+        "development-area": """You are Alfred, helping the user clarify areas for growth.
+
+Current development area entry:
+{current_data}
+
+Your role:
+- Help them be specific about what skill/capability to develop
+- Connect to their goals and challenges
+- Suggest concrete first steps
+- Frame it as opportunity, not deficit
+
+Give direct, actionable feedback in 2-3 sentences."""
+    }
+    
+    # Default coaching prompt
+    default_prompt = """You are Alfred, providing coaching on this journey entry.
+
+Current entry:
+{current_data}
+
+Help them make it more specific, actionable, and aligned with their leadership development.
+Give direct, actionable feedback in 2-3 sentences."""
+    
+    # Get appropriate prompt
+    coaching_template = coaching_prompts.get(
+        coach_request.journey_type,
+        default_prompt
+    )
+    
+    # Format current data for prompt
+    current_data_str = "\n".join([
+        f"- {key}: {value}" 
+        for key, value in coach_request.current_data.items() 
+        if value and key not in ['id', 'user_number', 'first_seen_at', 'updated_at']
+    ])
+    
+    # Build system prompt
+    system_prompt = f"""You are Alfred, an AI Chief of Staff and executive coach.
+    
+You have full context about the user's journey:
+{journey_context}
+
+{coaching_template.format(current_data=current_data_str)}
+
+Keep responses warm, direct, and actionable. No pleasantries needed."""
+    
+    # Build messages
+    if coach_request.action == "initial_feedback":
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Give me feedback on my current {coach_request.journey_type} entry."}
+        ]
+    else:
+        # Continuing conversation
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # Add conversation history if provided
+        if coach_request.conversation_history:
+            for msg in coach_request.conversation_history:
+                messages.append({
+                    "role": msg.get("role"),
+                    "content": msg.get("content")
+                })
+        
+        # Add current user message
+        if coach_request.user_message:
+            messages.append({
+                "role": "user",
+                "content": coach_request.user_message
+            })
+    
+    # Get GPT response
+    try:
+        response = openai_client_journey.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=messages,
+            max_tokens=300,  # Keep responses concise
+            temperature=0.7
+        )
+        
+        feedback = response.choices[0].message.content
+        
+        return {
+            "feedback": feedback,
+            "journey_type": coach_request.journey_type,
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    except Exception as e:
+        print(f"Error generating coaching feedback: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate coaching feedback"
+        )

@@ -26,6 +26,7 @@ class States:
     PROACTIVE = "PROACTIVE"
     LEARNING = "LEARNING"
     GOAL_REVIEW = "GOAL_REVIEW"
+    PEOPLE_REVIEW = "PEOPLE_REVIEW"
 
 
 # State timeout configuration (in minutes)
@@ -36,6 +37,7 @@ STATE_TIMEOUTS = {
     States.DRAFTING: 10,
     States.REVIEWING: 30,
     States.GOAL_REVIEW: 60,
+    States.PEOPLE_REVIEW: 60,
 }
 
 
@@ -175,6 +177,12 @@ def transition_state(
             return States.IDLE, "goal_review_cancelled"
         return States.GOAL_REVIEW, "continue_goal_review"
 
+    elif current == States.PEOPLE_REVIEW:
+        msg = (user_message or "").lower()
+        if any(w in msg for w in ["cancel", "stop", "exit", "nevermind", "never mind"]):
+            return States.IDLE, "people_review_cancelled"
+        return States.PEOPLE_REVIEW, "continue_people_review"
+
     
     # Default: stay in current state
     return current, "continue"
@@ -200,6 +208,9 @@ def _transition_from_idle(intent: str, confidence: float, explicit: bool) -> tup
 
     if intent == "GOAL_REVIEW" and confidence > 0.6:
         return States.GOAL_REVIEW, "goal_review_requested"
+
+    if intent == "PEOPLE_REVIEW" and confidence > 0.6:
+        return States.PEOPLE_REVIEW, "people_review_requested"
 
     if intent == "ORGANIZE":
         return States.DRAFTING, "organization_request"
