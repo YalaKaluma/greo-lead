@@ -402,26 +402,26 @@ def _handle_closure(
             "state_context": None
         }
     
-    # Build summary
-    strength_text = f"{review.relationship_strength}/5" if review.relationship_strength else "not rated"
+    # Generate smart summary with GPT
+    try:
+        summary = _generate_closure_summary(
+            person_name=person['name'],
+            relation=person.get('relation', 'colleague'),
+            reflection=state_context.get('user_reflection', ''),
+            diagnostics=state_context.get('diagnosis_input', ''),
+            planning=combined_plan,
+            relationship_strength=review.relationship_strength
+        )
+    except Exception as e:
+        print(f"❌ Error generating closure summary: {e}")
+        import traceback
+        traceback.print_exc()
+        # Fallback to simple summary
+        strength_text = f"{review.relationship_strength}/5" if review.relationship_strength else "not rated"
+        summary = f"We reviewed your relationship with {person['name']}:\n\n📊 Strength: {strength_text}\n✅ Next: {combined_plan[:100]}"
     
-    summary_parts = [
-        f"We reviewed your relationship with {person['name']}:",
-        f"\n📊 Strength: {strength_text}"
-    ]
-    
-    # Extract key insight from reflection
-    reflection = state_context.get('user_reflection', '')
-    if reflection and len(reflection) > 20:
-        insight = reflection[:150] + "..." if len(reflection) > 150 else reflection
-        summary_parts.append(f"\n💡 Key insight: {insight}")
-    
-    # Add next steps
-    if combined_plan:
-        next_step = combined_plan[:150] + "..." if len(combined_plan) > 150 else combined_plan
-        summary_parts.append(f"\n✅ Next: {next_step}")
-    
-    summary_parts.append("\n\nI've saved this review. Would you like me to create any tasks related to this relationship?")
+    # Add task creation offer
+    full_response = summary + "\n\nI've saved this review. Would you like me to create any tasks related to this relationship?"
     
     # Complete the review
     PeopleReviewService.complete_review(db, review_id)
@@ -429,7 +429,7 @@ def _handle_closure(
     print(f"✅ PEOPLE REVIEW SESSION COMPLETE")
     
     return {
-        "response": "".join(summary_parts),
+        "response": full_response,
         "next_phase": "completed",
         "state_context": None
     }
@@ -498,25 +498,36 @@ def _generate_diagnostics_question(
     
     system_prompt = f"""You are Alfred, helping diagnose relationship dynamics with {person_name} ({relation}).
 
-Earlier they said: "{reflection_summary}"
-Just now they said: "{user_input}"
+Earlier they said: "{reflection_summary[:200]}"
+Just now they said: "{user_input[:200]}"
 
-Your task: Ask ONE strategic question about patterns, importance, or underlying dynamics.
+Your task: Ask ONE strategic diagnostic question that reveals ROOT CAUSES or PATTERNS.
+
+This is the DIAGNOSTICS phase - different from reflection. You need to:
+- Identify PATTERNS or DYNAMICS, not just describe the relationship
+- Ask WHY things happen, not WHAT happens
+- Probe underlying causes
+- Help them see the system/structure, not just symptoms
 
 CRITICAL RULES:
 - Ask ONLY ONE question
 - Keep under 250 characters
-- Focus on WHY things are this way, not just WHAT is happening
-- Help them see patterns they might not have noticed
-- Build on what you now know from reflection
-- Be specific to this relationship
+- Focus on WHY or WHEN (not what/how)
+- Look for patterns, triggers, dynamics
+- Be specific to what they've shared
 
-Examples:
-"You talk every day but feel tension - is that tension about what you discuss or how you discuss it?"
-"As your supervisor, what happens when you need to push back on her direction?"
-"Where does this relationship work best - in crisis or in routine?"
+GOOD EXAMPLES:
+"You bonded in crisis - does the relationship need stress to stay strong, or can it thrive in calm?"
+"When is the trust strongest with Jack - in planning or in execution?"
+"What makes collaboration easy with him versus when it gets complicated?"
+"Is there a pattern to when you reach out to Jack versus when he reaches out to you?"
 
-Generate ONE diagnostic question."""
+BAD EXAMPLES (too general):
+"How does that influence your collaboration?" (too vague)
+"What patterns have you noticed?" (too open)
+"How important is this relationship?" (we know it's important)
+
+Generate ONE diagnostic question that helps them see the underlying PATTERN or DYNAMIC."""
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -578,6 +589,67 @@ Generate ONE planning question."""
         messages=messages,
         temperature=0.6,
         max_tokens=100
+    )
+    
+    return (resp.choices[0].message.content or "").strip()
+
+
+def _generate_closure_summary(
+    person_name: str,
+    relation: str,
+    reflection: str,
+    diagnostics: str,
+    planning: str,
+    relationship_strength: Optional[int]
+) -> str:
+    """Generate a concise, insightful closure summary"""
+    
+    strength_text = f"{relationship_strength}/5" if relationship_strength else "not rated"
+    
+    system_prompt = f"""You are Alfred, summarizing a relationship review with {person_name} ({relation}).
+
+CONVERSATION SUMMARY:
+- Reflection: {reflection[:300]}
+- Diagnostics: {diagnostics[:300]}
+- Planning: {planning[:300]}
+
+Your task: Create a concise summary with:
+1. Relationship strength rating ({strength_text})
+2. ONE key insight (10-15 words max) - NOT the full reflection, just the essence
+3. Main action item (10-15 words max)
+
+FORMAT:
+We reviewed your relationship with {person_name}:
+
+📊 Strength: {strength_text}
+💡 Key insight: [10-15 words capturing the core dynamic/pattern]
+✅ Next: [10-15 words stating the concrete action]
+
+EXAMPLES:
+💡 Key insight: Trust built through crisis, need to maintain connection beyond emergencies
+✅ Next: Involve Jack in SKaiX projects to stay engaged
+
+💡 Key insight: Daily supervision works but tension builds when pushing back
+✅ Next: Clarify decision authority to reduce friction
+
+RULES:
+- Keep it punchy and clear
+- Extract ESSENCE, don't copy their words verbatim
+- Focus on what matters most
+- Max 300 characters total
+- Don't add commentary or advice
+
+Generate the summary now."""
+
+    messages = [
+        {"role": "system", "content": system_prompt}
+    ]
+    
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=messages,
+        temperature=0.5,
+        max_tokens=150
     )
     
     return (resp.choices[0].message.content or "").strip()
