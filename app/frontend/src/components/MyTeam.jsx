@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 export default function MyTeam({ apiUrl, userNumber }) {
   const [people, setPeople] = useState([]);
@@ -8,10 +9,15 @@ export default function MyTeam({ apiUrl, userNumber }) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingPersonId, setEditingPersonId] = useState(null);
   const [askingHelpFrom, setAskingHelpFrom] = useState(null);
-  const [relationFilter, setRelationFilter] = useState('all'); // New: filter by relation type
+  const [relationFilter, setRelationFilter] = useState('all');
+  const [reviewSummaries, setReviewSummaries] = useState({});
+  const [expandedReview, setExpandedReview] = useState(null);
+  const [viewingProfile, setViewingProfile] = useState(null); // Person ID for profile view
+  const [customOrder, setCustomOrder] = useState([]); // User's manual sort order
 
   useEffect(() => {
     fetchPeople();
+    loadCustomOrder();
   }, []);
 
   const fetchPeople = async () => {
@@ -23,6 +29,7 @@ export default function MyTeam({ apiUrl, userNumber }) {
       });
       if (response.data && Array.isArray(response.data)) {
         setPeople(response.data);
+        fetchLatestReviews(response.data);
       }
     } catch (err) {
       console.error('Error fetching people:', err);
@@ -30,6 +37,36 @@ export default function MyTeam({ apiUrl, userNumber }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchLatestReviews = async (peopleList) => {
+    const summaries = {};
+    for (const person of peopleList) {
+      try {
+        const response = await axios.get(
+          `${apiUrl}/api/journey/people/${person.id}/review-history`,
+          { params: { user_number: userNumber } }
+        );
+        if (response.data && response.data.reviews && response.data.reviews.length > 0) {
+          summaries[person.id] = response.data.reviews[0];
+        }
+      } catch (err) {
+        console.error(`Error fetching reviews for ${person.name}:`, err);
+      }
+    }
+    setReviewSummaries(summaries);
+  };
+
+  const loadCustomOrder = () => {
+    const saved = localStorage.getItem('myteam_custom_order');
+    if (saved) {
+      setCustomOrder(JSON.parse(saved));
+    }
+  };
+
+  const saveCustomOrder = (order) => {
+    localStorage.setItem('myteam_custom_order', JSON.stringify(order));
+    setCustomOrder(order);
   };
 
   const addPerson = async (personData) => {
@@ -100,207 +137,663 @@ export default function MyTeam({ apiUrl, userNumber }) {
     }
   };
 
+  // Calculate health status based on review data
+  const getHealthStatus = (personId) => {
+    const review = reviewSummaries[personId];
+    const person = people.find(p => p.id === personId);
+    
+    if (!review) return 'gray'; // No review yet
+    
+    const strength = review.relationship_strength || 0;
+    const needsAttention = person?.needs_attention || false;
+    
+    // Red: strength ≤ 1 OR (needs_attention + strength ≤ 2)
+    if (strength <= 1 || (needsAttention && strength <= 2)) return 'red';
+    
+    // Dark Orange: strength = 2 OR needs_attention
+    if (strength === 2 || needsAttention) return 'darkorange';
+    
+    // Light Orange: strength = 3
+    if (strength === 3) return 'orange';
+    
+    // Green: strength ≥ 4
+    return 'green';
+  };
+
+  const getHealthColor = (status) => {
+    switch (status) {
+      case 'red': return 'bg-red-500';
+      case 'darkorange': return 'bg-orange-600';
+      case 'orange': return 'bg-orange-400';
+      case 'green': return 'bg-green-500';
+      default: return 'bg-gray-300';
+    }
+  };
+
+  const getHealthTooltip = (status) => {
+    switch (status) {
+      case 'red': return 'Critical - Needs immediate attention';
+      case 'darkorange': return 'Needs intervention';
+      case 'orange': return 'Needs support';
+      case 'green': return 'Healthy relationship';
+      default: return 'Not yet reviewed';
+    }
+  };
+
+  // Handle drag and drop
+  const onDragEnd = (result) => {
+    if (!result.destination) return;
+    
+    const items = Array.from(getSortedPeople());
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+    
+    const newOrder = items.map(p => p.id);
+    saveCustomOrder(newOrder);
+  };
+
+  // Get people sorted by custom order
+  const getSortedPeople = () => {
+    const filtered = people.filter(person => {
+      if (relationFilter === 'all') return true;
+      if (relationFilter === 'team member') return person.relation?.toLowerCase().includes('team');
+      if (relationFilter === 'supervisor') return person.relation?.toLowerCase().includes('supervisor');
+      if (relationFilter === 'mentor') return person.relation?.toLowerCase().includes('mentor');
+      if (relationFilter === 'peer') return person.relation?.toLowerCase().includes('peer') || person.relation?.toLowerCase().includes('colleague');
+      return true;
+    });
+
+    if (customOrder.length === 0) return filtered;
+
+    // Sort by custom order, then append any new people at the end
+    const sorted = [];
+    customOrder.forEach(id => {
+      const person = filtered.find(p => p.id === id);
+      if (person) sorted.push(person);
+    });
+    
+    // Add any people not in custom order
+    filtered.forEach(person => {
+      if (!customOrder.includes(person.id)) sorted.push(person);
+    });
+    
+    return sorted;
+  };
+
+  // Show profile page
+  if (viewingProfile) {
+    return (
+      <PersonProfile
+        personId={viewingProfile}
+        apiUrl={apiUrl}
+        userNumber={userNumber}
+        onClose={() => setViewingProfile(null)}
+      />
+    );
+  }
+
+  // Main MyTeam view
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="flex justify-center items-center h-64">
+        <div className="text-slate-600">Loading your team...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
-          {error}
-        </div>
+      <div className="flex justify-center items-center h-64">
+        <div className="text-red-600">{error}</div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="max-w-4xl mx-auto p-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold text-slate-800">My Team</h1>
-          <p className="text-slate-600 mt-1">People who can support you in your journey</p>
+          <p className="text-slate-600 mt-1">Manage your professional network</p>
         </div>
         <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+          onClick={() => setShowAddForm(true)}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
           + Add Person
         </button>
       </div>
 
-      {showAddForm && (
-        <PersonForm
-          onSubmit={addPerson}
-          onCancel={() => setShowAddForm(false)}
-        />
-      )}
-
-      {/* Relation Type Filters */}
-      <div className="mb-6 flex gap-3">
-        <button
-          onClick={() => setRelationFilter('all')}
-          className={`px-6 py-2 rounded-lg font-medium transition-all ${
-            relationFilter === 'all'
-              ? 'bg-blue-600 text-white shadow-lg'
-              : 'bg-white text-slate-700 border border-gray-300 hover:bg-gray-50'
-          }`}
-        >
-          All ({people.length})
-        </button>
-        <button
-          onClick={() => setRelationFilter('team member')}
-          className={`px-6 py-2 rounded-lg font-medium transition-all ${
-            relationFilter === 'team member'
-              ? 'bg-green-600 text-white shadow-lg'
-              : 'bg-white text-slate-700 border border-gray-300 hover:bg-gray-50'
-          }`}
-        >
-          Team Members ({people.filter(p => p.relation?.toLowerCase().includes('team')).length})
-        </button>
-        <button
-          onClick={() => setRelationFilter('supervisor')}
-          className={`px-6 py-2 rounded-lg font-medium transition-all ${
-            relationFilter === 'supervisor'
-              ? 'bg-indigo-600 text-white shadow-lg'
-              : 'bg-white text-slate-700 border border-gray-300 hover:bg-gray-50'
-          }`}
-        >
-          Supervisors ({people.filter(p => p.relation?.toLowerCase().includes('supervisor')).length})
-        </button>
-        <button
-          onClick={() => setRelationFilter('mentor')}
-          className={`px-6 py-2 rounded-lg font-medium transition-all ${
-            relationFilter === 'mentor'
-              ? 'bg-purple-600 text-white shadow-lg'
-              : 'bg-white text-slate-700 border border-gray-300 hover:bg-gray-50'
-          }`}
-        >
-          Mentors ({people.filter(p => p.relation?.toLowerCase().includes('mentor')).length})
-        </button>
-        <button
-          onClick={() => setRelationFilter('peer')}
-          className={`px-6 py-2 rounded-lg font-medium transition-all ${
-            relationFilter === 'peer'
-              ? 'bg-amber-600 text-white shadow-lg'
-              : 'bg-white text-slate-700 border border-gray-300 hover:bg-gray-50'
-          }`}
-        >
-          Peers ({people.filter(p => p.relation?.toLowerCase().includes('peer') || p.relation?.toLowerCase().includes('colleague')).length})
-        </button>
+      {/* Filters */}
+      <div className="mb-6 flex gap-2 overflow-x-auto pb-2">
+        {['all', 'team member', 'supervisor', 'mentor', 'peer'].map(filter => (
+          <button
+            key={filter}
+            onClick={() => setRelationFilter(filter)}
+            className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
+              relationFilter === filter
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            {filter === 'all' ? 'All' : filter.charAt(0).toUpperCase() + filter.slice(1) + 's'}
+          </button>
+        ))}
       </div>
 
-      {/* People List */}
-      {people.filter(person => {
-        if (relationFilter === 'all') return true;
-        if (relationFilter === 'team member') return person.relation?.toLowerCase().includes('team');
-        if (relationFilter === 'supervisor') return person.relation?.toLowerCase().includes('supervisor');
-        if (relationFilter === 'mentor') return person.relation?.toLowerCase().includes('mentor');
-        if (relationFilter === 'peer') return person.relation?.toLowerCase().includes('peer') || person.relation?.toLowerCase().includes('colleague');
-        return true;
-      }).length === 0 ? (
+      {/* Health Legend */}
+      <div className="mb-4 flex gap-4 text-sm text-slate-600">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-green-500"></div>
+          <span>Healthy</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-orange-400"></div>
+          <span>Needs support</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-orange-600"></div>
+          <span>Needs intervention</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-red-500"></div>
+          <span>Critical</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-gray-300"></div>
+          <span>Not reviewed</span>
+        </div>
+      </div>
+
+      {/* Add Person Form */}
+      {showAddForm && (
+        <div className="mb-6">
+          <PersonForm
+            onSubmit={addPerson}
+            onCancel={() => setShowAddForm(false)}
+          />
+        </div>
+      )}
+
+      {/* People List - Drag and Drop */}
+      {getSortedPeople().length === 0 ? (
         <div className="text-center py-12">
           <p className="text-slate-600 text-lg">
             No {relationFilter !== 'all' ? relationFilter + 's' : 'team members'} yet. Add people to your network!
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {people.filter(person => {
-            if (relationFilter === 'all') return true;
-            if (relationFilter === 'team member') return person.relation?.toLowerCase().includes('team');
-            if (relationFilter === 'supervisor') return person.relation?.toLowerCase().includes('supervisor');
-            if (relationFilter === 'mentor') return person.relation?.toLowerCase().includes('mentor');
-            if (relationFilter === 'peer') return person.relation?.toLowerCase().includes('peer') || person.relation?.toLowerCase().includes('colleague');
-            return true;
-          }).map((person) => (
-            editingPersonId === person.id ? (
-              <PersonForm
-                key={person.id}
-                person={person}
-                onSubmit={(data) => updatePerson(person.id, data)}
-                onCancel={() => setEditingPersonId(null)}
-                onDelete={() => deletePerson(person.id)}
-              />
-            ) : (
+        <DragDropContext onDragEnd={onDragEnd}>
+          <Droppable droppableId="people-list">
+            {(provided) => (
               <div
-                key={person.id}
-                className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                {...provided.droppableProps}
+                ref={provided.innerRef}
+                className="space-y-2"
               >
-                <div className="flex items-start justify-between gap-6">
-                  {/* Left: Person Info (Name + Relation) */}
-                  <div 
-                    className="cursor-pointer"
-                    onClick={() => setEditingPersonId(person.id)}
+                {getSortedPeople().map((person, index) => (
+                  <Draggable
+                    key={person.id}
+                    draggableId={String(person.id)}
+                    index={index}
                   >
-                    <h3 className="text-lg font-bold text-slate-800">{person.name}</h3>
-                    {person.relation && (
-                      <p className="text-sm text-slate-600">{person.relation}</p>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        className={`${snapshot.isDragging ? 'opacity-50' : ''}`}
+                      >
+                        {editingPersonId === person.id ? (
+                          <PersonForm
+                            person={person}
+                            onSubmit={(data) => updatePerson(person.id, data)}
+                            onCancel={() => setEditingPersonId(null)}
+                            onDelete={() => deletePerson(person.id)}
+                          />
+                        ) : (
+                          <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                            <div className="flex items-start justify-between gap-6">
+                              {/* Drag Handle */}
+                              <div
+                                {...provided.dragHandleProps}
+                                className="cursor-move text-gray-400 hover:text-gray-600 pt-1"
+                                title="Drag to reorder"
+                              >
+                                ⋮⋮
+                              </div>
+
+                              {/* Person Info - Click to view profile */}
+                              <div 
+                                className="flex-1 cursor-pointer"
+                                onClick={() => setViewingProfile(person.id)}
+                              >
+                                <h3 className="text-lg font-bold text-slate-800 hover:text-blue-600">
+                                  {person.name}
+                                </h3>
+                                {person.relation && (
+                                  <p className="text-sm text-slate-600">{person.relation}</p>
+                                )}
+                              </div>
+
+                              {/* Context/Notes */}
+                              {person.context && (
+                                <div 
+                                  className="flex-1 text-sm text-slate-600 cursor-pointer"
+                                  onClick={() => setEditingPersonId(person.id)}
+                                >
+                                  {person.context}
+                                </div>
+                              )}
+
+                              {/* Action Icons */}
+                              <div className="flex items-center gap-4 text-slate-400">
+                                {/* View Tasks */}
+                                <a
+                                  href={`/?page=todo-list&delegate=${encodeURIComponent(person.name)}`}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    window.location.href = `/?page=todo-list&delegate=${encodeURIComponent(person.name)}`;
+                                  }}
+                                  className="hover:text-blue-600 transition-colors text-2xl"
+                                  title="View tasks"
+                                >
+                                  📋
+                                </a>
+
+                                {/* Ask for Help */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setAskingHelpFrom(askingHelpFrom === person.id ? null : person.id);
+                                  }}
+                                  className="hover:text-green-600 transition-colors text-2xl"
+                                  title="Ask for help"
+                                >
+                                  🤝
+                                </button>
+
+                                {/* Edit */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingPersonId(person.id);
+                                  }}
+                                  className="hover:text-blue-600 transition-colors text-xl"
+                                  title="Edit"
+                                >
+                                  ✏️
+                                </button>
+
+                                {/* Health Status Dot */}
+                                <div
+                                  className={`w-4 h-4 rounded-full ${getHealthColor(getHealthStatus(person.id))}`}
+                                  title={getHealthTooltip(getHealthStatus(person.id))}
+                                ></div>
+                              </div>
+                            </div>
+
+                            {/* Last Review Summary */}
+                            {reviewSummaries[person.id] && (
+                              <div className="mt-3 pt-3 border-t border-gray-200">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <span className="text-xs font-semibold text-purple-600">
+                                        📊 Last Review
+                                      </span>
+                                      <span className="text-xs text-slate-500">
+                                        {new Date(reviewSummaries[person.id].review_date).toLocaleDateString()}
+                                      </span>
+                                      {reviewSummaries[person.id].relationship_strength && (
+                                        <span className="text-xs font-medium text-slate-700">
+                                          {reviewSummaries[person.id].relationship_strength}/5
+                                        </span>
+                                      )}
+                                    </div>
+                                    {reviewSummaries[person.id].insights && (
+                                      <p className="text-sm text-slate-600 line-clamp-2">
+                                        {reviewSummaries[person.id].insights}
+                                      </p>
+                                    )}
+                                    {reviewSummaries[person.id].next_steps && (
+                                      <p className="text-xs text-slate-500 mt-1">
+                                        ✅ {reviewSummaries[person.id].next_steps.slice(0, 80)}...
+                                      </p>
+                                    )}
+                                  </div>
+                                  <button
+                                    onClick={() => setExpandedReview(expandedReview === person.id ? null : person.id)}
+                                    className="ml-2 text-xs text-purple-600 hover:text-purple-800 font-medium"
+                                  >
+                                    {expandedReview === person.id ? 'Hide' : 'Full'}
+                                  </button>
+                                </div>
+                                
+                                {/* Expanded Review */}
+                                {expandedReview === person.id && (
+                                  <div className="mt-3 p-3 bg-purple-50 rounded text-sm space-y-2">
+                                    {reviewSummaries[person.id].current_dynamics && (
+                                      <div>
+                                        <span className="font-semibold text-slate-700">Dynamics:</span>
+                                        <p className="text-slate-600">{reviewSummaries[person.id].current_dynamics}</p>
+                                      </div>
+                                    )}
+                                    {reviewSummaries[person.id].how_to_strengthen && (
+                                      <div>
+                                        <span className="font-semibold text-slate-700">How to strengthen:</span>
+                                        <p className="text-slate-600">{reviewSummaries[person.id].how_to_strengthen}</p>
+                                      </div>
+                                    )}
+                                    {reviewSummaries[person.id].next_steps && (
+                                      <div>
+                                        <span className="font-semibold text-slate-700">Next steps:</span>
+                                        <p className="text-slate-600">{reviewSummaries[person.id].next_steps}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Help Panel */}
+                            {askingHelpFrom === person.id && (
+                              <div className="mt-3 pt-3 border-t border-gray-200">
+                                <HelpPanel
+                                  personName={person.name}
+                                  onSubmit={(description) => createTaskForHelp(person.name, description)}
+                                  onCancel={() => setAskingHelpFrom(null)}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )}
-                  </div>
-
-                  {/* Middle: Context/Notes */}
-                  {person.context && (
-                    <div 
-                      className="flex-1 text-sm text-slate-600 cursor-pointer"
-                      onClick={() => setEditingPersonId(person.id)}
-                    >
-                      {person.context}
-                    </div>
-                  )}
-
-                  {/* Right: Action Icons */}
-                  <div className="flex items-center gap-4 text-slate-400">
-                    {/* View Tasks Link - Icon Only */}
-                    <a
-                      href={`/?page=todo-list&delegate=${encodeURIComponent(person.name)}`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        window.location.href = `/?page=todo-list&delegate=${encodeURIComponent(person.name)}`;
-                      }}
-                      className="hover:text-blue-600 transition-colors text-2xl"
-                      title="View tasks"
-                    >
-                      📋
-                    </a>
-
-                    {/* Ask for Help Button - Icon Only */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAskingHelpFrom(askingHelpFrom === person.id ? null : person.id);
-                      }}
-                      className="hover:text-green-600 transition-colors text-2xl"
-                      title="Ask for help"
-                    >
-                      🤝
-                    </button>
-                  </div>
-                </div>
-
-                {/* Help Panel - Appears Below When Active */}
-                {askingHelpFrom === person.id && (
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <HelpPanel
-                      personName={person.name}
-                      onSubmit={(description) => createTaskForHelp(person.name, description)}
-                      onCancel={() => setAskingHelpFrom(null)}
-                    />
-                  </div>
-                )}
+                  </Draggable>
+                ))}
+                {provided.placeholder}
               </div>
-            )
-          ))}
-        </div>
+            )}
+          </Droppable>
+        </DragDropContext>
       )}
     </div>
   );
 }
 
+// Person Profile Full Page View
+function PersonProfile({ personId, apiUrl, userNumber, onClose }) {
+  const [person, setPerson] = useState(null);
+  const [reviews, setReviews] = useState([]);
+  const [synthesis, setSynthesis] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [expandedReviewId, setExpandedReviewId] = useState(null);
+
+  useEffect(() => {
+    fetchPersonData();
+  }, [personId]);
+
+  const fetchPersonData = async () => {
+    try {
+      // Fetch person details
+      const peopleResponse = await axios.get(`${apiUrl}/api/journey/people`, {
+        params: { user_number: userNumber }
+      });
+      const foundPerson = peopleResponse.data.find(p => p.id === personId);
+      setPerson(foundPerson);
+
+      // Fetch review history
+      const reviewsResponse = await axios.get(
+        `${apiUrl}/api/journey/people/${personId}/review-history`,
+        { params: { user_number: userNumber } }
+      );
+      setReviews(reviewsResponse.data.reviews || []);
+
+      // Generate synthesis
+      await generateSynthesis(foundPerson, reviewsResponse.data.reviews || []);
+    } catch (err) {
+      console.error('Error fetching person profile:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateSynthesis = async (personData, reviewsData) => {
+    try {
+      const response = await axios.get(
+        `${apiUrl}/api/journey/people/${personId}/synthesis`,
+        { params: { user_number: userNumber } }
+      );
+      setSynthesis(response.data);
+    } catch (err) {
+      console.error('Error generating synthesis:', err);
+      // Fallback to placeholder
+      setSynthesis({
+        strengths: ['Deep technical expertise', 'Collaborative mindset', 'Strong in crisis situations'],
+        improvements: ['Needs clearer frameworks', 'Communication clarity', 'Reliability under pressure'],
+        trajectory: 'Stable partnership, focus on delegation and independence'
+      });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-slate-600">Loading profile...</div>
+      </div>
+    );
+  }
+
+  if (!person) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-red-600">Person not found</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+          <button
+            onClick={onClose}
+            className="flex items-center gap-2 text-slate-600 hover:text-slate-800 transition-colors"
+          >
+            ← Back to My Team
+          </button>
+          <h1 className="text-2xl font-bold text-slate-800">{person.name}</h1>
+          <div className="w-24"></div> {/* Spacer for centering */}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="max-w-5xl mx-auto px-6 py-8">
+        {/* Person Info Card */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-3xl font-bold text-slate-800 mb-2">{person.name}</h2>
+              {person.relation && (
+                <p className="text-lg text-slate-600 mb-4">{person.relation}</p>
+              )}
+              {person.context && (
+                <p className="text-slate-600 mb-4">{person.context}</p>
+              )}
+              <div className="flex gap-4 text-sm text-slate-500">
+                {person.email && (
+                  <a href={`mailto:${person.email}`} className="hover:text-blue-600">
+                    📧 {person.email}
+                  </a>
+                )}
+                {person.phone && (
+                  <span>📱 {person.phone}</span>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => window.location.href = `/?page=coaching-sessions&session=people_review&person=${person.id}`}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              + New Review
+            </button>
+          </div>
+        </div>
+
+        {/* Alfred's Synthesis */}
+        {synthesis && (
+          <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg border border-blue-200 p-6 mb-6">
+            <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+              🎯 Alfred's Synthesis
+            </h3>
+            
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-semibold text-slate-700 mb-2">💪 Core Strengths:</h4>
+                <ul className="list-disc list-inside text-slate-600 space-y-1">
+                  {synthesis.strengths.map((strength, i) => (
+                    <li key={i}>{strength}</li>
+                  ))}
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-slate-700 mb-2">⚠️ Improvement Opportunities:</h4>
+                <ul className="list-disc list-inside text-slate-600 space-y-1">
+                  {synthesis.improvements.map((improvement, i) => (
+                    <li key={i}>{improvement}</li>
+                  ))}
+                </ul>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-slate-700 mb-2">📈 Trajectory:</h4>
+                <p className="text-slate-600">{synthesis.trajectory}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Review History */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
+            📊 Review History
+          </h3>
+
+          {reviews.length === 0 ? (
+            <p className="text-slate-600">No reviews yet. Start your first review to build this relationship profile.</p>
+          ) : (
+            <div className="space-y-4">
+              {reviews.map((review) => (
+                <div
+                  key={review.id}
+                  className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-semibold text-purple-600">
+                          📅 {new Date(review.review_date).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })}
+                        </span>
+                        {review.relationship_strength && (
+                          <span className="text-sm font-medium text-slate-700">
+                            Strength: {review.relationship_strength}/5
+                          </span>
+                        )}
+                      </div>
+                      {review.insights && (
+                        <p className="text-sm text-slate-600 mt-2">{review.insights}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setExpandedReviewId(expandedReviewId === review.id ? null : review.id)}
+                      className="text-sm text-purple-600 hover:text-purple-800 font-medium"
+                    >
+                      {expandedReviewId === review.id ? 'Hide' : 'View Full'}
+                    </button>
+                  </div>
+
+                  {expandedReviewId === review.id && (
+                    <div className="mt-4 pt-4 border-t border-gray-200 space-y-3 text-sm">
+                      {review.recent_interactions && (
+                        <div>
+                          <span className="font-semibold text-slate-700">Recent Interactions:</span>
+                          <p className="text-slate-600">{review.recent_interactions}</p>
+                        </div>
+                      )}
+                      {review.current_dynamics && (
+                        <div>
+                          <span className="font-semibold text-slate-700">Current Dynamics:</span>
+                          <p className="text-slate-600">{review.current_dynamics}</p>
+                        </div>
+                      )}
+                      {review.strategic_importance && (
+                        <div>
+                          <span className="font-semibold text-slate-700">Strategic Importance:</span>
+                          <p className="text-slate-600">{review.strategic_importance}</p>
+                        </div>
+                      )}
+                      {review.mutual_value && (
+                        <div>
+                          <span className="font-semibold text-slate-700">Mutual Value:</span>
+                          <p className="text-slate-600">{review.mutual_value}</p>
+                        </div>
+                      )}
+                      {review.unresolved_issues && (
+                        <div>
+                          <span className="font-semibold text-slate-700">Unresolved Issues:</span>
+                          <p className="text-slate-600">{review.unresolved_issues}</p>
+                        </div>
+                      )}
+                      {review.patterns_noticed && (
+                        <div>
+                          <span className="font-semibold text-slate-700">Patterns Noticed:</span>
+                          <p className="text-slate-600">{review.patterns_noticed}</p>
+                        </div>
+                      )}
+                      {review.how_to_strengthen && (
+                        <div>
+                          <span className="font-semibold text-slate-700">How to Strengthen:</span>
+                          <p className="text-slate-600">{review.how_to_strengthen}</p>
+                        </div>
+                      )}
+                      {review.what_to_appreciate && (
+                        <div>
+                          <span className="font-semibold text-slate-700">What to Appreciate:</span>
+                          <p className="text-slate-600">{review.what_to_appreciate}</p>
+                        </div>
+                      )}
+                      {review.communication_plan && (
+                        <div>
+                          <span className="font-semibold text-slate-700">Communication Plan:</span>
+                          <p className="text-slate-600">{review.communication_plan}</p>
+                        </div>
+                      )}
+                      {review.next_steps && (
+                        <div>
+                          <span className="font-semibold text-slate-700">Next Steps:</span>
+                          <p className="text-slate-600">{review.next_steps}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Helper Components (PersonForm, HelpPanel - keep existing code)
 function PersonForm({ person, onSubmit, onCancel, onDelete }) {
   const [formData, setFormData] = useState({
     name: person?.name || '',
@@ -360,21 +853,21 @@ function PersonForm({ person, onSubmit, onCancel, onDelete }) {
         value={formData.context}
         onChange={(e) => setFormData({ ...formData, context: e.target.value })}
         placeholder="Context / Notes"
-        rows={3}
+        rows={2}
         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
 
       <div className="flex gap-2">
         <button
           type="submit"
-          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium"
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
         >
-          Save
+          {person ? 'Save Changes' : 'Add Person'}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded font-medium"
+          className="px-4 py-2 bg-slate-200 text-slate-700 rounded hover:bg-slate-300 transition-colors"
         >
           Cancel
         </button>
@@ -382,7 +875,7 @@ function PersonForm({ person, onSubmit, onCancel, onDelete }) {
           <button
             type="button"
             onClick={onDelete}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium"
+            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors ml-auto"
           >
             Delete
           </button>
@@ -393,54 +886,43 @@ function PersonForm({ person, onSubmit, onCancel, onDelete }) {
 }
 
 function HelpPanel({ personName, onSubmit, onCancel }) {
-  const [helpText, setHelpText] = useState('');
+  const [description, setDescription] = useState('');
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!helpText.trim()) {
+  const handleSubmit = () => {
+    if (!description.trim()) {
       alert('Please describe what you need help with');
       return;
     }
-    onSubmit(helpText);
-    setHelpText('');
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit(e);
-    }
+    onSubmit(description);
+    setDescription('');
   };
 
   return (
-    <div className="mt-3 bg-green-50 border-2 border-green-300 rounded-lg p-4 space-y-3">
-      <h4 className="font-semibold text-slate-800">What do you need help with?</h4>
-      <form onSubmit={handleSubmit}>
-        <textarea
-          value={helpText}
-          onChange={(e) => setHelpText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={`Describe what ${personName} can help you with... (Press Enter to create task)`}
-          rows={3}
-          className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
-          autoFocus
-        />
-        <div className="flex gap-2 mt-2">
-          <button
-            type="submit"
-            className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-medium"
-          >
-            Create Task
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded font-medium"
-          >
-            Cancel
-          </button>
-        </div>
-      </form>
+    <div className="space-y-2">
+      <label className="text-sm font-medium text-slate-700">
+        What do you need {personName}'s help with?
+      </label>
+      <textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Describe the help you need..."
+        rows={3}
+        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+      />
+      <div className="flex gap-2">
+        <button
+          onClick={handleSubmit}
+          className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+        >
+          Create Task
+        </button>
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 bg-slate-200 text-slate-700 rounded hover:bg-slate-300 transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

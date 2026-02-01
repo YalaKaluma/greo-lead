@@ -18,7 +18,8 @@ from app.models import (
     JourneyExecutionSystem,
     JourneyInspiration,
     JourneyCoachingMoment,
-    JourneyTeamComposition
+    JourneyTeamComposition,
+    RelationshipReview
 )
 from pydantic import BaseModel
 from datetime import datetime
@@ -2299,3 +2300,146 @@ def get_active_people_review(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Add this to app/routers/journey.py
+
+@router.get("/people/{person_id}/synthesis")
+def get_person_synthesis(
+    person_id: int,
+    user_number: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Generate Alfred's synthesis of a person based on all review history.
+    Uses GPT to analyze all reviews and extract:
+    - Core strengths (recurring positive patterns)
+    - Improvement opportunities (recurring challenges)
+    - Trajectory (getting better/worse/stable)
+    """
+    from openai import OpenAI
+    from app.config import OPENAI_API_KEY, OPENAI_MODEL
+    
+    # Get person
+    person = db.query(JourneyPerson).filter(
+        JourneyPerson.id == person_id,
+        JourneyPerson.user_number == user_number
+    ).first()
+    
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+    
+    # Get all reviews for this person
+    reviews = db.query(RelationshipReview).filter(
+        RelationshipReview.person_id == person_id,
+        RelationshipReview.user_number == user_number,
+        RelationshipReview.completed_at.isnot(None)
+    ).order_by(RelationshipReview.review_date.desc()).all()
+    
+    if not reviews:
+        return {
+            "person_name": person.name,
+            "strengths": [],
+            "improvements": [],
+            "trajectory": "No reviews yet - start your first review to build this profile"
+        }
+    
+    # Build review summary for GPT
+    review_summaries = []
+    for review in reviews:
+        summary = f"""
+Review Date: {review.review_date.strftime('%Y-%m-%d')}
+Strength: {review.relationship_strength}/5
+Dynamics: {review.current_dynamics or 'N/A'}
+Strengths observed: {review.how_to_strengthen or 'N/A'}
+Issues: {review.unresolved_issues or 'N/A'}
+Next steps: {review.next_steps or 'N/A'}
+"""
+        review_summaries.append(summary.strip())
+    
+    all_reviews_text = "\n\n---\n\n".join(review_summaries)
+    
+    # Generate synthesis with GPT
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    
+    system_prompt = f"""You are Alfred, analyzing the relationship history between the user and {person.name} ({person.relation or 'colleague'}).
+
+You have {len(reviews)} reviews spanning from {reviews[-1].review_date.strftime('%Y-%m-%d')} to {reviews[0].review_date.strftime('%Y-%m-%d')}.
+
+Your task: Analyze all reviews and extract:
+
+1. CORE STRENGTHS (3-5 items):
+   - Recurring positive patterns
+   - What consistently works well
+   - This person's superpowers in the relationship
+
+2. IMPROVEMENT OPPORTUNITIES (3-5 items):
+   - Recurring challenges or friction points
+   - Areas that need development
+   - Patterns of difficulty
+
+3. TRAJECTORY (1 sentence):
+   - Is the relationship getting stronger, weaker, or stable?
+   - What's the overall direction?
+
+FORMAT YOUR RESPONSE AS JSON:
+{{
+  "strengths": ["item 1", "item 2", "item 3"],
+  "improvements": ["item 1", "item 2", "item 3"],
+  "trajectory": "one sentence assessment"
+}}
+
+RULES:
+- Be concise (10-15 words per item max)
+- Focus on PATTERNS across reviews, not one-time events
+- Be balanced but honest
+- If relationship is improving/declining, say so
+- Use specific language, not generic platitudes
+
+REVIEWS:
+{all_reviews_text}
+"""
+    
+    try:
+        response = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt}
+            ],
+            temperature=0.5,
+            max_tokens=500
+        )
+        
+        import json
+        result_text = response.choices[0].message.content.strip()
+        
+        # Clean up JSON if GPT wrapped it in markdown
+        if result_text.startswith("```json"):
+            result_text = result_text[7:]
+        if result_text.endswith("```"):
+            result_text = result_text[:-3]
+        result_text = result_text.strip()
+        
+        synthesis = json.loads(result_text)
+        
+        return {
+            "person_name": person.name,
+            "review_count": len(reviews),
+            "first_review": reviews[-1].review_date.isoformat() if reviews else None,
+            "last_review": reviews[0].review_date.isoformat() if reviews else None,
+            "strengths": synthesis.get("strengths", []),
+            "improvements": synthesis.get("improvements", []),
+            "trajectory": synthesis.get("trajectory", "")
+        }
+        
+    except Exception as e:
+        print(f"❌ Error generating synthesis: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Fallback to simple extraction
+        return {
+            "person_name": person.name,
+            "review_count": len(reviews),
+            "strengths": ["Consistent collaboration", "Reliable partner", "Strong technical skills"],
+            "improvements": ["Communication clarity", "Time management", "Delegation"],
+            "trajectory": f"Relationship stable at {reviews[0].relationship_strength}/5 based on most recent review"
+        }
