@@ -8,8 +8,10 @@ export default function MyTeam({ apiUrl, userNumber }) {
   const [error, setError] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingPersonId, setEditingPersonId] = useState(null);
+  const [askingHelpFrom, setAskingHelpFrom] = useState(null);
   const [relationFilter, setRelationFilter] = useState('all');
   const [reviewSummaries, setReviewSummaries] = useState({});
+  const [expandedReview, setExpandedReview] = useState(null);
   const [viewingProfile, setViewingProfile] = useState(null); // Person ID for profile view
   const [customOrder, setCustomOrder] = useState([]); // User's manual sort order
 
@@ -108,6 +110,30 @@ export default function MyTeam({ apiUrl, userNumber }) {
     } catch (err) {
       console.error('Error deleting person:', err);
       alert('Failed to delete team member');
+    }
+  };
+
+  const createTaskForHelp = async (personName, helpDescription) => {
+    try {
+      const taskData = {
+        title: `Ask ${personName} for help`,
+        notes: helpDescription,
+        delegated_to: personName,
+        priority: 'medium',
+        status: 'open'
+      };
+      
+      await axios.post(
+        `${apiUrl}/api/tasks/`,
+        taskData,
+        { params: { user_number: userNumber } }
+      );
+      
+      setAskingHelpFrom(null);
+      alert('Task created! Check your Todo list.');
+    } catch (err) {
+      console.error('Error creating task:', err);
+      alert('Failed to create task');
     }
   };
 
@@ -327,17 +353,11 @@ export default function MyTeam({ apiUrl, userNumber }) {
                           />
                         ) : (
                           <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                            <div className="flex items-start gap-4">
-                              {/* Health Status Dot - LEFT SIDE */}
-                              <div
-                                className={`w-4 h-4 rounded-full mt-1 flex-shrink-0 ${getHealthColor(getHealthStatus(person.id))}`}
-                                title={getHealthTooltip(getHealthStatus(person.id))}
-                              ></div>
-
+                            <div className="flex items-start justify-between gap-6">
                               {/* Drag Handle */}
                               <div
                                 {...provided.dragHandleProps}
-                                className="cursor-move text-gray-400 hover:text-gray-600 pt-1 flex-shrink-0"
+                                className="cursor-move text-gray-400 hover:text-gray-600 pt-1"
                                 title="Drag to reorder"
                               >
                                 ⋮⋮
@@ -356,6 +376,16 @@ export default function MyTeam({ apiUrl, userNumber }) {
                                 )}
                               </div>
 
+                              {/* Context/Notes */}
+                              {person.context && (
+                                <div 
+                                  className="flex-1 text-sm text-slate-600 cursor-pointer"
+                                  onClick={() => setEditingPersonId(person.id)}
+                                >
+                                  {person.context}
+                                </div>
+                              )}
+
                               {/* Action Icons */}
                               <div className="flex items-center gap-4 text-slate-400">
                                 {/* View Tasks */}
@@ -371,6 +401,18 @@ export default function MyTeam({ apiUrl, userNumber }) {
                                   📋
                                 </a>
 
+                                {/* Ask for Help */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setAskingHelpFrom(askingHelpFrom === person.id ? null : person.id);
+                                  }}
+                                  className="hover:text-green-600 transition-colors text-2xl"
+                                  title="Ask for help"
+                                >
+                                  🤝
+                                </button>
+
                                 {/* Edit */}
                                 <button
                                   onClick={(e) => {
@@ -382,30 +424,86 @@ export default function MyTeam({ apiUrl, userNumber }) {
                                 >
                                   ✏️
                                 </button>
+
+                                {/* Health Status Dot */}
+                                <div
+                                  className={`w-4 h-4 rounded-full ${getHealthColor(getHealthStatus(person.id))}`}
+                                  title={getHealthTooltip(getHealthStatus(person.id))}
+                                ></div>
                               </div>
                             </div>
 
-                            {/* Last Review Summary - Simplified */}
+                            {/* Last Review Summary */}
                             {reviewSummaries[person.id] && (
                               <div className="mt-3 pt-3 border-t border-gray-200">
-                                <div className="flex items-center gap-2 text-xs text-slate-500">
-                                  <span className="font-semibold text-purple-600">
-                                    📊 Last Review:
-                                  </span>
-                                  <span>
-                                    {new Date(reviewSummaries[person.id].review_date).toLocaleDateString()}
-                                  </span>
-                                  {reviewSummaries[person.id].relationship_strength && (
-                                    <span className="font-medium text-slate-700">
-                                      • {reviewSummaries[person.id].relationship_strength}/5
-                                    </span>
-                                  )}
-                                  {person.context && (
-                                    <span className="text-slate-400">
-                                      • {person.context}
-                                    </span>
-                                  )}
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <span className="text-xs font-semibold text-purple-600">
+                                        📊 Last Review
+                                      </span>
+                                      <span className="text-xs text-slate-500">
+                                        {new Date(reviewSummaries[person.id].review_date).toLocaleDateString()}
+                                      </span>
+                                      {reviewSummaries[person.id].relationship_strength && (
+                                        <span className="text-xs font-medium text-slate-700">
+                                          {reviewSummaries[person.id].relationship_strength}/5
+                                        </span>
+                                      )}
+                                    </div>
+                                    {reviewSummaries[person.id].insights && (
+                                      <p className="text-sm text-slate-600 line-clamp-2">
+                                        {reviewSummaries[person.id].insights}
+                                      </p>
+                                    )}
+                                    {reviewSummaries[person.id].next_steps && (
+                                      <p className="text-xs text-slate-500 mt-1">
+                                        ✅ {reviewSummaries[person.id].next_steps.slice(0, 80)}...
+                                      </p>
+                                    )}
+                                  </div>
+                                  <button
+                                    onClick={() => setExpandedReview(expandedReview === person.id ? null : person.id)}
+                                    className="ml-2 text-xs text-purple-600 hover:text-purple-800 font-medium"
+                                  >
+                                    {expandedReview === person.id ? 'Hide' : 'Full'}
+                                  </button>
                                 </div>
+                                
+                                {/* Expanded Review */}
+                                {expandedReview === person.id && (
+                                  <div className="mt-3 p-3 bg-purple-50 rounded text-sm space-y-2">
+                                    {reviewSummaries[person.id].current_dynamics && (
+                                      <div>
+                                        <span className="font-semibold text-slate-700">Dynamics:</span>
+                                        <p className="text-slate-600">{reviewSummaries[person.id].current_dynamics}</p>
+                                      </div>
+                                    )}
+                                    {reviewSummaries[person.id].how_to_strengthen && (
+                                      <div>
+                                        <span className="font-semibold text-slate-700">How to strengthen:</span>
+                                        <p className="text-slate-600">{reviewSummaries[person.id].how_to_strengthen}</p>
+                                      </div>
+                                    )}
+                                    {reviewSummaries[person.id].next_steps && (
+                                      <div>
+                                        <span className="font-semibold text-slate-700">Next steps:</span>
+                                        <p className="text-slate-600">{reviewSummaries[person.id].next_steps}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Help Panel */}
+                            {askingHelpFrom === person.id && (
+                              <div className="mt-3 pt-3 border-t border-gray-200">
+                                <HelpPanel
+                                  personName={person.name}
+                                  onSubmit={(description) => createTaskForHelp(person.name, description)}
+                                  onCancel={() => setAskingHelpFrom(null)}
+                                />
                               </div>
                             )}
                           </div>
@@ -787,3 +885,44 @@ function PersonForm({ person, onSubmit, onCancel, onDelete }) {
   );
 }
 
+function HelpPanel({ personName, onSubmit, onCancel }) {
+  const [description, setDescription] = useState('');
+
+  const handleSubmit = () => {
+    if (!description.trim()) {
+      alert('Please describe what you need help with');
+      return;
+    }
+    onSubmit(description);
+    setDescription('');
+  };
+
+  return (
+    <div className="space-y-2">
+      <label className="text-sm font-medium text-slate-700">
+        What do you need {personName}'s help with?
+      </label>
+      <textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Describe the help you need..."
+        rows={3}
+        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+      />
+      <div className="flex gap-2">
+        <button
+          onClick={handleSubmit}
+          className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+        >
+          Create Task
+        </button>
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 bg-slate-200 text-slate-700 rounded hover:bg-slate-300 transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
