@@ -402,26 +402,26 @@ def _handle_closure(
             "state_context": None
         }
     
-    # Generate smart summary with GPT
-    try:
-        summary = _generate_closure_summary(
-            person_name=person['name'],
-            relation=person.get('relation', 'colleague'),
-            reflection=state_context.get('user_reflection', ''),
-            diagnostics=state_context.get('diagnosis_input', ''),
-            planning=combined_plan,
-            relationship_strength=review.relationship_strength
-        )
-    except Exception as e:
-        print(f"❌ Error generating closure summary: {e}")
-        import traceback
-        traceback.print_exc()
-        # Fallback to simple summary
-        strength_text = f"{review.relationship_strength}/5" if review.relationship_strength else "not rated"
-        summary = f"We reviewed your relationship with {person['name']}:\n\n📊 Strength: {strength_text}\n✅ Next: {combined_plan[:100]}"
+    # Build summary
+    strength_text = f"{review.relationship_strength}/5" if review.relationship_strength else "not rated"
     
-    # Add task creation offer
-    full_response = summary + "\n\nI've saved this review. Would you like me to create any tasks related to this relationship?"
+    summary_parts = [
+        f"We reviewed your relationship with {person['name']}:",
+        f"\n📊 Strength: {strength_text}"
+    ]
+    
+    # Extract key insight from reflection
+    reflection = state_context.get('user_reflection', '')
+    if reflection and len(reflection) > 20:
+        insight = reflection[:150] + "..." if len(reflection) > 150 else reflection
+        summary_parts.append(f"\n💡 Key insight: {insight}")
+    
+    # Add next steps
+    if combined_plan:
+        next_step = combined_plan[:150] + "..." if len(combined_plan) > 150 else combined_plan
+        summary_parts.append(f"\n✅ Next: {next_step}")
+    
+    summary_parts.append("\n\nI've saved this review. Would you like me to create any tasks related to this relationship?")
     
     # Complete the review
     PeopleReviewService.complete_review(db, review_id)
@@ -429,7 +429,7 @@ def _handle_closure(
     print(f"✅ PEOPLE REVIEW SESSION COMPLETE")
     
     return {
-        "response": full_response,
+        "response": "".join(summary_parts),
         "next_phase": "completed",
         "state_context": None
     }
@@ -452,35 +452,24 @@ def _generate_reflection_question(
 
 The user just said: "{user_input}"
 
-Your task: 
-1. FIRST, briefly acknowledge what they shared (1 sentence, show you heard them)
-2. THEN, ask ONE thoughtful follow-up question that goes deeper
+Your task: Ask ONE thoughtful follow-up question that goes deeper into what they just shared.
 
 CRITICAL RULES:
-- Start with acknowledgment/mirroring ("That's a powerful bond..." / "Sounds like there's real tension there...")
-- Then ask ONLY ONE question (not multiple)
-- Keep total response under 280 characters
-- React to emotional signals (excitement → explore it, tension → probe it, appreciation → understand it)
+- Ask ONLY ONE question (not multiple)
+- Keep under 250 characters
+- React to what they actually said (don't ignore their answer)
+- If they mention tension/conflict → probe that specifically
+- If they mention positive aspects → explore what makes that work
+- If they mention mixed feelings → help them untangle that
 - Don't ask rating scales or frequency questions yet
-- Make it conversational and warm
+- Make it conversational, not mechanical
 
-STRUCTURE:
-[Acknowledgment]. [Question]?
+Examples:
+If they mention tension: "That tension you mentioned - what does that actually look like when it shows up?"
+If they mention daily contact: "With daily contact, what's the difference between a good day and a tough day with {person_name}?"
+If they mention supervision: "As your supervisor, where does the relationship feel most/least effective?"
 
-GOOD EXAMPLES:
-User: "We built it from scratch together in the garage..."
-Bad: "What aspects contribute to the partnership?"
-Good: "That's a powerful bond - building from scratch together. What about those daily interactions keeps that early energy alive?"
-
-User: "She's my supervisor, we talk daily but there's tension..."
-Bad: "What's working well?"
-Good: "Daily contact with tension is tough. What does a good day look like versus a hard day with {person_name}?"
-
-User: "He's brilliant but unreliable under pressure..."
-Bad: "How would you rate this relationship?"
-Good: "Sounds like there's real respect mixed with frustration. When he gets unreliable, what specifically breaks down?"
-
-Generate your response now: [Acknowledgment]. [Question]?"""
+Generate ONE question now that builds on what they said."""
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -509,40 +498,25 @@ def _generate_diagnostics_question(
     
     system_prompt = f"""You are Alfred, helping diagnose relationship dynamics with {person_name} ({relation}).
 
-Earlier they said: "{reflection_summary[:200]}"
-Just now they said: "{user_input[:200]}"
+Earlier they said: "{reflection_summary}"
+Just now they said: "{user_input}"
 
-Your task:
-1. FIRST, briefly acknowledge what you've learned (1 sentence)
-2. THEN, ask ONE diagnostic question about the PATTERN or ROOT CAUSE
-
-This is DIAGNOSTICS - you're looking for underlying dynamics, not just describing the relationship.
-
-STRUCTURE:
-[Acknowledgment of pattern/dynamic]. [Diagnostic question]?
+Your task: Ask ONE strategic question about patterns, importance, or underlying dynamics.
 
 CRITICAL RULES:
-- Start with acknowledgment that shows you see the dynamic
 - Ask ONLY ONE question
-- Keep total under 280 characters
-- Focus on WHY/WHEN (not what/how)
-- Look for patterns, triggers, systemic issues
-- Help them see what they might not have articulated
+- Keep under 250 characters
+- Focus on WHY things are this way, not just WHAT is happening
+- Help them see patterns they might not have noticed
+- Build on what you now know from reflection
+- Be specific to this relationship
 
-GOOD EXAMPLES:
-User said: "We bonded through client battles, deep trust"
-Bad: "How does that influence collaboration?"
-Good: "Sounds like crisis builds your bond. Does the relationship need that stress to stay strong, or does it thrive in calm too?"
+Examples:
+"You talk every day but feel tension - is that tension about what you discuss or how you discuss it?"
+"As your supervisor, what happens when you need to push back on her direction?"
+"Where does this relationship work best - in crisis or in routine?"
 
-User said: "Long-term vision drives us"
-Bad: "What patterns have you noticed?"
-Good: "The shared vision clearly energizes you both. When that's strongest, what changes in how you actually work together day-to-day?"
-
-User said: "Daily supervision, some tension when I push back"
-Bad: "Are there unresolved issues?"
-Good: "Tension when pushing back on your supervisor is natural. Is it about WHAT you're pushing back on, or HOW the pushback happens?"
-
-Generate your response: [Acknowledgment]. [Diagnostic question]?"""
+Generate ONE diagnostic question."""
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -570,44 +544,29 @@ def _generate_planning_question(
 ) -> str:
     """Generate ONE action-oriented planning question"""
     
-    system_prompt = f"""You are Alfred, helping plan improvements for the relationship with {person_name} ({relation}).
+    system_prompt = f"""You are Alfred, helping plan actions to improve the relationship with {person_name} ({relation}).
 
 What we've learned:
 Reflection: {reflection_summary[:200]}
 Diagnosis: {diagnosis_summary[:200]}
-Just now: {user_input[:200]}
+Just now: {user_input}
 
-Your task:
-1. FIRST, acknowledge the strength AND identify the improvement opportunity (1-2 sentences)
-2. THEN, ask ONE question about the specific improvement
-
-This is PLANNING - transition from diagnosis to action by naming both strength and gap.
-
-STRUCTURE:
-[Acknowledge strength]. [Name the gap/opportunity]. [Action question]?
+Your task: Ask ONE action-oriented question that leads to concrete next steps.
 
 CRITICAL RULES:
-- Start by naming what's WORKING (the strength)
-- Then name what needs IMPROVEMENT (the gap)
-- Then ask about the specific action to close that gap
-- Keep total under 300 characters
+- Ask ONLY ONE question
+- Keep under 250 characters
 - Make it specific to THIS relationship
 - Focus on what THEY can control
+- Force clarity on the single most important action
+- Be direct and clear
 
-GOOD EXAMPLES:
-User said: "Long-term vision" after reflection on partnership
-Bad: "What's the ONE step to align on vision?"
-Good: "Your vision alignment is clearly the strength here. Where's the execution gap - is it in delegation, clarity of roles, or something else?"
+Examples:
+"What's the ONE conversation you need to have with {person_name} this week?"
+"If you could only change one thing about how you work together, what would it be?"
+"What boundary would reduce the most tension if you set it clearly?"
 
-User said: "Trust builds in crisis"
-Bad: "What action can you take?"
-Good: "The crisis trust is real. The opportunity might be building connection in calmer times. What's one routine you could establish?"
-
-User said: "Daily supervision works but tension when pushing back"
-Bad: "What boundary needs setting?"
-Good: "Daily touch-points work well. The friction seems to be around decision authority. What conversation would clarify where you each own decisions?"
-
-Generate your response: [Strength]. [Gap]. [Action question]?"""
+Generate ONE planning question."""
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -619,81 +578,6 @@ Generate your response: [Strength]. [Gap]. [Action question]?"""
         messages=messages,
         temperature=0.6,
         max_tokens=100
-    )
-    
-    return (resp.choices[0].message.content or "").strip()
-
-
-def _generate_closure_summary(
-    person_name: str,
-    relation: str,
-    reflection: str,
-    diagnostics: str,
-    planning: str,
-    relationship_strength: Optional[int]
-) -> str:
-    """Generate a concise, insightful closure summary"""
-    
-    system_prompt = f"""You are Alfred, summarizing a relationship review with {person_name} ({relation}).
-
-CONVERSATION SUMMARY:
-- Reflection: {reflection[:300]}
-- Diagnostics: {diagnostics[:300]}
-- Planning: {planning[:300]}
-
-Your task: Create a structured summary with:
-1. Overall assessment (infer strength 1-5 based on conversation tone)
-2. What's WORKING (the strengths in this relationship)
-3. IMPROVEMENT OPPORTUNITY (what needs work)
-4. NEXT STEP (concrete action)
-
-FORMAT:
-We reviewed your relationship with {person_name}:
-
-📊 Strength: [X]/5 - [One line assessment]
-💪 What's working: [10-15 words on the core strength]
-⚠️ Growth opportunity: [10-15 words on what needs improvement]
-✅ Next: [10-15 words concrete action]
-
-EXAMPLES:
-
-Example 1 (Strong partnership):
-📊 Strength: 4/5 - Strong vision alignment, needs execution clarity
-💪 What's working: Deep partnership from building together, shared long-term focus
-⚠️ Growth opportunity: Needs clearer frameworks for independent project management
-✅ Next: Define client meeting responsibilities and decision authority
-
-Example 2 (Tension with supervisor):
-📊 Strength: 3/5 - Good daily connection, friction on pushback
-💪 What's working: Daily touchpoints maintain alignment and visibility
-⚠️ Growth opportunity: Unclear decision authority creates tension on pushback
-✅ Next: Clarify where each person owns final decisions
-
-Example 3 (Crisis-dependent bond):
-📊 Strength: 4/5 - Excellent under pressure, untested in routine
-💪 What's working: Crisis builds deep trust and effective collaboration
-⚠️ Growth opportunity: Need to maintain connection beyond high-stress moments
-✅ Next: Establish regular check-ins separate from project work
-
-RULES:
-- Infer strength score from conversation (positive = 4-5, mixed = 3, struggling = 2)
-- Extract ESSENCE, don't copy verbatim
-- Always show BOTH strength AND improvement
-- Keep each line to 10-15 words
-- Be specific and actionable
-- Max 350 characters total
-
-Generate the summary now."""
-
-    messages = [
-        {"role": "system", "content": system_prompt}
-    ]
-    
-    resp = client.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=messages,
-        temperature=0.5,
-        max_tokens=150
     )
     
     return (resp.choices[0].message.content or "").strip()
