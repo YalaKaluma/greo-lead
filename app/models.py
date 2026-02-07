@@ -735,3 +735,69 @@ class TaskPriorityDecision(Base):
 
     # Metadata
     decided_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    # Add this to app/models.py
+
+class LeadershipCoachingSession(Base):
+    __tablename__ = "leadership_coaching_sessions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True, nullable=False)
+    
+    # Session metadata
+    session_date = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Quadrant selection (which of the 5 areas of the wheel)
+    quadrant = Column(String, nullable=False)  # "vision_goals", "people", "prioritize_execute", "learning_development", "time_energy"
+    
+    # The situation they brought to coaching
+    situation = Column(Text, nullable=True)
+    
+    # Coaching conversation flow
+    reflection = Column(Text, nullable=True)  # Their exploration of the situation
+    pattern = Column(Text, nullable=True)  # Pattern Alfred identified
+    underlying_belief = Column(Text, nullable=True)  # Core belief driving behavior
+    experiment = Column(Text, nullable=True)  # Behavioral experiment designed
+    
+    # Assessment
+    development_level = Column(Integer, nullable=True)  # 1-5 on this quadrant
+    
+    # Outcomes
+    insights = Column(Text, nullable=True)  # Key insight from session
+    practice = Column(Text, nullable=True)  # Specific practice/experiment to try
+    
+    # Journey connections (which facets of the wheel were touched)
+    connected_facets = Column(JSON, nullable=True)  # e.g., ["Inspire", "Coach & Delegate"]
+    journey_updates = Column(JSON, nullable=True)  # Track what got added to journey tables
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), onupdate=lambda: datetime.now(timezone.utc))
+
+
+# Migration SQL to add the table
+"""
+CREATE TABLE leadership_coaching_sessions (
+    id SERIAL PRIMARY KEY,
+    user_number VARCHAR NOT NULL,
+    session_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    quadrant VARCHAR NOT NULL,
+    situation TEXT,
+    reflection TEXT,
+    pattern TEXT,
+    underlying_belief TEXT,
+    experiment TEXT,
+    development_level INTEGER,
+    insights TEXT,
+    practice TEXT,
+    connected_facets JSONB,
+    journey_updates JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_leadership_sessions_user ON leadership_coaching_sessions(user_number);
+CREATE INDEX idx_leadership_sessions_quadrant ON leadership_coaching_sessions(quadrant);
+"""

@@ -10,9 +10,17 @@ const GOAL_REVIEW_STAGES = [
   { id: 'closure', label: 'Closure', description: 'Summary and next steps' }
 ];
 
+const PEOPLE_REVIEW_STAGES = [
+  { id: 'select_person', label: 'Selection', description: 'Choose who to review' },
+  { id: 'reflection', label: 'Reflection', description: 'Current relationship state' },
+  { id: 'diagnostics', label: 'Diagnostics', description: 'Patterns and dynamics' },
+  { id: 'planning', label: 'Planning', description: 'Actions and next steps' },
+  { id: 'closure', label: 'Closure', description: 'Summary and tasks' }
+];
+
 const SESSION_TYPES = [
   { id: 'goal_review', label: 'Goal Review Session', enabled: true },
-  { id: 'people_review', label: 'People Review Session', enabled: false },
+  { id: 'people_review', label: 'People Review Session', enabled: true },
   { id: 'leadership_coaching', label: 'Leadership Coaching Session', enabled: false }
 ];
 
@@ -52,23 +60,35 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   };
 
   const startSession = async (sessionType) => {
-    if (sessionType !== 'goal_review') return; // Only goal review enabled for now
+    if (!['goal_review', 'people_review'].includes(sessionType)) return; // Only these enabled for now
 
     console.log('Starting session:', sessionType);
     console.log('API URL:', apiUrl);
     console.log('User Number:', userNumber);
 
     setActiveSession(sessionType);
-    setCurrentStage('framing');
-    setStageIndex(0);
+    
+    // Set appropriate initial stage
+    if (sessionType === 'goal_review') {
+      setCurrentStage('framing');
+      setStageIndex(0);
+    } else if (sessionType === 'people_review') {
+      setCurrentStage('select_person');
+      setStageIndex(0);
+    }
+    
     setIsLoading(true);
 
     try {
-      // Send message to start goal review session
+      // Send message to start session
+      const startMessage = sessionType === 'goal_review' 
+        ? 'Start goal review session'
+        : 'Start people review session';
+        
       console.log('Sending POST to:', `${apiUrl}/api/chat`);
       const response = await axios.post(`${apiUrl}/api/chat`, {
         user_number: userNumber,
-        message: 'Start goal review session'
+        message: startMessage
       });
 
       console.log('Response received:', response.data);
@@ -80,17 +100,22 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
       };
 
       setMessages(prev => [...prev, 
-        { role: 'user', content: 'Start goal review session', timestamp: new Date().toISOString() },
+        { role: 'user', content: startMessage, timestamp: new Date().toISOString() },
         newMessage
       ]);
 
       // Update stage from response if available
-      if (response.data.goal_review_status) {
+      if (sessionType === 'goal_review' && response.data.goal_review_status) {
         const status = response.data.goal_review_status;
         console.log('Goal review status:', status);
         setCurrentStage(status.stage);
         const idx = GOAL_REVIEW_STAGES.findIndex(s => s.id === status.stage);
         setStageIndex(idx >= 0 ? idx : 0);
+      } else if (sessionType === 'people_review' && response.data.people_review_status) {
+        const status = response.data.people_review_status;
+        console.log('People review status:', status);
+        setCurrentStage(status.phase);
+        // People review doesn't have fixed stages like goal review
       }
     } catch (error) {
       console.error('Error starting session:', error);
@@ -184,7 +209,19 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
           setCurrentStage(null);
           setStageIndex(0);
         }
-      } else if (response.data.state !== 'GOAL_REVIEW') {
+      } else if (response.data.people_review_status) {
+        // Handle people review status
+        const status = response.data.people_review_status;
+        if (status.active) {
+          setActiveSession('people_review');
+          setCurrentStage(status.phase);
+        } else {
+          // Session ended
+          setActiveSession(null);
+          setCurrentStage(null);
+          setStageIndex(0);
+        }
+      } else if (response.data.state !== 'GOAL_REVIEW' && response.data.state !== 'PEOPLE_REVIEW') {
         // Session ended or not active
         setActiveSession(null);
         setCurrentStage(null);
@@ -261,7 +298,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
           </div>
         </div>
 
-        {/* Progress Dots - Only show when session is active */}
+        {/* Progress Dots - Only show when goal review session is active */}
         {activeSession === 'goal_review' && (
           <div className="mt-6 flex items-center justify-center gap-2">
             {GOAL_REVIEW_STAGES.map((stage, index) => (
@@ -296,6 +333,45 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
                   <div className={`
                     w-12 h-0.5 mb-6
                     ${index < stageIndex ? 'bg-green-500' : 'bg-gray-200'}
+                  `} />
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+        )}
+
+        {/* Progress Dots - People Review */}
+        {activeSession === 'people_review' && (
+          <div className="mt-6 flex items-center justify-center gap-2">
+            {PEOPLE_REVIEW_STAGES.map((stage, index) => (
+              <React.Fragment key={stage.id}>
+                <div className="flex flex-col items-center">
+                  <div
+                    className={`
+                      w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold
+                      transition-all
+                      ${currentStage === stage.id
+                        ? 'bg-purple-600 text-white shadow-lg scale-110'
+                        : PEOPLE_REVIEW_STAGES.findIndex(s => s.id === currentStage) > index
+                          ? 'bg-green-500 text-white'
+                          : 'bg-gray-200 text-gray-500'
+                      }
+                    `}
+                    title={`${stage.label}: ${stage.description}`}
+                  >
+                    {PEOPLE_REVIEW_STAGES.findIndex(s => s.id === currentStage) > index ? '✓' : index + 1}
+                  </div>
+                  <span className={`
+                    mt-2 text-xs font-medium
+                    ${currentStage === stage.id ? 'text-purple-600' : 'text-gray-500'}
+                  `}>
+                    {stage.label}
+                  </span>
+                </div>
+                {index < PEOPLE_REVIEW_STAGES.length - 1 && (
+                  <div className={`
+                    w-12 h-0.5 mb-6
+                    ${PEOPLE_REVIEW_STAGES.findIndex(s => s.id === currentStage) > index ? 'bg-green-500' : 'bg-gray-200'}
                   `} />
                 )}
               </React.Fragment>

@@ -18,10 +18,19 @@ const PEOPLE_REVIEW_STAGES = [
   { id: 'closure', label: 'Closure', description: 'Summary and tasks' }
 ];
 
+const LEADERSHIP_COACHING_STAGES = [
+  { id: 'selection', label: 'Quadrant', description: 'Choose focus area' },
+  { id: 'situation', label: 'Situation', description: 'Describe challenge' },
+  { id: 'reflection', label: 'Reflection', description: 'Explore story' },
+  { id: 'diagnostics', label: 'Diagnostics', description: 'Identify pattern' },
+  { id: 'planning', label: 'Planning', description: 'Design experiment' },
+  { id: 'closure', label: 'Closure', description: 'Synthesize insights' }
+];
+
 const SESSION_TYPES = [
-  { id: 'goal_review', label: 'Goal Review Session', enabled: true },
-  { id: 'people_review', label: 'People Review Session', enabled: true },
-  { id: 'leadership_coaching', label: 'Leadership Coaching Session', enabled: false }
+  { id: 'goal_review', label: 'Goal Review Session', icon: '🎯', color: 'blue', enabled: true },
+  { id: 'people_review', label: 'People Review Session', icon: '👥', color: 'purple', enabled: true },
+  { id: 'leadership_coaching', label: 'Leadership Coaching', icon: '🧭', color: 'green', enabled: true }
 ];
 
 const MyCoachingSessions = ({ apiUrl, userNumber }) => {
@@ -60,7 +69,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   };
 
   const startSession = async (sessionType) => {
-    if (!['goal_review', 'people_review'].includes(sessionType)) return; // Only these enabled for now
+    if (!['goal_review', 'people_review', 'leadership_coaching'].includes(sessionType)) return;
 
     console.log('Starting session:', sessionType);
     console.log('API URL:', apiUrl);
@@ -75,6 +84,9 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
     } else if (sessionType === 'people_review') {
       setCurrentStage('select_person');
       setStageIndex(0);
+    } else if (sessionType === 'leadership_coaching') {
+      setCurrentStage('selection');
+      setStageIndex(0);
     }
     
     setIsLoading(true);
@@ -83,7 +95,9 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
       // Send message to start session
       const startMessage = sessionType === 'goal_review' 
         ? 'Start goal review session'
-        : 'Start people review session';
+        : sessionType === 'people_review'
+        ? 'Start people review session'
+        : 'Start leadership coaching session';
         
       console.log('Sending POST to:', `${apiUrl}/api/chat`);
       const response = await axios.post(`${apiUrl}/api/chat`, {
@@ -221,7 +235,19 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
           setCurrentStage(null);
           setStageIndex(0);
         }
-      } else if (response.data.state !== 'GOAL_REVIEW' && response.data.state !== 'PEOPLE_REVIEW') {
+      } else if (response.data.leadership_coaching_status) {
+        // Handle leadership coaching status
+        const status = response.data.leadership_coaching_status;
+        if (status.active) {
+          setActiveSession('leadership_coaching');
+          setCurrentStage(status.phase);
+        } else {
+          // Session ended
+          setActiveSession(null);
+          setCurrentStage(null);
+          setStageIndex(0);
+        }
+      } else if (response.data.state !== 'GOAL_REVIEW' && response.data.state !== 'PEOPLE_REVIEW' && response.data.state !== 'LEADERSHIP_COACHING') {
         // Session ended or not active
         setActiveSession(null);
         setCurrentStage(null);
@@ -275,26 +301,46 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold text-gray-900">Coaching Sessions</h1>
           <div className="flex gap-3">
-            {SESSION_TYPES.map(session => (
-              <button
-                key={session.id}
-                onClick={() => session.enabled && startSession(session.id)}
-                disabled={!session.enabled || activeSession !== null}
-                className={`
-                  px-4 py-2 rounded-lg font-medium text-sm transition-all
-                  ${session.enabled 
-                    ? activeSession === session.id
-                      ? 'bg-blue-600 text-white shadow-md'
-                      : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
-                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  }
-                  ${activeSession && activeSession !== session.id ? 'opacity-50' : ''}
-                `}
-              >
-                {session.label}
-                {!session.enabled && ' 🔒'}
-              </button>
-            ))}
+            {SESSION_TYPES.map(session => {
+              const colorClasses = {
+                blue: {
+                  active: 'bg-blue-600 text-white shadow-md',
+                  inactive: 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
+                },
+                purple: {
+                  active: 'bg-purple-600 text-white shadow-md',
+                  inactive: 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+                },
+                green: {
+                  active: 'bg-green-600 text-white shadow-md',
+                  inactive: 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
+                }
+              };
+              
+              const colors = colorClasses[session.color] || colorClasses.blue;
+              
+              return (
+                <button
+                  key={session.id}
+                  onClick={() => session.enabled && startSession(session.id)}
+                  disabled={!session.enabled || activeSession !== null}
+                  className={`
+                    px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2
+                    ${session.enabled 
+                      ? activeSession === session.id
+                        ? colors.active
+                        : colors.inactive
+                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    }
+                    ${activeSession && activeSession !== session.id ? 'opacity-50' : ''}
+                  `}
+                >
+                  <span>{session.icon}</span>
+                  <span>{session.label}</span>
+                  {!session.enabled && ' 🔒'}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -372,6 +418,45 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
                   <div className={`
                     w-12 h-0.5 mb-6
                     ${PEOPLE_REVIEW_STAGES.findIndex(s => s.id === currentStage) > index ? 'bg-green-500' : 'bg-gray-200'}
+                  `} />
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+        )}
+
+        {/* Progress Dots - Leadership Coaching */}
+        {activeSession === 'leadership_coaching' && (
+          <div className="mt-6 flex items-center justify-center gap-2">
+            {LEADERSHIP_COACHING_STAGES.map((stage, index) => (
+              <React.Fragment key={stage.id}>
+                <div className="flex flex-col items-center">
+                  <div
+                    className={`
+                      w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold
+                      transition-all
+                      ${currentStage === stage.id
+                        ? 'bg-green-600 text-white shadow-lg scale-110'
+                        : LEADERSHIP_COACHING_STAGES.findIndex(s => s.id === currentStage) > index
+                          ? 'bg-green-500 text-white'
+                          : 'bg-gray-200 text-gray-500'
+                      }
+                    `}
+                    title={`${stage.label}: ${stage.description}`}
+                  >
+                    {LEADERSHIP_COACHING_STAGES.findIndex(s => s.id === currentStage) > index ? '✓' : index + 1}
+                  </div>
+                  <span className={`
+                    mt-2 text-xs font-medium
+                    ${currentStage === stage.id ? 'text-green-600' : 'text-gray-500'}
+                  `}>
+                    {stage.label}
+                  </span>
+                </div>
+                {index < LEADERSHIP_COACHING_STAGES.length - 1 && (
+                  <div className={`
+                    w-12 h-0.5 mb-6
+                    ${LEADERSHIP_COACHING_STAGES.findIndex(s => s.id === currentStage) > index ? 'bg-green-500' : 'bg-gray-200'}
                   `} />
                 )}
               </React.Fragment>
