@@ -250,13 +250,12 @@ def _handle_diagnostics(
         'underlying_belief': pattern_analysis['belief']
     })
     
-    # Generate planning question (pass user_message for depth acknowledgment)
+    # Generate planning question
     planning_question = _generate_planning_question(
         quadrant=session.quadrant,
         pattern=pattern_analysis['pattern'],
         belief=pattern_analysis['belief'],
-        situation=session.situation,
-        user_depth=user_message  # Pass the user's response for acknowledgment
+        situation=session.situation
     )
     
     return {
@@ -401,31 +400,36 @@ def _generate_thought_starters(
     
     system_prompt = f"""You are Alfred, helping a leader reflect on {quadrant_name}.
 
-THEIR FULL CONTEXT (goals, projects, strengths, challenges):
-{journey_context[:1200]}
+THEIR CONTEXT:
+{journey_context[:500]}
 
-Your task: Generate 2-3 brief thought starters that reference THEIR ACTUAL CONTEXT.
+Your task: Generate 2-3 brief thought starters (examples of common struggles) in this area to help them think of a specific situation.
 
-CRITICAL: Be SPECIFIC to what you know about them, not generic advice.
+RULES:
+- Each thought starter is ONE sentence
+- Make them SPECIFIC and relatable
+- Base them on their context if relevant
+- Keep total under 150 characters
+- Format as bullet points
 
 EXAMPLES:
 
-BAD (Generic):
-• Struggling to maintain energy throughout the day
-• Feeling overwhelmed
+For "Prioritize & Execute":
+• Spending time on urgent tasks while important projects stall
+• Saying yes to everything and running out of capacity
+• Starting many things but struggling to finish them
 
-GOOD (Context-Specific):
-• Morning workout routine disrupted despite your goal to stop work at 6pm
-• Energy drains from juggling Savencia project with business development
-• Recovery squeezed by your "want more" drive after wins
+For "People":
+• Avoiding difficult feedback conversations
+• Micromanaging instead of delegating
+• Team members not stepping up to ownership
 
-RULES:
-- Each thought starter ONE sentence, under 60 chars
-- Reference their ACTUAL goals, projects, or patterns
-- Total under 200 characters
-- Format with "•" bullets
+For "Vision & Goals":
+• Goals feel disconnected from daily work
+• Not sure if you're making real progress
+• Unclear what success looks like
 
-Generate 2-3 thought starters for {quadrant_name} based on their context now."""
+Generate 2-3 thought starters for {quadrant_name} now."""
     
     messages = [
         {"role": "system", "content": system_prompt}
@@ -434,8 +438,8 @@ Generate 2-3 thought starters for {quadrant_name} based on their context now."""
     resp = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=messages,
-        temperature=0.6,
-        max_tokens=120
+        temperature=0.7,
+        max_tokens=100
     )
     
     thought_starters = (resp.choices[0].message.content or "").strip()
@@ -652,17 +656,11 @@ def _generate_planning_question(
     quadrant: str,
     pattern: str,
     belief: str,
-    situation: str,
-    user_depth: str = ""  # NEW: User's deep reflection if they shared one
+    situation: str
 ) -> str:
     """Generate question that designs a behavioral EXPERIMENT"""
     
     quadrant_name = LEADERSHIP_QUADRANTS[quadrant]['name']
-    
-    # Build context for acknowledgment
-    depth_context = ""
-    if user_depth and len(user_depth) > 150:
-        depth_context = f"\n\nUSER'S DEEP REFLECTION (acknowledge this first):\n{user_depth[:400]}"
     
     system_prompt = f"""You are Alfred, helping design a leadership experiment.
 
@@ -670,63 +668,56 @@ CONTEXT:
 - Development area: {quadrant_name}
 - Pattern identified: {pattern}
 - Underlying belief: {belief}
-- Original situation: {situation[:200]}{depth_context}
+- Original situation: {situation[:200]}
 
 Your task: Help them design a SMALL, SPECIFIC behavioral experiment to test their belief.
 
-CRITICAL INSTRUCTIONS:
-1. If user shared deep reflection (multiple beliefs, fears), ACKNOWLEDGE IT FIRST
-   - Mirror their insights back ("You're naming two powerful forces...")
-   - Show you heard the depth ("Fear of losing what you gained + the addictive pull of more")
-   - This builds trust before jumping to solutions
-2. Then transition to the micro-experiment
-3. Write in NATURAL, CLEAR language - no awkward phrasing
+NOT a vague commitment ("I'll be more direct").
+NOT a big change ("I'll transform my leadership style").
+BUT a tiny, testable action they can try ONCE.
 
-STRUCTURE (when user shared depth):
-1. Acknowledge their insight richly (2-3 sentences)
-2. Connect pattern to what they revealed
-3. Propose ONE tiny, testable micro-experiment  
+CRITICAL: Write in NATURAL, CLEAR language. No awkward phrasing.
+
+STRUCTURE:
+1. State the pattern clearly ("Here's what I'm noticing...")
+2. Connect it to consequences ("This means...")
+3. Propose ONE specific micro-experiment
 4. Ask where they'll try it
 
-STRUCTURE (when simple response):
-1. State the pattern clearly
-2. Connect to consequences
-3. Propose micro-experiment
-4. Ask where they'll try it
+GOOD EXAMPLES:
 
-EXAMPLE WITH DEEP ACKNOWLEDGMENT:
+Pattern: Hides behind "some people" when giving feedback
+Belief: Directness damages relationships
 
-Pattern: Success disrupts routines
-Belief: Fear of losing gains + addictive pull of winning
-User depth: "Two beliefs: 1. Fear of losing what I gained 2. I want more - winning is addictive"
+Response: "Here's what I'm noticing: you avoid being the direct source of feedback because you fear damaging the relationship. But indirect feedback actually creates MORE damage - confusion and eroded trust.
 
-Response: "You're naming two powerful forces at play: the fear of losing what you've built, and the addictive pull of 'I want more.' That's a revealing tension - success itself becomes destabilizing.
+Try this micro-experiment: Next time you have feedback, own it from the start. Say 'I need you to...' instead of 'Some people feel...'
 
-What if you anchored to ONE non-negotiable routine as your stability point? Not a full system, just one thing that grounds you regardless of wins or chaos.
+Who's the safest person to practice this with?"
 
-Tomorrow morning - which single 10-minute routine would serve as that anchor?"
+---
+
+Pattern: Seeks consensus instead of making calls
+Belief: Deciding without full alignment makes them look autocratic
+
+Response: "I'm seeing a pattern: you keep seeking consensus to avoid looking autocratic. But endless discussion frustrates people MORE than a clear decision would.
+
+Here's a micro-experiment: Pick ONE upcoming decision. Listen for 20 minutes, then make your call. Explain your reasoning but don't negotiate.
+
+What's coming up where you can test this?"
+
+---
+
+Pattern: Prioritizes urgent over important
+Belief: Missing urgent tasks leads to immediate negative consequences
+
+Response: "The pattern: you default to urgent tasks because important ones don't have deadlines. But this keeps you firefighting instead of building.
+
+Micro-experiment: Tomorrow, block 30 minutes FIRST for one important task. Before checking email, before urgent requests.
+
+Which important task will you protect that time for?"
 
 RULES:
-- Keep under 350 characters
-- ONE clear micro-experiment
-- End with specific implementation question
-- Warm, direct tone
-- Match depth given with depth returned
-
-Generate your response now."""
-    
-    messages = [
-        {"role": "system", "content": system_prompt}
-    ]
-    
-    resp = client.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=messages,
-        temperature=0.6,
-        max_tokens=220
-    )
-    
-    return (resp.choices[0].message.content or "What's one small experiment you could try?").strip()
 - Write naturally - like you're talking to a smart friend
 - Keep under 280 characters
 - ONE clear experiment, not multiple options
