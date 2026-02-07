@@ -15,6 +15,7 @@ import json
 
 
 # Valid states
+
 class States:
     IDLE = "IDLE"
     CLARIFYING = "CLARIFYING"
@@ -27,6 +28,8 @@ class States:
     LEARNING = "LEARNING"
     GOAL_REVIEW = "GOAL_REVIEW"
     PEOPLE_REVIEW = "PEOPLE_REVIEW"
+    LEADERSHIP_COACHING = "LEADERSHIP_COACHING"
+
 
 
 # State timeout configuration (in minutes)
@@ -38,6 +41,7 @@ STATE_TIMEOUTS = {
     States.REVIEWING: 30,
     States.GOAL_REVIEW: 60,
     States.PEOPLE_REVIEW: 60,
+    States.LEADERSHIP_COACHING: 60,
 }
 
 

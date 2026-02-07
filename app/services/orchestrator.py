@@ -138,6 +138,23 @@ def orchestrate(
                 explicit_execution=explicit_execution,
                 user_message=user_message
             )
+    # CRITICAL: Check for explicit leadership coaching request - override any state
+    elif top_intent and top_intent['name'] == 'LEADERSHIP_COACHING' and top_intent['confidence'] > 0.7:
+        keywords = ["leadership coaching", "leadership session", "work on my leadership", "be a better leader", "leadership development", "start leadership"]
+        if any(kw in user_message.lower() for kw in keywords):
+            print(f"🔄 FORCING STATE TRANSITION: {state.current_state} → LEADERSHIP_COACHING")
+            print(f"   Reason: Explicit leadership coaching request detected")
+            state.state_context = None
+            new_state = States.LEADERSHIP_COACHING
+            reason = "explicit_leadership_coaching_request"
+        else:
+            new_state, reason = transition_state(
+                db=db,
+                state=state,
+                intents=intents,
+                explicit_execution=explicit_execution,
+                user_message=user_message
+            )
     else:
         # Step 3: Determine state transition
         new_state, reason = transition_state(
@@ -161,6 +178,7 @@ def orchestrate(
         States.PROACTIVE: handle_proactive,
         States.GOAL_REVIEW: handle_goal_review,
         States.PEOPLE_REVIEW: handle_people_review,
+        States.LEADERSHIP_COACHING: handle_leadership_coaching,
     }
 
     handler = handlers.get(new_state, handle_idle)
@@ -1252,5 +1270,68 @@ def handle_people_review(
                 'active': next_phase != 'completed',
                 'phase': next_phase
             } if next_phase != 'completed' else None
+        }
+    )
+
+
+def handle_leadership_coaching(
+        db: Session,
+        user_number: str,
+        user_message: str,
+        intents: List[Dict],
+        explicit_execution: bool,
+        current_state: Any,
+        reason: str
+) -> OrchestrationResult:
+    """
+    Handle LEADERSHIP_COACHING state - structured leadership development sessions.
+    
+    Delegates to leadership_coaching_orchestrator for phase management.
+    Follows the same pattern as goal_review and people_review.
+    """
+    
+    from app.services.leadership_coaching_orchestrator import orchestrate_leadership_coaching
+    
+    print(f"\n{'=' * 60}")
+    print(f"🧭 LEADERSHIP COACHING SESSION")
+    print(f"User message: {user_message[:100]}...")
+    print(f"{'=' * 60}")
+    
+    # Call the leadership coaching orchestrator
+    result = orchestrate_leadership_coaching(
+        db=db,
+        user_number=user_number,
+        user_message=user_message
+    )
+    
+    # Extract response and metadata
+    response = result["response"]
+    completed = result.get("completed", False)
+    session_id = result.get("session_id")
+    next_phase = result.get("next_phase")
+    
+    # Determine next state
+    if completed:
+        next_state = States.IDLE
+        state_context = None
+        print(f"✅ Leadership coaching session completed")
+    else:
+        next_state = States.LEADERSHIP_COACHING
+        state_context = {
+            "session_id": session_id,
+            "phase": next_phase
+        }
+        print(f"📍 Continuing in phase: {next_phase}")
+    
+    return OrchestrationResult(
+        response=response,
+        state=next_state,
+        data={
+            'state_context': state_context,
+            'leadership_coaching_status': {
+                'active': not completed,
+                'session_id': session_id,
+                'phase': next_phase
+            } if not completed else None
         }
     )
