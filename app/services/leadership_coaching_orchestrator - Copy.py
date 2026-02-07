@@ -108,11 +108,11 @@ def _handle_selection(
 
 Which area of the wheel do you want to focus on today?
 
-1. Vision & Goals - Your direction and purpose
-2. People - Leading, inspiring, and developing others  
-3. Prioritize & Execute - Getting things done effectively
-4. Learning & Development - Growing from experience
-5. Time & Energy - Managing your capacity
+1. 🎯 Vision & Goals - Your direction and purpose
+2. 👥 People - Leading, inspiring, and developing others  
+3. ⚡ Prioritize & Execute - Getting things done effectively
+4. 📚 Learning & Development - Growing from experience
+5. ⏰ Time & Energy - Managing your capacity
 
 Reply with the number or name."""
         
@@ -127,18 +127,9 @@ Reply with the number or name."""
     session = LeadershipCoachingService.create_session(db, user_number, quadrant_selected)
     quadrant_info = LEADERSHIP_QUADRANTS[quadrant_selected]
     
-    # Build context-based thought starters
-    journey_context = build_journey_context(db, user_number)
-    thought_starters = _generate_thought_starters(
-        quadrant=quadrant_selected,
-        journey_context=journey_context
-    )
-    
-    response = f"""Great - let's focus on {quadrant_info['name']}.
+    response = f"""Great - let's focus on {quadrant_info['icon']} {quadrant_info['name']}.
 
-{thought_starters}
-
-Now, think about this past week. Tell me about a specific moment where something didn't go the way you wanted in this area.
+Think about this past week. Tell me about a specific moment where something didn't go the way you wanted in this area. 
 
 What happened? Give me the situation - a conversation, a decision, a moment where you felt stuck or not at your best."""
     
@@ -277,13 +268,9 @@ def _handle_planning(
     
     print(f"📍 PHASE: PLANNING - Designing Experiment")
     
-    # The experiment is already in the session (from the diagnostics phase's planning_question)
-    # We need to extract it from the previous conversation, not from user_message
-    # user_message here is just their confirmation ("Yes, I'll try that" / "Alex" / etc.)
-    
-    # Save the user's commitment/context
+    # Save the experiment
     LeadershipCoachingService.update_session(db, session_id, {
-        'experiment': user_message  # This is their commitment, not the experiment itself
+        'experiment': user_message
     })
     
     # Generate closure summary
@@ -304,15 +291,10 @@ def _handle_planning(
     level_match = re.search(r'Development Level:\s*(\d)/5', closure)
     development_level = int(level_match.group(1)) if level_match else 3
     
-    # Extract the actual experiment description from the closure summary
-    # It will be in the "🔬 The Experiment:" line
-    experiment_match = re.search(r'🔬 The Experiment:\s*(.+?)(?:\n|$)', closure)
-    experiment_description = experiment_match.group(1).strip() if experiment_match else user_message
-    
     # Update session with closure data
     LeadershipCoachingService.update_session(db, session_id, {
         'development_level': development_level,
-        'practice': experiment_description,  # Use extracted experiment, not user response
+        'practice': user_message,
         'insights': closure  # Store full closure as insights
     })
     
@@ -329,19 +311,16 @@ def _handle_planning(
     except Exception as e:
         print(f"⚠️ Could not add development area: {e}")
     
-    # Auto-create task for the experiment using the EXTRACTED experiment
+    # Auto-create task for the experiment
     task_created = False
     try:
         from app.models import Task
         from datetime import datetime, timezone
         
-        # Create concise task title from experiment
-        task_title = f"Leadership: {experiment_description[:60]}"
-        
         task = Task(
             user_number=user_number,
-            title=task_title,
-            notes=f"Quadrant: {LEADERSHIP_QUADRANTS[session.quadrant]['name']}\n\nPattern: {session.pattern}\n\nExperiment: {experiment_description}\n\nContext: {user_message}",
+            title=f"Leadership Experiment: {user_message[:80]}",
+            notes=f"Quadrant: {LEADERSHIP_QUADRANTS[session.quadrant]['name']}\n\nPattern identified: {session.pattern}\n\nExperiment: {user_message}",
             priority='high',
             status='open',
             created_at=datetime.now(timezone.utc),
@@ -350,7 +329,7 @@ def _handle_planning(
         db.add(task)
         db.commit()
         task_created = True
-        print(f"✅ Auto-created leadership experiment task: {task_title}")
+        print(f"✅ Auto-created leadership experiment task")
     except Exception as e:
         print(f"⚠️ Could not auto-create task: {e}")
     
@@ -359,7 +338,7 @@ def _handle_planning(
     
     # Add task confirmation to response
     if task_created:
-        closure += f"\n\n✅ Task created: '{task_title}'"
+        closure += f"\n\n✅ Task created: 'Leadership Experiment: {user_message[:80]}'"
     
     return {
         "response": closure,
@@ -388,67 +367,6 @@ def _handle_closure(
 # ============================================================
 # GPT QUESTION GENERATORS - REAL COACHING, NOT QUESTIONNAIRES
 # ============================================================
-
-def _generate_thought_starters(
-    quadrant: str,
-    journey_context: str
-) -> str:
-    """Generate 2-3 context-based thought starters for the selected quadrant"""
-    
-    quadrant_info = LEADERSHIP_QUADRANTS[quadrant]
-    quadrant_name = quadrant_info['name']
-    
-    system_prompt = f"""You are Alfred, helping a leader reflect on {quadrant_name}.
-
-THEIR CONTEXT:
-{journey_context[:500]}
-
-Your task: Generate 2-3 brief thought starters (examples of common struggles) in this area to help them think of a specific situation.
-
-RULES:
-- Each thought starter is ONE sentence
-- Make them SPECIFIC and relatable
-- Base them on their context if relevant
-- Keep total under 150 characters
-- Format as bullet points
-
-EXAMPLES:
-
-For "Prioritize & Execute":
-• Spending time on urgent tasks while important projects stall
-• Saying yes to everything and running out of capacity
-• Starting many things but struggling to finish them
-
-For "People":
-• Avoiding difficult feedback conversations
-• Micromanaging instead of delegating
-• Team members not stepping up to ownership
-
-For "Vision & Goals":
-• Goals feel disconnected from daily work
-• Not sure if you're making real progress
-• Unclear what success looks like
-
-Generate 2-3 thought starters for {quadrant_name} now."""
-    
-    messages = [
-        {"role": "system", "content": system_prompt}
-    ]
-    
-    resp = client.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=messages,
-        temperature=0.7,
-        max_tokens=100
-    )
-    
-    thought_starters = (resp.choices[0].message.content or "").strip()
-    
-    if thought_starters:
-        return f"Common struggles in this area:\n{thought_starters}"
-    else:
-        return ""
-
 
 def _generate_reflection_question(
     quadrant: str,
@@ -676,53 +594,38 @@ NOT a vague commitment ("I'll be more direct").
 NOT a big change ("I'll transform my leadership style").
 BUT a tiny, testable action they can try ONCE.
 
-CRITICAL: Write in NATURAL, CLEAR language. No awkward phrasing.
-
 STRUCTURE:
-1. State the pattern clearly ("Here's what I'm noticing...")
-2. Connect it to consequences ("This means...")
-3. Propose ONE specific micro-experiment
-4. Ask where they'll try it
+1. Name the insight (pattern + belief connection)
+2. Propose the experiment (what to try differently)
+3. Ask them to identify the safest place to test it
 
 GOOD EXAMPLES:
 
 Pattern: Hides behind "some people" when giving feedback
 Belief: Directness damages relationships
 
-Response: "Here's what I'm noticing: you avoid being the direct source of feedback because you fear damaging the relationship. But indirect feedback actually creates MORE damage - confusion and eroded trust.
+Response: "Here's what I'm seeing: You think directness damages relationships. But the dancing around it probably damages trust MORE than clean honesty would.
 
-Try this micro-experiment: Next time you have feedback, own it from the start. Say 'I need you to...' instead of 'Some people feel...'
+What if you tried a small experiment - next time you have feedback, say the direct thing FIRST, then add context. Not as a new habit, just a one-time test.
 
-Who's the safest person to practice this with?"
+Who's the safest person to try this with?"
 
 ---
 
 Pattern: Seeks consensus instead of making calls
 Belief: Deciding without full alignment makes them look autocratic
 
-Response: "I'm seeing a pattern: you keep seeking consensus to avoid looking autocratic. But endless discussion frustrates people MORE than a clear decision would.
+Response: "You're optimizing for 'no one upset' but that creates frustration and wastes time. Leadership IS about making calls that upset someone.
 
-Here's a micro-experiment: Pick ONE upcoming decision. Listen for 20 minutes, then make your call. Explain your reasoning but don't negotiate.
+Here's an experiment: Your next decision moment - listen for 30 minutes MAX, then make YOUR call. Explain your reasoning but don't negotiate.
 
-What's coming up where you can test this?"
-
----
-
-Pattern: Prioritizes urgent over important
-Belief: Missing urgent tasks leads to immediate negative consequences
-
-Response: "The pattern: you default to urgent tasks because important ones don't have deadlines. But this keeps you firefighting instead of building.
-
-Micro-experiment: Tomorrow, block 30 minutes FIRST for one important task. Before checking email, before urgent requests.
-
-Which important task will you protect that time for?"
+What's the next decision coming up where you can try this?"
 
 RULES:
-- Write naturally - like you're talking to a smart friend
-- Keep under 280 characters
-- ONE clear experiment, not multiple options
-- End with specific question about implementation
-- No awkward constructions like "Pattern: X / Belief: Y / Response:"
+- Keep under 350 characters
+- Make experiment tiny and specific
+- End with question about WHERE to test it
+- Warm but direct tone
 
 Generate your response now."""
     
@@ -734,7 +637,7 @@ Generate your response now."""
         model=OPENAI_MODEL,
         messages=messages,
         temperature=0.6,
-        max_tokens=180
+        max_tokens=150
     )
     
     return (resp.choices[0].message.content or "What's one small experiment you could try?").strip()
