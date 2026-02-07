@@ -727,6 +727,26 @@ Generate your response now."""
     )
     
     return (resp.choices[0].message.content or "What's one small experiment you could try?").strip()
+- Write naturally - like you're talking to a smart friend
+- Keep under 280 characters
+- ONE clear experiment, not multiple options
+- End with specific question about implementation
+- No awkward constructions like "Pattern: X / Belief: Y / Response:"
+
+Generate your response now."""
+    
+    messages = [
+        {"role": "system", "content": system_prompt}
+    ]
+    
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=messages,
+        temperature=0.6,
+        max_tokens=180
+    )
+    
+    return (resp.choices[0].message.content or "What's one small experiment you could try?").strip()
 
 
 def _generate_closure_summary(
