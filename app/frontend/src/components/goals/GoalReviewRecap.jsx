@@ -1,8 +1,8 @@
 import GoalCard from './GoalCard';
 
 /* =========================================================
-   PROGRESS REVIEW - Card-based layout
-   Shows review summary ONLY for the expanded goal
+   PROGRESS REVIEW
+   When expanded: Goal tree first, then reviews underneath
    ========================================================= */
 
 export default function GoalReviewRecap({ 
@@ -13,15 +13,16 @@ export default function GoalReviewRecap({
   taskCounts 
 }) {
   
-  // Build map of goal_id -> latest review session for THAT goal
-  const goalReviews = {};
+  // Build map of goal_id -> ALL review sessions for that goal (sorted by date)
+  const reviewsByGoal = {};
   reviewSessions.forEach(session => {
-    if (!goalReviews[session.goal_id]) {
-      goalReviews[session.goal_id] = session;
+    if (!reviewsByGoal[session.goal_id]) {
+      reviewsByGoal[session.goal_id] = [];
     }
+    reviewsByGoal[session.goal_id].push(session);
   });
 
-  // Get the most recent review overall (for when nothing is expanded)
+  // Get the most recent overall review (for collapsed view)
   const latestReview = reviewSessions.length > 0 ? reviewSessions[0] : null;
 
   const buildTree = () => {
@@ -44,7 +45,7 @@ export default function GoalReviewRecap({
 
   return (
     <div className="space-y-6">
-      {/* Show latest review summary ONLY when no goal is expanded */}
+      {/* Show latest review ONLY when no goal is expanded */}
       {!expandedGoalId && latestReview && (
         <div className="bg-slate-50 border border-slate-200 rounded-lg p-5">
           <div className="flex items-start justify-between mb-4">
@@ -66,7 +67,6 @@ export default function GoalReviewRecap({
             </div>
           </div>
 
-          {/* Session Summary */}
           <div className="mb-4">
             <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
               Session Summary
@@ -76,7 +76,6 @@ export default function GoalReviewRecap({
             </p>
           </div>
 
-          {/* Key insights */}
           {(latestReview.key_progress || latestReview.key_blockers || latestReview.chosen_adjustment) && (
             <div className="grid md:grid-cols-3 gap-3">
               {latestReview.key_progress && (
@@ -120,17 +119,17 @@ export default function GoalReviewRecap({
           tree.map(ltGoal => {
             const isExpanded = expandedGoalId === ltGoal.id;
             const hasChildren = ltGoal.children && ltGoal.children.length > 0;
-            const ltReview = goalReviews[ltGoal.id];  // THIS goal's review
+            const goalReviews = reviewsByGoal[ltGoal.id] || [];  // ALL reviews for this goal
+            const latestGoalReview = goalReviews.length > 0 ? goalReviews[0] : null;
             
-            // If another goal is expanded, don't show this one
             if (expandedGoalId && expandedGoalId !== ltGoal.id) {
               return null;
             }
             
             return (
-              <div key={ltGoal.id}>
+              <div key={ltGoal.id} className="space-y-6">
                 {!isExpanded ? (
-                  /* Collapsed view - simple card */
+                  /* Collapsed view */
                   <div>
                     <GoalCard 
                       goal={ltGoal}
@@ -138,93 +137,26 @@ export default function GoalReviewRecap({
                       taskCount={taskCounts[ltGoal.id] || 0}
                       isInTree={false}
                     />
-                    {ltReview && (
+                    {latestGoalReview && (
                       <div className="mt-2 ml-4 p-3 bg-slate-50 border-l-4 border-slate-400 rounded text-sm">
                         <div className="flex items-baseline gap-2 mb-1">
                           <span className="font-medium text-slate-700">Last reviewed:</span>
                           <span className="text-slate-600">
-                            {new Date(ltReview.session_ended_at).toLocaleDateString('en-US', { 
+                            {new Date(latestGoalReview.session_ended_at).toLocaleDateString('en-US', { 
                               month: 'numeric', 
                               day: 'numeric',
                               year: 'numeric'
                             })}
                           </span>
                         </div>
-                        <p className="text-slate-600 line-clamp-2">{ltReview.summary}</p>
+                        <p className="text-slate-600 line-clamp-2">{latestGoalReview.summary}</p>
                       </div>
                     )}
                   </div>
                 ) : (
-                  /* EXPANDED VIEW - Card-based breakdown with THIS goal's review */
-                  <div className="space-y-4">
-                    {/* THIS GOAL'S Review Summary at top */}
-                    {ltReview && (
-                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-5">
-                        <div className="flex items-start justify-between mb-4">
-                          <div>
-                            <h3 className="text-base font-semibold text-slate-800 mb-1">
-                              Latest Goal Review
-                            </h3>
-                            <p className="text-sm text-slate-600">
-                              {new Date(ltReview.session_ended_at).toLocaleDateString('en-US', {
-                                weekday: 'long',
-                                month: 'long',
-                                day: 'numeric',
-                                year: 'numeric'
-                              })}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => onCardClick(ltGoal)}
-                            className="text-sm px-3 py-1.5 bg-white border border-slate-300 rounded text-blue-600 hover:bg-slate-50"
-                          >
-                            {ltGoal.title || ltGoal.goal_text?.substring(0, 30)}
-                          </button>
-                        </div>
-
-                        <div className="mb-4">
-                          <h4 className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
-                            Session Summary
-                          </h4>
-                          <p className="text-slate-700 leading-relaxed">
-                            {ltReview.summary}
-                          </p>
-                        </div>
-
-                        {(ltReview.key_progress || ltReview.key_blockers || ltReview.chosen_adjustment) && (
-                          <div className="grid md:grid-cols-3 gap-3">
-                            {ltReview.key_progress && (
-                              <div className="bg-white border border-slate-200 rounded p-3">
-                                <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
-                                  Progress
-                                </div>
-                                <p className="text-sm text-slate-700">{ltReview.key_progress}</p>
-                              </div>
-                            )}
-
-                            {ltReview.key_blockers && (
-                              <div className="bg-white border border-slate-200 rounded p-3">
-                                <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
-                                  Blockers
-                                </div>
-                                <p className="text-sm text-slate-700">{ltReview.key_blockers}</p>
-                              </div>
-                            )}
-
-                            {ltReview.chosen_adjustment && (
-                              <div className="bg-white border border-slate-200 rounded p-3">
-                                <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
-                                  Actions Agreed
-                                </div>
-                                <p className="text-sm text-slate-700">{ltReview.chosen_adjustment}</p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Goal breakdown card structure */}
+                  /* EXPANDED VIEW - Goal tree FIRST, reviews UNDERNEATH */
+                  <>
+                    {/* Goal breakdown card */}
                     <div className="border border-slate-300 rounded-lg p-5 bg-white">
                       {/* Long-term goal header */}
                       <div className="mb-5">
@@ -259,7 +191,6 @@ export default function GoalReviewRecap({
                           >
                             {ltGoal.children.map((mtGoal) => {
                               const hasSTChildren = mtGoal.children && mtGoal.children.length > 0;
-                              const mtReview = goalReviews[mtGoal.id];
                               
                               return (
                                 <div key={mtGoal.id} className="flex flex-col gap-3">
@@ -287,28 +218,25 @@ export default function GoalReviewRecap({
                                       <div className="text-xs font-medium text-slate-500 uppercase tracking-wider pl-3">
                                         Short-Term Goals
                                       </div>
-                                      {mtGoal.children.map((stGoal) => {
-                                        const stReview = goalReviews[stGoal.id];
-                                        return (
-                                          <div
-                                            key={stGoal.id}
-                                            onClick={() => onCardClick(stGoal)}
-                                            className="border border-slate-200 rounded-lg p-3 bg-white hover:bg-slate-50 cursor-pointer transition-colors ml-3"
-                                          >
-                                            <h6 className="font-medium text-slate-800 text-sm mb-1 leading-tight">
-                                              {stGoal.title || stGoal.goal_text}
-                                            </h6>
-                                            <div className="text-xs text-slate-500">
-                                              Short Term
-                                              {taskCounts[stGoal.id] > 0 && (
-                                                <span className="text-blue-600 ml-2">
-                                                  • {taskCounts[stGoal.id]} task{taskCounts[stGoal.id] !== 1 ? 's' : ''}
-                                                </span>
-                                              )}
-                                            </div>
+                                      {mtGoal.children.map((stGoal) => (
+                                        <div
+                                          key={stGoal.id}
+                                          onClick={() => onCardClick(stGoal)}
+                                          className="border border-slate-200 rounded-lg p-3 bg-white hover:bg-slate-50 cursor-pointer transition-colors ml-3"
+                                        >
+                                          <h6 className="font-medium text-slate-800 text-sm mb-1 leading-tight">
+                                            {stGoal.title || stGoal.goal_text}
+                                          </h6>
+                                          <div className="text-xs text-slate-500">
+                                            Short Term
+                                            {taskCounts[stGoal.id] > 0 && (
+                                              <span className="text-blue-600 ml-2">
+                                                • {taskCounts[stGoal.id]} task{taskCounts[stGoal.id] !== 1 ? 's' : ''}
+                                              </span>
+                                            )}
                                           </div>
-                                        );
-                                      })}
+                                        </div>
+                                      ))}
                                     </div>
                                   )}
                                 </div>
@@ -318,7 +246,88 @@ export default function GoalReviewRecap({
                         </div>
                       )}
                     </div>
-                  </div>
+
+                    {/* Review Sessions - ALL sessions for THIS goal */}
+                    {goalReviews.length > 0 && (
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-slate-800">
+                          Coaching Sessions ({goalReviews.length})
+                        </h3>
+
+                        {goalReviews.map((review, index) => (
+                          <div 
+                            key={review.id}
+                            className="bg-slate-50 border border-slate-200 rounded-lg p-5"
+                          >
+                            <div className="flex items-start justify-between mb-4">
+                              <div>
+                                <h4 className="text-base font-semibold text-slate-800 mb-1">
+                                  {index === 0 ? 'Latest Session' : `Session ${goalReviews.length - index}`}
+                                </h4>
+                                <p className="text-sm text-slate-600">
+                                  {new Date(review.session_ended_at).toLocaleDateString('en-US', {
+                                    weekday: 'long',
+                                    month: 'long',
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="mb-4">
+                              <h5 className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+                                Session Summary
+                              </h5>
+                              <p className="text-slate-700 leading-relaxed">
+                                {review.summary}
+                              </p>
+                            </div>
+
+                            {(review.key_progress || review.key_blockers || review.chosen_adjustment) && (
+                              <div className="grid md:grid-cols-3 gap-3">
+                                {review.key_progress && (
+                                  <div className="bg-white border border-slate-200 rounded p-3">
+                                    <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+                                      Progress
+                                    </div>
+                                    <p className="text-sm text-slate-700">{review.key_progress}</p>
+                                  </div>
+                                )}
+
+                                {review.key_blockers && (
+                                  <div className="bg-white border border-slate-200 rounded p-3">
+                                    <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+                                      Blockers
+                                    </div>
+                                    <p className="text-sm text-slate-700">{review.key_blockers}</p>
+                                  </div>
+                                )}
+
+                                {review.chosen_adjustment && (
+                                  <div className="bg-white border border-slate-200 rounded p-3">
+                                    <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+                                      Actions Agreed
+                                    </div>
+                                    <p className="text-sm text-slate-700">{review.chosen_adjustment}</p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* No reviews state for this goal */}
+                    {goalReviews.length === 0 && (
+                      <div className="text-center py-8 bg-slate-50 border border-slate-200 rounded-lg">
+                        <p className="text-sm text-slate-600">
+                          No coaching sessions yet for this goal
+                        </p>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             );
@@ -327,7 +336,7 @@ export default function GoalReviewRecap({
       </div>
 
       {/* Empty state */}
-      {reviewSessions.length === 0 && (
+      {reviewSessions.length === 0 && !expandedGoalId && (
         <div className="text-center py-12 bg-slate-50 border border-slate-200 rounded-lg">
           <div className="text-5xl mb-4">💬</div>
           <h3 className="text-base font-semibold text-slate-700 mb-2">
