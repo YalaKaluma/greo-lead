@@ -2446,6 +2446,7 @@ REVIEWS:
 
 
 # Add this endpoint to app/routers/journey.py
+# Add this endpoint to app/routers/journey.py
 
 @router.get("/goal-reviews")
 async def get_goal_reviews(
