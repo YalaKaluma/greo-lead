@@ -2443,3 +2443,47 @@ REVIEWS:
             "improvements": ["Communication clarity", "Time management", "Delegation"],
             "trajectory": f"Relationship stable at {reviews[0].relationship_strength}/5 based on most recent review"
         }
+
+
+# Add this endpoint to app/routers/journey.py
+
+@router.get("/goal-reviews")
+async def get_goal_reviews(
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """
+    Fetch goal review sessions for this user.
+    Returns list of sessions with summaries from coaching conversations.
+    """
+    from app.models import GoalReviewSession
+
+    # Fetch all review sessions, ordered by most recent first
+    sessions = (
+        db.query(GoalReviewSession)
+        .filter(GoalReviewSession.user_number == user_number)
+        .order_by(GoalReviewSession.session_ended_at.desc())
+        .limit(50)  # Last 50 sessions
+        .all()
+    )
+
+    # Serialize sessions for frontend
+    sessions_data = [
+        {
+            "id": s.id,
+            "goal_id": s.goal_id,
+            "goal_title": s.goal_title,
+            "session_started_at": s.session_started_at.isoformat() if s.session_started_at else None,
+            "session_ended_at": s.session_ended_at.isoformat() if s.session_ended_at else None,
+            "summary": s.summary,
+            "key_progress": s.key_progress,
+            "key_blockers": s.key_blockers,
+            "key_pattern": s.key_pattern,
+            "chosen_adjustment": s.chosen_adjustment
+        }
+        for s in sessions
+    ]
+
+    return {
+        "sessions": sessions_data
+    }
