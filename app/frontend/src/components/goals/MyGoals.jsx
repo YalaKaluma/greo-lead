@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import GoalsHeader from './GoalsHeader';
 import GoalsList from './GoalsList';
+import GoalReviewRecap from './GoalReviewRecap';
 import GoalViewPanel from './GoalViewPanel';
 import GoalEditPanel from './GoalEditPanel';
 import GoalCreateModal from './GoalCreateModal';
@@ -20,7 +21,6 @@ const organizeGoalsByTimeHorizon = (goals) => {
     }
   });
 
-  // Sort by sort_order within each section
   Object.keys(organized).forEach(key => {
     organized[key].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   });
@@ -37,12 +37,14 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const [goals, setGoals] = useState([]);
   const [linkedTasks, setLinkedTasks] = useState({});
   const [taskCounts, setTaskCounts] = useState({});
+  const [reviewSessions, setReviewSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   
   // UI state
-  const [expandedGoalId, setExpandedGoalId] = useState(null);   // For tree expansion of LT goals
-  const [viewingGoal, setViewingGoal] = useState(null);         // For view panel (MT/ST only)
-  const [editingGoal, setEditingGoal] = useState(null);         // For edit panel
+  const [activeTab, setActiveTab] = useState('setting');
+  const [expandedGoalId, setExpandedGoalId] = useState(null);
+  const [viewingGoal, setViewingGoal] = useState(null);
+  const [editingGoal, setEditingGoal] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [parentGoalForChild, setParentGoalForChild] = useState(null);
 
@@ -58,8 +60,6 @@ export default function MyGoals({ apiUrl, userNumber }) {
       }
     } catch (err) {
       console.error('Error fetching goals:', err);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -70,7 +70,6 @@ export default function MyGoals({ apiUrl, userNumber }) {
       });
       
       if (Array.isArray(res.data)) {
-        // Group by goal_id
         const tasksByGoal = {};
         const counts = {};
         
@@ -93,22 +92,39 @@ export default function MyGoals({ apiUrl, userNumber }) {
     }
   };
 
+  const fetchGoalReviews = async () => {
+    try {
+      const res = await axios.get(`${apiUrl}/api/journey/goal-reviews`, {
+        params: { user_number: userNumber }
+      });
+      
+      if (res.data && res.data.sessions) {
+        setReviewSessions(res.data.sessions);
+      }
+    } catch (err) {
+      console.error('Error fetching goal reviews:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetchGoals();
-    fetchAllLinkedTasks();
+    const loadData = async () => {
+      await fetchGoals();
+      await fetchAllLinkedTasks();
+      await fetchGoalReviews();
+    };
+    loadData();
   }, [userNumber]);
 
   /* ---------------- EVENT HANDLERS ---------------- */
 
   const handleCardClick = (goal) => {
-    // If it's a LONG TERM goal, toggle tree expansion
     if (goal.time_horizon === 'long') {
       setExpandedGoalId(expandedGoalId === goal.id ? null : goal.id);
       setViewingGoal(null);
       setEditingGoal(null);
-    } 
-    // If it's MEDIUM or SHORT TERM, open VIEW panel (not edit)
-    else {
+    } else {
       setViewingGoal(goal);
       setEditingGoal(null);
     }
@@ -128,7 +144,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const handleCreateChildGoal = (parentGoalId) => {
     setParentGoalForChild(parentGoalId);
     setShowCreateModal(true);
-    setViewingGoal(null); // Close view panel when opening modal
+    setViewingGoal(null);
   };
 
   /* ---------------- CRUD OPERATIONS ---------------- */
@@ -137,10 +153,8 @@ export default function MyGoals({ apiUrl, userNumber }) {
     try {
       await axios.post(
         `${apiUrl}/api/journey/goals`,
-        goalData,  // Send ONLY the goal data in body
-        {
-          params: { user_number: userNumber }  // Send user_number as query param
-        }
+        goalData,
+        { params: { user_number: userNumber } }
       );
       await fetchGoals();
       setShowCreateModal(false);
@@ -155,10 +169,8 @@ export default function MyGoals({ apiUrl, userNumber }) {
     try {
       await axios.put(
         `${apiUrl}/api/journey/goals/${goalId}`,
-        updates,  // Send ONLY the goal data in body
-        {
-          params: { user_number: userNumber }  // Send user_number as query param
-        }
+        updates,
+        { params: { user_number: userNumber } }
       );
       await fetchGoals();
       setEditingGoal(null);
@@ -193,25 +205,70 @@ export default function MyGoals({ apiUrl, userNumber }) {
       {/* Header */}
       <GoalsHeader onAddClick={() => setShowCreateModal(true)} />
 
-      {/* Main content area - NO MARGIN ADJUSTMENT */}
-      <div className="relative">
-        {/* Goals list */}
-        <div>
-          {loading ? (
-            <div className="text-center py-12 text-slate-500">
-              Loading goals...
-            </div>
-          ) : (
-            <GoalsList 
-              goals={organizedGoals}
-              expandedGoalId={expandedGoalId}
-              onCardClick={handleCardClick}
-              taskCounts={taskCounts}
-            />
-          )}
+      {/* Tab Navigation */}
+      <div className="mb-6 border-b border-slate-200">
+        <div className="flex gap-6">
+          <button
+            onClick={() => setActiveTab('setting')}
+            className={`pb-3 px-2 font-medium transition-colors relative ${
+              activeTab === 'setting'
+                ? 'text-blue-600'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Goal Setting
+            {activeTab === 'setting' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('review')}
+            className={`pb-3 px-2 font-medium transition-colors relative ${
+              activeTab === 'review'
+                ? 'text-blue-600'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Progress Review
+            {activeTab === 'review' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+            )}
+          </button>
         </div>
+      </div>
 
-        {/* View panel - FIXED OVERLAY (not pushing content) */}
+      {/* Main content area */}
+      <div className="relative">
+        {loading ? (
+          <div className="text-center py-12 text-slate-500">
+            Loading goals...
+          </div>
+        ) : (
+          <>
+            {/* Goal Setting Tab */}
+            {activeTab === 'setting' && (
+              <GoalsList 
+                goals={organizedGoals}
+                expandedGoalId={expandedGoalId}
+                onCardClick={handleCardClick}
+                taskCounts={taskCounts}
+              />
+            )}
+
+            {/* Progress Review Tab */}
+            {activeTab === 'review' && (
+              <GoalReviewRecap
+                goals={organizedGoals}
+                reviewSessions={reviewSessions}
+                expandedGoalId={expandedGoalId}
+                onCardClick={handleCardClick}
+                taskCounts={taskCounts}
+              />
+            )}
+          </>
+        )}
+
+        {/* View/Edit panels */}
         {viewingGoal && (
           <GoalViewPanel
             goal={viewingGoal}
@@ -223,7 +280,6 @@ export default function MyGoals({ apiUrl, userNumber }) {
           />
         )}
 
-        {/* Edit panel - FIXED OVERLAY */}
         {editingGoal && (
           <GoalEditPanel
             goal={editingGoal}
