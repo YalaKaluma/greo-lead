@@ -1,8 +1,8 @@
 import GoalCard from './GoalCard';
 
 /* =========================================================
-   PROGRESS REVIEW with Status Indicators
-   Shows red/orange/green status from coaching sessions
+   PROGRESS REVIEW
+   When expanded: Goal tree first, then reviews underneath
    ========================================================= */
 
 export default function GoalReviewRecap({ 
@@ -24,16 +24,6 @@ export default function GoalReviewRecap({
 
   // Get the most recent overall review (for collapsed view)
   const latestReview = reviewSessions.length > 0 ? reviewSessions[0] : null;
-
-  // Helper to get status display
-  const getStatusDisplay = (status) => {
-    const statusMap = {
-      green: { emoji: '🟢', label: 'On Track', color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200' },
-      orange: { emoji: '🟠', label: 'Needs Attention', color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200' },
-      red: { emoji: '🔴', label: 'At Risk', color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' }
-    };
-    return statusMap[status] || null;
-  };
 
   const buildTree = () => {
     const longTermGoals = goals.long || [];
@@ -72,15 +62,8 @@ export default function GoalReviewRecap({
                 })}
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              {latestReview.progress_status && (
-                <span className={`text-sm px-3 py-1.5 rounded border ${getStatusDisplay(latestReview.progress_status).bg} ${getStatusDisplay(latestReview.progress_status).border} ${getStatusDisplay(latestReview.progress_status).color} font-medium`}>
-                  {getStatusDisplay(latestReview.progress_status).emoji} {getStatusDisplay(latestReview.progress_status).label}
-                </span>
-              )}
-              <div className="text-sm px-3 py-1.5 bg-white border border-slate-300 rounded text-slate-700">
-                {latestReview.goal_title}
-              </div>
+            <div className="text-sm px-3 py-1.5 bg-white border border-slate-300 rounded text-slate-700">
+              {latestReview.goal_title}
             </div>
           </div>
 
@@ -136,7 +119,7 @@ export default function GoalReviewRecap({
           tree.map(ltGoal => {
             const isExpanded = expandedGoalId === ltGoal.id;
             const hasChildren = ltGoal.children && ltGoal.children.length > 0;
-            const goalReviews = reviewsByGoal[ltGoal.id] || [];
+            const goalReviews = reviewsByGoal[ltGoal.id] || [];  // ALL reviews for this goal
             const latestGoalReview = goalReviews.length > 0 ? goalReviews[0] : null;
             
             if (expandedGoalId && expandedGoalId !== ltGoal.id) {
@@ -165,34 +148,22 @@ export default function GoalReviewRecap({
                               year: 'numeric'
                             })}
                           </span>
-                          {latestGoalReview.progress_status && (
-                            <span className={`ml-2 ${getStatusDisplay(latestGoalReview.progress_status).color} font-medium`}>
-                              {getStatusDisplay(latestGoalReview.progress_status).emoji} {getStatusDisplay(latestGoalReview.progress_status).label}
-                            </span>
-                          )}
                         </div>
                         <p className="text-slate-600 line-clamp-2">{latestGoalReview.summary}</p>
                       </div>
                     )}
                   </div>
                 ) : (
-                  /* EXPANDED VIEW */
+                  /* EXPANDED VIEW - Goal tree FIRST, reviews UNDERNEATH */
                   <>
                     {/* Goal breakdown card */}
                     <div className="border border-slate-300 rounded-lg p-5 bg-white">
                       {/* Long-term goal header */}
                       <div className="mb-5">
                         <div className="border-2 border-blue-400 rounded-lg p-4 bg-blue-50/30">
-                          <div className="flex items-start justify-between mb-2">
-                            <h3 className="text-xl font-bold text-slate-900">
-                              {ltGoal.title || ltGoal.goal_text}
-                            </h3>
-                            {latestGoalReview?.progress_status && (
-                              <span className={`text-sm px-3 py-1.5 rounded border ${getStatusDisplay(latestGoalReview.progress_status).bg} ${getStatusDisplay(latestGoalReview.progress_status).border} ${getStatusDisplay(latestGoalReview.progress_status).color} font-medium`}>
-                                {getStatusDisplay(latestGoalReview.progress_status).emoji} {getStatusDisplay(latestGoalReview.progress_status).label}
-                              </span>
-                            )}
-                          </div>
+                          <h3 className="text-xl font-bold text-slate-900 mb-1">
+                            {ltGoal.title || ltGoal.goal_text}
+                          </h3>
                           <div className="flex items-center gap-3 text-sm text-slate-600">
                             <span>Long Term</span>
                             {taskCounts[ltGoal.id] > 0 && (
@@ -211,6 +182,7 @@ export default function GoalReviewRecap({
                             How this goal breaks down
                           </h4>
                           
+                          {/* Medium-term goals in columns */}
                           <div 
                             className="grid gap-4"
                             style={{ 
@@ -222,6 +194,7 @@ export default function GoalReviewRecap({
                               
                               return (
                                 <div key={mtGoal.id} className="flex flex-col gap-3">
+                                  {/* Medium-term goal card */}
                                   <div 
                                     onClick={() => onCardClick(mtGoal)}
                                     className="border border-slate-300 rounded-lg p-4 bg-slate-50 hover:bg-slate-100 cursor-pointer transition-colors"
@@ -239,6 +212,7 @@ export default function GoalReviewRecap({
                                     </div>
                                   </div>
 
+                                  {/* Short-term goals list */}
                                   {hasSTChildren && (
                                     <div className="space-y-2">
                                       <div className="text-xs font-medium text-slate-500 uppercase tracking-wider pl-3">
@@ -273,87 +247,79 @@ export default function GoalReviewRecap({
                       )}
                     </div>
 
-                    {/* Review Sessions */}
+                    {/* Review Sessions - ALL sessions for THIS goal */}
                     {goalReviews.length > 0 && (
                       <div className="space-y-4">
                         <h3 className="text-lg font-semibold text-slate-800">
                           Coaching Sessions ({goalReviews.length})
                         </h3>
 
-                        {goalReviews.map((review, index) => {
-                          const statusDisplay = review.progress_status ? getStatusDisplay(review.progress_status) : null;
-                          
-                          return (
-                            <div 
-                              key={review.id}
-                              className="bg-slate-50 border border-slate-200 rounded-lg p-5"
-                            >
-                              <div className="flex items-start justify-between mb-4">
-                                <div>
-                                  <h4 className="text-base font-semibold text-slate-800 mb-1">
-                                    {index === 0 ? 'Latest Session' : `Session ${goalReviews.length - index}`}
-                                  </h4>
-                                  <p className="text-sm text-slate-600">
-                                    {new Date(review.session_ended_at).toLocaleDateString('en-US', {
-                                      weekday: 'long',
-                                      month: 'long',
-                                      day: 'numeric',
-                                      year: 'numeric'
-                                    })}
-                                  </p>
-                                </div>
-                                {statusDisplay && (
-                                  <span className={`text-sm px-3 py-1.5 rounded border ${statusDisplay.bg} ${statusDisplay.border} ${statusDisplay.color} font-medium`}>
-                                    {statusDisplay.emoji} {statusDisplay.label}
-                                  </span>
-                                )}
-                              </div>
-
-                              <div className="mb-4">
-                                <h5 className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
-                                  Session Summary
-                                </h5>
-                                <p className="text-slate-700 leading-relaxed">
-                                  {review.summary}
+                        {goalReviews.map((review, index) => (
+                          <div 
+                            key={review.id}
+                            className="bg-slate-50 border border-slate-200 rounded-lg p-5"
+                          >
+                            <div className="flex items-start justify-between mb-4">
+                              <div>
+                                <h4 className="text-base font-semibold text-slate-800 mb-1">
+                                  {index === 0 ? 'Latest Session' : `Session ${goalReviews.length - index}`}
+                                </h4>
+                                <p className="text-sm text-slate-600">
+                                  {new Date(review.session_ended_at).toLocaleDateString('en-US', {
+                                    weekday: 'long',
+                                    month: 'long',
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                  })}
                                 </p>
                               </div>
-
-                              {(review.key_progress || review.key_blockers || review.chosen_adjustment) && (
-                                <div className="grid md:grid-cols-3 gap-3">
-                                  {review.key_progress && (
-                                    <div className="bg-white border border-slate-200 rounded p-3">
-                                      <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
-                                        Progress
-                                      </div>
-                                      <p className="text-sm text-slate-700">{review.key_progress}</p>
-                                    </div>
-                                  )}
-
-                                  {review.key_blockers && (
-                                    <div className="bg-white border border-slate-200 rounded p-3">
-                                      <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
-                                        Blockers
-                                      </div>
-                                      <p className="text-sm text-slate-700">{review.key_blockers}</p>
-                                    </div>
-                                  )}
-
-                                  {review.chosen_adjustment && (
-                                    <div className="bg-white border border-slate-200 rounded p-3">
-                                      <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
-                                        Actions Agreed
-                                      </div>
-                                      <p className="text-sm text-slate-700">{review.chosen_adjustment}</p>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
                             </div>
-                          );
-                        })}
+
+                            <div className="mb-4">
+                              <h5 className="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+                                Session Summary
+                              </h5>
+                              <p className="text-slate-700 leading-relaxed">
+                                {review.summary}
+                              </p>
+                            </div>
+
+                            {(review.key_progress || review.key_blockers || review.chosen_adjustment) && (
+                              <div className="grid md:grid-cols-3 gap-3">
+                                {review.key_progress && (
+                                  <div className="bg-white border border-slate-200 rounded p-3">
+                                    <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+                                      Progress
+                                    </div>
+                                    <p className="text-sm text-slate-700">{review.key_progress}</p>
+                                  </div>
+                                )}
+
+                                {review.key_blockers && (
+                                  <div className="bg-white border border-slate-200 rounded p-3">
+                                    <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+                                      Blockers
+                                    </div>
+                                    <p className="text-sm text-slate-700">{review.key_blockers}</p>
+                                  </div>
+                                )}
+
+                                {review.chosen_adjustment && (
+                                  <div className="bg-white border border-slate-200 rounded p-3">
+                                    <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
+                                      Actions Agreed
+                                    </div>
+                                    <p className="text-sm text-slate-700">{review.chosen_adjustment}</p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     )}
 
+                    {/* No reviews state for this goal */}
                     {goalReviews.length === 0 && (
                       <div className="text-center py-8 bg-slate-50 border border-slate-200 rounded-lg">
                         <p className="text-sm text-slate-600">
@@ -369,6 +335,7 @@ export default function GoalReviewRecap({
         )}
       </div>
 
+      {/* Empty state */}
       {reviewSessions.length === 0 && !expandedGoalId && (
         <div className="text-center py-12 bg-slate-50 border border-slate-200 rounded-lg">
           <div className="text-5xl mb-4">💬</div>

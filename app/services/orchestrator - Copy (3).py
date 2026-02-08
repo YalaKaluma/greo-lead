@@ -691,7 +691,6 @@ def _finalize_goal_review_session(
         key_blockers=summary.get("key_blockers") or "Not captured",
         key_pattern=summary.get("key_pattern") or "Not captured",
         chosen_adjustment=summary.get("chosen_adjustment") or "Not captured",
-        progress_status=state_ctx.get("progress_status"),  # NEW: Save status (green/orange/red)
         created_tasks=created_tasks,
         prompt_version="goal_review_v2"
         # Note: ended_early field not added yet - requires DB migration
@@ -963,12 +962,11 @@ def handle_goal_review(
       3. diagnosis        – deeper: progress, blockers, patterns
       4. adjustment       – pick an adjustment
       5. closure          – internal summary + create tasks
-      6. status           – user sets green/orange/red progress indicator
 
     At closure:
       - Alfred generates a session summary (internal)
       - Alfred deterministically creates tasks
-      - Session memory is persisted with status
+      - Session memory is persisted
     """
 
     state_ctx = current_state.state_context or {}
@@ -1188,93 +1186,36 @@ def handle_goal_review(
         )
 
     # --------------------------------------------------------------
-    # Phase 5 — Closure
+    # Phase 5 — Closure (DECISIVE)
     # --------------------------------------------------------------
-    if phase == "closure":
-        print(f"📍 PHASE 5: CLOSURE - Generating summary")
-        
-        closure_text = _run_goal_review_prompt(
-            f"{prompt_base}/closure.yaml",
-            journey_context=journey_context,
-            goal_tree=goal_tree,
-            recent_history=history,
-            user_input=user_message
-        )
-        
-        # Store closure summary for later
-        state_ctx["closure_summary"] = closure_text
-        state_ctx["phase"] = "status"
-        
-        print(f"✅ Phase transition: closure → status")
-        return OrchestrationResult(
-            response=closure_text,
-            state=States.GOAL_REVIEW,
-            data={
-                "state_context": state_ctx,
-                "goal_review_status": _build_goal_review_status("status", state_ctx)
-            }
-        )
-    
-    # --------------------------------------------------------------
-    # Phase 6 — Status (NEW - Set progress indicator)
-    # --------------------------------------------------------------
-    print(f"📍 PHASE 6: STATUS - Getting progress indicator")
-    
-    # Detect status from user input
-    detected_status = None
-    if "green" in msg_lower or "🟢" in user_message:
-        detected_status = "green"
-    elif "orange" in msg_lower or "🟠" in user_message or "yellow" in msg_lower:
-        detected_status = "orange"
-    elif "red" in msg_lower or "🔴" in user_message:
-        detected_status = "red"
-    
-    if detected_status:
-        # User provided status - finalize session
-        print(f"✅ Status detected: {detected_status}")
-        state_ctx["progress_status"] = detected_status
-        
-        # Finalize session with status
-        tasks_created = _finalize_goal_review_session(
-            db=db,
-            user_number=user_number,
-            state_ctx=state_ctx,
-            force_end=False
-        )
-        
-        # Build final response
-        status_emoji = {"green": "🟢", "orange": "🟠", "red": "🔴"}[detected_status]
-        status_label = {"green": "On track", "orange": "Needs attention", "red": "At risk"}[detected_status]
-        
-        completion_msg = f"""Got it - marking this goal as {status_emoji} {status_label}.
+    print(f"📍 PHASE 5: CLOSURE - Creating tasks and saving session")
 
-✅ **Session complete!** I've created {tasks_created} task{'s' if tasks_created != 1 else ''} and saved our review. You can find your new tasks in your todo list."""
-        
-        print(f"🎉 GOAL REVIEW SESSION COMPLETE - Returning to IDLE state")
-        
-        return OrchestrationResult(
-            response=completion_msg,
-            state=States.IDLE,
-            data={"state_context": None}
-        )
-    else:
-        # No valid status yet - ask user
-        status_prompt = """Based on our conversation, how would you rate the current progress on this goal?
+    closure_text = _run_goal_review_prompt(
+        f"{prompt_base}/closure.yaml",
+        journey_context=journey_context,
+        goal_tree=goal_tree,
+        recent_history=history,
+        user_input=user_message
+    )
 
-🟢 Green - On track, making good progress
-🟠 Orange - Needs attention, some concerns
-🔴 Red - At risk, significant challenges
+    # Finalize session using shared function
+    tasks_created = _finalize_goal_review_session(
+        db=db,
+        user_number=user_number,
+        state_ctx=state_ctx,
+        force_end=False
+    )
 
-Just reply with the color (green, orange, or red)."""
-        
-        return OrchestrationResult(
-            response=status_prompt,
-            state=States.GOAL_REVIEW,
-            data={
-                "state_context": state_ctx,
-                "goal_review_status": _build_goal_review_status("status", state_ctx)
-            }
-        )
+    print(f"🎉 GOAL REVIEW SESSION COMPLETE - Returning to IDLE state")
+
+    # Add completion message to the closure text
+    completion_msg = f"\n\n✅ **Session complete!** I've created {tasks_created} task{'s' if tasks_created != 1 else ''} and saved our review. You can find your new tasks in your todo list."
+
+    return OrchestrationResult(
+        response=closure_text + completion_msg,
+        state=States.IDLE,
+        data={"state_context": None}
+    )
 
 
 def handle_people_review(
