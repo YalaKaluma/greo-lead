@@ -2,11 +2,26 @@ from sqlalchemy.orm import Session
 #from app.models.message import Message
 from app.models import Message
 
-def save_message(db: Session, sender: str, user_number: str, content: str):
-    msg = Message(sender=sender, user_number=user_number, content=content)
+def save_message(
+    db: Session,
+    sender: str,
+    user_number: str,
+    content: str,
+    message_type: str = "chat",
+    is_read: bool = True
+):
+    msg = Message(
+        sender=sender,
+        user_number=user_number,
+        content=content,
+        message_type=message_type,
+        is_read=is_read
+    )
+
     db.add(msg)
     db.commit()
     db.refresh(msg)
+
     return msg
 
 def load_conversation_history(db: Session, user_number: str):

@@ -248,11 +248,14 @@ async def get_chat_history(
         messages = reversed(messages)
 
         # Format for frontend
+
         formatted_messages = [
             {
                 "role": "user" if msg.sender == "user" else "assistant",
                 "content": msg.content,
-                "timestamp": msg.timestamp.isoformat()
+                "timestamp": msg.timestamp.isoformat(),
+                "message_type": getattr(msg, "message_type", "chat"),
+                "is_read": getattr(msg, "is_read", True)
             }
             for msg in messages
         ]

@@ -675,8 +675,19 @@ def send_nudge_for_user(
         # Send via WhatsApp
         send_whatsapp_message(message_text, user_number, nudge_type)
 
+        # Save in Journal
+
+
         # Save to database (non-blocking)
-        save_message_safe(db, user_number, message_text)
+        #save_message_safe(db, user_number, message_text)
+        save_message(
+            db,
+            sender="assistant",
+            user_number=user_number,
+            content=message_text,
+            message_type="nudge",
+            is_read=False
+        )
 
         # LOG TO EXCEL (non-blocking) ✨
         log_nudge_to_excel(

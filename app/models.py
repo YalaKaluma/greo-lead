@@ -30,11 +30,14 @@ class Message(Base):
     __tablename__ = "messages"
 
     id = Column(Integer, primary_key=True, index=True)
-    sender = Column(String, index=True)  # "user" or "assistant"
+    sender = Column(String, index=True)
     user_number = Column(String, index=True)
     content = Column(Text)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now())
 
+    # NEW
+    message_type = Column(String, default="chat")
+    is_read = Column(Boolean, default=True)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
 
 class Task(Base):
     __tablename__ = "tasks"
