@@ -673,7 +673,8 @@ def send_nudge_for_user(
         message_text = generate_ai_message(system_prompt, conversation_history, nudge_type, user_number)
 
         # Send via WhatsApp
-        send_whatsapp_message(message_text, user_number, nudge_type)
+        #Temporarly disabled
+#        send_whatsapp_message(message_text, user_number, nudge_type)
 
         # Save in Journal
 
