@@ -14,7 +14,8 @@ useEffect(() => {
       if (!userNumber) return;
 
       const apiUrl =
-        process.env.REACT_APP_API_URL || 'http://localhost:8000';
+  //      process.env.REACT_APP_API_URL || 'http://localhost:8000';
+        process.env.REACT_APP_API_URL || '';
 
       const response = await axios.get(
         `${apiUrl}/api/chat/unread-nudges`,
