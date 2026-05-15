@@ -298,50 +298,11 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
     <div className="h-full flex flex-col bg-white">
       {/* Header with Session Type Buttons */}
       <div className="border-b border-gray-200 bg-white px-6 py-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold text-gray-900">My Journal</h1>
-          <div className="flex gap-3">
-            {SESSION_TYPES.map(session => {
-              const colorClasses = {
-                blue: {
-                  active: 'bg-blue-600 text-white shadow-md',
-                  inactive: 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
-                },
-                purple: {
-                  active: 'bg-purple-600 text-white shadow-md',
-                  inactive: 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
-                },
-                green: {
-                  active: 'bg-green-600 text-white shadow-md',
-                  inactive: 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
-                }
-              };
-              
-              const colors = colorClasses[session.color] || colorClasses.blue;
-              
-              return (
-                <button
-                  key={session.id}
-                  onClick={() => session.enabled && startSession(session.id)}
-                  disabled={!session.enabled || activeSession !== null}
-                  className={`
-                    px-4 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2
-                    ${session.enabled 
-                      ? activeSession === session.id
-                        ? colors.active
-                        : colors.inactive
-                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    }
-                    ${activeSession && activeSession !== session.id ? 'opacity-50' : ''}
-                  `}
-                >
-                  <span>{session.icon}</span>
-                  <span>{session.label}</span>
-                  {!session.enabled && ' 🔒'}
-                </button>
-              );
-            })}
-          </div>
+
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">
+            My Journal
+          </h1>
         </div>
 
         {/* Progress Dots - Only show when goal review session is active */}
