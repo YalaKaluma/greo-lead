@@ -27,11 +27,11 @@ const LEADERSHIP_COACHING_STAGES = [
   { id: 'closure', label: 'Closure', description: 'Synthesize insights' }
 ];
 
-const SESSION_TYPES = [
-  { id: 'goal_review', label: 'Goal Review Session', icon: '🎯', color: 'blue', enabled: true },
-  { id: 'people_review', label: 'People Review Session', icon: '👥', color: 'purple', enabled: true },
-  { id: 'leadership_coaching', label: 'Leadership Coaching', icon: '🧭', color: 'green', enabled: true }
-];
+//const SESSION_TYPES = [
+//  { id: 'goal_review', label: 'Goal Review Session', icon: '🎯', color: 'blue', enabled: true },
+//  { id: 'people_review', label: 'People Review Session', icon: '👥', color: 'purple', enabled: true },
+//  { id: 'leadership_coaching', label: 'Leadership Coaching', icon: '🧭', color: 'green', enabled: true }
+//];
 
 const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   const [messages, setMessages] = useState([]);
@@ -299,7 +299,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
       {/* Header with Session Type Buttons */}
       <div className="border-b border-gray-200 bg-white px-6 py-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold text-gray-900">Coaching Sessions</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">My Journal</h1>
           <div className="flex gap-3">
             {SESSION_TYPES.map(session => {
               const colorClasses = {
