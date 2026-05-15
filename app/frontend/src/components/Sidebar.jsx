@@ -10,7 +10,7 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onC
     { id: 'my-journey', label: 'My Journey', disabled: false },
     // CHANGED: Replace 'my-journal' with 'coaching-sessions'
     { id: 'coaching-sessions', label: 'My Coaching Sessions', disabled: false },
-    { id: 'my-feedback', label: 'My Feedbackxxxx', disabled: true },
+    { id: 'my-feedback', label: 'My Feedback', disabled: true },
     { id: 'my-calendar', label: 'My Calendar', disabled: true },  
   ];
 
