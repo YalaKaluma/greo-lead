@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
+from app.models import Message
 
 from app.db import get_db
 from app.models import User, OnboardingStep
@@ -265,6 +266,35 @@ async def get_chat_history(
     except Exception as e:
         print(f"Error loading chat history: {e}")
         return {"messages": []}
+
+@router.get("/chat/unread-nudges")
+def get_unread_nudges(
+    user_number: str,
+    db: Session = Depends(get_db)
+):
+    count = db.query(Message).filter(
+        Message.user_number == user_number,
+        Message.message_type == "nudge",
+        Message.is_read == False
+    ).count()
+
+    return {"count": count}
+
+@router.post("/chat/mark-nudges-read")
+def mark_nudges_read(
+    user_number: str,
+    db: Session = Depends(get_db)
+):
+    db.query(Message).filter(
+        Message.user_number == user_number,
+        Message.message_type == "nudge",
+        Message.is_read == False
+    ).update({"is_read": True})
+
+    db.commit()
+
+    return {"status": "success"}
+
 
 
 @router.post("/chat/welcome")

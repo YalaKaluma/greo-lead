@@ -1,6 +1,36 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
 
 export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onClose }) {
+
+  const [unreadNudges, setUnreadNudges] = useState(0);
+
+useEffect(() => {
+  const fetchUnreadNudges = async () => {
+    try {
+      const userNumber = localStorage.getItem('user_number');
+
+      if (!userNumber) return;
+
+      const apiUrl =
+        process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
+      const response = await axios.get(
+        `${apiUrl}/api/chat/unread-nudges`,
+        {
+          params: { user_number: userNumber }
+        }
+      );
+
+      setUnreadNudges(response.data.count);
+    } catch (err) {
+      console.error('Failed to load unread nudges', err);
+    }
+  };
+
+  fetchUnreadNudges();
+}, []);
+
   const menuItems = [
     { id: 'my-goals', label: 'My Vision & Goals', disabled: false },
     { id: 'todo-list', label: 'My Tasks', disabled: false },
@@ -84,7 +114,18 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onC
                   }
                 `}
               >
-                {item.label}
+                
+                
+                <div className="flex items-center justify-between w-full">
+                  <span>{item.label}</span>
+
+                  {item.id === 'my-journal' && unreadNudges > 0 && (
+                    <span className="ml-2 bg-red-500 text-white text-xs font-bold rounded-full px-2 py-0.5 min-w-[20px] text-center">
+                     {unreadNudges}
+                    </span>
+                  )}
+                </div>
+
               </button>
             ))}
           </div>

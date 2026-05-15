@@ -53,9 +53,31 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   }, [messages]);
 
   // Load chat history on mount
+
   useEffect(() => {
-    loadChatHistory();
-  }, [userNumber]);
+  loadChatHistory();
+
+  const markNudgesRead = async () => {
+    try {
+      await axios.post(
+        `${apiUrl}/api/chat/mark-nudges-read`,
+        null,
+        {
+          params: { user_number: userNumber }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to mark nudges read:', error);
+    }
+  };
+
+  if (userNumber) {
+    markNudgesRead();
+  }
+
+}, [userNumber]);
+
+
 
   const loadChatHistory = async () => {
     try {
