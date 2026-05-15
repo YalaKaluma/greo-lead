@@ -9,6 +9,7 @@ useEffect(() => {
   const fetchUnreadNudges = async () => {
     try {
       const userNumber = localStorage.getItem('user_number');
+      console.log("Sidebar user number:", userNumber);
 
       if (!userNumber) return;
 
