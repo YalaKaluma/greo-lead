@@ -37,6 +37,8 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
   const [activeSession, setActiveSession] = useState(null);
   const [currentStage, setCurrentStage] = useState(null);
   const [stageIndex, setStageIndex] = useState(0);
@@ -201,6 +203,68 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
       setIsLoading(false);
     }
   };
+
+  const startRecording = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    const recorder = new MediaRecorder(stream);
+
+    let chunks = [];
+
+    recorder.ondataavailable = (event) => {
+      chunks.push(event.data);
+    };
+
+    recorder.onstop = async () => {
+      const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+
+      await transcribeAudio(audioBlob);
+    };
+
+    recorder.start();
+
+    setMediaRecorder(recorder);
+    setIsRecording(true);
+
+  } catch (error) {
+    console.error('Error accessing microphone:', error);
+    alert('Could not access microphone.');
+  }
+};
+
+const stopRecording = () => {
+  if (mediaRecorder) {
+    mediaRecorder.stop();
+    setIsRecording(false);
+  }
+};
+
+const transcribeAudio = async (audioBlob) => {
+  try {
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'recording.webm');
+
+    const response = await axios.post(
+      `${apiUrl}/api/journal/audio`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      }
+    );
+
+    const transcript = response.data.transcript;
+
+    setInputMessage(transcript);
+
+  } catch (error) {
+    console.error('Transcription error:', error);
+    alert('Failed to transcribe audio.');
+  }
+};
+
 
   const sendMessage = async (e) => {
     e.preventDefault();
@@ -530,6 +594,21 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
             disabled={isLoading}
             className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
+
+          <button
+            type="button"
+            onClick={isRecording ? stopRecording : startRecording}
+            className={`px-4 py-3 rounded-lg text-white transition-colors ${
+            isRecording
+            ? 'bg-red-600 hover:bg-red-700'
+            : 'bg-gray-600 hover:bg-gray-700'
+            }`}
+           >
+             {isRecording ? '⏹️ Stop' : '🎤'}
+          </button>
+
+
+
           <button
             type="submit"
             disabled={!inputMessage.trim() || isLoading}

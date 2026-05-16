@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 from app.models import Message
+from openai import OpenAI
 
 from app.db import get_db
 from app.models import User, OnboardingStep
@@ -11,6 +12,7 @@ from app.services.orchestrator import orchestrate
 from app.services.message_service import load_conversation_history, save_message
 
 router = APIRouter()
+client = OpenAI()
 
 
 class ChatMessage(BaseModel):
@@ -220,6 +222,36 @@ async def end_goal_review_session(
         "tasks_created": tasks_created,
         "timestamp": datetime.utcnow().isoformat()
     }
+
+@router.post("/journal/audio")
+async def transcribe_audio(
+        file: UploadFile = File(...)
+):
+    """
+    Transcribe recorded audio from journal voice input.
+    """
+
+    try:
+        # Read uploaded file
+        audio_bytes = await file.read()
+
+        # Send to OpenAI transcription API
+        transcript = client.audio.transcriptions.create(
+            model="gpt-4o-mini-transcribe",
+            file=(file.filename, audio_bytes, file.content_type)
+        )
+
+        return {
+            "transcript": transcript.text
+        }
+
+    except Exception as e:
+        print(f"Audio transcription error: {e}")
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Transcription failed: {str(e)}"
+        )
 
 
 @router.get("/chat/history")
