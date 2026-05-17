@@ -21,8 +21,8 @@ async def enrich_task(task_data):
     - strategic_intent
     - move_the_needle_score
     - estimated_effort
-    - suggested_subtasks
-    - alfred_help
+    - suggested_subtasks (must be an array of strings)
+    - alfred_help (must be an array of strings)
     - priority_suggestion
 
     Keep responses concise and executive-oriented.
@@ -45,4 +45,14 @@ async def enrich_task(task_data):
         ]
     )
 
-    return json.loads(response.choices[0].message.content)
+    result = json.loads(response.choices[0].message.content)
+
+    # Normalize arrays
+    if not isinstance(result.get("alfred_help"), list):
+        result["alfred_help"] = [str(result.get("alfred_help"))]
+
+    if not isinstance(result.get("suggested_subtasks"), list):
+        result["suggested_subtasks"] = [str(result.get("suggested_subtasks"))]
+
+    return result
+
