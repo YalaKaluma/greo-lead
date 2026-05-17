@@ -26,6 +26,8 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
   });
 
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [alfredInsights, setAlfredInsights] = useState(null);
+  const [alfredLoading, setAlfredLoading] = useState(false);
 
   const setTomorrow = () => {
     const tomorrow = getETDate();  // Use ET instead of new Date()
@@ -60,6 +62,47 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
     }
   };
 
+  const handleAskAlfred = async () => {
+  if (!editData.title.trim()) {
+    alert('Please enter a task title first');
+    return;
+  }
+
+  setAlfredLoading(true);
+
+  try {
+    // MOCK DATA FOR NOW
+    const mockInsights = {
+      strategic_intent: "Validate VTM logic accuracy before Savencia rollout",
+      move_the_needle_score: 9.1,
+      estimated_effort: "4-6 hours",
+      suggested_subtasks: [
+        "Validate SKU mappings",
+        "Compare transfer outputs",
+        "Test edge cases",
+        "Document anomalies"
+      ],
+      alfred_help: [
+        "Generate test cases",
+        "Analyze anomalies",
+        "Draft validation summary"
+      ],
+      priority_suggestion: "high"
+    };
+
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    setAlfredInsights(mockInsights);
+
+  } catch (error) {
+    console.error('Error enriching task:', error);
+    alert('Failed to analyze task');
+  } finally {
+    setAlfredLoading(false);
+  }
+};
+
   return (
     <>
       <div 
@@ -83,7 +126,30 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
 
           <div className="p-4 space-y-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Task Title</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-slate-700">
+                  Task Title
+                </label>
+
+                <button
+                  onClick={handleAskAlfred}
+                  disabled={alfredLoading}
+                  className="text-sm px-3 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {alfredLoading ? 'Analyzing...' : '✨ Ask Alfred'}
+                </button>
+              </div>
+
+              
+
+
+
+
+
+
+
+
+
               <input
                 type="text"
                 value={editData.title}
@@ -200,6 +266,149 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
             </div>
 
             <div>
+              {alfredInsights && (
+                <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-3">
+                  
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-purple-900">
+                      ✨ Alfred Insights
+                    </h3>
+
+                    <div className="text-sm font-medium text-purple-700">
+                      Move the Needle: {alfredInsights.move_the_needle_score}/10
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs uppercase text-slate-500 mb-1">
+                      Strategic Intent
+                    </div>
+                    <div className="text-sm text-slate-700">
+                      {alfredInsights.strategic_intent}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs uppercase text-slate-500 mb-1">
+                      Estimated Effort
+                    </div>
+                    <div className="text-sm text-slate-700">
+                      {alfredInsights.estimated_effort}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-xs uppercase text-slate-500 mb-1">
+                      Suggested Subtasks
+                    </div>
+
+                    <ul className="space-y-1">
+                      {alfredInsights.suggested_subtasks.map((task, index) => (
+                        <li key={index} className="text-sm text-slate-700">
+                          • {task}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div>
+                    <div className="text-xs uppercase text-slate-500 mb-1">
+                      How Alfred Can Help
+                    </div>
+
+                    <ul className="space-y-1">
+                      {alfredInsights.alfred_help.map((help, index) => (
+                        <li key={index} className="text-sm text-slate-700">
+                          • {help}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                </div>
+              )}
+
+
+
+
+
+
+
+              
+
+
+
+              {alfredInsights && (
+  <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-4 mb-4">
+
+    <div className="flex items-center justify-between">
+      <h3 className="font-semibold text-purple-900">
+        ✨ Alfred Insights
+      </h3>
+
+      <div className="text-sm font-medium text-purple-700">
+        Move the Needle: {alfredInsights.move_the_needle_score}/10
+      </div>
+    </div>
+
+    <div>
+      <div className="text-xs uppercase text-slate-500 mb-1">
+        Strategic Intent
+      </div>
+
+      <div className="text-sm text-slate-700">
+        {alfredInsights.strategic_intent}
+      </div>
+    </div>
+
+    <div>
+      <div className="text-xs uppercase text-slate-500 mb-1">
+        Estimated Effort
+      </div>
+
+      <div className="text-sm text-slate-700">
+        {alfredInsights.estimated_effort}
+      </div>
+    </div>
+
+    <div>
+      <div className="text-xs uppercase text-slate-500 mb-1">
+        Suggested Subtasks
+      </div>
+
+      <ul className="space-y-1">
+        {alfredInsights.suggested_subtasks.map((task, index) => (
+          <li
+            key={index}
+            className="text-sm text-slate-700"
+          >
+            • {task}
+          </li>
+        ))}
+      </ul>
+    </div>
+
+    <div>
+      <div className="text-xs uppercase text-slate-500 mb-1">
+        How Alfred Can Help
+      </div>
+
+      <ul className="space-y-1">
+        {alfredInsights.alfred_help.map((help, index) => (
+          <li
+            key={index}
+            className="text-sm text-slate-700"
+          >
+            • {help}
+          </li>
+        ))}
+      </ul>
+    </div>
+
+  </div>
+)}
+
+              
               <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
               <textarea
                 value={editData.notes}
@@ -242,3 +451,4 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
     </>
   );
 }
+
