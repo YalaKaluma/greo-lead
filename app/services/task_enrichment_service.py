@@ -48,8 +48,13 @@ async def enrich_task(task_data):
     result = json.loads(response.choices[0].message.content)
 
     # Normalize arrays
-    if not isinstance(result.get("alfred_help"), list):
+
+    if result.get("alfred_help") is None:
+        result["alfred_help"] = []
+
+    elif not isinstance(result.get("alfred_help"), list):
         result["alfred_help"] = [str(result.get("alfred_help"))]
+
 
     if not isinstance(result.get("suggested_subtasks"), list):
         result["suggested_subtasks"] = [str(result.get("suggested_subtasks"))]
