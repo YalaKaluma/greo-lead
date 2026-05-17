@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from datetime import datetime, date, timedelta
 from typing import Optional
 from pytz import timezone
+from app.services.task_enrichment_service import enrich_task
 
 router = APIRouter()
 
@@ -278,3 +279,10 @@ def delete_task(
     db.commit()
 
     return {"success": True, "message": "Task deleted"}
+
+@router.post("/enrich")
+async def enrich_task_endpoint(request: dict):
+
+    result = await enrich_task(request)
+
+    return result

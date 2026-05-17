@@ -71,24 +71,22 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
   setAlfredLoading(true);
 
   try {
-    // MOCK DATA FOR NOW
-    const mockInsights = {
-      strategic_intent: "Validate VTM logic accuracy before Savencia rollout",
-      move_the_needle_score: 9.1,
-      estimated_effort: "4-6 hours",
-      suggested_subtasks: [
-        "Validate SKU mappings",
-        "Compare transfer outputs",
-        "Test edge cases",
-        "Document anomalies"
-      ],
-      alfred_help: [
-        "Generate test cases",
-        "Analyze anomalies",
-        "Draft validation summary"
-      ],
-      priority_suggestion: "high"
-    };
+    const response = await fetch('/api/tasks/enrich', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    title: editData.title,
+    notes: editData.notes,
+    goal_id: editData.goal_id
+  })
+});
+
+const data = await response.json();
+
+setAlfredInsights(data);
+
 
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 1000));
