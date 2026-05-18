@@ -1,6 +1,16 @@
 import GoalCard from './GoalCard';
 
-export default function GoalsList({ goals, onCardClick, expandedGoalId, taskCounts = {} }) {
+//Old version
+//export default function GoalsList({ goals, onCardClick, expandedGoalId, taskCounts = {} }) {
+
+
+export default function GoalsList({ 
+  goals,
+  onCardClick,
+  onEditClick,
+  expandedGoalId,
+  taskCounts = {}
+}) {
   
   const buildTree = () => {
     const longTermGoals = goals.long || [];
@@ -42,6 +52,7 @@ export default function GoalsList({ goals, onCardClick, expandedGoalId, taskCoun
                 <GoalCard 
                   goal={ltGoal}
                   onClick={onCardClick}
+                  onEdit={onEditClick}
                   taskCount={taskCounts[ltGoal.id] || 0}
                   isInTree={false}
                 />
@@ -73,6 +84,7 @@ export default function GoalsList({ goals, onCardClick, expandedGoalId, taskCoun
                               <GoalCard 
                                 goal={mtGoal}
                                 onClick={onCardClick}
+                                onEdit={onEditClick}
                                 taskCount={taskCounts[mtGoal.id] || 0}
                                 isInTree={true}
                               />
@@ -83,6 +95,7 @@ export default function GoalsList({ goals, onCardClick, expandedGoalId, taskCoun
                                   <GoalCard 
                                     goal={mtGoal}
                                     onClick={onCardClick}
+                                    onEdit={onEditClick}
                                     taskCount={taskCounts[mtGoal.id] || 0}
                                     isInTree={true}
                                   />

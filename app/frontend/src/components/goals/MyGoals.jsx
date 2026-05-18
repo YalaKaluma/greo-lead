@@ -251,6 +251,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
                 goals={organizedGoals}
                 expandedGoalId={expandedGoalId}
                 onCardClick={handleCardClick}
+                onEditClick={handleEditClick}
                 taskCounts={taskCounts}
               />
             )}
