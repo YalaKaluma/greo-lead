@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
 from app.services.people_review_service import PeopleReviewService
-
+from app.models import GoalReviewSession
 
 # Pydantic request models for Goals
 class GoalCreate(BaseModel):
@@ -559,8 +559,19 @@ def delete_goal(
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
 
+    # Delete linked review sessions first
+    review_sessions = db.query(GoalReviewSession).filter(
+        GoalReviewSession.goal_id == goal.id
+    ).all()
+
+    for session in review_sessions:
+        db.delete(session)
+
+    # Delete goal
     db.delete(goal)
     db.commit()
+
+
     return {"success": True, "message": "Goal deleted"}
 
 
