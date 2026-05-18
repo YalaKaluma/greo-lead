@@ -28,7 +28,13 @@ class TaskCreate(BaseModel):
     project: Optional[str] = None
     delegated_to: Optional[str] = None
     goal_id: Optional[int] = None
-
+    strategic_intent: Optional[str] = None
+    move_the_needle_score: Optional[float] = None
+    estimated_effort: Optional[str] = None
+    suggested_subtasks: Optional[list] = None
+    alfred_help: Optional[list] = None
+    enhanced_title: Optional[str] = None
+    ai_enriched: Optional[bool] = False
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -39,6 +45,15 @@ class TaskUpdate(BaseModel):
     project: Optional[str] = None
     delegated_to: Optional[str] = None
     goal_id: Optional[int] = None
+    strategic_intent: Optional[str] = None
+    move_the_needle_score: Optional[float] = None
+    estimated_effort: Optional[str] = None
+
+    suggested_subtasks: Optional[list] = None
+    alfred_help: Optional[list] = None
+
+    enhanced_title: Optional[str] = None
+    ai_enriched: Optional[bool] = False
 
 
 class TaskResponse(BaseModel):
@@ -54,6 +69,15 @@ class TaskResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     goal_id: Optional[int]
+    strategic_intent: Optional[str] = None
+    move_the_needle_score: Optional[float] = None
+    estimated_effort: Optional[str] = None
+    suggested_subtasks: Optional[list] = None
+    alfred_help: Optional[list] = None
+    enhanced_title: Optional[str] = None
+    ai_enriched: Optional[bool] = False
+
+
 
     class Config:
         from_attributes = True
@@ -286,3 +310,4 @@ async def enrich_task_endpoint(request: dict):
     result = await enrich_task(request)
 
     return result
+

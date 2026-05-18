@@ -1,6 +1,6 @@
 // frontend/src/components/TodoList/TaskModal.jsx
-import { useState } from 'react';
 import { getTodayET, getETDate, getNextMonday, getSortedGoals, getGoalIndentation } from '../../utils/taskHelpers';
+import { useState, useEffect } from 'react';
 
 /**
  * TaskModal Component
@@ -29,6 +29,30 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
   const [alfredInsights, setAlfredInsights] = useState(null);
   const [alfredLoading, setAlfredLoading] = useState(false);
 
+  useEffect(() => {
+
+    // Reload Alfred insights if task was AI enriched
+    if (task?.ai_enriched) {
+
+      setAlfredInsights({
+        strategic_intent: task.strategic_intent,
+        move_the_needle_score: task.move_the_needle_score,
+        estimated_effort: task.estimated_effort,
+
+        suggested_subtasks: task.suggested_subtasks || [],
+        alfred_help: task.alfred_help || [],
+
+        enhanced_title: task.enhanced_title
+      });
+
+    } else {
+
+      setAlfredInsights(null);
+
+    }
+
+  }, [task]);
+
   const setTomorrow = () => {
     const tomorrow = getETDate();  // Use ET instead of new Date()
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -53,7 +77,21 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
       alert('Please enter a task title');
       return;
     }
-    onSave(editData);
+//    onSave(editData);
+    onSave({
+      ...editData,
+
+      strategic_intent: alfredInsights?.strategic_intent,
+      move_the_needle_score: alfredInsights?.move_the_needle_score,
+      estimated_effort: alfredInsights?.estimated_effort,
+
+      suggested_subtasks: alfredInsights?.suggested_subtasks,
+      alfred_help: alfredInsights?.alfred_help,
+
+      enhanced_title: alfredInsights?.enhanced_title,
+
+      ai_enriched: !!alfredInsights
+    });
   };
 
   const handleDelete = () => {

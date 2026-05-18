@@ -64,6 +64,18 @@ class Task(Base):
     top10_position = Column(Integer, nullable=True)  # 1-10 or null
     last_prioritized_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Fields for AI based enhancement to task description
+    strategic_intent = Column(Text, nullable=True)
+    move_the_needle_score = Column(Float, nullable=True)
+    estimated_effort = Column(String, nullable=True)
+
+    suggested_subtasks = Column(JSON, nullable=True)
+    alfred_help = Column(JSON, nullable=True)
+
+    enhanced_title = Column(Text, nullable=True)
+
+    ai_enriched = Column(Boolean, default=False)
+
 
 # ---------------------------------------------------------
 # EXPANDED JOURNEY STRUCTURE
@@ -704,6 +716,7 @@ class TaskPriorityRecommendation(Base):
 
     # Metadata
     generated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
 
 
 class TaskPriorityDecision(Base):
