@@ -27,6 +27,7 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
 
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [alfredInsights, setAlfredInsights] = useState(null);
+  const [showAlfredInsights, setShowAlfredInsights] = useState(false);
   const [alfredLoading, setAlfredLoading] = useState(false);
 
   useEffect(() => {
@@ -304,98 +305,119 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
             </div>
 
             <div>
-              {alfredInsights && (
-                <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-3">
-                  
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-purple-900">
-                      ✨ Alfred Insights
-                    </h3>
 
-                    <div className="text-sm font-medium text-purple-700">
-                      Move the Needle: {alfredInsights.move_the_needle_score}/10
-                    </div>
-                  </div>
+{alfredInsights && (
 
-                  <div>
-                    
-                    <div>
-              <div className="text-xs uppercase text-slate-500 mb-1">
-                Suggested Title
-              </div>
+  <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-4">
 
-              <div className="flex items-center justify-between gap-2">
-                
-                <div className="text-sm text-slate-700 font-medium">
-                  {alfredInsights.enhanced_title}
-                </div>
+    <button
+      onClick={() => setShowAlfredInsights(!showAlfredInsights)}
+      className="w-full flex items-center justify-between"
+    >
 
-                <button
-                  onClick={() =>
-                    setEditData({
-                      ...editData,
-                      title: alfredInsights.enhanced_title
-                    })
-                  }
-                  className="text-xs px-2 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-md"
-                >
-                  Apply
-                </button>
+      <div className="flex items-center gap-2">
 
-              </div>
+        <span className="text-purple-700 text-sm">
+          {showAlfredInsights ? '▼' : '▶'}
+        </span>
+
+        <h3 className="font-semibold text-purple-900">
+          ✨ Alfred Insights
+        </h3>
+
+      </div>
+
+      <div className="text-sm font-medium text-purple-700">
+        Move the Needle: {alfredInsights.move_the_needle_score}/10
+      </div>
+
+    </button>
+
+    {showAlfredInsights && (
+
+      <>
+
+        <div>
+          <div className="text-xs uppercase text-slate-500 mb-1">
+            Suggested Title
+          </div>
+
+          <div className="flex items-center justify-between gap-2">
+
+            <div className="text-sm text-slate-700 font-medium">
+              {alfredInsights.enhanced_title}
             </div>
-                    
-                    <div className="text-xs uppercase text-slate-500 mb-1">
-                      Strategic Intent
-                    </div>
-                    <div className="text-sm text-slate-700">
-                      {alfredInsights.strategic_intent}
-                    </div>
-                  </div>
 
-                  <div>
-                    <div className="text-xs uppercase text-slate-500 mb-1">
-                      Estimated Effort
-                    </div>
-                    <div className="text-sm text-slate-700">
-                      {alfredInsights.estimated_effort}
-                    </div>
-                  </div>
+            <button
+              onClick={() =>
+                setEditData({
+                  ...editData,
+                  title: alfredInsights.enhanced_title
+                })
+              }
+              className="text-xs px-2 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-md"
+            >
+              Apply
+            </button>
 
-                  <div>
-                    <div className="text-xs uppercase text-slate-500 mb-1">
-                      Suggested Subtasks
-                    </div>
+          </div>
+        </div>
 
-                    <ul className="space-y-1">
-                      {alfredInsights.suggested_subtasks.map((task, index) => (
-                        <li key={index} className="text-sm text-slate-700">
-                          • {task}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+        <div>
+          <div className="text-xs uppercase text-slate-500 mb-1">
+            Strategic Intent
+          </div>
 
-                  <div>
-                    <div className="text-xs uppercase text-slate-500 mb-1">
-                      How Alfred Can Help
-                    </div>
+          <div className="text-sm text-slate-700">
+            {alfredInsights.strategic_intent}
+          </div>
+        </div>
 
-                    <ul className="space-y-1">
-                      {alfredInsights.alfred_help.map((help, index) => (
-                        <li key={index} className="text-sm text-slate-700">
-                          • {help}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+        <div>
+          <div className="text-xs uppercase text-slate-500 mb-1">
+            Estimated Effort
+          </div>
 
-                </div>
-              )}
+          <div className="text-sm text-slate-700">
+            {alfredInsights.estimated_effort}
+          </div>
+        </div>
 
+        <div>
+          <div className="text-xs uppercase text-slate-500 mb-1">
+            Suggested Subtasks
+          </div>
 
-              
+          <ul className="space-y-1">
+            {(alfredInsights.suggested_subtasks || []).map((task, index) => (
+              <li key={index} className="text-sm text-slate-700">
+                • {task}
+              </li>
+            ))}
+          </ul>
+        </div>
 
+        <div>
+          <div className="text-xs uppercase text-slate-500 mb-1">
+            How Alfred Can Help
+          </div>
+
+          <ul className="space-y-1">
+            {(alfredInsights.alfred_help || []).map((help, index) => (
+              <li key={index} className="text-sm text-slate-700">
+                • {help}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+      </>
+
+    )}
+
+  </div>
+
+)}
 
               
               <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
