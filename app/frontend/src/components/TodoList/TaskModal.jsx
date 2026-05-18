@@ -72,31 +72,33 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
 
   try {
     const response = await fetch('/api/tasks/enrich', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    title: editData.title,
-    notes: editData.notes,
-    goal_id: editData.goal_id
-  })
-});
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: editData.title,
+        notes: editData.notes,
+        goal_id: editData.goal_id
+      })
+    });
 
-const data = await response.json();
+    const data = await response.json();
 
-setAlfredInsights(data);
+    setAlfredInsights(data);
 
 
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
 
-    setAlfredInsights(mockInsights);
 
   } catch (error) {
-    console.error('Error enriching task:', error);
-    alert('Failed to analyze task');
-  } finally {
+  console.error('FULL ERROR:', error);
+
+  if (error?.stack) {
+    console.error(error.stack);
+  }
+
+  alert(JSON.stringify(error, null, 2));
+} finally {
     setAlfredLoading(false);
   }
 };
