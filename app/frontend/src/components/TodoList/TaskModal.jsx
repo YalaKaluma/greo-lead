@@ -280,6 +280,33 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
                   </div>
 
                   <div>
+                    
+                    <div>
+              <div className="text-xs uppercase text-slate-500 mb-1">
+                Suggested Title
+              </div>
+
+              <div className="flex items-center justify-between gap-2">
+                
+                <div className="text-sm text-slate-700 font-medium">
+                  {alfredInsights.enhanced_title}
+                </div>
+
+                <button
+                  onClick={() =>
+                    setEditData({
+                      ...editData,
+                      title: alfredInsights.enhanced_title
+                    })
+                  }
+                  className="text-xs px-2 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-md"
+                >
+                  Apply
+                </button>
+
+              </div>
+            </div>
+                    
                     <div className="text-xs uppercase text-slate-500 mb-1">
                       Strategic Intent
                     </div>

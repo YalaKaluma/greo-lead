@@ -18,13 +18,20 @@ async def enrich_task(task_data):
     {task_data.get("notes")}
 
     Return ONLY valid JSON with:
+    - enhanced_title
     - strategic_intent
     - move_the_needle_score
     - estimated_effort
     - suggested_subtasks (must be an array of strings)
     - alfred_help (must be an array of strings)
     - priority_suggestion
-
+    
+    The enhanced_title should:
+        - be clearer and more professional
+        - preserve original intent
+        - improve readability and searchability
+        - stay concise
+    
     Keep responses concise and executive-oriented.
     """
 
