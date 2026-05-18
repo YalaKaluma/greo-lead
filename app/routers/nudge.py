@@ -653,14 +653,25 @@ def send_nudge_for_user(
         # Build full context
         context_text, conversation_history = build_full_context(db, user_number)
 
+        from app.services.morning_briefing_service import MorningBriefingService
+
+        move_the_needle_context = ""
+
+        if nudge_type == "morning":
+            briefing_service = MorningBriefingService(db)
+            move_the_needle_context = briefing_service.generate_move_the_needle_context(user_number)
+            
+
         # Build context summary for logging
         task_ctx = build_task_context(db, user_number)
         habit_ctx = build_habit_context(db, user_number)
         context_summary = build_context_summary_for_log(task_ctx, habit_ctx)
 
         # Create system prompt from template
+
         system_prompt = config["system_prompt"].format(
             context=context_text,
+            move_the_needle=move_the_needle_context,
             max_length=config["max_length"]
         )
 
