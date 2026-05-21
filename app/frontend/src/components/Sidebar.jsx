@@ -36,7 +36,6 @@ useEffect(() => {
   const menuItems = [
     { id: 'my-goals', label: 'My Vision & Goals', disabled: false },
     { id: 'todo-list', label: 'My Tasks', disabled: false },
-//    { id: 'priority-review', label: 'Task Prioritization', disabled: false },
     { id: 'my-team', label: 'My Team', disabled: false },
     { id: 'my-habits', label: 'My Habits', disabled: false },
     { id: 'my-journey', label: 'My Journey', disabled: false },

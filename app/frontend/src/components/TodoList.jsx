@@ -6,7 +6,6 @@ import TaskItem from './TodoList/TaskItem';
 import TaskModal from './TodoList/TaskModal';
 import BulkActionModal from './TodoList/BulkActionModal';
 import FilterSection from './TodoList/FilterSection';
-import ReasonModal from './TodoList/ReasonModal';
 import { getTodayET, isOverdueET, getSortedGoals } from '../utils/taskHelpers';
 import { usePriority } from '../hooks/usePriority';
 
@@ -49,21 +48,15 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [selectionMode, setSelectionMode] = useState(false);
   const [showBulkActionModal, setShowBulkActionModal] = useState(false);
 
-  // Priority review state
+  // Optional strategic prioritization lens
   const {
     priorityMode,
     priorityLoading,
     priorityRecommendation,
-    priorityDecisions,
-    applyingPriority,
     runPrioritization,
-    recordDecision,
-    applyPriorityChanges,
-    cancelPriorityMode,
+    exitPriorityMode,
     getTaskScore
   } = usePriority(apiUrl, userNumber);
-
-  const [showReasonModal, setShowReasonModal] = useState(null);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -183,7 +176,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const getSortedTasks = () => {
-    // PRIORITY MODE ALWAYS OVERRIDES: Use LLM scoring when in priority review
+    // Strategic View is an explicit, temporary lens over the user's tasks.
     if (priorityMode && priorityRecommendation && priorityRecommendation.all_scored_tasks) {
       const scoredTasks = priorityRecommendation.all_scored_tasks;
       
@@ -196,7 +189,7 @@ export default function TodoList({ apiUrl, userNumber }) {
         .filter(Boolean);
     }
     
-    // If manual drag-and-drop order exists, use it (unless in priority mode)
+    // Manual drag-and-drop order is the default experience.
     if (sortOrder.length > 0) {
       return [...tasks].sort((a, b) => {
         const indexA = sortOrder.indexOf(a.id);
@@ -415,7 +408,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   // ============================================================================
-  // PRIORITY REVIEW OPERATIONS
+  // STRATEGIC VIEW OPERATIONS
   // ============================================================================
 
   const handleRunPrioritization = async () => {
@@ -425,26 +418,8 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
   };
 
-  const handlePriorityDecision = async (taskId, action, reason = null) => {
-    const result = await recordDecision(taskId, action, reason);
-    if (!result.success) {
-      alert(result.error);
-    }
-    setShowReasonModal(null);
-  };
-
-  const handleApplyPriority = async () => {
-    const result = await applyPriorityChanges();
-    if (result.success) {
-      alert(result.message);
-      await fetchTasks(); // Refresh task list
-    } else {
-      alert(result.error);
-    }
-  };
-
-  const handleCancelPriority = () => {
-    cancelPriorityMode();
+  const handleExitPriority = () => {
+    exitPriorityMode();
   };
 
   // ============================================================================
@@ -480,6 +455,10 @@ export default function TodoList({ apiUrl, userNumber }) {
                 <span className="text-blue-600 font-medium">
                   {selectedTasks.length} task(s) selected
                 </span>
+              ) : priorityMode ? (
+                <span className="text-blue-700 font-medium">
+                  Strategic View: Alfred's MTN lens is sorting this view only. Your manual order is unchanged.
+                </span>
               ) : (
                 <>
                   {filterType === 'due_today' && 'Tasks due today'}
@@ -497,7 +476,7 @@ export default function TodoList({ apiUrl, userNumber }) {
               <button
                 onClick={resetSortOrder}
                 className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-lg font-medium transition-colors text-sm"
-                title="Reset to priority sorting"
+                title="Return to the default task order"
               >
                 ↻ Reset Sort
               </button>
@@ -521,7 +500,7 @@ export default function TodoList({ apiUrl, userNumber }) {
                 <button
                   onClick={handleRunPrioritization}
                   disabled={priorityLoading || tasks.length === 0}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {priorityLoading ? (
                     <span className="flex items-center gap-2">
@@ -532,9 +511,9 @@ export default function TodoList({ apiUrl, userNumber }) {
                       <span className="hidden sm:inline">Analyzing...</span>
                     </span>
                   ) : (
-                    <span className="hidden sm:inline">⚡ Prioritize</span>
+                    <span className="hidden sm:inline">Move the Needle</span>
                   )}
-                  {!priorityLoading && <span className="sm:hidden">⚡</span>}
+                  {!priorityLoading && <span className="sm:hidden">MTN</span>}
                 </button>
                 <button
                   onClick={() => {
@@ -551,17 +530,10 @@ export default function TodoList({ apiUrl, userNumber }) {
             {priorityMode && (
               <>
                 <button
-                  onClick={handleCancelPriority}
+                  onClick={handleExitPriority}
                   className="px-4 py-2 border border-gray-300 hover:bg-gray-50 rounded-lg font-medium transition-colors"
                 >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleApplyPriority}
-                  disabled={applyingPriority || Object.keys(priorityDecisions).length === 0}
-                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {applyingPriority ? 'Applying...' : `Apply ${Object.values(priorityDecisions).filter(d => d === 'accept').length} Changes`}
+                  Manual View
                 </button>
               </>
             )}
@@ -614,7 +586,6 @@ export default function TodoList({ apiUrl, userNumber }) {
                 >
                   {sortedTasks.map((task, index) => {
                     const scoreData = getTaskScore(task.id);
-                    const decision = priorityDecisions[task.id];
 
                     return (
                       <TaskItem
@@ -633,10 +604,7 @@ export default function TodoList({ apiUrl, userNumber }) {
                         onSelectToggle={() => toggleTaskSelection(task.id)}
                         goals={goals}
                         priorityMode={priorityMode}
-                        priorityDecision={decision}
                         priorityScore={scoreData}
-                        onPriorityAccept={() => handlePriorityDecision(task.id, 'accept')}
-                        onPriorityReject={() => setShowReasonModal(scoreData)}
                       />
                     );
                   })}
@@ -700,15 +668,6 @@ export default function TodoList({ apiUrl, userNumber }) {
           onCancel={() => setShowBulkActionModal(false)}
           delegates={delegates}
           goals={getSortedGoals(goals)}
-        />
-      )}
-
-      {/* Reason Modal for Priority Reject */}
-      {showReasonModal && (
-        <ReasonModal
-          task={showReasonModal}
-          onSubmit={(reason) => handlePriorityDecision(showReasonModal.task_id, 'reject', reason)}
-          onClose={() => setShowReasonModal(null)}
         />
       )}
     </div>

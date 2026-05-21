@@ -1,11 +1,10 @@
-// frontend/src/components/TodoList/TaskItem.jsx
 import { useState } from 'react';
 import { Draggable } from 'react-beautiful-dnd';
 import { getPriorityIcon, formatDueDate, getDueDateColor } from '../../utils/taskHelpers';
 
 /**
  * TaskItem Component
- * 
+ *
  * Individual task in the list with:
  * - Drag and drop support
  * - Long-press for multi-select (750ms)
@@ -25,12 +24,8 @@ export default function TaskItem({
   onLongPress,
   onSelectToggle,
   goals,
-  // Priority mode props
   priorityMode = false,
-  priorityDecision = null,
-  priorityScore = null,
-  onPriorityAccept = null,
-  onPriorityReject = null
+  priorityScore = null
 }) {
   const [swipeDistance, setSwipeDistance] = useState(0);
   const [touchStartX, setTouchStartX] = useState(0);
@@ -38,7 +33,7 @@ export default function TaskItem({
 
   const onTouchStart = (e) => {
     setTouchStartX(e.touches[0].clientX);
-    
+
     const timer = setTimeout(() => {
       if (!selectionMode) {
         onLongPress();
@@ -55,7 +50,7 @@ export default function TaskItem({
       clearTimeout(longPressTimer);
       setLongPressTimer(null);
     }
-    
+
     const currentX = e.touches[0].clientX;
     const distance = Math.max(0, touchStartX - currentX);
     setSwipeDistance(Math.min(distance, 100));
@@ -90,17 +85,13 @@ export default function TaskItem({
           onSelectToggle={onSelectToggle}
           goals={goals}
           priorityMode={priorityMode}
-          priorityDecision={priorityDecision}
           priorityScore={priorityScore}
-          onPriorityAccept={onPriorityAccept}
-          onPriorityReject={onPriorityReject}
         />
       )}
     </Draggable>
   );
 }
 
-// Task Card Component
 function TaskCard({
   task,
   index,
@@ -119,18 +110,30 @@ function TaskCard({
   onSelectToggle,
   goals,
   priorityMode,
-  priorityDecision,
-  priorityScore,
-  onPriorityAccept,
-  onPriorityReject
+  priorityScore
 }) {
   const goalLabel =
     goals.find(g => g.id === task.goal_id)?.title ||
     goals.find(g => g.id === task.goal_id)?.goal_text ||
     'Goal';
 
+  const getMtnLabel = (score) => {
+    if (score >= 0.85) return 'Transformational';
+    if (score >= 0.7) return 'Strategic';
+    if (score >= 0.5) return 'Important';
+    if (score >= 0.3) return 'Maintenance';
+    return 'Low Leverage';
+  };
+
+  const getMtnStyle = (score) => {
+    if (score >= 0.85) return 'bg-blue-100 text-blue-800 border-blue-200';
+    if (score >= 0.7) return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+    if (score >= 0.5) return 'bg-amber-100 text-amber-800 border-amber-200';
+    if (score >= 0.3) return 'bg-slate-100 text-slate-700 border-slate-200';
+    return 'bg-gray-100 text-gray-600 border-gray-200';
+  };
+
   const handleClick = (e) => {
-    // Priority mode: clicking does nothing (use buttons instead)
     if (priorityMode) {
       e.preventDefault();
       e.stopPropagation();
@@ -174,11 +177,10 @@ function TaskCard({
         hover:border-gray-300 transition-all
         ${snapshot.isDragging ? 'opacity-50 scale-98 shadow-lg' : ''}
         ${isCompleting ? 'opacity-60' : ''}
-        ${index >= 10 ? 'opacity-40' : ''}
+        ${index >= 10 && !priorityMode ? 'opacity-40' : ''}
         ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}
-        ${priorityMode && !priorityDecision ? 'cursor-default' : 'cursor-pointer'}
-        ${priorityDecision === 'accept' ? 'border-green-300 bg-green-50' : ''}
-        ${priorityDecision === 'reject' ? 'border-red-300 bg-red-50' : ''}
+        ${priorityMode ? 'cursor-default' : 'cursor-pointer'}
+        ${priorityMode && priorityScore?.score >= 0.75 ? 'border-blue-300 bg-blue-50' : ''}
       `}
       onClick={handleClick}
     >
@@ -186,7 +188,7 @@ function TaskCard({
         {isSelected && (
           <div className="flex-shrink-0 mt-0.5">
             <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
-              <span className="text-white text-xs">✓</span>
+              <span className="text-white text-xs">x</span>
             </div>
           </div>
         )}
@@ -197,7 +199,7 @@ function TaskCard({
             className="text-slate-300 cursor-grab active:cursor-grabbing mt-0.5"
             onClick={(e) => e.stopPropagation()}
           >
-            ⋮⋮
+            ::
           </div>
         )}
 
@@ -215,13 +217,13 @@ function TaskCard({
         )}
 
         <div className="flex-1 min-w-0">
-          <div 
+          <div
             className="font-medium text-slate-800 text-base break-words leading-tight cursor-pointer hover:text-blue-600 transition-colors"
             onClick={(e) => {
               e.stopPropagation();
-              onStartEdit();
+              if (!priorityMode) onStartEdit();
             }}
-            title="Click to edit/reschedule"
+            title={priorityMode ? 'Return to Manual View to edit' : 'Click to edit/reschedule'}
           >
             {task.title}
           </div>
@@ -229,11 +231,7 @@ function TaskCard({
           <div className="flex items-center justify-between mt-1">
             <div>
               {task.due_date && (
-                <span
-                  className={`px-2 py-0.5 rounded text-xs font-medium ${getDueDateColor(
-                    task.due_date
-                  )}`}
-                >
+                <span className={`px-2 py-0.5 rounded text-xs font-medium ${getDueDateColor(task.due_date)}`}>
                   {formatDueDate(task.due_date)}
                 </span>
               )}
@@ -241,7 +239,7 @@ function TaskCard({
 
             {task.goal_id && (
               <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-medium">
-                🎯 {goalLabel}
+                Goal: {goalLabel}
               </span>
             )}
           </div>
@@ -255,65 +253,28 @@ function TaskCard({
           {task.delegated_to && (
             <div className="mt-1">
               <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
-                👤 {task.delegated_to}
+                Delegated: {task.delegated_to}
               </span>
             </div>
           )}
 
-          {/* Priority Score Display */}
           {priorityMode && priorityScore && (
-            <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-medium text-blue-600">
-                  Score: {(priorityScore.score * 100).toFixed(0)}%
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className={`text-xs px-2 py-0.5 rounded border font-medium ${getMtnStyle(priorityScore.score)}`}>
+                MTN: {getMtnLabel(priorityScore.score)}
+              </span>
+              {priorityScore.reason && (
+                <span className="text-xs text-slate-600">
+                  {priorityScore.reason}
                 </span>
-                <span className={`text-xs px-2 py-0.5 rounded ${
-                  priorityScore.confidence === 'high' ? 'bg-green-100 text-green-800' :
-                  priorityScore.confidence === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                  'bg-gray-100 text-gray-800'
-                }`}>
-                  {priorityScore.confidence} confidence
-                </span>
-              </div>
-              <p className="text-xs text-gray-700">
-                {priorityScore.reason}
-              </p>
-            </div>
-          )}
-
-          {/* Decision Indicator */}
-          {priorityDecision && (
-            <div className={`mt-2 text-xs font-semibold ${
-              priorityDecision === 'accept' ? 'text-green-700' : 'text-red-700'
-            }`}>
-              {priorityDecision === 'accept' ? '✓ Accepted for Top 10' : '✗ Rejected'}
+              )}
             </div>
           )}
         </div>
 
-        {/* Priority Mode Buttons - Right side */}
-        {priorityMode && !priorityDecision && (
-          <div className="flex-shrink-0 flex gap-1.5 ml-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onPriorityAccept?.();
-              }}
-              className="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded font-medium transition-colors"
-              title="Accept for Top 10"
-            >
-              ✓ Accept
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onPriorityReject?.();
-              }}
-              className="px-3 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded font-medium transition-colors"
-              title="Reject"
-            >
-              ✗ Reject
-            </button>
+        {priorityMode && priorityScore?.score >= 0.85 && (
+          <div className="flex-shrink-0 ml-2">
+            <div className="h-2 w-2 rounded-full bg-blue-500 mt-2" title="Highest leverage" />
           </div>
         )}
       </div>

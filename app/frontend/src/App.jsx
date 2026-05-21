@@ -7,7 +7,6 @@ import MyTeam from './components/MyTeam';
 import MyCoachingSessions from './components/MyCoachingSessions'; // NEW: Replace MyJournal
 import MyHabits from './components/MyHabits';
 import MyJournal from './components/MyJournal';
-import PriorityReview from './components/PriorityReview';
 import TourOverlay from './components/TourOverlay';
 import AlfredChat from './components/AlfredChat';
 import { useEffect, useState } from "react";
@@ -196,7 +195,6 @@ function App() {
             {/* CHANGED: my-journal -> coaching-sessions */}
             {currentPage === 'coaching-sessions' && 'Coaching Sessions'}
             {currentPage === 'my-journal' && 'My Journal'}
-            {currentPage === 'priority-review' && 'Priority Review'}
           </h1>
         </div>
       )}
@@ -232,10 +230,6 @@ function App() {
 
         {currentPage === 'my-journal' && (
           <MyJournal apiUrl={API_URL} userNumber={userNumber} />
-        )}
-
-        {currentPage === 'priority-review' && (
-          <PriorityReview userNumber={userNumber} onComplete={() => handleNavigate('todo-list')} />
         )}
       </main>
 
