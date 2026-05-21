@@ -200,6 +200,10 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   });
   const [loadingSignals, setLoadingSignals] = useState(false);
   const [activeTopic, setActiveTopic] = useState("Execution System");
+  const [trialRecords, setTrialRecords] = useState([]);
+  const [activeTrial, setActiveTrial] = useState(null);
+  const [trialDraft, setTrialDraft] = useState("");
+  const [savingTrial, setSavingTrial] = useState(false);
 
   const selectedDimension = useMemo(
     () => DIMENSIONS.find((dimension) => dimension.id === selectedDimensionId) || DIMENSIONS[2],
@@ -239,6 +243,27 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
     };
 
     fetchSignals();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiUrl, userNumber]);
+
+  useEffect(() => {
+    if (!apiUrl || !userNumber) return;
+
+    let cancelled = false;
+    const fetchTrials = async () => {
+      try {
+        const response = await axios.get(`${apiUrl}/api/journey/belt-trials`, {
+          params: { user_number: userNumber, target_belt: "yellow" },
+        });
+        if (!cancelled) setTrialRecords(response.data || []);
+      } catch (error) {
+        console.error("Failed to load belt trials", error);
+      }
+    };
+
+    fetchTrials();
     return () => {
       cancelled = true;
     };
@@ -288,6 +313,80 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   const selectedState = dimensionStates[selectedDimension.id];
   const selectedBelt = getBelt(selectedState.beltIndex);
   const nextBelt = BELTS[Math.min(selectedState.beltIndex + 1, BELTS.length - 1)];
+
+  const handleStartTrial = async (trialType, prompt) => {
+    if (!apiUrl || !userNumber) return;
+
+    setSavingTrial(true);
+    try {
+      const existing = trialRecords.find(
+        (trial) =>
+          trial.dimension_id === selectedDimension.id &&
+          trial.target_belt === "yellow" &&
+          trial.trial_type === trialType
+      );
+
+      const trial =
+        existing ||
+        (
+          await axios.post(`${apiUrl}/api/journey/belt-trials`, {
+            user_number: userNumber,
+            dimension_id: selectedDimension.id,
+            target_belt: "yellow",
+            trial_type: trialType,
+            prompt,
+          })
+        ).data;
+
+      if (!existing) {
+        setTrialRecords((current) => [trial, ...current]);
+      }
+
+      setActiveTrial(trial);
+      setTrialDraft(trial.response_text || "");
+    } catch (error) {
+      console.error("Failed to start belt trial", error);
+      alert("Alfred could not start this exercise yet. Please try again.");
+    } finally {
+      setSavingTrial(false);
+    }
+  };
+
+  const saveTrialResponse = async (status) => {
+    if (!activeTrial || !trialDraft.trim()) return;
+
+    setSavingTrial(true);
+    try {
+      const response = await axios.put(
+        `${apiUrl}/api/journey/belt-trials/${activeTrial.id}`,
+        {
+          response_text: trialDraft.trim(),
+          status,
+        },
+        { params: { user_number: userNumber } }
+      );
+
+      const updatedTrial = response.data;
+      setTrialRecords((current) =>
+        current.map((trial) => (trial.id === updatedTrial.id ? updatedTrial : trial))
+      );
+      setActiveTrial(null);
+      setTrialDraft("");
+    } catch (error) {
+      console.error("Failed to submit belt trial", error);
+      alert("Alfred could not submit this exercise yet. Please try again.");
+    } finally {
+      setSavingTrial(false);
+    }
+  };
+
+  const handleSaveTrial = async () => {
+    await saveTrialResponse("in_progress");
+  };
+
+  const handleSubmitTrial = async () => {
+    await saveTrialResponse("submitted");
+  };
 
   return (
     <div className="min-h-full bg-[#f6f5f1] px-4 py-5 text-slate-900 md:px-10 md:py-8">
@@ -343,8 +442,19 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
 
             {selectedDimension.mvp ? (
               <>
-                <PathToYellowPanel dimension={selectedDimension} />
-                <TrialsPanel telemetry={telemetry} belt={selectedBelt} nextBelt={nextBelt} />
+                <PathToYellowPanel
+                  dimension={selectedDimension}
+                  trialRecords={trialRecords}
+                  savingTrial={savingTrial}
+                  onStartTrial={handleStartTrial}
+                />
+                <TrialsPanel
+                  telemetry={telemetry}
+                  belt={selectedBelt}
+                  nextBelt={nextBelt}
+                  dimension={selectedDimension}
+                  trialRecords={trialRecords}
+                />
                 <TelemetryPanel telemetry={telemetry} loading={loadingSignals} />
                 <TopicEvidencePanel
                   activeTopic={activeTopic}
@@ -354,13 +464,33 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
               </>
             ) : (
               <>
-                <PathToYellowPanel dimension={selectedDimension} />
+                <PathToYellowPanel
+                  dimension={selectedDimension}
+                  trialRecords={trialRecords}
+                  savingTrial={savingTrial}
+                  onStartTrial={handleStartTrial}
+                />
                 <ComingSoonPanel dimension={selectedDimension} />
               </>
             )}
           </section>
         </div>
       </div>
+
+      {activeTrial && (
+        <TrialModal
+          trial={activeTrial}
+          draft={trialDraft}
+          setDraft={setTrialDraft}
+          saving={savingTrial}
+          onClose={() => {
+            setActiveTrial(null);
+            setTrialDraft("");
+          }}
+          onSave={handleSaveTrial}
+          onSubmit={handleSubmitTrial}
+        />
+      )}
     </div>
   );
 }
@@ -535,8 +665,30 @@ function DimensionDeepDive({ dimension, dimensionState, belt, nextBelt, telemetr
   );
 }
 
-function PathToYellowPanel({ dimension }) {
+function getStoredTrial(trialRecords, dimensionId, trialType) {
+  return trialRecords.find(
+    (trial) =>
+      trial.dimension_id === dimensionId &&
+      trial.target_belt === "yellow" &&
+      trial.trial_type === trialType
+  );
+}
+
+function formatTrialStatus(status) {
+  const labels = {
+    not_started: "Not Started",
+    in_progress: "In Progress",
+    submitted: "Submitted",
+    needs_deeper_reflection: "Needs Deeper Reflection",
+    passed: "Passed",
+  };
+  return labels[status] || "Not Started";
+}
+
+function PathToYellowPanel({ dimension, trialRecords, savingTrial, onStartTrial }) {
   const requirements = YELLOW_BELT_REQUIREMENTS[dimension.id];
+  const reflectionTrial = getStoredTrial(trialRecords, dimension.id, "reflection");
+  const realWorldTrial = getStoredTrial(trialRecords, dimension.id, "real_world");
 
   return (
     <div className="rounded-lg border border-amber-200 bg-white p-5 shadow-sm">
@@ -560,25 +712,34 @@ function PathToYellowPanel({ dimension }) {
           title="Reflection Trial"
           body={requirements.reflection}
           footer="Show self-awareness, ownership, and pattern recognition."
+          status={formatTrialStatus(reflectionTrial?.status)}
+          buttonLabel={reflectionTrial ? "Continue Reflection" : "Start Reflection"}
+          disabled={savingTrial}
+          onClick={() => onStartTrial("reflection", requirements.reflection)}
         />
         <RequirementCard
           number="2"
           title="Real-World Trial"
           body={requirements.realWorld}
           footer="Do one concrete action outside the app, then reflect on what happened."
+          status={formatTrialStatus(realWorldTrial?.status)}
+          buttonLabel={realWorldTrial ? "Log Trial" : "Start Trial"}
+          disabled={savingTrial}
+          onClick={() => onStartTrial("real_world", requirements.realWorld)}
         />
         <RequirementCard
           number="3"
           title="Behavioral Evidence"
           body={requirements.behavioral}
           footer="Alfred needs usage evidence before recommending promotion."
+          status="Auto-tracked"
         />
       </div>
     </div>
   );
 }
 
-function RequirementCard({ number, title, body, footer }) {
+function RequirementCard({ number, title, body, footer, status, buttonLabel, disabled, onClick }) {
   return (
     <article className="rounded-lg border border-slate-200 bg-[#fbfaf7] p-4">
       <div className="flex items-start gap-3">
@@ -586,22 +747,127 @@ function RequirementCard({ number, title, body, footer }) {
           {number}
         </span>
         <div>
-          <h4 className="text-sm font-semibold text-slate-950">{title}</h4>
+          <div className="flex flex-wrap items-center gap-2">
+            <h4 className="text-sm font-semibold text-slate-950">{title}</h4>
+            {status && <StatusPill status={status} />}
+          </div>
           <p className="mt-2 text-sm leading-6 text-slate-700">{body}</p>
           <p className="mt-4 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500">
             {footer}
           </p>
+          {buttonLabel && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={onClick}
+              className="mt-4 rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {buttonLabel}
+            </button>
+          )}
         </div>
       </div>
     </article>
   );
 }
 
-function TrialsPanel({ telemetry, belt, nextBelt }) {
-  const telemetryAverage = getTelemetryAverage(telemetry);
-  const trials = EXECUTE_TRIALS.map((trial) =>
-    trial.id === "telemetry" ? { ...trial, status: inferStatus(telemetryAverage) } : trial
+function TrialModal({ trial, draft, setDraft, saving, onClose, onSave, onSubmit }) {
+  const isReflection = trial.trial_type === "reflection";
+  const title = isReflection ? "Reflection Trial" : "Real-World Trial";
+  const helperText = isReflection
+    ? "Write honestly. Alfred will eventually evaluate depth, ownership, and pattern recognition, not polish."
+    : "Log what you tried, what happened, what you noticed emotionally, and what you would change next time.";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+      <div className="w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-2xl">
+        <div className="border-b border-slate-200 px-6 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">
+                Path to Yellow Belt
+              </p>
+              <h3 className="mt-1 text-xl font-semibold text-slate-950">{title}</h3>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md px-2 py-1 text-xl leading-none text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+              aria-label="Close exercise"
+            >
+              x
+            </button>
+          </div>
+        </div>
+
+        <div className="px-6 py-5">
+          <div className="rounded-lg border border-[#ded7c8] bg-[#fbfaf7] p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7c4a2d]">
+              Prompt
+            </p>
+            <p className="mt-2 text-sm leading-6 text-slate-800">{trial.prompt}</p>
+          </div>
+
+          <label className="mt-5 block text-sm font-semibold text-slate-800" htmlFor="belt-trial-response">
+            Your response
+          </label>
+          <textarea
+            id="belt-trial-response"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            rows={10}
+            className="mt-2 w-full resize-y rounded-lg border border-slate-300 px-4 py-3 text-sm leading-6 outline-none focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
+            placeholder={isReflection ? "Start with what happened, then what it revealed..." : "Describe the action, the outcome, and what you learned..."}
+          />
+          <p className="mt-2 text-xs leading-5 text-slate-500">{helperText}</p>
+        </div>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            disabled={saving || !draft.trim()}
+            onClick={onSave}
+            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Save for Later
+          </button>
+          <button
+            type="button"
+            disabled={saving || !draft.trim()}
+            onClick={onSubmit}
+            className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            Submit Exercise
+          </button>
+        </div>
+      </div>
+    </div>
   );
+}
+
+function TrialsPanel({ telemetry, belt, nextBelt, dimension, trialRecords }) {
+  const telemetryAverage = getTelemetryAverage(telemetry);
+  const trials = EXECUTE_TRIALS.map((trial) => {
+    if (trial.id === "telemetry") {
+      return { ...trial, status: inferStatus(telemetryAverage) };
+    }
+
+    const storedTrial = getStoredTrial(
+      trialRecords,
+      dimension.id,
+      trial.id === "world" ? "real_world" : trial.id
+    );
+
+    return storedTrial
+      ? {
+          ...trial,
+          status: formatTrialStatus(storedTrial.status),
+          evidence: storedTrial.response_text
+            ? "Your submission is stored. Alfred grading is the next backend step before this can become a pass."
+            : trial.evidence,
+        }
+      : trial;
+  });
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">

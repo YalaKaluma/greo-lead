@@ -19,6 +19,7 @@ from app.models import (
     JourneyInspiration,
     JourneyCoachingMoment,
     JourneyTeamComposition,
+    JourneyBeltTrial,
     RelationshipReview
 )
 from pydantic import BaseModel
@@ -64,6 +65,112 @@ class PersonUpdate(BaseModel):
 
 
 router = APIRouter()
+
+
+class BeltTrialCreate(BaseModel):
+    user_number: str
+    dimension_id: str
+    trial_type: str
+    prompt: str
+    target_belt: Optional[str] = "yellow"
+
+
+class BeltTrialSubmit(BaseModel):
+    response_text: str
+    status: Optional[str] = "submitted"
+
+
+class BeltTrialResponse(BaseModel):
+    id: int
+    user_number: str
+    dimension_id: str
+    target_belt: str
+    trial_type: str
+    prompt: str
+    response_text: Optional[str]
+    status: str
+    ai_feedback: Optional[str]
+    score: Optional[int]
+    evidence: Optional[dict]
+    started_at: datetime
+    submitted_at: Optional[datetime]
+    reviewed_at: Optional[datetime]
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/belt-trials", response_model=list[BeltTrialResponse])
+def get_belt_trials(
+        user_number: str,
+        dimension_id: Optional[str] = None,
+        target_belt: Optional[str] = None,
+        db: Session = Depends(get_db)
+):
+    query = db.query(JourneyBeltTrial).filter(JourneyBeltTrial.user_number == user_number)
+
+    if dimension_id:
+        query = query.filter(JourneyBeltTrial.dimension_id == dimension_id)
+    if target_belt:
+        query = query.filter(JourneyBeltTrial.target_belt == target_belt)
+
+    return query.order_by(JourneyBeltTrial.started_at.desc()).all()
+
+
+@router.post("/belt-trials", response_model=BeltTrialResponse)
+def start_belt_trial(
+        trial_data: BeltTrialCreate,
+        db: Session = Depends(get_db)
+):
+    existing = db.query(JourneyBeltTrial).filter(
+        JourneyBeltTrial.user_number == trial_data.user_number,
+        JourneyBeltTrial.dimension_id == trial_data.dimension_id,
+        JourneyBeltTrial.target_belt == (trial_data.target_belt or "yellow"),
+        JourneyBeltTrial.trial_type == trial_data.trial_type,
+    ).first()
+
+    if existing:
+        return existing
+
+    trial = JourneyBeltTrial(
+        user_number=trial_data.user_number,
+        dimension_id=trial_data.dimension_id,
+        target_belt=trial_data.target_belt or "yellow",
+        trial_type=trial_data.trial_type,
+        prompt=trial_data.prompt,
+        status="in_progress",
+        started_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    db.add(trial)
+    db.commit()
+    db.refresh(trial)
+    return trial
+
+
+@router.put("/belt-trials/{trial_id}", response_model=BeltTrialResponse)
+def submit_belt_trial(
+        trial_id: int,
+        trial_data: BeltTrialSubmit,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    trial = db.query(JourneyBeltTrial).filter(
+        JourneyBeltTrial.id == trial_id,
+        JourneyBeltTrial.user_number == user_number
+    ).first()
+
+    if not trial:
+        raise HTTPException(status_code=404, detail="Belt trial not found")
+
+    trial.response_text = trial_data.response_text
+    trial.status = trial_data.status or "submitted"
+    trial.submitted_at = datetime.now()
+    trial.updated_at = datetime.now()
+    db.commit()
+    db.refresh(trial)
+    return trial
 
 
 # Pydantic response models

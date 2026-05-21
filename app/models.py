@@ -351,6 +351,27 @@ class JourneyTeamComposition(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class JourneyBeltTrial(Base):
+    """User-submitted leadership belt trials for Journey 2.0 progression."""
+    __tablename__ = "journey_belt_trials"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True, nullable=False)
+    dimension_id = Column(String, index=True, nullable=False)
+    target_belt = Column(String, default="yellow", nullable=False)
+    trial_type = Column(String, index=True, nullable=False)  # reflection, real_world, behavioral
+    prompt = Column(Text, nullable=False)
+    response_text = Column(Text, nullable=True)
+    status = Column(String, default="not_started", nullable=False)
+    ai_feedback = Column(Text, nullable=True)
+    score = Column(Integer, nullable=True)
+    evidence = Column(JSON, nullable=True)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    submitted_at = Column(DateTime, nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class ConversationState(Base):
     """
     Alfred's Brain - stores conversation state for intent-driven orchestration.
