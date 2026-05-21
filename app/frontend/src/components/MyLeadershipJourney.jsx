@@ -19,33 +19,18 @@ const DIMENSIONS = [
     id: "vision",
     name: "Vision & Goals",
     brief: "Purpose, values, alignment, and long-term direction.",
-    beltIndex: 1,
-    progress: 58,
-    momentum: true,
-    assessment:
-      "Your direction is becoming more explicit. The next edge is reducing goal clutter so priorities become easier to defend under pressure.",
     topics: ["Values", "Strengths", "Goals"],
   },
   {
     id: "people",
     name: "People",
     brief: "Communication, delegation, inspiration, and trust.",
-    beltIndex: 1,
-    progress: 42,
-    momentum: false,
-    assessment:
-      "You show an emerging awareness of how leadership behavior affects others. The work now is practicing delegation and feedback when the stakes feel real.",
     topics: ["Team Composition", "Inspire", "Coach & Delegate"],
   },
   {
     id: "execute",
     name: "Prioritize & Execute",
     brief: "Focus, discipline, prioritization, and delivery.",
-    beltIndex: 2,
-    progress: 68,
-    momentum: true,
-    assessment:
-      "You demonstrate strong strategic ambition and a growing execution system. Your next level is consistency under stress: protecting the vital few when urgency starts competing for authority.",
     topics: ["Prioritization", "Execution System", "Procrastination"],
     mvp: true,
   },
@@ -53,22 +38,12 @@ const DIMENSIONS = [
     id: "energy",
     name: "Time & Energy",
     brief: "Recovery, capacity, energy management, and sustainability.",
-    beltIndex: 1,
-    progress: 35,
-    momentum: false,
-    assessment:
-      "You understand that energy is a leadership asset. The opportunity is turning that insight into protected recovery rhythms before depletion forces the issue.",
     topics: ["Energy Sources", "Energy Drains", "Recovery"],
   },
   {
     id: "learning",
     name: "Learning & Development",
     brief: "Growth, resilience, reflection, and continuous improvement.",
-    beltIndex: 2,
-    progress: 51,
-    momentum: true,
-    assessment:
-      "Reflection is becoming a source of leverage. The next stage is translating insight into repeatable practice and eventually into wisdom you can transmit to others.",
     topics: ["Failures & Scars", "Development Opportunities", "Development Plan"],
   },
 ];
@@ -95,23 +70,23 @@ const EXECUTE_TRIALS = [
   {
     id: "reflection",
     type: "Reflection Trial",
-    status: "Passed",
+    status: "Not Started",
     prompt: "How does stress affect execution, focus, and follow-through?",
     evidence:
-      "Recent reflections show ownership of avoidance patterns and a clearer ability to name the emotion underneath procrastination.",
+      "No scored reflection trial is stored yet. This should only pass after Alfred evaluates depth, ownership, and pattern recognition.",
   },
   {
     id: "world",
     type: "Real-World Trial",
-    status: "Submitted",
+    status: "Not Started",
     prompt: "Plan your top 3 priorities daily for one full workweek.",
     evidence:
-      "The trial is active. Alfred is looking for a complete weekly reflection before recommending advancement.",
+      "No real-world trial submission is stored yet. The future flow should capture what happened, what was hard, and what changed.",
   },
   {
     id: "telemetry",
     type: "Behavioral Integration Trial",
-    status: "In Progress",
+    status: "Not Started",
     prompt: "Use the prioritization system consistently and reduce overdue task drift.",
     evidence:
       "Signals are being read from task completion, MTN usage, overdue items, and linked execution reflections.",
@@ -141,8 +116,8 @@ function arcPath(r, a1, a2) {
   return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`;
 }
 
-function getBelt(dimension) {
-  return BELTS[dimension.beltIndex] || BELTS[0];
+function getBelt(beltIndex) {
+  return BELTS[beltIndex] || BELTS[0];
 }
 
 function inferStatus(score) {
@@ -150,6 +125,41 @@ function inferStatus(score) {
   if (score >= 55) return "In Progress";
   if (score > 0) return "Needs Evidence";
   return "Not Started";
+}
+
+function getTelemetryAverage(telemetry) {
+  return Math.round(telemetry.reduce((sum, signal) => sum + signal.value, 0) / Math.max(telemetry.length, 1));
+}
+
+function buildDimensionStates(telemetry) {
+  const telemetryAverage = getTelemetryAverage(telemetry);
+  const executeHasEvidence = telemetry.some((signal) => signal.value > 0);
+
+  return DIMENSIONS.reduce((states, dimension) => {
+    if (dimension.id !== "execute") {
+      states[dimension.id] = {
+        beltIndex: 0,
+        progress: 0,
+        momentum: false,
+        assessment:
+          "This dimension is mapped, but Alfred has not started scoring it yet. It should remain White Belt until reflection, real-world, and behavioral evidence are connected.",
+        evidenceLabel: "Not yet scored",
+      };
+      return states;
+    }
+
+    states[dimension.id] = {
+      beltIndex: 0,
+      progress: telemetryAverage,
+      momentum: telemetryAverage >= 55,
+      assessment: executeHasEvidence
+        ? "Alfred has early behavioral evidence for your execution system, but not enough completed trial evidence to award a higher belt. The current score should be treated as progress toward Yellow Belt, not as earned maturity."
+        : "Alfred does not yet have enough behavioral evidence or completed trials to assess this dimension. You are at the starting point, which is exactly where an honest operating system should begin.",
+      evidenceLabel: executeHasEvidence ? "Early telemetry only" : "No earned evidence yet",
+    };
+
+    return states;
+  }, {});
 }
 
 export default function MyLeadershipJourney({ apiUrl, userNumber }) {
@@ -236,6 +246,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
     ];
   }, [signals]);
 
+  const dimensionStates = useMemo(() => buildDimensionStates(telemetry), [telemetry]);
+
   const topicItems = useMemo(() => {
     if (activeTopic === "Execution System") return signals.executionSystems;
     if (activeTopic === "Prioritization") {
@@ -245,8 +257,9 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
     return [];
   }, [activeTopic, signals]);
 
-  const selectedBelt = getBelt(selectedDimension);
-  const nextBelt = BELTS[Math.min(selectedDimension.beltIndex + 1, BELTS.length - 1)];
+  const selectedState = dimensionStates[selectedDimension.id];
+  const selectedBelt = getBelt(selectedState.beltIndex);
+  const nextBelt = BELTS[Math.min(selectedState.beltIndex + 1, BELTS.length - 1)];
 
   return (
     <div className="min-h-full bg-[#f6f5f1] px-4 py-5 text-slate-900 md:px-10 md:py-8">
@@ -285,6 +298,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <LeadershipWheel
               selectedDimensionId={selectedDimensionId}
+              dimensionStates={dimensionStates}
               onSelectDimension={setSelectedDimensionId}
             />
           </section>
@@ -292,6 +306,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
           <section className="space-y-5">
             <DimensionDeepDive
               dimension={selectedDimension}
+              dimensionState={selectedState}
               belt={selectedBelt}
               nextBelt={nextBelt}
               telemetry={telemetry}
@@ -300,7 +315,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
 
             {selectedDimension.mvp ? (
               <>
-                <TrialsPanel telemetry={telemetry} />
+                <TrialsPanel telemetry={telemetry} belt={selectedBelt} nextBelt={nextBelt} />
                 <TelemetryPanel telemetry={telemetry} loading={loadingSignals} />
                 <TopicEvidencePanel
                   activeTopic={activeTopic}
@@ -318,7 +333,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   );
 }
 
-function LeadershipWheel({ selectedDimensionId, onSelectDimension }) {
+function LeadershipWheel({ selectedDimensionId, dimensionStates, onSelectDimension }) {
   const anglePerDim = 360 / DIMENSIONS.length;
 
   return (
@@ -348,11 +363,12 @@ function LeadershipWheel({ selectedDimensionId, onSelectDimension }) {
         const start = index * anglePerDim;
         const end = (index + 1) * anglePerDim;
         const mid = start + anglePerDim / 2;
-        const belt = getBelt(dimension);
+        const dimensionState = dimensionStates[dimension.id];
+        const belt = getBelt(dimensionState.beltIndex);
         const isSelected = selectedDimensionId === dimension.id;
         const labelPos = polar(CENTER.x, CENTER.y, (R_CENTER + R_INNER) / 2 + 6, mid);
         const topicPos = polar(CENTER.x, CENTER.y, (R_INNER + R_OUTER) / 2, mid);
-        const progressEnd = start + (anglePerDim * dimension.progress) / 100;
+        const progressEnd = start + (anglePerDim * dimensionState.progress) / 100;
 
         return (
           <g key={dimension.id}>
@@ -361,7 +377,7 @@ function LeadershipWheel({ selectedDimensionId, onSelectDimension }) {
               fill={belt.color}
               stroke={isSelected ? "#0f172a" : "#ffffff"}
               strokeWidth={isSelected ? 8 : 4}
-              filter={dimension.momentum ? "url(#momentum-glow)" : undefined}
+              filter={dimensionState.momentum ? "url(#momentum-glow)" : undefined}
               opacity={isSelected ? 1 : 0.92}
               onClick={() => onSelectDimension(dimension.id)}
               style={{ cursor: "pointer" }}
@@ -374,13 +390,15 @@ function LeadershipWheel({ selectedDimensionId, onSelectDimension }) {
               onClick={() => onSelectDimension(dimension.id)}
               style={{ cursor: "pointer" }}
             />
-            <path
-              d={arcPath(R_OUTER + 16, start + 3, progressEnd - 3)}
-              fill="none"
-              stroke={belt.color}
-              strokeWidth="18"
-              strokeLinecap="round"
-            />
+            {dimensionState.progress > 0 && (
+              <path
+                d={arcPath(R_OUTER + 16, start + 3, progressEnd - 3)}
+                fill="none"
+                stroke={belt.color}
+                strokeWidth="18"
+                strokeLinecap="round"
+              />
+            )}
             <text
               x={labelPos.x}
               y={labelPos.y - 8}
@@ -407,11 +425,16 @@ function LeadershipWheel({ selectedDimensionId, onSelectDimension }) {
             >
               <tspan x={topicPos.x}>{belt.shortName}</tspan>
               <tspan x={topicPos.x} dy="20">
-                {dimension.progress}% to next
+                {dimensionState.progress}% to next
               </tspan>
-              {dimension.momentum && (
+              {dimensionState.momentum && (
                 <tspan x={topicPos.x} dy="20" fill={isSelected ? "#f8e7bd" : "#7c4a2d"}>
                   Momentum active
+                </tspan>
+              )}
+              {!dimensionState.momentum && dimensionState.evidenceLabel && (
+                <tspan x={topicPos.x} dy="20" fill={isSelected ? "#d9c8a6" : "#64748b"}>
+                  {dimensionState.evidenceLabel}
                 </tspan>
               )}
             </text>
@@ -422,10 +445,8 @@ function LeadershipWheel({ selectedDimensionId, onSelectDimension }) {
   );
 }
 
-function DimensionDeepDive({ dimension, belt, nextBelt, telemetry, loadingSignals }) {
-  const integrationAverage = Math.round(
-    telemetry.reduce((sum, signal) => sum + signal.value, 0) / Math.max(telemetry.length, 1)
-  );
+function DimensionDeepDive({ dimension, dimensionState, belt, nextBelt, telemetry, loadingSignals }) {
+  const integrationAverage = dimension.mvp ? getTelemetryAverage(telemetry) : null;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -436,6 +457,9 @@ function DimensionDeepDive({ dimension, belt, nextBelt, telemetry, loadingSignal
           </p>
           <h2 className="mt-2 text-2xl font-semibold text-slate-950">{dimension.name}</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{dimension.brief}</p>
+          <p className="mt-3 inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+            {dimensionState.evidenceLabel}
+          </p>
         </div>
 
         <div className="grid min-w-[260px] grid-cols-2 overflow-hidden rounded-lg border border-slate-200">
@@ -461,13 +485,17 @@ function DimensionDeepDive({ dimension, belt, nextBelt, telemetry, loadingSignal
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#7c4a2d]">
             Alfred Leadership Assessment
           </p>
-          <p className="text-sm leading-6 text-slate-700">{dimension.assessment}</p>
+          <p className="text-sm leading-6 text-slate-700">{dimensionState.assessment}</p>
         </div>
         <div className="rounded-lg border border-slate-200 bg-slate-950 p-4 text-white">
           <p className="text-xs uppercase tracking-wide text-slate-300">Integration Readiness</p>
-          <p className="mt-3 text-4xl font-semibold">{loadingSignals ? "--" : `${integrationAverage}%`}</p>
+          <p className="mt-3 text-4xl font-semibold">
+            {loadingSignals || integrationAverage === null ? "--" : `${integrationAverage}%`}
+          </p>
           <p className="mt-2 text-xs leading-5 text-slate-300">
-            Behavioral evidence from Alfred usage. Advancement is recommended when the pattern holds.
+            {dimension.mvp
+              ? "Behavioral evidence from Alfred usage. Advancement is recommended when the pattern holds."
+              : "Behavioral scoring for this dimension is not connected yet."}
           </p>
         </div>
       </div>
@@ -475,10 +503,8 @@ function DimensionDeepDive({ dimension, belt, nextBelt, telemetry, loadingSignal
   );
 }
 
-function TrialsPanel({ telemetry }) {
-  const telemetryAverage = Math.round(
-    telemetry.reduce((sum, signal) => sum + signal.value, 0) / Math.max(telemetry.length, 1)
-  );
+function TrialsPanel({ telemetry, belt, nextBelt }) {
+  const telemetryAverage = getTelemetryAverage(telemetry);
   const trials = EXECUTE_TRIALS.map((trial) =>
     trial.id === "telemetry" ? { ...trial, status: inferStatus(telemetryAverage) } : trial
   );
@@ -488,7 +514,9 @@ function TrialsPanel({ telemetry }) {
       <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Advancement Loop</p>
-          <h3 className="mt-1 text-xl font-semibold text-slate-950">Green to Brown Belt Trials</h3>
+          <h3 className="mt-1 text-xl font-semibold text-slate-950">
+            {belt.shortName} to {nextBelt.shortName} Belt Trials
+          </h3>
         </div>
         <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
           Alfred recommends, you decide
