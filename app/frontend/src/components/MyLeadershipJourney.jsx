@@ -93,6 +93,34 @@ const EXECUTE_TRIALS = [
   },
 ];
 
+const YELLOW_BELT_REQUIREMENTS = {
+  vision: {
+    reflection: "Describe a goal that looks impressive on paper but may not be fully aligned with your values.",
+    realWorld: "Rewrite, retire, or clarify one goal so it better reflects what actually matters.",
+    behavioral: "Complete at least one weekly goal review and add alignment context to your active goals.",
+  },
+  people: {
+    reflection: "Describe a recent interaction where your emotional reaction affected another person.",
+    realWorld: "Ask one person for specific feedback on how they experience your leadership.",
+    behavioral: "Capture a relationship reflection, delegation note, or coaching moment in Alfred.",
+  },
+  execute: {
+    reflection: "Explain how stress affects your execution, focus, and follow-through.",
+    realWorld: "Plan your top 3 priorities daily for one full workweek.",
+    behavioral: "Use Alfred's prioritization system and capture at least one execution system or procrastination pattern.",
+  },
+  energy: {
+    reflection: "Name what reliably drains you, what restores you, and the pattern you tend to ignore.",
+    realWorld: "Track your energy for 7 days and remove or contain one energy drain.",
+    behavioral: "Log energy sources, energy drains, recovery methods, or wellness habits in Alfred.",
+  },
+  learning: {
+    reflection: "Describe a failure that taught you something you still use today.",
+    realWorld: "Reflect on one major mistake and identify the lesson you want to carry forward.",
+    behavioral: "Capture a failure, development area, coaching reflection, or journal entry in Alfred.",
+  },
+};
+
 function polar(cx, cy, r, angleDeg) {
   const a = ((angleDeg - 90) * Math.PI) / 180;
   return {
@@ -315,6 +343,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
 
             {selectedDimension.mvp ? (
               <>
+                <PathToYellowPanel dimension={selectedDimension} />
                 <TrialsPanel telemetry={telemetry} belt={selectedBelt} nextBelt={nextBelt} />
                 <TelemetryPanel telemetry={telemetry} loading={loadingSignals} />
                 <TopicEvidencePanel
@@ -324,7 +353,10 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                 />
               </>
             ) : (
-              <ComingSoonPanel dimension={selectedDimension} />
+              <>
+                <PathToYellowPanel dimension={selectedDimension} />
+                <ComingSoonPanel dimension={selectedDimension} />
+              </>
             )}
           </section>
         </div>
@@ -500,6 +532,68 @@ function DimensionDeepDive({ dimension, dimensionState, belt, nextBelt, telemetr
         </div>
       </div>
     </div>
+  );
+}
+
+function PathToYellowPanel({ dimension }) {
+  const requirements = YELLOW_BELT_REQUIREMENTS[dimension.id];
+
+  return (
+    <div className="rounded-lg border border-amber-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">
+            Path to Yellow Belt
+          </p>
+          <h3 className="mt-1 text-xl font-semibold text-slate-950">
+            What Alfred needs to see in {dimension.name}
+          </h3>
+        </div>
+        <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+          Awareness to Understanding
+        </span>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-3">
+        <RequirementCard
+          number="1"
+          title="Reflection Trial"
+          body={requirements.reflection}
+          footer="Show self-awareness, ownership, and pattern recognition."
+        />
+        <RequirementCard
+          number="2"
+          title="Real-World Trial"
+          body={requirements.realWorld}
+          footer="Do one concrete action outside the app, then reflect on what happened."
+        />
+        <RequirementCard
+          number="3"
+          title="Behavioral Evidence"
+          body={requirements.behavioral}
+          footer="Alfred needs usage evidence before recommending promotion."
+        />
+      </div>
+    </div>
+  );
+}
+
+function RequirementCard({ number, title, body, footer }) {
+  return (
+    <article className="rounded-lg border border-slate-200 bg-[#fbfaf7] p-4">
+      <div className="flex items-start gap-3">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500 text-sm font-semibold text-white">
+          {number}
+        </span>
+        <div>
+          <h4 className="text-sm font-semibold text-slate-950">{title}</h4>
+          <p className="mt-2 text-sm leading-6 text-slate-700">{body}</p>
+          <p className="mt-4 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500">
+            {footer}
+          </p>
+        </div>
+      </div>
+    </article>
   );
 }
 
