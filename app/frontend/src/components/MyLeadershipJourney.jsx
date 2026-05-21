@@ -382,41 +382,28 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
     trialConfig?.yellow_belt?.dimensions || FALLBACK_YELLOW_BELT_REQUIREMENTS;
 
   const handleStartTrial = async (trialType, prompt) => {
-    if (!apiUrl || !userNumber) return;
+    const existing = trialRecords.find(
+      (trial) =>
+        trial.dimension_id === selectedDimension.id &&
+        trial.target_belt === "yellow" &&
+        trial.trial_type === trialType
+    );
 
-    setSavingTrial(true);
-    try {
-      const existing = trialRecords.find(
-        (trial) =>
-          trial.dimension_id === selectedDimension.id &&
-          trial.target_belt === "yellow" &&
-          trial.trial_type === trialType
-      );
+    const trial =
+      existing ||
+      {
+        id: null,
+        user_number: userNumber,
+        dimension_id: selectedDimension.id,
+        target_belt: "yellow",
+        trial_type: trialType,
+        prompt,
+        response_text: "",
+        status: "in_progress",
+      };
 
-      const trial =
-        existing ||
-        (
-          await axios.post(`${apiUrl}/api/journey/belt-trials`, {
-            user_number: userNumber,
-            dimension_id: selectedDimension.id,
-            target_belt: "yellow",
-            trial_type: trialType,
-            prompt,
-          })
-        ).data;
-
-      if (!existing) {
-        setTrialRecords((current) => [trial, ...current]);
-      }
-
-      setActiveTrial(trial);
-      setTrialDraft(trial.response_text || "");
-    } catch (error) {
-      console.error("Failed to start belt trial", error);
-      alert("Alfred could not start this exercise yet. Please try again.");
-    } finally {
-      setSavingTrial(false);
-    }
+    setActiveTrial(trial);
+    setTrialDraft(trial.response_text || "");
   };
 
   const saveTrialResponse = async (status) => {
@@ -424,24 +411,38 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
 
     setSavingTrial(true);
     try {
-      const response = await axios.put(
-        `${apiUrl}/api/journey/belt-trials/${activeTrial.id}`,
-        {
-          response_text: trialDraft.trim(),
-          status,
-        },
-        { params: { user_number: userNumber } }
-      );
+      const payload = {
+        user_number: userNumber,
+        dimension_id: activeTrial.dimension_id,
+        target_belt: activeTrial.target_belt || "yellow",
+        trial_type: activeTrial.trial_type,
+        prompt: activeTrial.prompt,
+        response_text: trialDraft.trim(),
+        status,
+      };
+
+      const response = activeTrial.id
+        ? await axios.put(
+            `${apiUrl}/api/journey/belt-trials/${activeTrial.id}`,
+            {
+              response_text: trialDraft.trim(),
+              status,
+            },
+            { params: { user_number: userNumber } }
+          )
+        : await axios.post(`${apiUrl}/api/journey/belt-trials`, payload);
 
       const updatedTrial = response.data;
       setTrialRecords((current) =>
-        current.map((trial) => (trial.id === updatedTrial.id ? updatedTrial : trial))
+        current.some((trial) => trial.id === updatedTrial.id)
+          ? current.map((trial) => (trial.id === updatedTrial.id ? updatedTrial : trial))
+          : [updatedTrial, ...current]
       );
       setActiveTrial(null);
       setTrialDraft("");
     } catch (error) {
       console.error("Failed to submit belt trial", error);
-      alert("Alfred could not submit this exercise yet. Please try again.");
+      alert("Alfred could not save this exercise yet. Your text is still on screen; please try again.");
     } finally {
       setSavingTrial(false);
     }

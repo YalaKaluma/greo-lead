@@ -97,6 +97,8 @@ class BeltTrialCreate(BaseModel):
     trial_type: str
     prompt: str
     target_belt: Optional[str] = "yellow"
+    response_text: Optional[str] = None
+    status: Optional[str] = "in_progress"
 
 
 class BeltTrialSubmit(BaseModel):
@@ -155,6 +157,14 @@ def start_belt_trial(
     ).first()
 
     if existing:
+        if trial_data.response_text is not None:
+            existing.response_text = trial_data.response_text
+            existing.status = trial_data.status or "in_progress"
+            existing.updated_at = datetime.now()
+            if existing.status == "submitted":
+                existing.submitted_at = datetime.now()
+            db.commit()
+            db.refresh(existing)
         return existing
 
     trial = JourneyBeltTrial(
@@ -163,8 +173,10 @@ def start_belt_trial(
         target_belt=trial_data.target_belt or "yellow",
         trial_type=trial_data.trial_type,
         prompt=trial_data.prompt,
-        status="in_progress",
+        response_text=trial_data.response_text,
+        status=trial_data.status or "in_progress",
         started_at=datetime.now(),
+        submitted_at=datetime.now() if trial_data.status == "submitted" else None,
         updated_at=datetime.now(),
     )
     db.add(trial)
