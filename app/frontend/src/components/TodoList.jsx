@@ -422,6 +422,12 @@ export default function TodoList({ apiUrl, userNumber }) {
     exitPriorityMode();
   };
 
+  const handleApplyPrioritySort = () => {
+    const newOrder = getSortedTasks().map(task => task.id);
+    saveSortOrder(newOrder);
+    exitPriorityMode();
+  };
+
   // ============================================================================
   // COMPUTED VALUES
   // ============================================================================
@@ -529,6 +535,12 @@ export default function TodoList({ apiUrl, userNumber }) {
             )}
             {priorityMode && (
               <>
+                <button
+                  onClick={handleApplyPrioritySort}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-medium transition-colors"
+                >
+                  Apply MTN Sort
+                </button>
                 <button
                   onClick={handleExitPriority}
                   className="px-4 py-2 border border-gray-300 hover:bg-gray-50 rounded-lg font-medium transition-colors"

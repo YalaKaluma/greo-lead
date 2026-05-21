@@ -112,6 +112,8 @@ function TaskCard({
   priorityMode,
   priorityScore
 }) {
+  const [showMtnDetails, setShowMtnDetails] = useState(false);
+
   const goalLabel =
     goals.find(g => g.id === task.goal_id)?.title ||
     goals.find(g => g.id === task.goal_id)?.goal_text ||
@@ -137,6 +139,9 @@ function TaskCard({
     if (priorityMode) {
       e.preventDefault();
       e.stopPropagation();
+      if (priorityScore) {
+        setShowMtnDetails(prev => !prev);
+      }
       return;
     }
 
@@ -179,7 +184,7 @@ function TaskCard({
         ${isCompleting ? 'opacity-60' : ''}
         ${index >= 10 && !priorityMode ? 'opacity-40' : ''}
         ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}
-        ${priorityMode ? 'cursor-default' : 'cursor-pointer'}
+        cursor-pointer
         ${priorityMode && priorityScore?.score >= 0.75 ? 'border-blue-300 bg-blue-50' : ''}
       `}
       onClick={handleClick}
@@ -221,9 +226,13 @@ function TaskCard({
             className="font-medium text-slate-800 text-base break-words leading-tight cursor-pointer hover:text-blue-600 transition-colors"
             onClick={(e) => {
               e.stopPropagation();
-              if (!priorityMode) onStartEdit();
+              if (priorityMode && priorityScore) {
+                setShowMtnDetails(prev => !prev);
+              } else {
+                onStartEdit();
+              }
             }}
-            title={priorityMode ? 'Return to Manual View to edit' : 'Click to edit/reschedule'}
+            title={priorityMode ? 'Click to see why Alfred scored it this way' : 'Click to edit/reschedule'}
           >
             {task.title}
           </div>
@@ -258,26 +267,25 @@ function TaskCard({
             </div>
           )}
 
-          {priorityMode && priorityScore && (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className={`text-xs px-2 py-0.5 rounded border font-medium ${getMtnStyle(priorityScore.score)}`}>
-                MTN: {getMtnLabel(priorityScore.score)}
-              </span>
-              {priorityScore.reason && (
-                <span className="text-xs text-slate-600">
-                  {priorityScore.reason}
-                </span>
-              )}
-            </div>
-          )}
         </div>
 
-        {priorityMode && priorityScore?.score >= 0.85 && (
-          <div className="flex-shrink-0 ml-2">
-            <div className="h-2 w-2 rounded-full bg-blue-500 mt-2" title="Highest leverage" />
+        {priorityMode && priorityScore && (
+          <div className="flex-shrink-0 ml-3 flex items-center gap-2">
+            <span className={`whitespace-nowrap text-xs px-2 py-0.5 rounded border font-medium ${getMtnStyle(priorityScore.score)}`}>
+              MTN: {getMtnLabel(priorityScore.score)}
+            </span>
+            {priorityScore.score >= 0.85 && (
+              <div className="h-2 w-2 rounded-full bg-blue-500" title="Highest leverage" />
+            )}
           </div>
         )}
       </div>
+
+      {priorityMode && priorityScore && showMtnDetails && (
+        <div className="mt-2 ml-10 border-t border-slate-200 pt-2 text-sm text-slate-700">
+          {priorityScore.reason || 'No explanation available for this MTN score.'}
+        </div>
+      )}
     </div>
   );
 }
