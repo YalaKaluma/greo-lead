@@ -93,31 +93,76 @@ const EXECUTE_TRIALS = [
   },
 ];
 
-const YELLOW_BELT_REQUIREMENTS = {
+const FALLBACK_YELLOW_BELT_REQUIREMENTS = {
   vision: {
-    reflection: "Describe a goal that looks impressive on paper but may not be fully aligned with your values.",
-    realWorld: "Rewrite, retire, or clarify one goal so it better reflects what actually matters.",
-    behavioral: "Complete at least one weekly goal review and add alignment context to your active goals.",
+    reflection: {
+      prompt: "Describe a goal that looks impressive on paper but may not be fully aligned with your values.",
+      completion_hint: "Show self-awareness, ownership, and pattern recognition.",
+    },
+    real_world: {
+      prompt: "Rewrite, retire, or clarify one goal so it better reflects what actually matters.",
+      completion_hint: "Do one concrete action outside the app, then reflect on what happened.",
+    },
+    behavioral: {
+      prompt: "Complete at least one weekly goal review and add alignment context to your active goals.",
+      completion_hint: "Alfred needs usage evidence before recommending promotion.",
+    },
   },
   people: {
-    reflection: "Describe a recent interaction where your emotional reaction affected another person.",
-    realWorld: "Ask one person for specific feedback on how they experience your leadership.",
-    behavioral: "Capture a relationship reflection, delegation note, or coaching moment in Alfred.",
+    reflection: {
+      prompt: "Describe a recent interaction where your emotional reaction affected another person.",
+      completion_hint: "Show self-awareness, ownership, and pattern recognition.",
+    },
+    real_world: {
+      prompt: "Ask one person for specific feedback on how they experience your leadership.",
+      completion_hint: "Do one concrete action outside the app, then reflect on what happened.",
+    },
+    behavioral: {
+      prompt: "Capture a relationship reflection, delegation note, or coaching moment in Alfred.",
+      completion_hint: "Alfred needs usage evidence before recommending promotion.",
+    },
   },
   execute: {
-    reflection: "Explain how stress affects your execution, focus, and follow-through.",
-    realWorld: "Plan your top 3 priorities daily for one full workweek.",
-    behavioral: "Use Alfred's prioritization system and capture at least one execution system or procrastination pattern.",
+    reflection: {
+      prompt: "Explain how stress affects your execution, focus, and follow-through.",
+      completion_hint: "Show self-awareness, ownership, and pattern recognition.",
+    },
+    real_world: {
+      prompt: "Plan your top 3 priorities daily for one full workweek.",
+      completion_hint: "Do one concrete action outside the app, then reflect on what happened.",
+    },
+    behavioral: {
+      prompt: "Use Alfred's prioritization system and capture at least one execution system or procrastination pattern.",
+      completion_hint: "Alfred needs usage evidence before recommending promotion.",
+    },
   },
   energy: {
-    reflection: "Name what reliably drains you, what restores you, and the pattern you tend to ignore.",
-    realWorld: "Track your energy for 7 days and remove or contain one energy drain.",
-    behavioral: "Log energy sources, energy drains, recovery methods, or wellness habits in Alfred.",
+    reflection: {
+      prompt: "Name what reliably drains you, what restores you, and the pattern you tend to ignore.",
+      completion_hint: "Show self-awareness, ownership, and pattern recognition.",
+    },
+    real_world: {
+      prompt: "Track your energy for 7 days and remove or contain one energy drain.",
+      completion_hint: "Do one concrete action outside the app, then reflect on what happened.",
+    },
+    behavioral: {
+      prompt: "Log energy sources, energy drains, recovery methods, or wellness habits in Alfred.",
+      completion_hint: "Alfred needs usage evidence before recommending promotion.",
+    },
   },
   learning: {
-    reflection: "Describe a failure that taught you something you still use today.",
-    realWorld: "Reflect on one major mistake and identify the lesson you want to carry forward.",
-    behavioral: "Capture a failure, development area, coaching reflection, or journal entry in Alfred.",
+    reflection: {
+      prompt: "Describe a failure that taught you something you still use today.",
+      completion_hint: "Show self-awareness, ownership, and pattern recognition.",
+    },
+    real_world: {
+      prompt: "Reflect on one major mistake and identify the lesson you want to carry forward.",
+      completion_hint: "Do one concrete action outside the app, then reflect on what happened.",
+    },
+    behavioral: {
+      prompt: "Capture a failure, development area, coaching reflection, or journal entry in Alfred.",
+      completion_hint: "Alfred needs usage evidence before recommending promotion.",
+    },
   },
 };
 
@@ -201,6 +246,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   const [loadingSignals, setLoadingSignals] = useState(false);
   const [activeTopic, setActiveTopic] = useState("Execution System");
   const [trialRecords, setTrialRecords] = useState([]);
+  const [trialConfig, setTrialConfig] = useState(null);
   const [activeTrial, setActiveTrial] = useState(null);
   const [trialDraft, setTrialDraft] = useState("");
   const [savingTrial, setSavingTrial] = useState(false);
@@ -247,6 +293,25 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
       cancelled = true;
     };
   }, [apiUrl, userNumber]);
+
+  useEffect(() => {
+    if (!apiUrl) return;
+
+    let cancelled = false;
+    const fetchTrialConfig = async () => {
+      try {
+        const response = await axios.get(`${apiUrl}/api/journey/trial-config`);
+        if (!cancelled) setTrialConfig(response.data);
+      } catch (error) {
+        console.error("Failed to load journey trial config", error);
+      }
+    };
+
+    fetchTrialConfig();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiUrl]);
 
   useEffect(() => {
     if (!apiUrl || !userNumber) return;
@@ -313,6 +378,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   const selectedState = dimensionStates[selectedDimension.id];
   const selectedBelt = getBelt(selectedState.beltIndex);
   const nextBelt = BELTS[Math.min(selectedState.beltIndex + 1, BELTS.length - 1)];
+  const yellowBeltRequirements =
+    trialConfig?.yellow_belt?.dimensions || FALLBACK_YELLOW_BELT_REQUIREMENTS;
 
   const handleStartTrial = async (trialType, prompt) => {
     if (!apiUrl || !userNumber) return;
@@ -444,6 +511,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
               <>
                 <PathToYellowPanel
                   dimension={selectedDimension}
+                  requirements={yellowBeltRequirements[selectedDimension.id]}
                   trialRecords={trialRecords}
                   savingTrial={savingTrial}
                   onStartTrial={handleStartTrial}
@@ -453,6 +521,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                   belt={selectedBelt}
                   nextBelt={nextBelt}
                   dimension={selectedDimension}
+                  requirements={yellowBeltRequirements[selectedDimension.id]}
                   trialRecords={trialRecords}
                 />
                 <TelemetryPanel telemetry={telemetry} loading={loadingSignals} />
@@ -685,8 +754,8 @@ function formatTrialStatus(status) {
   return labels[status] || "Not Started";
 }
 
-function PathToYellowPanel({ dimension, trialRecords, savingTrial, onStartTrial }) {
-  const requirements = YELLOW_BELT_REQUIREMENTS[dimension.id];
+function PathToYellowPanel({ dimension, requirements, trialRecords, savingTrial, onStartTrial }) {
+  const safeRequirements = requirements || FALLBACK_YELLOW_BELT_REQUIREMENTS[dimension.id];
   const reflectionTrial = getStoredTrial(trialRecords, dimension.id, "reflection");
   const realWorldTrial = getStoredTrial(trialRecords, dimension.id, "real_world");
 
@@ -709,29 +778,29 @@ function PathToYellowPanel({ dimension, trialRecords, savingTrial, onStartTrial 
       <div className="grid gap-3 lg:grid-cols-3">
         <RequirementCard
           number="1"
-          title="Reflection Trial"
-          body={requirements.reflection}
-          footer="Show self-awareness, ownership, and pattern recognition."
+          title={safeRequirements.reflection.title || "Reflection Trial"}
+          body={safeRequirements.reflection.prompt}
+          footer={safeRequirements.reflection.completion_hint}
           status={formatTrialStatus(reflectionTrial?.status)}
           buttonLabel={reflectionTrial ? "Continue Reflection" : "Start Reflection"}
           disabled={savingTrial}
-          onClick={() => onStartTrial("reflection", requirements.reflection)}
+          onClick={() => onStartTrial("reflection", safeRequirements.reflection.prompt)}
         />
         <RequirementCard
           number="2"
-          title="Real-World Trial"
-          body={requirements.realWorld}
-          footer="Do one concrete action outside the app, then reflect on what happened."
+          title={safeRequirements.real_world.title || "Real-World Trial"}
+          body={safeRequirements.real_world.prompt}
+          footer={safeRequirements.real_world.completion_hint}
           status={formatTrialStatus(realWorldTrial?.status)}
           buttonLabel={realWorldTrial ? "Log Trial" : "Start Trial"}
           disabled={savingTrial}
-          onClick={() => onStartTrial("real_world", requirements.realWorld)}
+          onClick={() => onStartTrial("real_world", safeRequirements.real_world.prompt)}
         />
         <RequirementCard
           number="3"
-          title="Behavioral Evidence"
-          body={requirements.behavioral}
-          footer="Alfred needs usage evidence before recommending promotion."
+          title={safeRequirements.behavioral.title || "Behavioral Evidence"}
+          body={safeRequirements.behavioral.prompt}
+          footer={safeRequirements.behavioral.completion_hint}
           status="Auto-tracked"
         />
       </div>

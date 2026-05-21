@@ -25,6 +25,8 @@ from app.models import (
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
+from pathlib import Path
+import yaml
 from app.services.people_review_service import PeopleReviewService
 from app.models import GoalReviewSession
 
@@ -65,6 +67,28 @@ class PersonUpdate(BaseModel):
 
 
 router = APIRouter()
+
+
+def load_journey_trials_config():
+    config_path = Path(__file__).parent.parent / "journey_trials.yaml"
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        return {
+            "version": 0,
+            "yellow_belt": {
+                "meaning": "Understanding",
+                "description": "Move from awareness into a clearer understanding of your patterns.",
+                "dimensions": {}
+            }
+        }
+
+
+@router.get("/trial-config")
+def get_trial_config():
+    return load_journey_trials_config()
 
 
 class BeltTrialCreate(BaseModel):

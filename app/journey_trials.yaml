@@ -1,0 +1,112 @@
+# journey_trials.yaml
+#
+# Journey 2.0 curriculum configuration.
+# Keep belt requirements here so prompts can be tested, tuned, and versioned
+# without changing frontend or route logic.
+
+version: 1
+
+yellow_belt:
+  meaning: Understanding
+  description: Move from awareness into a clearer understanding of your patterns.
+
+  dimensions:
+    vision:
+      name: Vision & Goals
+      reflection:
+        title: Reflection Trial
+        prompt: Describe a goal that looks impressive on paper but may not be fully aligned with your values.
+        grading_focus:
+          - honesty
+          - motivation clarity
+          - contradiction awareness
+          - ownership
+        completion_hint: Show self-awareness, ownership, and pattern recognition.
+      real_world:
+        title: Real-World Trial
+        prompt: Rewrite, retire, or clarify one goal so it better reflects what actually matters.
+        completion_hint: Do one concrete action outside the app, then reflect on what happened.
+      behavioral:
+        title: Behavioral Evidence
+        prompt: Complete at least one weekly goal review and add alignment context to your active goals.
+        completion_hint: Alfred needs usage evidence before recommending promotion.
+
+    people:
+      name: People
+      reflection:
+        title: Reflection Trial
+        prompt: Describe a recent interaction where your emotional reaction affected another person.
+        grading_focus:
+          - emotional honesty
+          - impact awareness
+          - ownership
+          - pattern recognition
+        completion_hint: Show self-awareness, ownership, and pattern recognition.
+      real_world:
+        title: Real-World Trial
+        prompt: Ask one person for specific feedback on how they experience your leadership.
+        completion_hint: Do one concrete action outside the app, then reflect on what happened.
+      behavioral:
+        title: Behavioral Evidence
+        prompt: Capture a relationship reflection, delegation note, or coaching moment in Alfred.
+        completion_hint: Alfred needs usage evidence before recommending promotion.
+
+    execute:
+      name: Prioritize & Execute
+      reflection:
+        title: Reflection Trial
+        prompt: Explain how stress affects your execution, focus, and follow-through.
+        grading_focus:
+          - stress awareness
+          - avoidance pattern recognition
+          - ownership
+          - clarity of next behavior
+        completion_hint: Show self-awareness, ownership, and pattern recognition.
+      real_world:
+        title: Real-World Trial
+        prompt: Plan your top 3 priorities daily for one full workweek.
+        completion_hint: Do one concrete action outside the app, then reflect on what happened.
+      behavioral:
+        title: Behavioral Evidence
+        prompt: Use Alfred's prioritization system and capture at least one execution system or procrastination pattern.
+        completion_hint: Alfred needs usage evidence before recommending promotion.
+
+    energy:
+      name: Time & Energy
+      reflection:
+        title: Reflection Trial
+        prompt: Name what reliably drains you, what restores you, and the pattern you tend to ignore.
+        grading_focus:
+          - energy pattern clarity
+          - burnout awareness
+          - honesty
+          - actionable insight
+        completion_hint: Show self-awareness, ownership, and pattern recognition.
+      real_world:
+        title: Real-World Trial
+        prompt: Track your energy for 7 days and remove or contain one energy drain.
+        completion_hint: Do one concrete action outside the app, then reflect on what happened.
+      behavioral:
+        title: Behavioral Evidence
+        prompt: Log energy sources, energy drains, recovery methods, or wellness habits in Alfred.
+        completion_hint: Alfred needs usage evidence before recommending promotion.
+
+    learning:
+      name: Learning & Development
+      reflection:
+        title: Reflection Trial
+        prompt: Describe a failure that taught you something you still use today.
+        grading_focus:
+          - learning extraction
+          - ownership
+          - resilience
+          - applied wisdom
+        completion_hint: Show self-awareness, ownership, and pattern recognition.
+      real_world:
+        title: Real-World Trial
+        prompt: Reflect on one major mistake and identify the lesson you want to carry forward.
+        completion_hint: Do one concrete action outside the app, then reflect on what happened.
+      behavioral:
+        title: Behavioral Evidence
+        prompt: Capture a failure, development area, coaching reflection, or journal entry in Alfred.
+        completion_hint: Alfred needs usage evidence before recommending promotion.
