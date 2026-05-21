@@ -35,11 +35,10 @@ useEffect(() => {
 
   const menuItems = [
     { id: 'my-goals', label: 'My Vision & Goals', disabled: false },
-    { id: 'todo-list', label: 'My Tasks', disabled: false },
-    { id: 'my-team', label: 'My Team', disabled: false },
-    { id: 'my-habits', label: 'My Habits', disabled: false },
     { id: 'my-journey', label: 'My Journey', disabled: false },
-    // CHANGED: Replace 'my-journal' with 'coaching-sessions'
+    { id: 'todo-list', label: 'My Tasks', disabled: false },
+    { id: 'my-habits', label: 'My Habits', disabled: false },
+    { id: 'my-team', label: 'My Team', disabled: false },
     { id: 'coaching-sessions', label: 'My Coaching Sessions', disabled: false },
     { id: 'my-journal', label: 'My Journal', disabled: false },
     { id: 'my-feedback', label: 'My Feedback', disabled: true },
