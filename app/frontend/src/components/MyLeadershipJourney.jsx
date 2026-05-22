@@ -620,6 +620,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
               <>
                 <PathToNextBeltPanel
                   dimension={selectedDimension}
+                  targetBelt={nextBelt}
+                  requirements={nextBeltRequirements}
                   trialRecords={trialRecords}
                   savingTrial={savingTrial}
                   onStartTrial={handleStartTrial}
