@@ -15,7 +15,6 @@ const BELTS = [
 ];
 
 const BELT_IDS = BELTS.map((belt) => belt.id);
-const EARNABLE_BELT_IDS = BELT_IDS.slice(1);
 
 const DIMENSIONS = [
   {
@@ -275,36 +274,40 @@ function getTargetBeltProgress(dimensionId, targetBeltId, trialRecords, telemetr
 
 function getDimensionProgression(dimensionId, trialRecords, telemetryAverage) {
   let currentBeltId = "white";
+  let activeBeltId = "white";
   let nextBeltId = "yellow";
 
-  for (const targetBeltId of EARNABLE_BELT_IDS) {
-    const progress = getTargetBeltProgress(dimensionId, targetBeltId, trialRecords, telemetryAverage);
+  for (const beltId of BELT_IDS) {
+    const progress = getTargetBeltProgress(dimensionId, beltId, trialRecords, telemetryAverage);
     if (!progress.isComplete) {
-      nextBeltId = targetBeltId;
+      activeBeltId = beltId;
+      nextBeltId = getNextBeltId(beltId);
       break;
     }
 
-    currentBeltId = targetBeltId;
-    nextBeltId = getNextBeltId(targetBeltId);
+    currentBeltId = getNextBeltId(beltId);
+    activeBeltId = currentBeltId;
+    nextBeltId = getNextBeltId(currentBeltId);
   }
 
   if (currentBeltId === "black") {
+    activeBeltId = "black";
     nextBeltId = "black";
   }
 
-  const nextProgress = currentBeltId === "black"
-    ? { completed: 3, submitted: 0, started: 3, percent: 100, isComplete: true }
-    : getTargetBeltProgress(dimensionId, nextBeltId, trialRecords, telemetryAverage);
+  const activeProgress = getTargetBeltProgress(dimensionId, activeBeltId, trialRecords, telemetryAverage);
 
   return {
     currentBeltId,
+    activeBeltId,
     nextBeltId,
     currentBeltIndex: getBeltIndexById(currentBeltId),
+    activeBeltIndex: getBeltIndexById(activeBeltId),
     nextBeltIndex: getBeltIndexById(nextBeltId),
-    progress: nextProgress.percent,
-    completedRequirements: nextProgress.completed,
-    submittedRequirements: nextProgress.submitted,
-    startedRequirements: nextProgress.started,
+    progress: activeProgress.percent,
+    completedRequirements: activeProgress.completed,
+    submittedRequirements: activeProgress.submitted,
+    startedRequirements: activeProgress.started,
   };
 }
 
@@ -316,21 +319,23 @@ function buildDimensionStates(telemetry, trialRecords) {
     const hasAnyTrialEvidence = trialRecords.some((trial) => trial.dimension_id === dimension.id);
     const hasTelemetryEvidence = dimension.id === "execute" && telemetry.some((signal) => signal.value > 0);
     const hasEvidence = hasAnyTrialEvidence || hasTelemetryEvidence;
+    const activeBelt = getBeltById(progression.activeBeltId);
     const nextBelt = getBeltById(progression.nextBeltId);
 
     states[dimension.id] = {
       beltIndex: progression.currentBeltIndex,
       currentBeltId: progression.currentBeltId,
+      activeBeltId: progression.activeBeltId,
       nextBeltId: progression.nextBeltId,
       progress: progression.progress,
       momentum: progression.progress >= 55 && progression.currentBeltId !== "black",
       assessment: progression.currentBeltId === "black"
-        ? "You have completed the full belt path for this dimension. The work now is transmission: helping others develop this capability with judgment and humility."
+        ? `You are working the ${activeBelt.name} trials for this dimension. The work now is transmission: helping others develop this capability with judgment and humility.`
         : hasEvidence
-          ? `Alfred sees ${progression.startedRequirements} of 3 requirements started toward ${nextBelt.name}, with ${progression.submittedRequirements} submitted and ${progression.completedRequirements} passed. Submitted work is saved, but still needs review before it becomes earned maturity.`
-          : `Alfred does not yet have enough completed trial evidence to assess this dimension beyond White Belt. Start the ${nextBelt.name} path to begin earning progress.`,
+          ? `Alfred sees ${progression.startedRequirements} of 3 ${activeBelt.name} requirements started, with ${progression.submittedRequirements} submitted and ${progression.completedRequirements} passed. Passing these trials is what moves you toward ${nextBelt.name}.`
+          : `Start the ${activeBelt.name} trials. Passing them is what moves you toward ${nextBelt.name}.`,
       evidenceLabel: progression.currentBeltId === "black"
-        ? "Full path complete"
+        ? `${progression.startedRequirements}/3 active`
         : hasEvidence
           ? `${progression.startedRequirements}/3 started`
           : "No earned evidence yet",
@@ -492,18 +497,19 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
 
   const selectedState = dimensionStates[selectedDimension.id];
   const selectedBelt = getBelt(selectedState.beltIndex);
+  const activeBelt = getBeltById(selectedState.activeBeltId);
   const nextBelt = getBeltById(selectedState.nextBeltId);
-  const nextBeltRequirements = getBeltRequirementsFromConfig(
+  const activeBeltRequirements = getBeltRequirementsFromConfig(
     trialConfig,
     selectedDimension.id,
-    selectedState.nextBeltId
+    selectedState.activeBeltId
   );
 
   const handleStartTrial = async (trialType, prompt) => {
     const existing = trialRecords.find(
       (trial) =>
         trial.dimension_id === selectedDimension.id &&
-        trial.target_belt === selectedState.nextBeltId &&
+        trial.target_belt === selectedState.activeBeltId &&
         trial.trial_type === trialType
     );
 
@@ -513,7 +519,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
         id: null,
         user_number: userNumber,
         dimension_id: selectedDimension.id,
-        target_belt: selectedState.nextBeltId,
+        target_belt: selectedState.activeBeltId,
         trial_type: trialType,
         prompt,
         response_text: "",
@@ -630,8 +636,9 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
               <>
                 <PathToNextBeltPanel
                   dimension={selectedDimension}
-                  targetBelt={nextBelt}
-                  requirements={nextBeltRequirements}
+                  targetBelt={activeBelt}
+                  nextBelt={nextBelt}
+                  requirements={activeBeltRequirements}
                   trialRecords={trialRecords}
                   savingTrial={savingTrial}
                   onStartTrial={handleStartTrial}
@@ -641,8 +648,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                   belt={selectedBelt}
                   nextBelt={nextBelt}
                   dimension={selectedDimension}
-                  targetBelt={nextBelt}
-                  requirements={nextBeltRequirements}
+                  targetBelt={activeBelt}
+                  requirements={activeBeltRequirements}
                   trialRecords={trialRecords}
                 />
                 <TelemetryPanel telemetry={telemetry} loading={loadingSignals} />
@@ -656,8 +663,9 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
               <>
                 <PathToNextBeltPanel
                   dimension={selectedDimension}
-                  targetBelt={nextBelt}
-                  requirements={nextBeltRequirements}
+                  targetBelt={activeBelt}
+                  nextBelt={nextBelt}
+                  requirements={activeBeltRequirements}
                   trialRecords={trialRecords}
                   savingTrial={savingTrial}
                   onStartTrial={handleStartTrial}
@@ -878,8 +886,9 @@ function normalizeRequirements(requirements, dimensionId) {
   };
 }
 
-function PathToNextBeltPanel({ dimension, targetBelt, requirements, trialRecords, savingTrial, onStartTrial }) {
+function PathToNextBeltPanel({ dimension, targetBelt, nextBelt, requirements, trialRecords, savingTrial, onStartTrial }) {
   const safeTargetBelt = targetBelt || getBeltById("yellow");
+  const safeNextBelt = nextBelt || getBeltById(getNextBeltId(safeTargetBelt.id));
   const safeRequirements = normalizeRequirements(requirements, dimension.id);
   const reflectionTrial = getStoredTrial(trialRecords, dimension.id, safeTargetBelt.id, "reflection");
   const realWorldTrial = getStoredTrial(trialRecords, dimension.id, safeTargetBelt.id, "real_world");
@@ -889,14 +898,14 @@ function PathToNextBeltPanel({ dimension, targetBelt, requirements, trialRecords
       <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">
-            Path to {safeTargetBelt.name}
+            {safeTargetBelt.name} Trials
           </p>
           <h3 className="mt-1 text-xl font-semibold text-slate-950">
             What Alfred needs to see in {dimension.name}
           </h3>
         </div>
         <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
-          {safeTargetBelt.meaning}
+          Earn {safeNextBelt.name}
         </span>
       </div>
 

@@ -35,22 +35,6 @@ dimensions:
     description: Purpose, values, alignment, and long-term direction.
     belts:
       white:
-        criteria: Recognizes importance of purpose and direction.
-        reflection:
-          title: Reflection Trial
-          prompt: What gives your life meaning?
-          grading_focus: [honesty, clarity, values awareness, emotional specificity]
-          completion_hint: Name what matters before trying to optimize it.
-        real_world:
-          title: Real-World Trial
-          prompt: Define your top 5 values and write one sentence for why each matters.
-          completion_hint: Turn broad ideals into language you can actually use.
-        behavioral:
-          title: Behavioral Evidence
-          prompt: Set up at least one goal and complete 3 reflections connected to direction or values.
-          signals: [goal_setup, value_reflections, journaling]
-          completion_hint: Alfred looks for early evidence that direction is being named.
-      yellow:
         criteria: Understand the relationship between values (purpose), strengths (fulfillment), and goals (direction). Begin discovering what genuinely matters to you.
         reflection:
           title: Reflection Trial
@@ -66,7 +50,7 @@ dimensions:
           prompt: Complete goals, values, and strengths in Alfred.
           signals: [goals_completed, values_completed, strengths_completed]
           completion_hint: Alfred looks for the core direction map to be fully captured.
-      green:
+      yellow:
         criteria: Apply self-awareness intentionally and begin aligning behavior, priorities, and goals with deeper motivations and purpose.
         reflection:
           title: Reflection Trial
@@ -82,7 +66,7 @@ dimensions:
           prompt: Maintain 3 goal reviews and journal on how values and strengths affect energy and fulfillment.
           signals: [three_goal_reviews, values_strengths_energy_journals, fulfillment_reflections]
           completion_hint: Alfred looks for repeated reflection on how values and strengths shape fulfillment.
-      brown:
+      green:
         criteria: Integrate values, strengths, goals, and energy into a coherent operating system that remains stable under pressure.
         reflection:
           title: Reflection Trial
@@ -98,6 +82,22 @@ dimensions:
           prompt: Complete 5 new goal reviews and explicitly link goals to values and strengths.
           signals: [five_goal_reviews, goals_linked_to_values, goals_linked_to_strengths]
           completion_hint: Alfred looks for explicit links between goals, values, and strengths over time.
+      brown:
+        criteria: Develop the wisdom and clarity necessary to help others find alignment, purpose, and intentional direction in their own lives.
+        reflection:
+          title: Reflection Trial
+          prompt: What wisdom now guides your decisions, and how was it earned?
+          grading_focus: [wisdom, earned clarity, transmission, humility]
+          completion_hint: Distill the principles you can now pass on to others.
+        real_world:
+          title: Real-World Trial
+          prompt: Help someone around you define their strengths, values, and meaningful goals. Support them in finding greater alignment.
+          completion_hint: Guide someone else toward their own alignment without imposing yours.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Complete 5 new goal reviews, link goals to people supporting the goals, and flag strengths and values of people and how they fit into the goal.
+          signals: [five_goal_reviews, goals_linked_to_people, people_strengths_flagged, people_values_flagged]
+          completion_hint: Alfred looks for direction becoming relational and useful to others.
       black:
         criteria: Develop the wisdom and clarity necessary to help others find alignment, purpose, and intentional direction in their own lives.
         reflection:
