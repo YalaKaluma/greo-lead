@@ -7,12 +7,15 @@ const R_INNER = 220;
 const R_OUTER = 360;
 
 const BELTS = [
-  { name: "White Belt", shortName: "White", meaning: "Awareness", color: "#e5e7eb", text: "#111827" },
-  { name: "Yellow Belt", shortName: "Yellow", meaning: "Understanding", color: "#d6a11d", text: "#111827" },
-  { name: "Green Belt", shortName: "Green", meaning: "Application", color: "#2f855a", text: "#ffffff" },
-  { name: "Brown Belt", shortName: "Brown", meaning: "Integration", color: "#7c4a2d", text: "#ffffff" },
-  { name: "Black Belt", shortName: "Black", meaning: "Transmission", color: "#111827", text: "#ffffff" },
+  { id: "white", name: "White Belt", shortName: "White", meaning: "Awareness", color: "#e5e7eb", text: "#111827" },
+  { id: "yellow", name: "Yellow Belt", shortName: "Yellow", meaning: "Understanding", color: "#d6a11d", text: "#111827" },
+  { id: "green", name: "Green Belt", shortName: "Green", meaning: "Application", color: "#2f855a", text: "#ffffff" },
+  { id: "brown", name: "Brown Belt", shortName: "Brown", meaning: "Integration", color: "#7c4a2d", text: "#ffffff" },
+  { id: "black", name: "Black Belt", shortName: "Black", meaning: "Transmission", color: "#111827", text: "#ffffff" },
 ];
+
+const BELT_IDS = BELTS.map((belt) => belt.id);
+const EARNABLE_BELT_IDS = BELT_IDS.slice(1);
 
 const DIMENSIONS = [
   {
@@ -65,33 +68,6 @@ const TOPIC_ENDPOINTS = {
   "Development Opportunities": "development-areas",
   "Development Plan": "execution-systems",
 };
-
-const EXECUTE_TRIALS = [
-  {
-    id: "reflection",
-    type: "Reflection Trial",
-    status: "Not Started",
-    prompt: "How does stress affect execution, focus, and follow-through?",
-    evidence:
-      "No scored reflection trial is stored yet. This should only pass after Alfred evaluates depth, ownership, and pattern recognition.",
-  },
-  {
-    id: "world",
-    type: "Real-World Trial",
-    status: "Not Started",
-    prompt: "Plan your top 3 priorities daily for one full workweek.",
-    evidence:
-      "No real-world trial submission is stored yet. The future flow should capture what happened, what was hard, and what changed.",
-  },
-  {
-    id: "telemetry",
-    type: "Behavioral Integration Trial",
-    status: "Not Started",
-    prompt: "Use the prioritization system consistently and reduce overdue task drift.",
-    evidence:
-      "Signals are being read from task completion, MTN usage, overdue items, and linked execution reflections.",
-  },
-];
 
 const FALLBACK_YELLOW_BELT_REQUIREMENTS = {
   vision: {
@@ -193,6 +169,19 @@ function getBelt(beltIndex) {
   return BELTS[beltIndex] || BELTS[0];
 }
 
+function getBeltById(beltId) {
+  return BELTS.find((belt) => belt.id === beltId) || BELTS[0];
+}
+
+function getBeltIndexById(beltId) {
+  return Math.max(0, BELTS.findIndex((belt) => belt.id === beltId));
+}
+
+function getNextBeltId(currentBeltId) {
+  const currentIndex = getBeltIndexById(currentBeltId);
+  return BELTS[Math.min(currentIndex + 1, BELTS.length - 1)].id;
+}
+
 function inferStatus(score) {
   if (score >= 85) return "Passed";
   if (score >= 55) return "In Progress";
@@ -204,35 +193,125 @@ function getTelemetryAverage(telemetry) {
   return Math.round(telemetry.reduce((sum, signal) => sum + signal.value, 0) / Math.max(telemetry.length, 1));
 }
 
-function buildDimensionStates(telemetry) {
-  const telemetryAverage = getTelemetryAverage(telemetry);
-  const executeHasEvidence = telemetry.some((signal) => signal.value > 0);
+function normalizeStatus(status) {
+  return (status || "not_started").toLowerCase();
+}
 
-  return DIMENSIONS.reduce((states, dimension) => {
-    if (dimension.id !== "execute") {
-      states[dimension.id] = {
-        beltIndex: 0,
-        progress: 0,
-        momentum: false,
-        assessment:
-          "This dimension is mapped, but Alfred has not started scoring it yet. It should remain White Belt until reflection, real-world, and behavioral evidence are connected.",
-        evidenceLabel: "Not yet scored",
-      };
-      return states;
+function isPassed(status) {
+  return normalizeStatus(status) === "passed";
+}
+
+function getStoredTrial(trialRecords, dimensionId, targetBeltId, trialType) {
+  return trialRecords.find(
+    (trial) =>
+      trial.dimension_id === dimensionId &&
+      trial.target_belt === targetBeltId &&
+      trial.trial_type === trialType
+  );
+}
+
+function getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryAverage) {
+  const storedBehavioralTrial = getStoredTrial(trialRecords, dimensionId, targetBeltId, "behavioral");
+  if (storedBehavioralTrial?.status) return normalizeStatus(storedBehavioralTrial.status);
+
+  if (dimensionId === "execute") {
+    return normalizeStatus(inferStatus(telemetryAverage));
+  }
+
+  return "not_started";
+}
+
+function getTargetBeltProgress(dimensionId, targetBeltId, trialRecords, telemetryAverage) {
+  const reflection = getStoredTrial(trialRecords, dimensionId, targetBeltId, "reflection");
+  const realWorld = getStoredTrial(trialRecords, dimensionId, targetBeltId, "real_world");
+  const behavioralStatus = getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryAverage);
+
+  const completed = [
+    isPassed(reflection?.status),
+    isPassed(realWorld?.status),
+    isPassed(behavioralStatus),
+  ].filter(Boolean).length;
+
+  return {
+    completed,
+    percent: Math.round((completed / 3) * 100),
+    isComplete: completed === 3,
+  };
+}
+
+function getDimensionProgression(dimensionId, trialRecords, telemetryAverage) {
+  let currentBeltId = "white";
+  let nextBeltId = "yellow";
+
+  for (const targetBeltId of EARNABLE_BELT_IDS) {
+    const progress = getTargetBeltProgress(dimensionId, targetBeltId, trialRecords, telemetryAverage);
+    if (!progress.isComplete) {
+      nextBeltId = targetBeltId;
+      break;
     }
 
+    currentBeltId = targetBeltId;
+    nextBeltId = getNextBeltId(targetBeltId);
+  }
+
+  if (currentBeltId === "black") {
+    nextBeltId = "black";
+  }
+
+  const nextProgress = currentBeltId === "black"
+    ? { completed: 3, percent: 100, isComplete: true }
+    : getTargetBeltProgress(dimensionId, nextBeltId, trialRecords, telemetryAverage);
+
+  return {
+    currentBeltId,
+    nextBeltId,
+    currentBeltIndex: getBeltIndexById(currentBeltId),
+    nextBeltIndex: getBeltIndexById(nextBeltId),
+    progress: nextProgress.percent,
+    completedRequirements: nextProgress.completed,
+  };
+}
+
+function buildDimensionStates(telemetry, trialRecords) {
+  const telemetryAverage = getTelemetryAverage(telemetry);
+
+  return DIMENSIONS.reduce((states, dimension) => {
+    const progression = getDimensionProgression(dimension.id, trialRecords, telemetryAverage);
+    const hasAnyTrialEvidence = trialRecords.some((trial) => trial.dimension_id === dimension.id);
+    const hasTelemetryEvidence = dimension.id === "execute" && telemetry.some((signal) => signal.value > 0);
+    const hasEvidence = hasAnyTrialEvidence || hasTelemetryEvidence;
+    const nextBelt = getBeltById(progression.nextBeltId);
+
     states[dimension.id] = {
-      beltIndex: 0,
-      progress: telemetryAverage,
-      momentum: telemetryAverage >= 55,
-      assessment: executeHasEvidence
-        ? "Alfred has early behavioral evidence for your execution system, but not enough completed trial evidence to award a higher belt. The current score should be treated as progress toward Yellow Belt, not as earned maturity."
-        : "Alfred does not yet have enough behavioral evidence or completed trials to assess this dimension. You are at the starting point, which is exactly where an honest operating system should begin.",
-      evidenceLabel: executeHasEvidence ? "Early telemetry only" : "No earned evidence yet",
+      beltIndex: progression.currentBeltIndex,
+      currentBeltId: progression.currentBeltId,
+      nextBeltId: progression.nextBeltId,
+      progress: progression.progress,
+      momentum: progression.progress >= 55 && progression.currentBeltId !== "black",
+      assessment: progression.currentBeltId === "black"
+        ? "You have completed the full belt path for this dimension. The work now is transmission: helping others develop this capability with judgment and humility."
+        : hasEvidence
+          ? `Alfred sees ${progression.completedRequirements} of 3 requirements completed toward ${nextBelt.name}. Submitted work still needs review before it becomes earned maturity.`
+          : `Alfred does not yet have enough completed trial evidence to assess this dimension beyond White Belt. Start the ${nextBelt.name} path to begin earning progress.`,
+      evidenceLabel: progression.currentBeltId === "black"
+        ? "Full path complete"
+        : hasEvidence
+          ? `${progression.completedRequirements}/3 toward ${nextBelt.shortName}`
+          : "No earned evidence yet",
     };
 
     return states;
   }, {});
+}
+
+function getBeltRequirementsFromConfig(config, dimensionId, beltId) {
+  const fullCurriculum = config?.dimensions?.[dimensionId]?.belts?.[beltId];
+  if (fullCurriculum) return fullCurriculum;
+
+  const legacyYellow = config?.yellow_belt?.dimensions?.[dimensionId];
+  if (beltId === "yellow" && legacyYellow) return legacyYellow;
+
+  return FALLBACK_YELLOW_BELT_REQUIREMENTS[dimensionId];
 }
 
 export default function MyLeadershipJourney({ apiUrl, userNumber }) {
@@ -320,7 +399,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
     const fetchTrials = async () => {
       try {
         const response = await axios.get(`${apiUrl}/api/journey/belt-trials`, {
-          params: { user_number: userNumber, target_belt: "yellow" },
+          params: { user_number: userNumber },
         });
         if (!cancelled) setTrialRecords(response.data || []);
       } catch (error) {
@@ -364,7 +443,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
     ];
   }, [signals]);
 
-  const dimensionStates = useMemo(() => buildDimensionStates(telemetry), [telemetry]);
+  const dimensionStates = useMemo(() => buildDimensionStates(telemetry, trialRecords), [telemetry, trialRecords]);
 
   const topicItems = useMemo(() => {
     if (activeTopic === "Execution System") return signals.executionSystems;
@@ -377,15 +456,18 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
 
   const selectedState = dimensionStates[selectedDimension.id];
   const selectedBelt = getBelt(selectedState.beltIndex);
-  const nextBelt = BELTS[Math.min(selectedState.beltIndex + 1, BELTS.length - 1)];
-  const yellowBeltRequirements =
-    trialConfig?.yellow_belt?.dimensions || FALLBACK_YELLOW_BELT_REQUIREMENTS;
+  const nextBelt = getBeltById(selectedState.nextBeltId);
+  const nextBeltRequirements = getBeltRequirementsFromConfig(
+    trialConfig,
+    selectedDimension.id,
+    selectedState.nextBeltId
+  );
 
   const handleStartTrial = async (trialType, prompt) => {
     const existing = trialRecords.find(
       (trial) =>
         trial.dimension_id === selectedDimension.id &&
-        trial.target_belt === "yellow" &&
+        trial.target_belt === selectedState.nextBeltId &&
         trial.trial_type === trialType
     );
 
@@ -395,7 +477,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
         id: null,
         user_number: userNumber,
         dimension_id: selectedDimension.id,
-        target_belt: "yellow",
+        target_belt: selectedState.nextBeltId,
         trial_type: trialType,
         prompt,
         response_text: "",
@@ -510,9 +592,10 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
 
             {selectedDimension.mvp ? (
               <>
-                <PathToYellowPanel
+                <PathToNextBeltPanel
                   dimension={selectedDimension}
-                  requirements={yellowBeltRequirements[selectedDimension.id]}
+                  targetBelt={nextBelt}
+                  requirements={nextBeltRequirements}
                   trialRecords={trialRecords}
                   savingTrial={savingTrial}
                   onStartTrial={handleStartTrial}
@@ -522,7 +605,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                   belt={selectedBelt}
                   nextBelt={nextBelt}
                   dimension={selectedDimension}
-                  requirements={yellowBeltRequirements[selectedDimension.id]}
+                  targetBelt={nextBelt}
+                  requirements={nextBeltRequirements}
                   trialRecords={trialRecords}
                 />
                 <TelemetryPanel telemetry={telemetry} loading={loadingSignals} />
@@ -534,7 +618,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
               </>
             ) : (
               <>
-                <PathToYellowPanel
+                <PathToNextBeltPanel
                   dimension={selectedDimension}
                   trialRecords={trialRecords}
                   savingTrial={savingTrial}
@@ -735,15 +819,6 @@ function DimensionDeepDive({ dimension, dimensionState, belt, nextBelt, telemetr
   );
 }
 
-function getStoredTrial(trialRecords, dimensionId, trialType) {
-  return trialRecords.find(
-    (trial) =>
-      trial.dimension_id === dimensionId &&
-      trial.target_belt === "yellow" &&
-      trial.trial_type === trialType
-  );
-}
-
 function formatTrialStatus(status) {
   const labels = {
     not_started: "Not Started",
@@ -755,24 +830,24 @@ function formatTrialStatus(status) {
   return labels[status] || "Not Started";
 }
 
-function PathToYellowPanel({ dimension, requirements, trialRecords, savingTrial, onStartTrial }) {
+function PathToNextBeltPanel({ dimension, targetBelt, requirements, trialRecords, savingTrial, onStartTrial }) {
   const safeRequirements = requirements || FALLBACK_YELLOW_BELT_REQUIREMENTS[dimension.id];
-  const reflectionTrial = getStoredTrial(trialRecords, dimension.id, "reflection");
-  const realWorldTrial = getStoredTrial(trialRecords, dimension.id, "real_world");
+  const reflectionTrial = getStoredTrial(trialRecords, dimension.id, targetBelt.id, "reflection");
+  const realWorldTrial = getStoredTrial(trialRecords, dimension.id, targetBelt.id, "real_world");
 
   return (
     <div className="rounded-lg border border-amber-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">
-            Path to Yellow Belt
+            Path to {targetBelt.name}
           </p>
           <h3 className="mt-1 text-xl font-semibold text-slate-950">
             What Alfred needs to see in {dimension.name}
           </h3>
         </div>
         <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
-          Awareness to Understanding
+          {targetBelt.meaning}
         </span>
       </div>
 
@@ -843,6 +918,7 @@ function RequirementCard({ number, title, body, footer, status, buttonLabel, dis
 
 function TrialModal({ trial, draft, setDraft, saving, onClose, onSave, onSubmit }) {
   const isReflection = trial.trial_type === "reflection";
+  const targetBelt = getBeltById(trial.target_belt);
   const title = isReflection ? "Reflection Trial" : "Real-World Trial";
   const helperText = isReflection
     ? "Write honestly. Alfred will eventually evaluate depth, ownership, and pattern recognition, not polish."
@@ -855,7 +931,7 @@ function TrialModal({ trial, draft, setDraft, saving, onClose, onSave, onSubmit 
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">
-                Path to Yellow Belt
+                Path to {targetBelt.name}
               </p>
               <h3 className="mt-1 text-xl font-semibold text-slate-950">{title}</h3>
             </div>
@@ -915,17 +991,44 @@ function TrialModal({ trial, draft, setDraft, saving, onClose, onSave, onSubmit 
   );
 }
 
-function TrialsPanel({ telemetry, belt, nextBelt, dimension, trialRecords }) {
+function TrialsPanel({ telemetry, belt, nextBelt, dimension, targetBelt, requirements, trialRecords }) {
   const telemetryAverage = getTelemetryAverage(telemetry);
-  const trials = EXECUTE_TRIALS.map((trial) => {
-    if (trial.id === "telemetry") {
-      return { ...trial, status: inferStatus(telemetryAverage) };
+  const safeRequirements = requirements || FALLBACK_YELLOW_BELT_REQUIREMENTS[dimension.id];
+  const trials = [
+    {
+      id: "reflection",
+      type: safeRequirements.reflection.title || "Reflection Trial",
+      trialType: "reflection",
+      prompt: safeRequirements.reflection.prompt,
+      evidence: safeRequirements.reflection.completion_hint,
+    },
+    {
+      id: "real_world",
+      type: safeRequirements.real_world.title || "Real-World Trial",
+      trialType: "real_world",
+      prompt: safeRequirements.real_world.prompt,
+      evidence: safeRequirements.real_world.completion_hint,
+    },
+    {
+      id: "behavioral",
+      type: safeRequirements.behavioral.title || "Behavioral Integration Trial",
+      trialType: "behavioral",
+      prompt: safeRequirements.behavioral.prompt,
+      evidence: safeRequirements.behavioral.completion_hint,
+    },
+  ].map((trial) => {
+    if (trial.id === "behavioral") {
+      return {
+        ...trial,
+        status: formatTrialStatus(getBehavioralStatus(dimension.id, targetBelt.id, trialRecords, telemetryAverage)),
+      };
     }
 
     const storedTrial = getStoredTrial(
       trialRecords,
       dimension.id,
-      trial.id === "world" ? "real_world" : trial.id
+      targetBelt.id,
+      trial.trialType
     );
 
     return storedTrial
@@ -936,7 +1039,7 @@ function TrialsPanel({ telemetry, belt, nextBelt, dimension, trialRecords }) {
             ? "Your submission is stored. Alfred grading is the next backend step before this can become a pass."
             : trial.evidence,
         }
-      : trial;
+      : { ...trial, status: "Not Started" };
   });
 
   return (

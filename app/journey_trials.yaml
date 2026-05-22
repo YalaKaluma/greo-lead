@@ -1,112 +1,456 @@
 # journey_trials.yaml
 #
 # Journey 2.0 curriculum configuration.
-# Keep belt requirements here so prompts can be tested, tuned, and versioned
-# without changing frontend or route logic.
+# This file is the source of truth for belt criteria, reflection trials,
+# real-world trials, and behavioral signals. The UI can render one belt path
+# at a time, while the backend keeps the full curriculum available for tuning.
 
 version: 1
 
-yellow_belt:
-  meaning: Understanding
-  description: Move from awareness into a clearer understanding of your patterns.
+belts:
+  white:
+    name: White Belt
+    meaning: Awareness
+    description: Recognize the dimension and begin naming current patterns.
+  yellow:
+    name: Yellow Belt
+    meaning: Understanding
+    description: Understand motivations, contradictions, and recurring patterns.
+  green:
+    name: Green Belt
+    meaning: Application
+    description: Practice the behavior deliberately in real life.
+  brown:
+    name: Brown Belt
+    meaning: Integration
+    description: Sustain the behavior under pressure and across contexts.
+  black:
+    name: Black Belt
+    meaning: Transmission
+    description: Help others develop the same capacity.
 
-  dimensions:
-    vision:
-      name: Vision & Goals
-      reflection:
-        title: Reflection Trial
-        prompt: Describe a goal that looks impressive on paper but may not be fully aligned with your values.
-        grading_focus:
-          - honesty
-          - motivation clarity
-          - contradiction awareness
-          - ownership
-        completion_hint: Show self-awareness, ownership, and pattern recognition.
-      real_world:
-        title: Real-World Trial
-        prompt: Rewrite, retire, or clarify one goal so it better reflects what actually matters.
-        completion_hint: Do one concrete action outside the app, then reflect on what happened.
-      behavioral:
-        title: Behavioral Evidence
-        prompt: Complete at least one weekly goal review and add alignment context to your active goals.
-        completion_hint: Alfred needs usage evidence before recommending promotion.
+dimensions:
+  vision:
+    name: Vision & Goals
+    description: Purpose, values, alignment, and long-term direction.
+    belts:
+      white:
+        criteria: Recognizes importance of purpose and direction.
+        reflection:
+          title: Reflection Trial
+          prompt: What gives your life meaning?
+          grading_focus: [honesty, clarity, values awareness, emotional specificity]
+          completion_hint: Name what matters before trying to optimize it.
+        real_world:
+          title: Real-World Trial
+          prompt: Define your top 5 values and write one sentence for why each matters.
+          completion_hint: Turn broad ideals into language you can actually use.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Set up at least one goal and complete 3 reflections connected to direction or values.
+          signals: [goal_setup, value_reflections, journaling]
+          completion_hint: Alfred looks for early evidence that direction is being named.
+      yellow:
+        criteria: Understands motivations and contradictions.
+        reflection:
+          title: Reflection Trial
+          prompt: Describe a misaligned goal.
+          grading_focus: [honesty, motivation clarity, contradiction awareness, ownership]
+          completion_hint: Show where ambition and values are not fully aligned.
+        real_world:
+          title: Real-World Trial
+          prompt: Rewrite, remove, or clarify one goal so it better reflects what actually matters.
+          completion_hint: Make one real adjustment to your goal system.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Complete weekly goal reviews.
+          signals: [weekly_goal_reviews, goal_updates, task_goal_alignment]
+          completion_hint: Alfred looks for repeated review, not a one-time insight.
+      green:
+        criteria: Structures life intentionally.
+        reflection:
+          title: Reflection Trial
+          prompt: How do your habits reflect your vision?
+          grading_focus: [systems awareness, alignment, specificity, ownership]
+          completion_hint: Connect stated direction to daily behavior.
+        real_world:
+          title: Real-World Trial
+          prompt: Run one week of aligned planning where your top tasks explicitly support your goals.
+          completion_hint: Use planning to make your values operational.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Reach 80% or higher task-goal alignment.
+          signals: [task_goal_alignment, linked_tasks, weekly_planning]
+          completion_hint: Alfred looks for your task system reflecting your direction.
+      brown:
+        criteria: Maintains alignment under stress.
+        reflection:
+          title: Reflection Trial
+          prompt: Describe a values-based decision you made under pressure.
+          grading_focus: [pressure awareness, tradeoff clarity, values fidelity, courage]
+          completion_hint: Show that alignment held when it had a cost.
+        real_world:
+          title: Real-World Trial
+          prompt: Say no to one opportunity that conflicts with your values or current direction.
+          completion_hint: Practice protecting alignment from attractive distraction.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Maintain stable planning patterns during a demanding week.
+          signals: [planning_consistency, low_goal_churn, protected_priorities]
+          completion_hint: Alfred looks for alignment that survives pressure.
+      black:
+        criteria: Helps others find direction.
+        reflection:
+          title: Reflection Trial
+          prompt: What wisdom now guides you?
+          grading_focus: [distilled wisdom, humility, clarity, transmission]
+          completion_hint: Articulate principles that could help another person.
+        real_world:
+          title: Real-World Trial
+          prompt: Mentor someone through a values or direction decision.
+          completion_hint: Help another person clarify what matters to them.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Capture coaching or mentorship activity tied to goals, values, or direction.
+          signals: [coaching_activity, mentorship_notes, shared_goal_reviews]
+          completion_hint: Alfred looks for your maturity becoming useful to others.
 
-    people:
-      name: People
-      reflection:
-        title: Reflection Trial
-        prompt: Describe a recent interaction where your emotional reaction affected another person.
-        grading_focus:
-          - emotional honesty
-          - impact awareness
-          - ownership
-          - pattern recognition
-        completion_hint: Show self-awareness, ownership, and pattern recognition.
-      real_world:
-        title: Real-World Trial
-        prompt: Ask one person for specific feedback on how they experience your leadership.
-        completion_hint: Do one concrete action outside the app, then reflect on what happened.
-      behavioral:
-        title: Behavioral Evidence
-        prompt: Capture a relationship reflection, delegation note, or coaching moment in Alfred.
-        completion_hint: Alfred needs usage evidence before recommending promotion.
+  people:
+    name: People
+    description: Communication, delegation, inspiration, and trust.
+    belts:
+      white:
+        criteria: Recognizes impact on others.
+        reflection:
+          title: Reflection Trial
+          prompt: Describe a poor interaction.
+          grading_focus: [impact awareness, honesty, emotional specificity, ownership]
+          completion_hint: Notice how your behavior landed on another person.
+        real_world:
+          title: Real-World Trial
+          prompt: Ask one person for feedback on how they experience your leadership.
+          completion_hint: Invite reality from outside your own interpretation.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Capture relationship reflections in Alfred.
+          signals: [relationship_reflections, people_reviews, journal_entries]
+          completion_hint: Alfred looks for early relationship awareness.
+      yellow:
+        criteria: Understands emotional triggers.
+        reflection:
+          title: Reflection Trial
+          prompt: What recurring interpersonal pattern do you notice?
+          grading_focus: [pattern recognition, trigger awareness, ownership, compassion]
+          completion_hint: Identify the loop, not just the incident.
+        real_world:
+          title: Real-World Trial
+          prompt: Practice active listening in one important conversation.
+          completion_hint: Listen for understanding before steering the outcome.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Capture delegation reflections or people review notes.
+          signals: [delegation_reflections, people_reviews, coaching_moments]
+          completion_hint: Alfred looks for repeated attention to how relationships work.
+      green:
+        criteria: Applies intentional leadership.
+        reflection:
+          title: Reflection Trial
+          prompt: Describe a moment where empathy changed an outcome.
+          grading_focus: [empathy, behavioral choice, outcome awareness, specificity]
+          completion_hint: Show how understanding changed what you did.
+        real_world:
+          title: Real-World Trial
+          prompt: Delegate a meaningful responsibility without intervening prematurely.
+          completion_hint: Practice trust with a real stake.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Track delegation attempts and outcomes.
+          signals: [delegation_tracking, coaching_moments, task_delegation]
+          completion_hint: Alfred looks for leadership leverage becoming practiced.
+      brown:
+        criteria: Creates trust consistently.
+        reflection:
+          title: Reflection Trial
+          prompt: How do others experience you under stress?
+          grading_focus: [stress behavior, relational impact, humility, repair]
+          completion_hint: Look at the version of you people meet under pressure.
+        real_world:
+          title: Real-World Trial
+          prompt: Facilitate one difficult conversation with clarity and care.
+          completion_hint: Practice honesty without losing respect.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Show collaboration consistency across relationship reviews or coaching notes.
+          signals: [relationship_health, review_cadence, collaboration_consistency]
+          completion_hint: Alfred looks for trust-building that is not mood-dependent.
+      black:
+        criteria: Mentors and elevates others.
+        reflection:
+          title: Reflection Trial
+          prompt: What leadership wisdom matters most?
+          grading_focus: [wisdom, service, clarity, lived experience]
+          completion_hint: Distill what you can now help others practice.
+        real_world:
+          title: Real-World Trial
+          prompt: Coach another person through a meaningful leadership challenge.
+          completion_hint: Help someone else grow without taking over.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Capture mentorship or coaching activity in Alfred.
+          signals: [mentorship_activity, coaching_moments, people_growth_notes]
+          completion_hint: Alfred looks for leadership becoming generative.
 
-    execute:
-      name: Prioritize & Execute
-      reflection:
-        title: Reflection Trial
-        prompt: Explain how stress affects your execution, focus, and follow-through.
-        grading_focus:
-          - stress awareness
-          - avoidance pattern recognition
-          - ownership
-          - clarity of next behavior
-        completion_hint: Show self-awareness, ownership, and pattern recognition.
-      real_world:
-        title: Real-World Trial
-        prompt: Plan your top 3 priorities daily for one full workweek.
-        completion_hint: Do one concrete action outside the app, then reflect on what happened.
-      behavioral:
-        title: Behavioral Evidence
-        prompt: Use Alfred's prioritization system and capture at least one execution system or procrastination pattern.
-        completion_hint: Alfred needs usage evidence before recommending promotion.
+  execute:
+    name: Prioritize & Execute
+    description: Focus, discipline, prioritization, and delivery.
+    belts:
+      white:
+        criteria: Recognizes distraction and procrastination.
+        reflection:
+          title: Reflection Trial
+          prompt: What do you avoid most?
+          grading_focus: [honesty, avoidance awareness, emotional specificity, ownership]
+          completion_hint: Name the resistance before designing around it.
+        real_world:
+          title: Real-World Trial
+          prompt: Track your distractions for 3 workdays.
+          completion_hint: Observe the pattern without judging it.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Review overdue task patterns.
+          signals: [overdue_tasks, postponed_tasks, task_review]
+          completion_hint: Alfred looks for awareness of execution friction.
+      yellow:
+        criteria: Understands emotional roots of execution.
+        reflection:
+          title: Reflection Trial
+          prompt: How does stress affect execution?
+          grading_focus: [stress awareness, avoidance pattern recognition, ownership, clarity]
+          completion_hint: Connect execution behavior to the emotion beneath it.
+        real_world:
+          title: Real-World Trial
+          prompt: Plan your top 3 priorities daily for one full workweek.
+          completion_hint: Practice clarity before urgency starts speaking loudly.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Use Alfred's prioritization system consistently.
+          signals: [mtn_usage, top10_usage, task_prioritization]
+          completion_hint: Alfred looks for repeated priority selection.
+      green:
+        criteria: Uses intentional systems.
+        reflection:
+          title: Reflection Trial
+          prompt: What system improved your consistency?
+          grading_focus: [systems thinking, specificity, evidence, adaptation]
+          completion_hint: Identify what actually changed your behavior.
+        real_world:
+          title: Real-World Trial
+          prompt: Complete a 7-day deep work sprint.
+          completion_hint: Protect focused execution long enough to learn from it.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Reach 90% or higher task completion across the sprint window.
+          signals: [task_completion_rate, deep_work_logs, overdue_reduction]
+          completion_hint: Alfred looks for execution reliability.
+      brown:
+        criteria: Executes strategically under pressure.
+        reflection:
+          title: Reflection Trial
+          prompt: How do you maintain clarity under pressure?
+          grading_focus: [pressure response, prioritization, strategic discipline, tradeoffs]
+          completion_hint: Show how you protect the vital few when everything feels urgent.
+        real_world:
+          title: Real-World Trial
+          prompt: Run a high-pressure execution week while protecting your top priorities.
+          completion_hint: Practice strategic delivery when the environment is noisy.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Maintain stable execution patterns during a demanding week.
+          signals: [stable_execution, priority_completion, overdue_control]
+          completion_hint: Alfred looks for discipline that survives pressure.
+      black:
+        criteria: Helps others execute effectively.
+        reflection:
+          title: Reflection Trial
+          prompt: What principles guide your work?
+          grading_focus: [principles, clarity, transferability, humility]
+          completion_hint: Distill execution wisdom someone else could apply.
+        real_world:
+          title: Real-World Trial
+          prompt: Improve someone else's workflow.
+          completion_hint: Help another person create more clarity and leverage.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Capture coaching activity related to prioritization or execution.
+          signals: [execution_coaching, workflow_improvement_notes, delegated_systems]
+          completion_hint: Alfred looks for execution maturity being transmitted.
 
-    energy:
-      name: Time & Energy
-      reflection:
-        title: Reflection Trial
-        prompt: Name what reliably drains you, what restores you, and the pattern you tend to ignore.
-        grading_focus:
-          - energy pattern clarity
-          - burnout awareness
-          - honesty
-          - actionable insight
-        completion_hint: Show self-awareness, ownership, and pattern recognition.
-      real_world:
-        title: Real-World Trial
-        prompt: Track your energy for 7 days and remove or contain one energy drain.
-        completion_hint: Do one concrete action outside the app, then reflect on what happened.
-      behavioral:
-        title: Behavioral Evidence
-        prompt: Log energy sources, energy drains, recovery methods, or wellness habits in Alfred.
-        completion_hint: Alfred needs usage evidence before recommending promotion.
+  energy:
+    name: Time & Energy
+    description: Recovery, capacity, energy management, and sustainability.
+    belts:
+      white:
+        criteria: Recognizes energy patterns.
+        reflection:
+          title: Reflection Trial
+          prompt: What drains you and what restores you?
+          grading_focus: [energy awareness, specificity, honesty, pattern recognition]
+          completion_hint: Identify energy as data, not just mood.
+        real_world:
+          title: Real-World Trial
+          prompt: Track your energy for 7 days.
+          completion_hint: Observe capacity before trying to optimize it.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Activate habit tracking or energy logging.
+          signals: [habit_tracking, energy_logs, recovery_notes]
+          completion_hint: Alfred looks for early capacity awareness.
+      yellow:
+        criteria: Understands burnout causes.
+        reflection:
+          title: Reflection Trial
+          prompt: What patterns create fatigue?
+          grading_focus: [burnout awareness, cause clarity, honesty, ownership]
+          completion_hint: Connect depletion to choices, context, and rhythms.
+        real_world:
+          title: Real-World Trial
+          prompt: Remove or contain one energy drain.
+          completion_hint: Change one pattern that predictably depletes you.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Complete energy journaling or recovery logs.
+          signals: [energy_journaling, recovery_logs, habit_consistency]
+          completion_hint: Alfred looks for repeated energy reflection.
+      green:
+        criteria: Manages recovery intentionally.
+        reflection:
+          title: Reflection Trial
+          prompt: How has recovery improved your performance?
+          grading_focus: [recovery insight, performance connection, specificity, sustainability]
+          completion_hint: Show that recovery is part of performance, not a reward after it.
+        real_world:
+          title: Real-World Trial
+          prompt: Complete a 14-day recovery routine.
+          completion_hint: Practice capacity as a system.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Maintain stable wellness habits.
+          signals: [wellness_habits, recovery_streaks, energy_stability]
+          completion_hint: Alfred looks for recovery becoming intentional.
+      brown:
+        criteria: Balances ambition sustainably.
+        reflection:
+          title: Reflection Trial
+          prompt: How do you protect energy?
+          grading_focus: [boundaries, ambition, sustainability, pressure behavior]
+          completion_hint: Show how you preserve capacity without abandoning ambition.
+        real_world:
+          title: Real-World Trial
+          prompt: Complete one full reset or recovery day.
+          completion_hint: Practice stopping before your body forces it.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Show low burnout indicators and stable recovery patterns.
+          signals: [low_burnout_indicators, recovery_consistency, balanced_workload]
+          completion_hint: Alfred looks for sustainable performance under load.
+      black:
+        criteria: Models sustainable performance.
+        reflection:
+          title: Reflection Trial
+          prompt: What is sustainable success?
+          grading_focus: [wisdom, sustainability, values, transmission]
+          completion_hint: Define success in a way that can endure.
+        real_world:
+          title: Real-World Trial
+          prompt: Coach another person on sustainable performance.
+          completion_hint: Help someone else protect energy and ambition at once.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Capture sustainability coaching or mentorship activity.
+          signals: [sustainability_coaching, mentorship_notes, recovery_guidance]
+          completion_hint: Alfred looks for sustainable leadership being modeled for others.
 
-    learning:
-      name: Learning & Development
-      reflection:
-        title: Reflection Trial
-        prompt: Describe a failure that taught you something you still use today.
-        grading_focus:
-          - learning extraction
-          - ownership
-          - resilience
-          - applied wisdom
-        completion_hint: Show self-awareness, ownership, and pattern recognition.
-      real_world:
-        title: Real-World Trial
-        prompt: Reflect on one major mistake and identify the lesson you want to carry forward.
-        completion_hint: Do one concrete action outside the app, then reflect on what happened.
-      behavioral:
-        title: Behavioral Evidence
-        prompt: Capture a failure, development area, coaching reflection, or journal entry in Alfred.
-        completion_hint: Alfred needs usage evidence before recommending promotion.
+  learning:
+    name: Learning & Development
+    description: Growth, resilience, reflection, and continuous improvement.
+    belts:
+      white:
+        criteria: Acknowledges growth areas.
+        reflection:
+          title: Reflection Trial
+          prompt: What failure taught you most?
+          grading_focus: [honesty, learning extraction, ownership, emotional specificity]
+          completion_hint: Turn experience into information.
+        real_world:
+          title: Real-World Trial
+          prompt: Reflect on one major mistake.
+          completion_hint: Name the lesson without collapsing into shame.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Journal consistently.
+          signals: [journaling_consistency, failure_entries, coaching_reflections]
+          completion_hint: Alfred looks for reflection becoming a habit.
+      yellow:
+        criteria: Understands limiting beliefs.
+        reflection:
+          title: Reflection Trial
+          prompt: What belief limits you?
+          grading_focus: [belief awareness, honesty, pattern recognition, ownership]
+          completion_hint: Name the assumption that quietly governs behavior.
+        real_world:
+          title: Real-World Trial
+          prompt: Seek difficult feedback.
+          completion_hint: Invite information your ego might prefer to avoid.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Maintain reflection consistency.
+          signals: [reflection_consistency, feedback_notes, coaching_sessions]
+          completion_hint: Alfred looks for repeated learning behavior.
+      green:
+        criteria: Pursues active growth.
+        reflection:
+          title: Reflection Trial
+          prompt: What change are you proud of?
+          grading_focus: [growth evidence, specificity, humility, behavior change]
+          completion_hint: Identify real growth, not just intention.
+        real_world:
+          title: Real-World Trial
+          prompt: Complete a 14-day growth challenge.
+          completion_hint: Practice change long enough to meet resistance.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Show exercise or coaching consistency.
+          signals: [exercise_consistency, coaching_sessions, development_actions]
+          completion_hint: Alfred looks for growth becoming practiced.
+      brown:
+        criteria: Integrates continuous learning.
+        reflection:
+          title: Reflection Trial
+          prompt: How did setbacks strengthen you?
+          grading_focus: [resilience, integration, wisdom, specificity]
+          completion_hint: Show how pain became capacity.
+        real_world:
+          title: Real-World Trial
+          prompt: Teach one lesson you learned from experience.
+          completion_hint: Convert learning into something useful for another person.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Show reflection depth across repeated entries or coaching sessions.
+          signals: [reflection_depth, coaching_patterns, development_tracking]
+          completion_hint: Alfred looks for learning integrated over time.
+      black:
+        criteria: Helps others grow.
+        reflection:
+          title: Reflection Trial
+          prompt: What wisdom should endure?
+          grading_focus: [wisdom, legacy, humility, transmission]
+          completion_hint: Distill what is worth passing on.
+        real_world:
+          title: Real-World Trial
+          prompt: Mentor someone deeply through a growth challenge.
+          completion_hint: Support another person's development without owning it for them.
+        behavioral:
+          title: Behavioral Evidence
+          prompt: Capture long-term mentorship patterns.
+          signals: [long_term_mentorship, growth_coaching, development_support]
+          completion_hint: Alfred looks for your learning becoming service.
