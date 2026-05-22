@@ -3,14 +3,15 @@ import axios from "axios";
 
 const CENTER = { x: 500, y: 500 };
 const R_CENTER = 116;
-const R_INNER = 220;
-const R_OUTER = 360;
+const R_DOMAIN = 240;
+const R_SUBDOMAIN = 380;
+const R_BELT = 412;
 
 const BELTS = [
-  { id: "white", name: "White Belt", shortName: "White", meaning: "Awareness", color: "#e5e7eb", text: "#111827" },
-  { id: "yellow", name: "Yellow Belt", shortName: "Yellow", meaning: "Understanding", color: "#d6a11d", text: "#111827" },
-  { id: "green", name: "Green Belt", shortName: "Green", meaning: "Application", color: "#2f855a", text: "#ffffff" },
-  { id: "brown", name: "Brown Belt", shortName: "Brown", meaning: "Integration", color: "#7c4a2d", text: "#ffffff" },
+  { id: "white", name: "White Belt", shortName: "White", meaning: "Awareness", color: "#F8FAFC", text: "#111827" },
+  { id: "yellow", name: "Yellow Belt", shortName: "Yellow", meaning: "Understanding", color: "#FACC15", text: "#111827" },
+  { id: "green", name: "Green Belt", shortName: "Green", meaning: "Application", color: "#22C55E", text: "#ffffff" },
+  { id: "brown", name: "Brown Belt", shortName: "Brown", meaning: "Integration", color: "#92400E", text: "#ffffff" },
   { id: "black", name: "Black Belt", shortName: "Black", meaning: "Transmission", color: "#111827", text: "#ffffff" },
 ];
 
@@ -21,51 +22,159 @@ const DIMENSIONS = [
     id: "vision",
     name: "Vision & Goals",
     brief: "Purpose, values, alignment, and long-term direction.",
-    topics: ["Values", "Strengths", "Goals"],
+    topics: [
+      { id: "values", label: "Values", endpoint: "values" },
+      { id: "strengths", label: "Strengths", endpoint: "strengths" },
+      { id: "goals", label: "Goals", endpoint: "goals" },
+    ],
   },
   {
     id: "people",
     name: "People",
     brief: "Communication, delegation, inspiration, and trust.",
-    topics: ["Team Composition", "Inspire", "Coach & Delegate"],
+    topics: [
+      { id: "team_composition", label: "Team Composition", endpoint: "team-composition" },
+      { id: "inspiration", label: "Inspire", endpoint: "inspiration" },
+      { id: "coaching_moments", label: "Coach & Delegate", endpoint: "coaching-moments" },
+    ],
   },
   {
     id: "execute",
     name: "Prioritize & Execute",
     brief: "Focus, discipline, prioritization, and delivery.",
-    topics: ["Prioritization", "Execution System", "Procrastination"],
+    topics: [
+      { id: "prioritization", label: "Prioritization", endpoint: "execution-systems", filter: (item) => item.category === "prioritization" },
+      { id: "execution_system", label: "Execution System", endpoint: "execution-systems" },
+      { id: "procrastination", label: "Procrastination", endpoint: "procrastination-patterns" },
+    ],
     mvp: true,
   },
   {
     id: "energy",
     name: "Time & Energy",
     brief: "Recovery, capacity, energy management, and sustainability.",
-    topics: ["Energy Sources", "Energy Drains", "Recovery"],
+    topics: [
+      { id: "energy_sources", label: "Energy Sources", endpoint: "energy-sources" },
+      { id: "energy_drains", label: "Energy Drains", endpoint: "energy-drains" },
+      { id: "recovery", label: "Recovery", endpoint: "recovery-methods" },
+    ],
   },
   {
     id: "learning",
     name: "Learning & Development",
     brief: "Growth, resilience, reflection, and continuous improvement.",
-    topics: ["Failures & Scars", "Development Opportunities", "Development Plan"],
+    topics: [
+      { id: "failures", label: "Failures & Scars", endpoint: "failures" },
+      { id: "development_opportunities", label: "Development Opportunities", endpoint: "development-areas" },
+      { id: "development_plan", label: "Development Plan", endpoint: "opportunities" },
+    ],
   },
 ];
 
-const TOPIC_ENDPOINTS = {
-  Values: "values",
-  Strengths: "strengths",
-  Goals: "goals",
-  "Team Composition": "team-composition",
-  Inspire: "inspiration",
-  "Coach & Delegate": "coaching-moments",
-  Prioritization: "execution-systems",
-  "Execution System": "execution-systems",
-  Procrastination: "procrastination-patterns",
-  "Energy Sources": "energy-sources",
-  "Energy Drains": "energy-drains",
-  Recovery: "recovery-methods",
-  "Failures & Scars": "failures",
-  "Development Opportunities": "development-areas",
-  "Development Plan": "execution-systems",
+const WHY_IT_MATTERS = {
+  Values: "Values are the rules you follow when no one is watching. They make trade-offs easier to live with.",
+  Strengths: "Leadership impact compounds when you deliberately use what already works.",
+  Goals: "Clear goals give direction and permission. They reduce noise and focus attention.",
+  "Team Composition": "The people around you shape your behavior more than your intentions.",
+  Inspire: "Inspiration creates energy and alignment. Without it, leaders end up pushing instead of pulling.",
+  "Coach & Delegate": "Coaching and delegation turn effort into leverage and protect your focus.",
+  Prioritization: "Every yes quietly creates a no. Prioritization is the ability to say no without guilt.",
+  "Execution System": "Willpower does not scale. A clear execution system creates progress without mental overload.",
+  Procrastination: "Procrastination is usually a signal of resistance, fear, or misalignment, not laziness.",
+  "Energy Sources": "Energy determines the quality of your decisions. Knowing what fuels you protects clarity.",
+  "Energy Drains": "Some activities cost more than they appear. Identifying them allows redesign or containment.",
+  Recovery: "Recovery is not a reward. It is a prerequisite for sustained leadership.",
+  "Failures & Scars": "Unexamined experiences tend to repeat. Reflection turns experience into information.",
+  "Development Opportunities": "Growth often hides inside discomfort. Naming it creates direction.",
+  "Development Plan": "Insight only compounds when it leads to deliberate action.",
+};
+
+const TOPIC_FORM_FIELDS = {
+  Values: [
+    { name: "title", label: "Title", type: "input" },
+    { name: "value_text", label: "Value", type: "textarea", required: true },
+    { name: "why", label: "Why it matters", type: "textarea" },
+  ],
+  Strengths: [
+    { name: "title", label: "Title", type: "input" },
+    { name: "strength", label: "Strength", type: "textarea", required: true },
+    { name: "source", label: "Source", type: "input" },
+  ],
+  Goals: [
+    { name: "title", label: "Title", type: "input" },
+    { name: "goal_text", label: "Goal", type: "textarea", required: true },
+    { name: "why", label: "Why", type: "textarea" },
+    { name: "time_horizon", label: "Time horizon", type: "input" },
+  ],
+  "Team Composition": [
+    { name: "composition_text", label: "Composition", type: "textarea", required: true },
+    { name: "team_type", label: "Team type", type: "input" },
+    { name: "dynamics", label: "Dynamics", type: "textarea" },
+  ],
+  Inspire: [
+    { name: "title", label: "Title", type: "input" },
+    { name: "inspiration_text", label: "How you inspire", type: "textarea", required: true },
+    { name: "approach", label: "Approach", type: "textarea" },
+    { name: "effectiveness", label: "What works", type: "textarea" },
+  ],
+  "Coach & Delegate": [
+    { name: "title", label: "Title", type: "input" },
+    { name: "moment_text", label: "Moment", type: "textarea", required: true },
+    { name: "person", label: "Person", type: "input" },
+    { name: "outcome", label: "Outcome", type: "textarea" },
+    { name: "learning", label: "Learning", type: "textarea" },
+  ],
+  Prioritization: [
+    { name: "title", label: "Title", type: "input" },
+    { name: "system_text", label: "System or approach", type: "textarea", required: true },
+    { name: "category", label: "Category", type: "input", defaultValue: "prioritization" },
+    { name: "effectiveness", label: "Effectiveness", type: "input" },
+  ],
+  "Execution System": [
+    { name: "title", label: "Title", type: "input" },
+    { name: "system_text", label: "System or approach", type: "textarea", required: true },
+    { name: "category", label: "Category", type: "input" },
+    { name: "effectiveness", label: "Effectiveness", type: "input" },
+  ],
+  Procrastination: [
+    { name: "title", label: "Title", type: "input" },
+    { name: "pattern_text", label: "Pattern", type: "textarea", required: true },
+    { name: "underlying_reason", label: "Underlying reason", type: "textarea" },
+    { name: "strategy", label: "Strategy", type: "textarea" },
+  ],
+  "Energy Sources": [
+    { name: "title", label: "Title", type: "input" },
+    { name: "source_text", label: "Energy source", type: "textarea", required: true },
+    { name: "category", label: "Category", type: "input" },
+  ],
+  "Energy Drains": [
+    { name: "title", label: "Title", type: "input" },
+    { name: "drain_text", label: "Energy drain", type: "textarea", required: true },
+    { name: "category", label: "Category", type: "input" },
+    { name: "mitigation", label: "Mitigation strategy", type: "textarea" },
+  ],
+  Recovery: [
+    { name: "title", label: "Title", type: "input" },
+    { name: "method_text", label: "Recovery method", type: "textarea", required: true },
+    { name: "category", label: "Category", type: "input" },
+    { name: "frequency", label: "Frequency", type: "input" },
+  ],
+  "Failures & Scars": [
+    { name: "title", label: "Title", type: "input" },
+    { name: "failure_text", label: "Failure or scar", type: "textarea", required: true },
+    { name: "learning", label: "Learning", type: "textarea" },
+    { name: "scar", label: "Scar", type: "textarea" },
+  ],
+  "Development Opportunities": [
+    { name: "title", label: "Title", type: "input" },
+    { name: "skill", label: "Development area", type: "textarea", required: true },
+    { name: "source", label: "Source", type: "input" },
+  ],
+  "Development Plan": [
+    { name: "title", label: "Title", type: "input" },
+    { name: "opportunity_text", label: "Opportunity", type: "textarea", required: true },
+    { name: "source", label: "Source", type: "input" },
+  ],
 };
 
 const FALLBACK_YELLOW_BELT_REQUIREMENTS = {
@@ -162,6 +271,75 @@ function arcPath(r, a1, a2) {
   const end = polar(CENTER.x, CENTER.y, r, a2);
   const largeArc = a2 - a1 > 180 ? 1 : 0;
   return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`;
+}
+
+function splitLabel(label, maxLineLength = 13) {
+  const words = label.split(" ");
+  const lines = [];
+
+  words.forEach((word) => {
+    const lastLine = lines[lines.length - 1];
+    if (lastLine && `${lastLine} ${word}`.length <= maxLineLength) {
+      lines[lines.length - 1] = `${lastLine} ${word}`;
+    } else {
+      lines.push(word);
+    }
+  });
+
+  return lines;
+}
+
+function getTopicItems(topic, topicData) {
+  if (!topic) return [];
+
+  const endpointItems = topicData[topic.endpoint] || [];
+  return topic.filter ? endpointItems.filter(topic.filter) : endpointItems;
+}
+
+function getItemTitle(item) {
+  return (
+    item.title ||
+    item.system_text ||
+    item.pattern_text ||
+    item.goal_text ||
+    item.value_text ||
+    item.strength ||
+    item.value ||
+    item.achievement ||
+    item.name ||
+    item.skill ||
+    item.failure_text ||
+    item.opportunity_text ||
+    item.composition_text ||
+    item.source_text ||
+    item.drain_text ||
+    item.method_text ||
+    item.inspiration_text ||
+    item.moment_text ||
+    "Captured evidence"
+  );
+}
+
+function getItemBody(item) {
+  return (
+    item.description ||
+    item.effectiveness ||
+    item.strategy ||
+    item.underlying_reason ||
+    item.why ||
+    item.category ||
+    item.source ||
+    item.context ||
+    item.dynamics ||
+    item.approach ||
+    item.lesson ||
+    item.learning ||
+    item.outcome ||
+    item.mitigation ||
+    item.frequency ||
+    item.impact ||
+    item.notes
+  );
 }
 
 function getBelt(beltIndex) {
@@ -363,6 +541,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
     procrastination: [],
     goalReviews: [],
   });
+  const [topicData, setTopicData] = useState({});
   const [loadingSignals, setLoadingSignals] = useState(false);
   const [activeTopic, setActiveTopic] = useState("Execution System");
   const [trialRecords, setTrialRecords] = useState([]);
@@ -370,11 +549,20 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   const [activeTrial, setActiveTrial] = useState(null);
   const [trialDraft, setTrialDraft] = useState("");
   const [savingTrial, setSavingTrial] = useState(false);
+  const [editingSubdomainItem, setEditingSubdomainItem] = useState(null);
+  const [editingSubdomainTopic, setEditingSubdomainTopic] = useState(null);
+  const [savingSubdomainItem, setSavingSubdomainItem] = useState(false);
 
   const selectedDimension = useMemo(
     () => DIMENSIONS.find((dimension) => dimension.id === selectedDimensionId) || DIMENSIONS[2],
     [selectedDimensionId]
   );
+
+  useEffect(() => {
+    if (!selectedDimension.topics.some((topic) => topic.label === activeTopic)) {
+      setActiveTopic(selectedDimension.topics[0].label);
+    }
+  }, [activeTopic, selectedDimension]);
 
   useEffect(() => {
     if (apiUrl == null || !userNumber) return;
@@ -389,8 +577,22 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
           axios.get(`${apiUrl}/api/journey/procrastination-patterns`, { params: { user_number: userNumber } }),
           axios.get(`${apiUrl}/api/journey/goal-reviews`, { params: { user_number: userNumber } }),
         ]);
+        const topicEndpoints = [
+          ...new Set(DIMENSIONS.flatMap((dimension) => dimension.topics.map((topic) => topic.endpoint))),
+        ];
+        const topicResponses = await Promise.allSettled(
+          topicEndpoints.map((endpoint) =>
+            axios.get(`${apiUrl}/api/journey/${endpoint}`, { params: { user_number: userNumber } })
+          )
+        );
 
         if (cancelled) return;
+
+        const nextTopicData = topicEndpoints.reduce((data, endpoint, index) => {
+          const response = topicResponses[index];
+          data[endpoint] = response.status === "fulfilled" ? response.value.data || [] : [];
+          return data;
+        }, {});
 
         setSignals({
           goals: goals.status === "fulfilled" ? goals.value.data || [] : [],
@@ -401,6 +603,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
               ? goalReviews.value.data?.sessions || goalReviews.value.data || []
               : [],
         });
+        setTopicData(nextTopicData);
       } catch (error) {
         console.error("Failed to load leadership telemetry", error);
       } finally {
@@ -486,14 +689,119 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
 
   const dimensionStates = useMemo(() => buildDimensionStates(telemetry, trialRecords), [telemetry, trialRecords]);
 
+  const activeTopicConfig = useMemo(() => {
+    return selectedDimension.topics.find((topic) => topic.label === activeTopic) || selectedDimension.topics[0];
+  }, [activeTopic, selectedDimension]);
+
   const topicItems = useMemo(() => {
-    if (activeTopic === "Execution System") return signals.executionSystems;
-    if (activeTopic === "Prioritization") {
-      return signals.executionSystems.filter((item) => item.category === "prioritization");
+    return getTopicItems(activeTopicConfig, topicData);
+  }, [activeTopicConfig, topicData]);
+
+  const handleSelectDimension = (dimensionId) => {
+    const nextDimension = DIMENSIONS.find((dimension) => dimension.id === dimensionId);
+    setSelectedDimensionId(dimensionId);
+    if (nextDimension?.topics?.length) {
+      setActiveTopic(nextDimension.topics[0].label);
     }
-    if (activeTopic === "Procrastination") return signals.procrastination;
-    return [];
-  }, [activeTopic, signals]);
+  };
+
+  const handleSelectSubdomain = (dimensionId, topic) => {
+    setSelectedDimensionId(dimensionId);
+    setActiveTopic(topic.label);
+  };
+
+  const updateTopicDataForEndpoint = (endpoint, items) => {
+    const safeItems = Array.isArray(items) ? items : [];
+
+    setTopicData((current) => ({
+      ...current,
+      [endpoint]: safeItems,
+    }));
+    setSignals((current) => ({
+      ...current,
+      goals: endpoint === "goals" ? safeItems : current.goals,
+      executionSystems: endpoint === "execution-systems" ? safeItems : current.executionSystems,
+      procrastination: endpoint === "procrastination-patterns" ? safeItems : current.procrastination,
+    }));
+  };
+
+  const refreshTopicData = async (topic) => {
+    if (!topic || apiUrl == null || !userNumber) return [];
+
+    const response = await axios.get(`${apiUrl}/api/journey/${topic.endpoint}`, {
+      params: { user_number: userNumber },
+    });
+    const data = response.data?.data || response.data || [];
+    updateTopicDataForEndpoint(topic.endpoint, data);
+    return data;
+  };
+
+  const handleAddSubdomainItem = (topic) => {
+    const fields = TOPIC_FORM_FIELDS[topic.label] || [];
+    const draft = fields.reduce((item, field) => {
+      item[field.name] = field.defaultValue || "";
+      return item;
+    }, { id: null, isNew: true });
+
+    setEditingSubdomainTopic(topic);
+    setEditingSubdomainItem(draft);
+  };
+
+  const handleEditSubdomainItem = (topic, item) => {
+    setEditingSubdomainTopic(topic);
+    setEditingSubdomainItem(item);
+  };
+
+  const handleSaveSubdomainItem = async (updates) => {
+    if (!editingSubdomainTopic) return;
+
+    setSavingSubdomainItem(true);
+    try {
+      const endpoint = editingSubdomainTopic.endpoint;
+      const payload = { ...updates, user_number: userNumber };
+
+      if (editingSubdomainItem?.id) {
+        await axios.put(
+          `${apiUrl}/api/journey/${endpoint}/${editingSubdomainItem.id}`,
+          updates,
+          { params: { user_number: userNumber } }
+        );
+      } else {
+        await axios.post(`${apiUrl}/api/journey/${endpoint}`, payload, {
+          params: { user_number: userNumber },
+        });
+      }
+
+      await refreshTopicData(editingSubdomainTopic);
+      setEditingSubdomainItem(null);
+      setEditingSubdomainTopic(null);
+    } catch (error) {
+      console.error("Failed to save subdomain item", error);
+      alert("Alfred could not save this Journey item yet. Please try again.");
+    } finally {
+      setSavingSubdomainItem(false);
+    }
+  };
+
+  const handleDeleteSubdomainItem = async () => {
+    if (!editingSubdomainTopic || !editingSubdomainItem?.id) return;
+    if (!window.confirm(`Delete this ${editingSubdomainTopic.label.toLowerCase()} item?`)) return;
+
+    setSavingSubdomainItem(true);
+    try {
+      await axios.delete(`${apiUrl}/api/journey/${editingSubdomainTopic.endpoint}/${editingSubdomainItem.id}`, {
+        params: { user_number: userNumber },
+      });
+      await refreshTopicData(editingSubdomainTopic);
+      setEditingSubdomainItem(null);
+      setEditingSubdomainTopic(null);
+    } catch (error) {
+      console.error("Failed to delete subdomain item", error);
+      alert("Alfred could not delete this Journey item yet. Please try again.");
+    } finally {
+      setSavingSubdomainItem(false);
+    }
+  };
 
   const selectedState = dimensionStates[selectedDimension.id];
   const selectedBelt = getBelt(selectedState.beltIndex);
@@ -617,8 +925,11 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <LeadershipWheel
               selectedDimensionId={selectedDimensionId}
+              activeTopic={activeTopic}
               dimensionStates={dimensionStates}
-              onSelectDimension={setSelectedDimensionId}
+              topicData={topicData}
+              onSelectDimension={handleSelectDimension}
+              onSelectSubdomain={handleSelectSubdomain}
             />
           </section>
 
@@ -654,9 +965,12 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                 />
                 <TelemetryPanel telemetry={telemetry} loading={loadingSignals} />
                 <TopicEvidencePanel
+                  dimension={selectedDimension}
                   activeTopic={activeTopic}
                   setActiveTopic={setActiveTopic}
                   items={topicItems}
+                  onAddItem={handleAddSubdomainItem}
+                  onEditItem={handleEditSubdomainItem}
                 />
               </>
             ) : (
@@ -671,6 +985,14 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
                   onStartTrial={handleStartTrial}
                 />
                 <ComingSoonPanel dimension={selectedDimension} />
+                <TopicEvidencePanel
+                  dimension={selectedDimension}
+                  activeTopic={activeTopic}
+                  setActiveTopic={setActiveTopic}
+                  items={topicItems}
+                  onAddItem={handleAddSubdomainItem}
+                  onEditItem={handleEditSubdomainItem}
+                />
               </>
             )}
           </section>
@@ -691,11 +1013,25 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
           onSubmit={handleSubmitTrial}
         />
       )}
+
+      {editingSubdomainItem && editingSubdomainTopic && (
+        <SubdomainItemModal
+          topic={editingSubdomainTopic}
+          item={editingSubdomainItem}
+          saving={savingSubdomainItem}
+          onClose={() => {
+            setEditingSubdomainItem(null);
+            setEditingSubdomainTopic(null);
+          }}
+          onSave={handleSaveSubdomainItem}
+          onDelete={handleDeleteSubdomainItem}
+        />
+      )}
     </div>
   );
 }
 
-function LeadershipWheel({ selectedDimensionId, dimensionStates, onSelectDimension }) {
+function LeadershipWheel({ selectedDimensionId, activeTopic, dimensionStates, topicData, onSelectDimension, onSelectSubdomain }) {
   const anglePerDim = 360 / DIMENSIONS.length;
 
   return (
@@ -728,14 +1064,13 @@ function LeadershipWheel({ selectedDimensionId, dimensionStates, onSelectDimensi
         const dimensionState = dimensionStates[dimension.id];
         const belt = getBelt(dimensionState.beltIndex);
         const isSelected = selectedDimensionId === dimension.id;
-        const labelPos = polar(CENTER.x, CENTER.y, (R_CENTER + R_INNER) / 2 + 6, mid);
-        const topicPos = polar(CENTER.x, CENTER.y, (R_INNER + R_OUTER) / 2, mid);
-        const progressEnd = start + (anglePerDim * dimensionState.progress) / 100;
+        const labelPos = polar(CENTER.x, CENTER.y, (R_CENTER + R_DOMAIN) / 2 + 4, mid);
+        const subdomainAngle = anglePerDim / dimension.topics.length;
 
         return (
           <g key={dimension.id}>
             <path
-              d={wedgePath(R_CENTER, R_INNER, start, end)}
+              d={wedgePath(R_CENTER, R_DOMAIN, start, end)}
               fill={belt.color}
               stroke={isSelected ? "#0f172a" : "#ffffff"}
               strokeWidth={isSelected ? 8 : 4}
@@ -744,23 +1079,6 @@ function LeadershipWheel({ selectedDimensionId, dimensionStates, onSelectDimensi
               onClick={() => onSelectDimension(dimension.id)}
               style={{ cursor: "pointer" }}
             />
-            <path
-              d={wedgePath(R_INNER, R_OUTER, start, end)}
-              fill={isSelected ? "#1f2937" : "#f8fafc"}
-              stroke="#d8d3c6"
-              strokeWidth="3"
-              onClick={() => onSelectDimension(dimension.id)}
-              style={{ cursor: "pointer" }}
-            />
-            {dimensionState.progress > 0 && (
-              <path
-                d={arcPath(R_OUTER + 16, start + 3, progressEnd - 3)}
-                fill="none"
-                stroke={belt.color}
-                strokeWidth="18"
-                strokeLinecap="round"
-              />
-            )}
             <text
               x={labelPos.x}
               y={labelPos.y - 8}
@@ -770,36 +1088,58 @@ function LeadershipWheel({ selectedDimensionId, dimensionStates, onSelectDimensi
               fontWeight="700"
               pointerEvents="none"
             >
-              {dimension.name.split(" & ").map((part, partIndex) => (
+              {splitLabel(dimension.name, 11).map((part, partIndex) => (
                 <tspan key={part} x={labelPos.x} dy={partIndex === 0 ? 0 : 19}>
-                  {partIndex === 0 ? part : `& ${part}`}
+                  {part}
                 </tspan>
               ))}
             </text>
-            <text
-              x={topicPos.x}
-              y={topicPos.y - 18}
-              textAnchor="middle"
-              fill={isSelected ? "#ffffff" : "#334155"}
-              fontSize="14"
-              fontWeight="600"
-              pointerEvents="none"
-            >
-              <tspan x={topicPos.x}>{belt.shortName}</tspan>
-              <tspan x={topicPos.x} dy="20">
-                {dimensionState.progress}% to next
-              </tspan>
-              {dimensionState.momentum && (
-                <tspan x={topicPos.x} dy="20" fill={isSelected ? "#f8e7bd" : "#7c4a2d"}>
-                  Momentum active
-                </tspan>
-              )}
-              {!dimensionState.momentum && dimensionState.evidenceLabel && (
-                <tspan x={topicPos.x} dy="20" fill={isSelected ? "#d9c8a6" : "#64748b"}>
-                  {dimensionState.evidenceLabel}
-                </tspan>
-              )}
-            </text>
+
+            {dimension.topics.map((topic, topicIndex) => {
+              const topicStart = start + topicIndex * subdomainAngle;
+              const topicEnd = topicStart + subdomainAngle;
+              const topicMid = topicStart + subdomainAngle / 2;
+              const topicItems = getTopicItems(topic, topicData);
+              const hasEvidence = topicItems.length > 0;
+              const isActiveTopic = isSelected && activeTopic === topic.label;
+              const topicPos = polar(CENTER.x, CENTER.y, (R_DOMAIN + R_SUBDOMAIN) / 2, topicMid);
+
+              return (
+                <g key={topic.id}>
+                  <path
+                    d={wedgePath(R_DOMAIN, R_SUBDOMAIN, topicStart, topicEnd)}
+                    fill={isActiveTopic ? "#0f172a" : isSelected ? "#1f2937" : hasEvidence ? "#f8fafc" : "#ffffff"}
+                    stroke={isActiveTopic ? belt.color : "#d8d3c6"}
+                    strokeWidth={isActiveTopic ? "5" : "3"}
+                    onClick={() => onSelectSubdomain(dimension.id, topic)}
+                    style={{ cursor: "pointer" }}
+                  />
+                  <path
+                    d={arcPath(R_BELT, topicStart + 2, topicEnd - 2)}
+                    fill="none"
+                    stroke={belt.color}
+                    strokeWidth="12"
+                    strokeLinecap="butt"
+                    pointerEvents="none"
+                  />
+                  <text
+                    x={topicPos.x}
+                    y={topicPos.y - 12}
+                    textAnchor="middle"
+                    fill={isSelected ? "#ffffff" : "#334155"}
+                    fontSize="13"
+                    fontWeight={hasEvidence ? "700" : "600"}
+                    pointerEvents="none"
+                  >
+                    {splitLabel(topic.label, 12).slice(0, 3).map((part, partLineIndex) => (
+                      <tspan key={part} x={topicPos.x} dy={partLineIndex === 0 ? 0 : 17}>
+                        {part}
+                      </tspan>
+                    ))}
+                  </text>
+                </g>
+              );
+            })}
           </g>
         );
       })}
@@ -1160,27 +1500,39 @@ function TelemetryPanel({ telemetry, loading }) {
   );
 }
 
-function TopicEvidencePanel({ activeTopic, setActiveTopic, items }) {
+function TopicEvidencePanel({ dimension, activeTopic, setActiveTopic, items, onAddItem, onEditItem }) {
+  const activeTopicConfig = dimension.topics.find((topic) => topic.label === activeTopic) || dimension.topics[0];
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Evidence Library</p>
-          <h3 className="mt-1 text-xl font-semibold text-slate-950">Prioritize & Execute Inputs</h3>
+          <h3 className="mt-1 text-xl font-semibold text-slate-950">{activeTopicConfig.label} Inputs</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{WHY_IT_MATTERS[activeTopicConfig.label]}</p>
         </div>
-        <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1">
-          {["Execution System", "Prioritization", "Procrastination"].map((topic) => (
-            <button
-              key={topic}
-              type="button"
-              onClick={() => setActiveTopic(topic)}
-              className={`rounded-md px-3 py-2 text-xs font-semibold transition ${
-                activeTopic === topic ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-white"
-              }`}
-            >
-              {topic}
-            </button>
-          ))}
+        <div className="flex flex-col gap-2 sm:items-end">
+          <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1">
+            {dimension.topics.map((topic) => (
+              <button
+                key={topic.id}
+                type="button"
+                onClick={() => setActiveTopic(topic.label)}
+                className={`rounded-md px-3 py-2 text-xs font-semibold transition ${
+                  activeTopicConfig.id === topic.id ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-white"
+                }`}
+              >
+                {topic.label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => onAddItem(activeTopicConfig)}
+            className="rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
+          >
+            Add {activeTopicConfig.label}
+          </button>
         </div>
       </div>
 
@@ -1191,25 +1543,28 @@ function TopicEvidencePanel({ activeTopic, setActiveTopic, items }) {
             but maturity scoring becomes more trustworthy as real usage accumulates.
           </div>
         ) : (
-          items.slice(0, 5).map((item) => <EvidenceItem key={item.id} item={item} />)
+          items.slice(0, 5).map((item) => (
+            <EvidenceItem
+              key={item.id}
+              item={item}
+              onClick={() => onEditItem(activeTopicConfig, item)}
+            />
+          ))
         )}
       </div>
     </div>
   );
 }
 
-function EvidenceItem({ item }) {
-  const title =
-    item.title ||
-    item.system_text ||
-    item.pattern_text ||
-    item.goal_text ||
-    item.strength ||
-    "Captured evidence";
-  const body = item.effectiveness || item.strategy || item.underlying_reason || item.why || item.category;
+function EvidenceItem({ item, onClick }) {
+  const title = getItemTitle(item);
+  const body = getItemBody(item);
 
   return (
-    <article className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+    <article
+      className="cursor-pointer rounded-lg border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300 hover:bg-white hover:shadow-sm"
+      onClick={onClick}
+    >
       <p className="text-sm font-semibold text-slate-900">{title}</p>
       {body && <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>}
     </article>
@@ -1227,10 +1582,119 @@ function ComingSoonPanel({ dimension }) {
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
         {dimension.topics.map((topic) => (
-          <span key={topic} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
-            {topic}
+          <span key={topic.id} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
+            {topic.label}
           </span>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function SubdomainItemModal({ topic, item, saving, onClose, onSave, onDelete }) {
+  const [formData, setFormData] = useState(item || {});
+  const fields = TOPIC_FORM_FIELDS[topic.label] || [];
+  const whyItMatters = WHY_IT_MATTERS[topic.label];
+
+  const handleChange = (fieldName, value) => {
+    setFormData((current) => ({ ...current, [fieldName]: value }));
+  };
+
+  const handleSubmit = () => {
+    const missingRequired = fields.find((field) => field.required && !String(formData[field.name] || "").trim());
+    if (missingRequired) {
+      alert(`${missingRequired.label} is required.`);
+      return;
+    }
+
+    const payload = fields.reduce((data, field) => {
+      const value = formData[field.name];
+      if (value !== undefined) data[field.name] = value;
+      return data;
+    }, {});
+
+    onSave(payload);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+      <div className="w-full max-w-2xl overflow-hidden rounded-lg bg-white shadow-2xl">
+        <div className="border-b border-slate-200 px-6 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                Journey Subdomain
+              </p>
+              <h3 className="mt-1 text-xl font-semibold text-slate-950">
+                {item?.id ? "Edit" : "Add"} {topic.label}
+              </h3>
+              {whyItMatters && <p className="mt-2 text-sm leading-6 text-slate-600">{whyItMatters}</p>}
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md px-2 py-1 text-xl leading-none text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+              aria-label="Close subdomain item"
+            >
+              x
+            </button>
+          </div>
+        </div>
+
+        <div className="max-h-[65vh] space-y-4 overflow-y-auto px-6 py-5">
+          {fields.map((field) => (
+            <label key={field.name} className="block">
+              <span className="text-sm font-semibold text-slate-800">
+                {field.label}
+                {field.required ? " *" : ""}
+              </span>
+              {field.type === "textarea" ? (
+                <textarea
+                  value={formData[field.name] || ""}
+                  onChange={(event) => handleChange(field.name, event.target.value)}
+                  rows={field.required ? 4 : 2}
+                  className="mt-2 w-full resize-y rounded-lg border border-slate-300 px-4 py-3 text-sm leading-6 outline-none focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
+                />
+              ) : (
+                <input
+                  type="text"
+                  value={formData[field.name] || ""}
+                  onChange={(event) => handleChange(field.name, event.target.value)}
+                  className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
+                />
+              )}
+            </label>
+          ))}
+        </div>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:justify-end">
+          {item?.id && (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={onDelete}
+              className="rounded-md border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Delete
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={saving}
+            onClick={onClose}
+            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={handleSubmit}
+            className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            {item?.id ? "Save Changes" : "Create"}
+          </button>
+        </div>
       </div>
     </div>
   );
