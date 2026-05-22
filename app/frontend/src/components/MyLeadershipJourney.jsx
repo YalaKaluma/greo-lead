@@ -202,6 +202,8 @@ function isPassed(status) {
 }
 
 function getStoredTrial(trialRecords, dimensionId, targetBeltId, trialType) {
+  if (!dimensionId || !targetBeltId || !trialType) return null;
+
   return trialRecords.find(
     (trial) =>
       trial.dimension_id === dimensionId &&
@@ -832,24 +834,35 @@ function formatTrialStatus(status) {
   return labels[status] || "Not Started";
 }
 
+function normalizeRequirements(requirements, dimensionId) {
+  const fallback = FALLBACK_YELLOW_BELT_REQUIREMENTS[dimensionId] || FALLBACK_YELLOW_BELT_REQUIREMENTS.execute;
+
+  return {
+    reflection: requirements?.reflection || fallback.reflection,
+    real_world: requirements?.real_world || fallback.real_world,
+    behavioral: requirements?.behavioral || fallback.behavioral,
+  };
+}
+
 function PathToNextBeltPanel({ dimension, targetBelt, requirements, trialRecords, savingTrial, onStartTrial }) {
-  const safeRequirements = requirements || FALLBACK_YELLOW_BELT_REQUIREMENTS[dimension.id];
-  const reflectionTrial = getStoredTrial(trialRecords, dimension.id, targetBelt.id, "reflection");
-  const realWorldTrial = getStoredTrial(trialRecords, dimension.id, targetBelt.id, "real_world");
+  const safeTargetBelt = targetBelt || getBeltById("yellow");
+  const safeRequirements = normalizeRequirements(requirements, dimension.id);
+  const reflectionTrial = getStoredTrial(trialRecords, dimension.id, safeTargetBelt.id, "reflection");
+  const realWorldTrial = getStoredTrial(trialRecords, dimension.id, safeTargetBelt.id, "real_world");
 
   return (
     <div className="rounded-lg border border-amber-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">
-            Path to {targetBelt.name}
+            Path to {safeTargetBelt.name}
           </p>
           <h3 className="mt-1 text-xl font-semibold text-slate-950">
             What Alfred needs to see in {dimension.name}
           </h3>
         </div>
         <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
-          {targetBelt.meaning}
+          {safeTargetBelt.meaning}
         </span>
       </div>
 
@@ -920,7 +933,7 @@ function RequirementCard({ number, title, body, footer, status, buttonLabel, dis
 
 function TrialModal({ trial, draft, setDraft, saving, onClose, onSave, onSubmit }) {
   const isReflection = trial.trial_type === "reflection";
-  const targetBelt = getBeltById(trial.target_belt);
+  const targetBelt = getBeltById(trial.target_belt || "yellow");
   const title = isReflection ? "Reflection Trial" : "Real-World Trial";
   const helperText = isReflection
     ? "Write honestly. Alfred will eventually evaluate depth, ownership, and pattern recognition, not polish."
@@ -995,7 +1008,8 @@ function TrialModal({ trial, draft, setDraft, saving, onClose, onSave, onSubmit 
 
 function TrialsPanel({ telemetry, belt, nextBelt, dimension, targetBelt, requirements, trialRecords }) {
   const telemetryAverage = getTelemetryAverage(telemetry);
-  const safeRequirements = requirements || FALLBACK_YELLOW_BELT_REQUIREMENTS[dimension.id];
+  const safeTargetBelt = targetBelt || nextBelt || getBeltById("yellow");
+  const safeRequirements = normalizeRequirements(requirements, dimension.id);
   const trials = [
     {
       id: "reflection",
@@ -1022,14 +1036,14 @@ function TrialsPanel({ telemetry, belt, nextBelt, dimension, targetBelt, require
     if (trial.id === "behavioral") {
       return {
         ...trial,
-        status: formatTrialStatus(getBehavioralStatus(dimension.id, targetBelt.id, trialRecords, telemetryAverage)),
+        status: formatTrialStatus(getBehavioralStatus(dimension.id, safeTargetBelt.id, trialRecords, telemetryAverage)),
       };
     }
 
     const storedTrial = getStoredTrial(
       trialRecords,
       dimension.id,
-      targetBelt.id,
+      safeTargetBelt.id,
       trial.trialType
     );
 
