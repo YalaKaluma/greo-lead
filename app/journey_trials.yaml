@@ -51,69 +51,69 @@ dimensions:
           signals: [goal_setup, value_reflections, journaling]
           completion_hint: Alfred looks for early evidence that direction is being named.
       yellow:
-        criteria: Understands motivations and contradictions.
+        criteria: Understand the relationship between values (purpose), strengths (fulfillment), and goals (direction). Begin discovering what genuinely matters to you.
         reflection:
           title: Reflection Trial
-          prompt: Describe a misaligned goal.
-          grading_focus: [honesty, motivation clarity, contradiction awareness, ownership]
-          completion_hint: Show where ambition and values are not fully aligned.
+          prompt: Describe one of your greatest achievements. Why was it truly meaningful to you?
+          grading_focus: [meaning, achievement reflection, values awareness, fulfillment clarity]
+          completion_hint: Connect achievement to values, strengths, and genuine meaning.
         real_world:
           title: Real-World Trial
-          prompt: Rewrite, remove, or clarify one goal so it better reflects what actually matters.
-          completion_hint: Make one real adjustment to your goal system.
+          prompt: Share your goals with someone you trust and discuss whether they feel authentic and aligned with who you truly are.
+          completion_hint: Test your goals in conversation with someone who can reflect honestly.
         behavioral:
           title: Behavioral Evidence
-          prompt: Complete weekly goal reviews.
-          signals: [weekly_goal_reviews, goal_updates, task_goal_alignment]
-          completion_hint: Alfred looks for repeated review, not a one-time insight.
+          prompt: Complete goals, values, and strengths in Alfred.
+          signals: [goals_completed, values_completed, strengths_completed]
+          completion_hint: Alfred looks for the core direction map to be fully captured.
       green:
-        criteria: Structures life intentionally.
+        criteria: Apply self-awareness intentionally and begin aligning behavior, priorities, and goals with deeper motivations and purpose.
         reflection:
           title: Reflection Trial
-          prompt: How do your habits reflect your vision?
-          grading_focus: [systems awareness, alignment, specificity, ownership]
-          completion_hint: Connect stated direction to daily behavior.
+          prompt: Describe a goal you pursued for the wrong reasons. What truly drove it?
+          grading_focus: [motivation honesty, self-awareness, misalignment recognition, ownership]
+          completion_hint: Identify the deeper driver beneath a goal that was not fully aligned.
         real_world:
           title: Real-World Trial
-          prompt: Run one week of aligned planning where your top tasks explicitly support your goals.
-          completion_hint: Use planning to make your values operational.
+          prompt: Share your values with someone you trust and discuss how they connect with your goals.
+          completion_hint: Practice translating values into the goals you actually pursue.
         behavioral:
           title: Behavioral Evidence
-          prompt: Reach 80% or higher task-goal alignment.
-          signals: [task_goal_alignment, linked_tasks, weekly_planning]
-          completion_hint: Alfred looks for your task system reflecting your direction.
+          prompt: Maintain 3 goal reviews and journal on how values and strengths affect energy and fulfillment.
+          signals: [three_goal_reviews, values_strengths_energy_journals, fulfillment_reflections]
+          completion_hint: Alfred looks for repeated reflection on how values and strengths shape fulfillment.
       brown:
-        criteria: Maintains alignment under stress.
+        criteria: Integrate values, strengths, goals, and energy into a coherent operating system that remains stable under pressure.
         reflection:
           title: Reflection Trial
-          prompt: Describe a values-based decision you made under pressure.
-          grading_focus: [pressure awareness, tradeoff clarity, values fidelity, courage]
-          completion_hint: Show that alignment held when it had a cost.
+          prompt: What have you learned about the interdependency between your strengths, values, energy, and goals?
+          grading_focus: [integration, systems thinking, pressure stability, self-knowledge]
+          completion_hint: Show how your direction, energy, strengths, and values now work together.
         real_world:
           title: Real-World Trial
-          prompt: Say no to one opportunity that conflicts with your values or current direction.
-          completion_hint: Practice protecting alignment from attractive distraction.
+          prompt: Audit one major area of your life (career, health, relationships, time allocation) for alignment and make one meaningful change.
+          completion_hint: Use the audit to make a concrete adjustment toward alignment.
         behavioral:
           title: Behavioral Evidence
-          prompt: Maintain stable planning patterns during a demanding week.
-          signals: [planning_consistency, low_goal_churn, protected_priorities]
-          completion_hint: Alfred looks for alignment that survives pressure.
+          prompt: Complete 5 new goal reviews and explicitly link goals to values and strengths.
+          signals: [five_goal_reviews, goals_linked_to_values, goals_linked_to_strengths]
+          completion_hint: Alfred looks for explicit links between goals, values, and strengths over time.
       black:
-        criteria: Helps others find direction.
+        criteria: Develop the wisdom and clarity necessary to help others find alignment, purpose, and intentional direction in their own lives.
         reflection:
           title: Reflection Trial
-          prompt: What wisdom now guides you?
-          grading_focus: [distilled wisdom, humility, clarity, transmission]
-          completion_hint: Articulate principles that could help another person.
+          prompt: What wisdom now guides your decisions, and how was it earned?
+          grading_focus: [wisdom, earned clarity, transmission, humility]
+          completion_hint: Distill the principles you can now pass on to others.
         real_world:
           title: Real-World Trial
-          prompt: Mentor someone through a values or direction decision.
-          completion_hint: Help another person clarify what matters to them.
+          prompt: Help someone around you define their strengths, values, and meaningful goals. Support them in finding greater alignment.
+          completion_hint: Guide someone else toward their own alignment without imposing yours.
         behavioral:
           title: Behavioral Evidence
-          prompt: Capture coaching or mentorship activity tied to goals, values, or direction.
-          signals: [coaching_activity, mentorship_notes, shared_goal_reviews]
-          completion_hint: Alfred looks for your maturity becoming useful to others.
+          prompt: Complete 5 new goal reviews, link goals to people supporting the goals, and flag strengths and values of people and how they fit into the goal.
+          signals: [five_goal_reviews, goals_linked_to_people, people_strengths_flagged, people_values_flagged]
+          completion_hint: Alfred looks for direction becoming relational and useful to others.
 
   people:
     name: People
