@@ -372,7 +372,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   );
 
   useEffect(() => {
-    if (!apiUrl || !userNumber) return;
+    if (apiUrl == null || !userNumber) return;
 
     let cancelled = false;
     const fetchSignals = async () => {
@@ -410,7 +410,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   }, [apiUrl, userNumber]);
 
   useEffect(() => {
-    if (!apiUrl) return;
+    if (apiUrl == null) return;
 
     let cancelled = false;
     const fetchTrialConfig = async () => {
@@ -429,7 +429,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   }, [apiUrl]);
 
   useEffect(() => {
-    if (!apiUrl || !userNumber) return;
+    if (apiUrl == null || !userNumber) return;
 
     let cancelled = false;
     const fetchTrials = async () => {
