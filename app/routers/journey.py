@@ -37,7 +37,7 @@ class GoalCreate(BaseModel):
     why: Optional[str] = None
     time_horizon: Optional[str] = "medium"
     parent_goal_id: Optional[int] = None
-    sort_order: Optional[int] = 0
+    sort_order: Optional[int] = None
 
 
 class GoalUpdate(BaseModel):
@@ -47,6 +47,13 @@ class GoalUpdate(BaseModel):
     time_horizon: Optional[str] = None
     parent_goal_id: Optional[int] = None
     sort_order: Optional[int] = None
+
+
+class GoalReorderRequest(BaseModel):
+    parent_id: Optional[int] = None
+    parent_goal_id: Optional[int] = None
+    goal_type: str
+    ordered_goal_ids: list[int]
 
 
 # Pydantic request models for People
@@ -635,6 +642,15 @@ def create_goal(
         db: Session = Depends(get_db)
 ):
     """Create a new goal"""
+    sort_order = goal_data.sort_order
+    if sort_order is None:
+        sibling_goals = db.query(JourneyGoal).filter(
+            JourneyGoal.user_number == user_number,
+            JourneyGoal.time_horizon == goal_data.time_horizon,
+            JourneyGoal.parent_goal_id == goal_data.parent_goal_id
+        ).all()
+        sort_order = max((goal.sort_order or 0 for goal in sibling_goals), default=-1) + 1
+
     new_goal = JourneyGoal(
         user_number=user_number,
         title=goal_data.title,
@@ -642,7 +658,7 @@ def create_goal(
         why=goal_data.why,
         time_horizon=goal_data.time_horizon,
         parent_goal_id=goal_data.parent_goal_id,
-        sort_order=goal_data.sort_order if goal_data.sort_order is not None else 0,
+        sort_order=sort_order,
         first_seen_at=datetime.now(),
         updated_at=datetime.now()
     )
@@ -650,6 +666,67 @@ def create_goal(
     db.commit()
     db.refresh(new_goal)
     return new_goal
+
+
+@router.patch("/goals/reorder")
+def reorder_goals(
+        reorder_data: GoalReorderRequest,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Persist manual goal ordering within a single parent scope."""
+    horizon_by_type = {
+        "long": "long",
+        "long_term": "long",
+        "medium": "medium",
+        "medium_term": "medium",
+        "short": "short",
+        "short_term": "short",
+    }
+    expected_horizon = horizon_by_type.get((reorder_data.goal_type or "").strip().lower())
+
+    if not expected_horizon:
+        raise HTTPException(status_code=400, detail="Invalid goal_type")
+
+    ordered_goal_ids = reorder_data.ordered_goal_ids or []
+    if not ordered_goal_ids:
+        raise HTTPException(status_code=400, detail="ordered_goal_ids is required")
+    if len(ordered_goal_ids) != len(set(ordered_goal_ids)):
+        raise HTTPException(status_code=400, detail="ordered_goal_ids must be unique")
+
+    parent_scope = reorder_data.parent_goal_id
+    if parent_scope is None:
+        parent_scope = reorder_data.parent_id
+
+    goals = db.query(JourneyGoal).filter(
+        JourneyGoal.user_number == user_number,
+        JourneyGoal.id.in_(ordered_goal_ids)
+    ).all()
+
+    if len(goals) != len(ordered_goal_ids):
+        raise HTTPException(status_code=400, detail="All reordered goals must belong to the current user")
+
+    goals_by_id = {goal.id: goal for goal in goals}
+    for goal in goals:
+        if goal.time_horizon != expected_horizon:
+            raise HTTPException(status_code=400, detail="All reordered goals must match goal_type")
+        if goal.parent_goal_id != parent_scope:
+            raise HTTPException(status_code=400, detail="All reordered goals must share the same parent scope")
+
+    for index, goal_id in enumerate(ordered_goal_ids):
+        goal = goals_by_id[goal_id]
+        goal.sort_order = index
+        goal.updated_at = datetime.now()
+
+    db.commit()
+
+    ordered_goals = []
+    for goal_id in ordered_goal_ids:
+        goal = goals_by_id[goal_id]
+        db.refresh(goal)
+        ordered_goals.append(goal)
+
+    return {"success": True, "goals": ordered_goals}
 
 
 @router.put("/goals/{goal_id}", response_model=GoalResponse)

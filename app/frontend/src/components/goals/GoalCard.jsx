@@ -7,7 +7,9 @@ export default function GoalCard({
   onClick,
   onEdit,
   taskCount = 0, 
-  isInTree = false
+  isInTree = false,
+  dragHandleProps = null,
+  isDragging = false
 }) {
   
   // Full labels
@@ -26,9 +28,15 @@ export default function GoalCard({
 
   return (
     <div
-    onClick={() => onClick(goal)}
+    {...(dragHandleProps || {})}
+    onClick={() => {
+      if (!isDragging) {
+        onClick(goal);
+      }
+    }}
     className={`
-    relative rounded border border-slate-300 bg-white hover:bg-slate-50 cursor-pointer
+    relative rounded border border-slate-300 bg-white hover:bg-slate-50
+    ${dragHandleProps ? (isDragging ? 'cursor-grabbing shadow-lg ring-2 ring-blue-300' : 'cursor-grab') : 'cursor-pointer'}
     ${isInTree ? 'p-1.5 lg:p-4' : 'p-3 lg:p-4'}
     ${isLongTerm ? 'border-2 border-blue-300' : ''}
   `}

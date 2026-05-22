@@ -22,7 +22,11 @@ const organizeGoalsByTimeHorizon = (goals) => {
   });
 
   Object.keys(organized).forEach(key => {
-    organized[key].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    organized[key].sort((a, b) => {
+      const orderDiff = (a.sort_order || 0) - (b.sort_order || 0);
+      if (orderDiff !== 0) return orderDiff;
+      return new Date(b.first_seen_at || 0) - new Date(a.first_seen_at || 0);
+    });
   });
 
   return organized;
@@ -47,6 +51,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const [editingGoal, setEditingGoal] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [parentGoalForChild, setParentGoalForChild] = useState(null);
+  const [reorderError, setReorderError] = useState('');
 
   /* ---------------- DATA FETCHING ---------------- */
 
@@ -127,6 +132,44 @@ export default function MyGoals({ apiUrl, userNumber }) {
     } else {
       setViewingGoal(goal);
       setEditingGoal(null);
+    }
+  };
+
+  const persistGoalOrder = async ({ parentId = null, goalType, orderedGoalIds }) => {
+    await axios.patch(
+      `${apiUrl}/api/journey/goals/reorder`,
+      {
+        parent_id: parentId,
+        goal_type: goalType,
+        ordered_goal_ids: orderedGoalIds
+      },
+      { params: { user_number: userNumber } }
+    );
+  };
+
+  const handleReorderGoals = async ({ parentId = null, goalType, orderedGoals }) => {
+    const previousGoals = goals;
+    const orderById = new Map(orderedGoals.map((goal, index) => [goal.id, index]));
+
+    setReorderError('');
+    setGoals(currentGoals =>
+      currentGoals.map(goal =>
+        orderById.has(goal.id)
+          ? { ...goal, sort_order: orderById.get(goal.id) }
+          : goal
+      )
+    );
+
+    try {
+      await persistGoalOrder({
+        parentId,
+        goalType,
+        orderedGoalIds: orderedGoals.map(goal => goal.id)
+      });
+    } catch (err) {
+      console.error('Error reordering goals:', err);
+      setGoals(previousGoals);
+      setReorderError('Could not save the new order. Your previous order has been restored.');
     }
   };
 
@@ -247,13 +290,21 @@ export default function MyGoals({ apiUrl, userNumber }) {
           <>
             {/* Goal Setting Tab */}
             {activeTab === 'setting' && (
+              <>
+              {reorderError && (
+                <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {reorderError}
+                </div>
+              )}
               <GoalsList 
                 goals={organizedGoals}
                 expandedGoalId={expandedGoalId}
                 onCardClick={handleCardClick}
                 onEditClick={handleEditClick}
+                onReorderGoals={handleReorderGoals}
                 taskCounts={taskCounts}
               />
+              </>
             )}
 
             {/* Progress Review Tab */}
