@@ -136,69 +136,69 @@ dimensions:
           signals: [relationship_reflections, people_reviews, journal_entries]
           completion_hint: Alfred looks for early relationship awareness.
       yellow:
-        criteria: Understands emotional triggers.
+        criteria: Understand how your behavior, emotions, communication style, and leadership presence impact other people. Begin developing awareness of trust, empathy, and relational patterns.
         reflection:
           title: Reflection Trial
-          prompt: What recurring interpersonal pattern do you notice?
-          grading_focus: [pattern recognition, trigger awareness, ownership, compassion]
-          completion_hint: Identify the loop, not just the incident.
+          prompt: Reflect on your leadership style using a real example. Describe a situation where your behavior positively or negatively impacted another person or team.
+          grading_focus: [impact awareness, leadership presence, emotional honesty, ownership]
+          completion_hint: Use a concrete example to understand how your style lands on others.
         real_world:
           title: Real-World Trial
-          prompt: Practice active listening in one important conversation.
-          completion_hint: Listen for understanding before steering the outcome.
+          prompt: Ask someone you trust for honest feedback about how you communicate, lead, or show up under stress. Reflect on what surprised you most.
+          completion_hint: Invite honest feedback and look for what you did not already know.
         behavioral:
           title: Behavioral Evidence
-          prompt: Capture delegation reflections or people review notes.
-          signals: [delegation_reflections, people_reviews, coaching_moments]
-          completion_hint: Alfred looks for repeated attention to how relationships work.
+          prompt: Enter at least 5 team members into Alfred.
+          signals: [five_team_members_entered]
+          completion_hint: Alfred looks for your leadership context to be mapped through real people.
       green:
-        criteria: Applies intentional leadership.
+        criteria: Apply intentional leadership behaviors and begin aligning communication, delegation, empathy, and support with the kind of leader you want to become.
         reflection:
           title: Reflection Trial
-          prompt: Describe a moment where empathy changed an outcome.
-          grading_focus: [empathy, behavioral choice, outcome awareness, specificity]
-          completion_hint: Show how understanding changed what you did.
+          prompt: Who is the most inspiring leader to you, and what qualities make them inspiring? Reflect on how those qualities compare to your current leadership style.
+          grading_focus: [leadership aspiration, self-comparison, values clarity, behavioral intention]
+          completion_hint: Use admired leadership qualities to clarify your own growth edge.
         real_world:
           title: Real-World Trial
-          prompt: Delegate a meaningful responsibility without intervening prematurely.
-          completion_hint: Practice trust with a real stake.
+          prompt: Delegate a meaningful responsibility to someone and intentionally avoid stepping in unless truly necessary. Afterwards, openly discuss the experience with them.
+          completion_hint: Practice trust, delegation, and follow-up conversation.
         behavioral:
           title: Behavioral Evidence
-          prompt: Track delegation attempts and outcomes.
-          signals: [delegation_tracking, coaching_moments, task_delegation]
-          completion_hint: Alfred looks for leadership leverage becoming practiced.
+          prompt: Complete 2 journal reflections on how other leaders impact you and complete at least 2 team reviews/check-ins in Alfred.
+          signals: [two_leadership_impact_journals, two_team_reviews]
+          completion_hint: Alfred looks for reflection on leadership models and repeated team check-ins.
       brown:
-        criteria: Creates trust consistently.
+        criteria: Integrate emotional intelligence, trust, delegation, communication, and leadership presence into a stable and authentic relational operating system.
         reflection:
           title: Reflection Trial
-          prompt: How do others experience you under stress?
-          grading_focus: [stress behavior, relational impact, humility, repair]
-          completion_hint: Look at the version of you people meet under pressure.
+          prompt: What has been your biggest leadership failure, and what did it teach you about yourself?
+          grading_focus: [failure ownership, self-knowledge, humility, relational learning]
+          completion_hint: Extract leadership wisdom from a real failure.
         real_world:
           title: Real-World Trial
-          prompt: Facilitate one difficult conversation with clarity and care.
-          completion_hint: Practice honesty without losing respect.
+          prompt: Have a difficult but meaningful conversation you have been avoiding. Focus on honesty, empathy, and listening rather than control or defensiveness.
+          completion_hint: Practice relational courage without losing empathy.
         behavioral:
           title: Behavioral Evidence
-          prompt: Show collaboration consistency across relationship reviews or coaching notes.
-          signals: [relationship_health, review_cadence, collaboration_consistency]
-          completion_hint: Alfred looks for trust-building that is not mood-dependent.
+          prompt: Complete 2 journal reflections on how you impact others and complete at least 2 team reviews/check-ins in Alfred, focusing on team members' needs and leadership style.
+          signals: [two_impact_journals, two_team_reviews_needs_style]
+          completion_hint: Alfred looks for repeated evidence of relational awareness and leadership style calibration.
       black:
-        criteria: Mentors and elevates others.
+        criteria: Develop the ability to elevate, mentor, and inspire others through presence, emotional wisdom, trust, and authentic leadership.
         reflection:
           title: Reflection Trial
-          prompt: What leadership wisdom matters most?
-          grading_focus: [wisdom, service, clarity, lived experience]
-          completion_hint: Distill what you can now help others practice.
+          prompt: What kind of leader - and human being - do you hope people become because of your influence?
+          grading_focus: [transmission, legacy, emotional wisdom, service]
+          completion_hint: Clarify the human impact you want your leadership to leave behind.
         real_world:
           title: Real-World Trial
-          prompt: Coach another person through a meaningful leadership challenge.
-          completion_hint: Help someone else grow without taking over.
+          prompt: Mentor or coach someone through an important personal or professional challenge while helping them build confidence, clarity, and ownership.
+          completion_hint: Help another person grow without taking ownership away from them.
         behavioral:
           title: Behavioral Evidence
-          prompt: Capture mentorship or coaching activity in Alfred.
-          signals: [mentorship_activity, coaching_moments, people_growth_notes]
-          completion_hint: Alfred looks for leadership becoming generative.
+          prompt: Complete 2 journal reflections on how you delegate and empower, and complete at least 2 team reviews/check-ins in Alfred focusing on team members' needs and leadership style.
+          signals: [two_delegate_empower_journals, two_team_reviews_needs_style]
+          completion_hint: Alfred looks for evidence that your leadership elevates others consistently.
 
   execute:
     name: Prioritize & Execute
