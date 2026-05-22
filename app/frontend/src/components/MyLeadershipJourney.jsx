@@ -201,6 +201,22 @@ function isPassed(status) {
   return normalizeStatus(status) === "passed";
 }
 
+function getStatusProgress(status) {
+  const normalized = normalizeStatus(status);
+
+  if (normalized === "passed") return 1;
+  if (normalized === "submitted") return 0.6;
+  if (normalized === "needs_deeper_reflection") return 0.45;
+  if (normalized === "in_progress") return 0.25;
+  if (normalized === "needs evidence") return 0.25;
+
+  return 0;
+}
+
+function isStarted(status) {
+  return getStatusProgress(status) > 0;
+}
+
 function getStoredTrial(trialRecords, dimensionId, targetBeltId, trialType) {
   if (!dimensionId || !targetBeltId || !trialType) return null;
 
@@ -233,10 +249,26 @@ function getTargetBeltProgress(dimensionId, targetBeltId, trialRecords, telemetr
     isPassed(realWorld?.status),
     isPassed(behavioralStatus),
   ].filter(Boolean).length;
+  const submitted = [
+    normalizeStatus(reflection?.status) === "submitted",
+    normalizeStatus(realWorld?.status) === "submitted",
+    normalizeStatus(behavioralStatus) === "submitted",
+  ].filter(Boolean).length;
+  const started = [
+    isStarted(reflection?.status),
+    isStarted(realWorld?.status),
+    isStarted(behavioralStatus),
+  ].filter(Boolean).length;
+  const weightedProgress =
+    getStatusProgress(reflection?.status) +
+    getStatusProgress(realWorld?.status) +
+    getStatusProgress(behavioralStatus);
 
   return {
     completed,
-    percent: Math.round((completed / 3) * 100),
+    submitted,
+    started,
+    percent: Math.round((weightedProgress / 3) * 100),
     isComplete: completed === 3,
   };
 }
@@ -261,7 +293,7 @@ function getDimensionProgression(dimensionId, trialRecords, telemetryAverage) {
   }
 
   const nextProgress = currentBeltId === "black"
-    ? { completed: 3, percent: 100, isComplete: true }
+    ? { completed: 3, submitted: 0, started: 3, percent: 100, isComplete: true }
     : getTargetBeltProgress(dimensionId, nextBeltId, trialRecords, telemetryAverage);
 
   return {
@@ -271,6 +303,8 @@ function getDimensionProgression(dimensionId, trialRecords, telemetryAverage) {
     nextBeltIndex: getBeltIndexById(nextBeltId),
     progress: nextProgress.percent,
     completedRequirements: nextProgress.completed,
+    submittedRequirements: nextProgress.submitted,
+    startedRequirements: nextProgress.started,
   };
 }
 
@@ -293,12 +327,12 @@ function buildDimensionStates(telemetry, trialRecords) {
       assessment: progression.currentBeltId === "black"
         ? "You have completed the full belt path for this dimension. The work now is transmission: helping others develop this capability with judgment and humility."
         : hasEvidence
-          ? `Alfred sees ${progression.completedRequirements} of 3 requirements completed toward ${nextBelt.name}. Submitted work still needs review before it becomes earned maturity.`
+          ? `Alfred sees ${progression.startedRequirements} of 3 requirements started toward ${nextBelt.name}, with ${progression.submittedRequirements} submitted and ${progression.completedRequirements} passed. Submitted work is saved, but still needs review before it becomes earned maturity.`
           : `Alfred does not yet have enough completed trial evidence to assess this dimension beyond White Belt. Start the ${nextBelt.name} path to begin earning progress.`,
       evidenceLabel: progression.currentBeltId === "black"
         ? "Full path complete"
         : hasEvidence
-          ? `${progression.completedRequirements}/3 toward ${nextBelt.shortName}`
+          ? `${progression.startedRequirements}/3 started`
           : "No earned evidence yet",
     };
 
