@@ -205,69 +205,69 @@ dimensions:
     description: Focus, discipline, prioritization, and delivery.
     belts:
       white:
-        criteria: Recognizes distraction and procrastination.
+        criteria: Understand how distraction, procrastination, emotional resistance, and lack of prioritization impact your execution and long-term goals. Begin developing awareness of your execution patterns.
         reflection:
           title: Reflection Trial
-          prompt: What do you avoid most?
-          grading_focus: [honesty, avoidance awareness, emotional specificity, ownership]
-          completion_hint: Name the resistance before designing around it.
+          prompt: Reflect on a situation where poor prioritization, procrastination, or lack of discipline negatively impacted your performance or well-being. What was truly driving the behavior?
+          grading_focus: [execution awareness, procrastination insight, emotional resistance, ownership]
+          completion_hint: Identify what was driving the execution pattern beneath the surface behavior.
         real_world:
           title: Real-World Trial
-          prompt: Track your distractions for 3 workdays.
-          completion_hint: Observe the pattern without judging it.
+          prompt: Track your distractions, avoidance patterns, and reactive behaviors for one full week. Identify the situations, emotions, or triggers most commonly associated with them.
+          completion_hint: Observe distraction and avoidance patterns long enough to see the triggers clearly.
         behavioral:
           title: Behavioral Evidence
-          prompt: Review overdue task patterns.
-          signals: [overdue_tasks, postponed_tasks, task_review]
-          completion_hint: Alfred looks for awareness of execution friction.
+          prompt: Fill in your prioritization and procrastination tendency, and current executive system.
+          signals: [prioritization_tendency_completed, procrastination_tendency_completed, executive_system_completed]
+          completion_hint: Alfred looks for your current execution pattern to be explicitly captured.
       yellow:
-        criteria: Understands emotional roots of execution.
+        criteria: Apply intentional systems for prioritization, focus, planning, and execution. Begin aligning daily behavior with strategic priorities instead of reactive impulses.
         reflection:
           title: Reflection Trial
-          prompt: How does stress affect execution?
-          grading_focus: [stress awareness, avoidance pattern recognition, ownership, clarity]
-          completion_hint: Connect execution behavior to the emotion beneath it.
+          prompt: Describe a goal or responsibility you failed to execute well. What patterns or behaviors held you back?
+          grading_focus: [execution ownership, pattern recognition, responsibility, behavioral insight]
+          completion_hint: Identify the patterns that interfered with execution.
         real_world:
           title: Real-World Trial
-          prompt: Plan your top 3 priorities daily for one full workweek.
-          completion_hint: Practice clarity before urgency starts speaking loudly.
+          prompt: Plan your top priorities intentionally for one full week and complete them before engaging in lower-value or reactive work. Reflect on what changed.
+          completion_hint: Practice acting from strategic priority before reactive demand.
         behavioral:
           title: Behavioral Evidence
-          prompt: Use Alfred's prioritization system consistently.
-          signals: [mtn_usage, top10_usage, task_prioritization]
-          completion_hint: Alfred looks for repeated priority selection.
+          prompt: Tasks consistently entered and maintained in Alfred.
+          signals: [tasks_consistently_entered, tasks_maintained]
+          completion_hint: Alfred looks for task capture and maintenance becoming consistent.
       green:
-        criteria: Uses intentional systems.
+        criteria: Integrate discipline, prioritization, focus, and execution into a stable operating system that remains effective under pressure, uncertainty, and competing demands.
         reflection:
           title: Reflection Trial
-          prompt: What system improved your consistency?
-          grading_focus: [systems thinking, specificity, evidence, adaptation]
-          completion_hint: Identify what actually changed your behavior.
+          prompt: What have you learned about the relationship between discipline, emotion, focus, and performance?
+          grading_focus: [integration, discipline, emotional awareness, performance insight]
+          completion_hint: Connect execution performance to discipline, emotion, and focus as one system.
         real_world:
           title: Real-World Trial
-          prompt: Complete a 7-day deep work sprint.
-          completion_hint: Protect focused execution long enough to learn from it.
+          prompt: Identify one recurring source of distraction or reactive behavior in your life and redesign your environment, routines, or systems to reduce its influence.
+          completion_hint: Make one structural change that reduces recurring distraction.
         behavioral:
           title: Behavioral Evidence
-          prompt: Reach 90% or higher task completion across the sprint window.
-          signals: [task_completion_rate, deep_work_logs, overdue_reduction]
-          completion_hint: Alfred looks for execution reliability.
+          prompt: Learn to flag move-the-needle actions and identify actions you most procrastinate on, including what they have in common.
+          signals: [move_the_needle_actions_flagged, procrastinated_actions_identified, procrastination_patterns_compared]
+          completion_hint: Alfred looks for clearer distinction between leverage work and avoidance patterns.
       brown:
-        criteria: Executes strategically under pressure.
+        criteria: Develop the ability to help others improve their execution, prioritization, discipline, and operational effectiveness through systems, coaching, and example.
         reflection:
           title: Reflection Trial
-          prompt: How do you maintain clarity under pressure?
-          grading_focus: [pressure response, prioritization, strategic discipline, tradeoffs]
-          completion_hint: Show how you protect the vital few when everything feels urgent.
+          prompt: What principles now guide the way you prioritize, execute, and manage your attention?
+          grading_focus: [principles, attention management, prioritization wisdom, execution clarity]
+          completion_hint: Distill the principles that now guide your execution system.
         real_world:
           title: Real-World Trial
-          prompt: Run a high-pressure execution week while protecting your top priorities.
-          completion_hint: Practice strategic delivery when the environment is noisy.
+          prompt: Help another person improve their workflow, prioritization system, or execution habits. Support them in becoming more intentional and disciplined.
+          completion_hint: Translate your execution maturity into help for someone else.
         behavioral:
           title: Behavioral Evidence
-          prompt: Maintain stable execution patterns during a demanding week.
-          signals: [stable_execution, priority_completion, overdue_control]
-          completion_hint: Alfred looks for discipline that survives pressure.
+          prompt: Update your executive system in light of what you learned.
+          signals: [executive_system_updated, execution_lessons_integrated]
+          completion_hint: Alfred looks for your execution system evolving from lived learning.
       black:
         criteria: Helps others execute effectively.
         reflection:
@@ -290,69 +290,69 @@ dimensions:
     description: Recovery, capacity, energy management, and sustainability.
     belts:
       white:
-        criteria: Recognizes energy patterns.
+        criteria: Understand the relationship between energy, emotions, recovery, stress, and performance. Begin identifying the people, habits, and environments that energize or drain you.
         reflection:
           title: Reflection Trial
-          prompt: What drains you and what restores you?
-          grading_focus: [energy awareness, specificity, honesty, pattern recognition]
-          completion_hint: Identify energy as data, not just mood.
+          prompt: Reflect on a period where your energy, stress, or lack of recovery negatively impacted your performance, relationships, or well-being. What patterns contributed to it?
+          grading_focus: [energy awareness, stress patterns, recovery insight, ownership]
+          completion_hint: Connect energy, recovery, stress, and performance through a concrete period in your life.
         real_world:
           title: Real-World Trial
-          prompt: Track your energy for 7 days.
-          completion_hint: Observe capacity before trying to optimize it.
+          prompt: Track your energy levels, stress levels, and recovery quality for one full week. Identify the situations, people, or habits that most strongly impact your energy.
+          completion_hint: Observe the people, habits, and environments that shape your capacity.
         behavioral:
           title: Behavioral Evidence
-          prompt: Activate habit tracking or energy logging.
-          signals: [habit_tracking, energy_logs, recovery_notes]
-          completion_hint: Alfred looks for early capacity awareness.
+          prompt: Fill out the sections on energy drains, energy sources, and recovery process.
+          signals: [energy_drains_completed, energy_sources_completed, recovery_process_completed]
+          completion_hint: Alfred looks for your core energy map to be captured.
       yellow:
-        criteria: Understands burnout causes.
+        criteria: Apply intentional habits and routines to improve energy, focus, recovery, and sustainability. Begin aligning your lifestyle with long-term performance and well-being.
         reflection:
           title: Reflection Trial
-          prompt: What patterns create fatigue?
-          grading_focus: [burnout awareness, cause clarity, honesty, ownership]
-          completion_hint: Connect depletion to choices, context, and rhythms.
+          prompt: What habits, environments, or relationships most consistently improve - or damage - your energy and well-being?
+          grading_focus: [habit awareness, environment awareness, relationship patterns, sustainability]
+          completion_hint: Identify which recurring conditions raise or drain your energy.
         real_world:
           title: Real-World Trial
-          prompt: Remove or contain one energy drain.
-          completion_hint: Change one pattern that predictably depletes you.
+          prompt: Intentionally redesign one part of your weekly routine to improve recovery, focus, or sustainability. Follow the new routine consistently for one week and reflect on the impact.
+          completion_hint: Change one weekly routine and observe its effect on energy and focus.
         behavioral:
           title: Behavioral Evidence
-          prompt: Complete energy journaling or recovery logs.
-          signals: [energy_journaling, recovery_logs, habit_consistency]
-          completion_hint: Alfred looks for repeated energy reflection.
+          prompt: Identify the habits needed to maintain high energy and complete 3 journal entries where you call out your energy level explicitly.
+          signals: [high_energy_habits_identified, three_energy_level_journals]
+          completion_hint: Alfred looks for explicit energy awareness in your habits and journal reflections.
       green:
-        criteria: Manages recovery intentionally.
+        criteria: Integrate ambition, discipline, recovery, relationships, and emotional regulation into a sustainable operating system that remains stable under pressure.
         reflection:
           title: Reflection Trial
-          prompt: How has recovery improved your performance?
-          grading_focus: [recovery insight, performance connection, specificity, sustainability]
-          completion_hint: Show that recovery is part of performance, not a reward after it.
+          prompt: What have you learned about the relationship between ambition, recovery, emotional balance, and sustainable performance?
+          grading_focus: [integration, ambition, recovery, emotional balance, sustainability]
+          completion_hint: Show how ambition and recovery now work together instead of competing.
         real_world:
           title: Real-World Trial
-          prompt: Complete a 14-day recovery routine.
-          completion_hint: Practice capacity as a system.
+          prompt: Identify one recurring source of exhaustion, overstimulation, or imbalance in your life and make a meaningful structural change to reduce its impact.
+          completion_hint: Make a structural change that reduces a recurring energy drain.
         behavioral:
           title: Behavioral Evidence
-          prompt: Maintain stable wellness habits.
-          signals: [wellness_habits, recovery_streaks, energy_stability]
-          completion_hint: Alfred looks for recovery becoming intentional.
+          prompt: Maintain a 7-day habit streak and complete 3 journal entries where you call out your energy level and sources explicitly.
+          signals: [seven_day_habit_streak, three_energy_level_and_source_journals]
+          completion_hint: Alfred looks for sustained habit consistency and explicit energy-source reflection.
       brown:
-        criteria: Balances ambition sustainably.
+        criteria: Develop the ability to model and teach sustainable high performance, emotional balance, and healthy ambition through wisdom, discipline, and example.
         reflection:
           title: Reflection Trial
-          prompt: How do you protect energy?
-          grading_focus: [boundaries, ambition, sustainability, pressure behavior]
-          completion_hint: Show how you preserve capacity without abandoning ambition.
+          prompt: What does sustainable success mean to you now, and how has your understanding evolved over time?
+          grading_focus: [sustainable success, wisdom, evolution, healthy ambition]
+          completion_hint: Define success in a way that reflects lived learning and can endure.
         real_world:
           title: Real-World Trial
-          prompt: Complete one full reset or recovery day.
-          completion_hint: Practice stopping before your body forces it.
+          prompt: Help another person improve their balance, recovery, or sustainability by sharing systems, habits, or perspectives that helped you grow.
+          completion_hint: Translate your sustainability lessons into support for another person.
         behavioral:
           title: Behavioral Evidence
-          prompt: Show low burnout indicators and stable recovery patterns.
-          signals: [low_burnout_indicators, recovery_consistency, balanced_workload]
-          completion_hint: Alfred looks for sustainable performance under load.
+          prompt: Maintain a 21-day habit streak and complete 3 journal entries where you call out your energy level and sources explicitly.
+          signals: [twenty_one_day_habit_streak, three_energy_level_and_source_journals]
+          completion_hint: Alfred looks for longer habit consistency and explicit energy-source reflection.
       black:
         criteria: Models sustainable performance.
         reflection:
@@ -375,69 +375,69 @@ dimensions:
     description: Growth, resilience, reflection, and continuous improvement.
     belts:
       white:
-        criteria: Acknowledges growth areas.
+        criteria: Understand how failures, mistakes, fears, and limitations have shaped your identity, beliefs, and growth patterns. Begin developing a growth-oriented mindset.
         reflection:
           title: Reflection Trial
-          prompt: What failure taught you most?
-          grading_focus: [honesty, learning extraction, ownership, emotional specificity]
-          completion_hint: Turn experience into information.
+          prompt: Reflect on one of the most difficult failures, disappointments, or setbacks in your life. What did it teach you about yourself?
+          grading_focus: [failure reflection, identity insight, honesty, growth mindset]
+          completion_hint: Extract self-knowledge from a difficult setback without collapsing into shame.
         real_world:
           title: Real-World Trial
-          prompt: Reflect on one major mistake.
-          completion_hint: Name the lesson without collapsing into shame.
+          prompt: Have an honest conversation with someone you trust about a personal weakness, fear, or growth area you typically avoid discussing openly.
+          completion_hint: Practice vulnerable learning through a conversation you would normally avoid.
         behavioral:
           title: Behavioral Evidence
-          prompt: Journal consistently.
-          signals: [journaling_consistency, failure_entries, coaching_reflections]
-          completion_hint: Alfred looks for reflection becoming a habit.
+          prompt: Complete development opportunities, scars, and failures in Alfred.
+          signals: [development_opportunities_completed, scars_completed, failures_completed]
+          completion_hint: Alfred looks for your growth landscape to be explicitly captured.
       yellow:
-        criteria: Understands limiting beliefs.
+        criteria: Apply intentional learning, reflection, and behavioral change to accelerate personal growth and self-improvement.
         reflection:
           title: Reflection Trial
-          prompt: What belief limits you?
-          grading_focus: [belief awareness, honesty, pattern recognition, ownership]
-          completion_hint: Name the assumption that quietly governs behavior.
+          prompt: What recurring pattern, fear, or belief has limited your growth the most?
+          grading_focus: [limiting belief, pattern recognition, fear awareness, ownership]
+          completion_hint: Name the recurring inner pattern that most constrains your growth.
         real_world:
           title: Real-World Trial
-          prompt: Seek difficult feedback.
-          completion_hint: Invite information your ego might prefer to avoid.
+          prompt: Choose one meaningful growth area and intentionally work on it for two weeks through exercises, habit changes, learning, or behavioral experiments.
+          completion_hint: Turn one growth area into a two-week behavioral experiment.
         behavioral:
           title: Behavioral Evidence
-          prompt: Maintain reflection consistency.
-          signals: [reflection_consistency, feedback_notes, coaching_sessions]
-          completion_hint: Alfred looks for repeated learning behavior.
+          prompt: Complete 3 journal reflections on behavioral change and self-awareness, including how scars and failures impact your behavior.
+          signals: [three_behavior_change_journals, self_awareness_reflections, scars_failures_behavior_reflections]
+          completion_hint: Alfred looks for repeated reflection on behavior change, self-awareness, scars, and failures.
       green:
-        criteria: Pursues active growth.
+        criteria: Integrate learning, resilience, humility, and self-awareness into a continuous process of personal evolution and adaptation.
         reflection:
           title: Reflection Trial
-          prompt: What change are you proud of?
-          grading_focus: [growth evidence, specificity, humility, behavior change]
-          completion_hint: Identify real growth, not just intention.
+          prompt: What have your failures and scars taught you about resilience, identity, and growth?
+          grading_focus: [resilience, identity, growth integration, humility]
+          completion_hint: Show how past pain has become useful perspective and capacity.
         real_world:
           title: Real-World Trial
-          prompt: Complete a 14-day growth challenge.
-          completion_hint: Practice change long enough to meet resistance.
+          prompt: Revisit a past failure, relationship, or unresolved experience and intentionally extract a deeper lesson or new perspective from it.
+          completion_hint: Return to an old experience and find a more mature lesson inside it.
         behavioral:
           title: Behavioral Evidence
-          prompt: Show exercise or coaching consistency.
-          signals: [exercise_consistency, coaching_sessions, development_actions]
-          completion_hint: Alfred looks for growth becoming practiced.
+          prompt: Complete 7 journal reflections on behavioral change and self-awareness, including how scars and failures impact your behavior.
+          signals: [seven_behavior_change_journals, self_awareness_reflections, scars_failures_behavior_reflections]
+          completion_hint: Alfred looks for deeper repeated reflection on behavior change, self-awareness, scars, and failures.
       brown:
-        criteria: Integrates continuous learning.
+        criteria: Develop the ability to help others grow through mentorship, perspective, vulnerability, and wisdom earned through lived experience.
         reflection:
           title: Reflection Trial
-          prompt: How did setbacks strengthen you?
-          grading_focus: [resilience, integration, wisdom, specificity]
-          completion_hint: Show how pain became capacity.
+          prompt: What lessons from your journey do you most hope others can learn without having to suffer the same mistakes?
+          grading_focus: [mentorship, vulnerability, wisdom, transmission]
+          completion_hint: Distill the hard-won lessons that could help someone else grow with less suffering.
         real_world:
           title: Real-World Trial
-          prompt: Teach one lesson you learned from experience.
-          completion_hint: Convert learning into something useful for another person.
+          prompt: Mentor, coach, or support another person through a meaningful growth challenge while helping them build resilience, self-awareness, and confidence.
+          completion_hint: Support another person's growth while helping them keep ownership of their path.
         behavioral:
           title: Behavioral Evidence
-          prompt: Show reflection depth across repeated entries or coaching sessions.
-          signals: [reflection_depth, coaching_patterns, development_tracking]
-          completion_hint: Alfred looks for learning integrated over time.
+          prompt: Complete 3 journal reflections on behavioral change among others, including how scars and failures impact your behavior.
+          signals: [three_others_behavior_change_journals, scars_failures_behavior_reflections]
+          completion_hint: Alfred looks for your growth work becoming useful in how you support others.
       black:
         criteria: Helps others grow.
         reflection:
