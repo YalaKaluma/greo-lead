@@ -922,14 +922,25 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
         </div>
 
         <div className="grid gap-6 xl:grid-cols-[520px_minmax(0,1fr)]">
-          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <LeadershipWheel
-              selectedDimensionId={selectedDimensionId}
+          <section className="space-y-5">
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <LeadershipWheel
+                selectedDimensionId={selectedDimensionId}
+                activeTopic={activeTopic}
+                dimensionStates={dimensionStates}
+                topicData={topicData}
+                onSelectDimension={handleSelectDimension}
+                onSelectSubdomain={handleSelectSubdomain}
+              />
+            </div>
+
+            <TopicEvidencePanel
+              dimension={selectedDimension}
               activeTopic={activeTopic}
-              dimensionStates={dimensionStates}
-              topicData={topicData}
-              onSelectDimension={handleSelectDimension}
-              onSelectSubdomain={handleSelectSubdomain}
+              setActiveTopic={setActiveTopic}
+              items={topicItems}
+              onAddItem={handleAddSubdomainItem}
+              onEditItem={handleEditSubdomainItem}
             />
           </section>
 
@@ -943,58 +954,17 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
               loadingSignals={loadingSignals}
             />
 
-            {selectedDimension.mvp ? (
-              <>
-                <PathToNextBeltPanel
-                  dimension={selectedDimension}
-                  targetBelt={activeBelt}
-                  nextBelt={nextBelt}
-                  requirements={activeBeltRequirements}
-                  trialRecords={trialRecords}
-                  savingTrial={savingTrial}
-                  onStartTrial={handleStartTrial}
-                />
-                <TrialsPanel
-                  telemetry={telemetry}
-                  belt={selectedBelt}
-                  nextBelt={nextBelt}
-                  dimension={selectedDimension}
-                  targetBelt={activeBelt}
-                  requirements={activeBeltRequirements}
-                  trialRecords={trialRecords}
-                />
-                <TelemetryPanel telemetry={telemetry} loading={loadingSignals} />
-                <TopicEvidencePanel
-                  dimension={selectedDimension}
-                  activeTopic={activeTopic}
-                  setActiveTopic={setActiveTopic}
-                  items={topicItems}
-                  onAddItem={handleAddSubdomainItem}
-                  onEditItem={handleEditSubdomainItem}
-                />
-              </>
-            ) : (
-              <>
-                <PathToNextBeltPanel
-                  dimension={selectedDimension}
-                  targetBelt={activeBelt}
-                  nextBelt={nextBelt}
-                  requirements={activeBeltRequirements}
-                  trialRecords={trialRecords}
-                  savingTrial={savingTrial}
-                  onStartTrial={handleStartTrial}
-                />
-                <ComingSoonPanel dimension={selectedDimension} />
-                <TopicEvidencePanel
-                  dimension={selectedDimension}
-                  activeTopic={activeTopic}
-                  setActiveTopic={setActiveTopic}
-                  items={topicItems}
-                  onAddItem={handleAddSubdomainItem}
-                  onEditItem={handleEditSubdomainItem}
-                />
-              </>
-            )}
+            <PathToNextBeltPanel
+              dimension={selectedDimension}
+              targetBelt={activeBelt}
+              nextBelt={nextBelt}
+              requirements={activeBeltRequirements}
+              trialRecords={trialRecords}
+              savingTrial={savingTrial}
+              onStartTrial={handleStartTrial}
+            />
+
+            {selectedDimension.mvp && <TelemetryPanel telemetry={telemetry} loading={loadingSignals} />}
           </section>
         </div>
       </div>
@@ -1389,90 +1359,6 @@ function TrialModal({ trial, draft, setDraft, saving, onClose, onSave, onSubmit 
   );
 }
 
-function TrialsPanel({ telemetry, belt, nextBelt, dimension, targetBelt, requirements, trialRecords }) {
-  const telemetryAverage = getTelemetryAverage(telemetry);
-  const safeTargetBelt = targetBelt || nextBelt || getBeltById("yellow");
-  const safeRequirements = normalizeRequirements(requirements, dimension.id);
-  const trials = [
-    {
-      id: "reflection",
-      type: safeRequirements.reflection.title || "Reflection Trial",
-      trialType: "reflection",
-      prompt: safeRequirements.reflection.prompt,
-      evidence: safeRequirements.reflection.completion_hint,
-    },
-    {
-      id: "real_world",
-      type: safeRequirements.real_world.title || "Real-World Trial",
-      trialType: "real_world",
-      prompt: safeRequirements.real_world.prompt,
-      evidence: safeRequirements.real_world.completion_hint,
-    },
-    {
-      id: "behavioral",
-      type: safeRequirements.behavioral.title || "Behavioral Integration Trial",
-      trialType: "behavioral",
-      prompt: safeRequirements.behavioral.prompt,
-      evidence: safeRequirements.behavioral.completion_hint,
-    },
-  ].map((trial) => {
-    if (trial.id === "behavioral") {
-      return {
-        ...trial,
-        status: formatTrialStatus(getBehavioralStatus(dimension.id, safeTargetBelt.id, trialRecords, telemetryAverage)),
-      };
-    }
-
-    const storedTrial = getStoredTrial(
-      trialRecords,
-      dimension.id,
-      safeTargetBelt.id,
-      trial.trialType
-    );
-
-    return storedTrial
-      ? {
-          ...trial,
-          status: formatTrialStatus(storedTrial.status),
-          evidence: storedTrial.response_text
-            ? "Your submission is stored. Alfred grading is the next backend step before this can become a pass."
-            : trial.evidence,
-        }
-      : { ...trial, status: "Not Started" };
-  });
-
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Advancement Loop</p>
-          <h3 className="mt-1 text-xl font-semibold text-slate-950">
-            {belt.shortName} to {nextBelt.shortName} Belt Trials
-          </h3>
-        </div>
-        <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
-          Alfred recommends, you decide
-        </span>
-      </div>
-
-      <div className="grid gap-3 lg:grid-cols-3">
-        {trials.map((trial) => (
-          <article key={trial.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <h4 className="text-sm font-semibold text-slate-950">{trial.type}</h4>
-              <StatusPill status={trial.status} />
-            </div>
-            <p className="mt-3 text-sm leading-6 text-slate-700">{trial.prompt}</p>
-            <p className="mt-4 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500">
-              {trial.evidence}
-            </p>
-          </article>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function TelemetryPanel({ telemetry, loading }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -1568,26 +1454,6 @@ function EvidenceItem({ item, onClick }) {
       <p className="text-sm font-semibold text-slate-900">{title}</p>
       {body && <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>}
     </article>
-  );
-}
-
-function ComingSoonPanel({ dimension }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">MVP Scope</p>
-      <h3 className="mt-1 text-xl font-semibold text-slate-950">{dimension.name} is mapped, not yet fully active</h3>
-      <p className="mt-3 text-sm leading-6 text-slate-600">
-        This dimension already has belt color, maturity language, and wheel navigation. The complete
-        reflection, real-world, and behavioral integration loop is implemented first for Prioritize & Execute.
-      </p>
-      <div className="mt-4 flex flex-wrap gap-2">
-        {dimension.topics.map((topic) => (
-          <span key={topic.id} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
-            {topic.label}
-          </span>
-        ))}
-      </div>
-    </div>
   );
 }
 
