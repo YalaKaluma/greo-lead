@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Text, Boolean, DECIMAL, Float, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Text, Boolean, DECIMAL, Float, Enum as SQLEnum, CheckConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Date
@@ -38,6 +38,24 @@ class Message(Base):
     message_type = Column(String, default="chat")
     is_read = Column(Boolean, default=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class MessageFeedback(Base):
+    __tablename__ = "message_feedback"
+    __table_args__ = (
+        CheckConstraint("rating BETWEEN 1 AND 5", name="ck_message_feedback_rating"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    message_id = Column(Integer, ForeignKey("messages.id"), nullable=False, index=True)
+    source_context = Column(String(50), nullable=False, index=True)
+    rating = Column(Integer, nullable=False)
+    feedback_text = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    message = relationship("Message")
 
 class Task(Base):
     __tablename__ = "tasks"

@@ -47,7 +47,7 @@ async def send_chat_message(
     user = db.query(User).filter(User.phone_number == chat_msg.user_number).first()
 
     # Save user message to history
-    save_message(
+    user_message = save_message(
         db=db,
         sender="user",
         user_number=chat_msg.user_number,
@@ -65,7 +65,7 @@ async def send_chat_message(
     reply = result.response
 
     # Save assistant response to history
-    save_message(
+    assistant_message = save_message(
         db=db,
         sender="assistant",
         user_number=chat_msg.user_number,
@@ -85,6 +85,8 @@ async def send_chat_message(
 
     return {
         "reply": reply,
+        "message_id": assistant_message.id,
+        "user_message_id": user_message.id,
         "tour_action": tour_action,
         "timestamp": datetime.utcnow().isoformat(),
         "state": result.state,
@@ -143,7 +145,7 @@ async def jump_to_stage(
     message = stage_messages.get(request.stage, f"Moved to {request.stage} stage.")
     
     # Save system message
-    save_message(
+    stage_message = save_message(
         db=db,
         sender="assistant",
         user_number=request.user_number,
@@ -153,6 +155,7 @@ async def jump_to_stage(
     return {
         "success": True,
         "message": message,
+        "message_id": stage_message.id,
         "stage": request.stage,
         "timestamp": datetime.utcnow().isoformat()
     }
@@ -252,6 +255,7 @@ async def get_chat_history(
         formatted_messages = [
             {
                 "role": "user" if msg.sender == "user" else "assistant",
+                "message_id": msg.id,
                 "content": msg.content,
                 "timestamp": msg.timestamp.isoformat(),
                 "message_type": getattr(msg, "message_type", "chat"),

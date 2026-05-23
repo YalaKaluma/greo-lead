@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import ReadAloudButton from './ReadAloudButton';
+import MessageFeedbackButton from './MessageFeedbackButton';
 import VoiceRecorder from './VoiceRecorder';
 
 // Session stage configurations
@@ -111,12 +112,13 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
 
       const newMessage = {
         role: 'assistant',
+        message_id: response.data.message_id,
         content: response.data.reply,
         timestamp: response.data.timestamp
       };
 
       setMessages(prev => [...prev, 
-        { role: 'user', content: startMessage, timestamp: new Date().toISOString() },
+        { role: 'user', message_id: response.data.user_message_id, content: startMessage, timestamp: new Date().toISOString() },
         newMessage
       ]);
 
@@ -168,6 +170,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
         // Add system message about stage jump
         const systemMessage = {
           role: 'assistant',
+          message_id: response.data.message_id,
           content: response.data.message || `Jumped to ${GOAL_REVIEW_STAGES[index].label} stage.`,
           timestamp: new Date().toISOString()
         };
@@ -191,7 +194,9 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
     setIsLoading(true);
 
     // Add user message immediately
+    const clientMessageId = `pending-${Date.now()}`;
     const newUserMessage = {
+      clientMessageId,
       role: 'user',
       content: userMsg,
       timestamp: new Date().toISOString()
@@ -206,10 +211,18 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
 
       const assistantMessage = {
         role: 'assistant',
+        message_id: response.data.message_id,
         content: response.data.reply,
         timestamp: response.data.timestamp
       };
-      setMessages(prev => [...prev, assistantMessage]);
+      setMessages(prev => [
+        ...prev.map((message) => (
+          message.clientMessageId === clientMessageId
+            ? { ...message, message_id: response.data.user_message_id }
+            : message
+        )),
+        assistantMessage
+      ]);
 
       // Update session state if in goal review
       if (response.data.goal_review_status) {
@@ -520,14 +533,25 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
                       minute: '2-digit' 
                     })}
                   </div>
-                  <ReadAloudButton
-                    text={msg.content}
-                    apiUrl={apiUrl}
-                    className={msg.role === 'user'
-                      ? 'text-blue-100 hover:bg-blue-500'
-                      : 'text-gray-600 hover:bg-gray-200'
-                    }
-                  />
+                  <div className="ml-auto flex items-center gap-1">
+                    <ReadAloudButton
+                      text={msg.content}
+                      apiUrl={apiUrl}
+                      className={msg.role === 'user'
+                        ? 'text-blue-100 hover:bg-blue-500'
+                        : 'text-gray-600 hover:bg-gray-200'
+                      }
+                    />
+                    <MessageFeedbackButton
+                      apiUrl={apiUrl}
+                      messageId={msg.message_id}
+                      sourceContext="coaching_session"
+                      className={msg.role === 'user'
+                        ? 'text-blue-100 hover:bg-blue-500'
+                        : 'text-gray-600 hover:bg-gray-200'
+                      }
+                    />
+                  </div>
                 </div>
               </div>
             </div>
