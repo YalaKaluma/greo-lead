@@ -154,9 +154,12 @@ def get_tasks(
         print(f"[TASKS API] Found {len(tasks)} tasks before sorting")
 
         # Sort by: manual order if present, then status, priority, and due date.
+        # getattr keeps this endpoint alive during deployments where the DB
+        # migration has run before the ORM model reloads, or vice versa.
         def sort_key(task):
-            manual_order_missing = 1 if task.sort_order is None else 0
-            manual_order_value = task.sort_order if task.sort_order is not None else 999999
+            sort_order = getattr(task, "sort_order", None)
+            manual_order_missing = 1 if sort_order is None else 0
+            manual_order_value = sort_order if sort_order is not None else 999999
             status_order = 0 if task.status == 'open' else 1
             priority_value = PRIORITY_ORDER.get(task.priority, 2)
             # Handle both DateTime and Date objects
@@ -284,6 +287,11 @@ def reorder_tasks(
 
     order_by_id = {task_id: index for index, task_id in enumerate(request.ordered_task_ids)}
     for task in tasks:
+        if not hasattr(task, "sort_order"):
+            raise HTTPException(
+                status_code=500,
+                detail="Task ordering is not available on this deployment yet. Redeploy the backend after updating models.py."
+            )
         task.sort_order = order_by_id[task.id]
         task.updated_at = datetime.now()
 
@@ -300,6 +308,12 @@ def reset_task_order(
     """
     Clear persisted manual ordering for a user.
     """
+    if not hasattr(Task, "sort_order"):
+        raise HTTPException(
+            status_code=500,
+            detail="Task ordering is not available on this deployment yet. Redeploy the backend after updating models.py."
+        )
+
     updated = db.query(Task).filter(Task.user_number == user_number).update({
         "sort_order": None,
         "updated_at": datetime.now()
