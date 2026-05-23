@@ -93,6 +93,32 @@ class Task(Base):
     enhanced_title = Column(Text, nullable=True)
 
     ai_enriched = Column(Boolean, default=False)
+    originating_opportunity_id = Column(Integer, ForeignKey("opportunity_suggestions.id", ondelete="SET NULL"), nullable=True)
+
+
+class OpportunitySuggestion(Base):
+    __tablename__ = "opportunity_suggestions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    surface = Column(Text, nullable=False)
+    type = Column(Text, nullable=False)
+    title = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
+    rationale = Column(Text, nullable=True)
+    domain = Column(Text, nullable=True)
+    linked_goal_id = Column(Integer, ForeignKey("journey_goals.id", ondelete="SET NULL"), nullable=True)
+    mtn_score = Column(DECIMAL, nullable=True)
+    status = Column(Text, default="suggested")
+    generated_context = Column(JSONB, nullable=True)
+    scoring_details = Column(JSONB, nullable=True)
+    created_task_id = Column(Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    user_feedback = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User")
+    linked_goal = relationship("JourneyGoal")
 
 
 # ---------------------------------------------------------

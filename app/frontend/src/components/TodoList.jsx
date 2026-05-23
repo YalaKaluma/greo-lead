@@ -42,6 +42,11 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [sortOrder, setSortOrder] = useState([]);
   const [completingTasks, setCompletingTasks] = useState([]);
   const [filtersCollapsed, setFiltersCollapsed] = useState(true);
+  const [showOpportunityModal, setShowOpportunityModal] = useState(false);
+  const [opportunityLoading, setOpportunityLoading] = useState(false);
+  const [opportunityError, setOpportunityError] = useState(null);
+  const [opportunities, setOpportunities] = useState([]);
+  const [opportunityActions, setOpportunityActions] = useState({});
 
   // Multi-select state
   const [selectedTasks, setSelectedTasks] = useState([]);
@@ -328,6 +333,89 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   // ============================================================================
+  // OPPORTUNITY OPERATIONS
+  // ============================================================================
+
+  const openOpportunityModal = async () => {
+    setShowOpportunityModal(true);
+    setOpportunityLoading(true);
+    setOpportunityError(null);
+    setOpportunities([]);
+    setOpportunityActions({});
+
+    try {
+      const response = await axios.post(`${apiUrl}/api/opportunities/generate`, {
+        user_number: userNumber,
+        surface: 'task_page',
+        type: 'task',
+        limit: 3
+      });
+      setOpportunities(response.data?.opportunities || []);
+    } catch (err) {
+      console.error('Error generating opportunities:', err);
+      setOpportunityError(err.response?.data?.detail || 'Failed to generate opportunities');
+    } finally {
+      setOpportunityLoading(false);
+    }
+  };
+
+  const closeOpportunityModal = () => {
+    setShowOpportunityModal(false);
+    setOpportunityLoading(false);
+    setOpportunityError(null);
+  };
+
+  const updateOpportunityAction = (opportunityId, action) => {
+    setOpportunityActions(prev => {
+      const next = { ...prev, [opportunityId]: action };
+      const allHandled = opportunities.length > 0 && opportunities.every(item => next[item.id]);
+      if (allHandled) {
+        setTimeout(() => closeOpportunityModal(), 600);
+      }
+      return next;
+    });
+  };
+
+  const acceptOpportunity = async (opportunityId) => {
+    setOpportunityActions(prev => ({ ...prev, [opportunityId]: 'working' }));
+    try {
+      await axios.post(`${apiUrl}/api/opportunities/${opportunityId}/accept`, {
+        user_number: userNumber
+      });
+      await fetchTasks();
+      await fetchFilters();
+      updateOpportunityAction(opportunityId, 'accepted');
+    } catch (err) {
+      console.error('Error accepting opportunity:', err);
+      setOpportunityError(err.response?.data?.detail || 'Failed to add opportunity to today');
+      setOpportunityActions(prev => {
+        const next = { ...prev };
+        delete next[opportunityId];
+        return next;
+      });
+    }
+  };
+
+  const declineOpportunity = async (opportunityId) => {
+    setOpportunityActions(prev => ({ ...prev, [opportunityId]: 'working' }));
+    try {
+      await axios.post(`${apiUrl}/api/opportunities/${opportunityId}/decline`, {
+        user_number: userNumber,
+        reason: 'Declined from task page'
+      });
+      updateOpportunityAction(opportunityId, 'declined');
+    } catch (err) {
+      console.error('Error declining opportunity:', err);
+      setOpportunityError(err.response?.data?.detail || 'Failed to decline opportunity');
+      setOpportunityActions(prev => {
+        const next = { ...prev };
+        delete next[opportunityId];
+        return next;
+      });
+    }
+  };
+
+  // ============================================================================
   // FILTER OPERATIONS
   // ============================================================================
 
@@ -543,6 +631,20 @@ export default function TodoList({ apiUrl, userNumber }) {
                   {!priorityLoading && <span className="sm:hidden">MTN</span>}
                 </button>
                 <button
+                  onClick={openOpportunityModal}
+                  disabled={opportunityLoading}
+                  className="bg-amber-400 hover:bg-amber-500 text-slate-900 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  title="Suggest move-the-needle actions"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M9 18h6" />
+                    <path d="M10 22h4" />
+                    <path d="M12 2a7 7 0 0 0-4 12.74V16h8v-1.26A7 7 0 0 0 12 2Z" />
+                  </svg>
+                  <span className="hidden lg:inline">Suggest move-the-needle actions</span>
+                  <span className="lg:hidden">Suggest</span>
+                </button>
+                <button
                   onClick={() => {
                     setEditingTask(null);
                     setShowTaskModal(true);
@@ -687,6 +789,120 @@ export default function TodoList({ apiUrl, userNumber }) {
           delegates={delegates}
           goals={getSortedGoals(goals)}
         />
+      )}
+
+      {showOpportunityModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/40 flex items-center justify-center px-4 py-6">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Move-the-needle actions</h2>
+                <p className="text-sm text-slate-600 mt-1">
+                  {opportunityLoading
+                    ? "Alfred is looking for today's highest-leverage moves..."
+                    : "Choose what belongs on today's list."}
+                </p>
+              </div>
+              <button
+                onClick={closeOpportunityModal}
+                className="text-slate-500 hover:text-slate-800 p-2 rounded-lg hover:bg-slate-100"
+                aria-label="Close recommendations"
+              >
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-88px)]">
+              {opportunityError && (
+                <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4">
+                  {opportunityError}
+                </div>
+              )}
+
+              {opportunityLoading ? (
+                <div className="py-12 flex flex-col items-center justify-center text-center">
+                  <div className="animate-spin rounded-full h-9 w-9 border-b-2 border-amber-500 mb-4"></div>
+                  <p className="text-slate-700 font-medium">Alfred is looking for today's highest-leverage moves...</p>
+                </div>
+              ) : opportunities.length === 0 && !opportunityError ? (
+                <div className="text-center py-10 text-slate-600">
+                  No recommendations came back this time.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                  {opportunities.map(opportunity => {
+                    const action = opportunityActions[opportunity.id];
+                    const goalTitle = opportunity.linked_goal_id
+                      ? goals.find(goal => goal.id === opportunity.linked_goal_id)?.title
+                      : null;
+
+                    return (
+                      <div key={opportunity.id} className="border border-slate-200 rounded-lg p-4 flex flex-col min-h-[260px]">
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <h3 className="font-semibold text-slate-900 leading-snug">{opportunity.title}</h3>
+                          <span className="shrink-0 bg-slate-900 text-white text-sm font-semibold px-2 py-1 rounded-md">
+                            {Number(opportunity.mtn_score || 0).toFixed(1)}
+                          </span>
+                        </div>
+
+                        {opportunity.description && (
+                          <p className="text-sm text-slate-700 mb-3">{opportunity.description}</p>
+                        )}
+
+                        {opportunity.rationale && (
+                          <p className="text-sm text-slate-600 mb-4">{opportunity.rationale}</p>
+                        )}
+
+                        <div className="flex flex-wrap gap-2 mt-auto mb-4">
+                          {opportunity.domain && (
+                            <span className="text-xs bg-amber-50 text-amber-800 border border-amber-200 px-2 py-1 rounded-md">
+                              {opportunity.domain}
+                            </span>
+                          )}
+                          {goalTitle && (
+                            <span className="text-xs bg-blue-50 text-blue-800 border border-blue-200 px-2 py-1 rounded-md">
+                              {goalTitle}
+                            </span>
+                          )}
+                        </div>
+
+                        {action === 'accepted' ? (
+                          <div className="bg-green-50 text-green-800 text-sm font-medium rounded-lg px-3 py-2 text-center">
+                            Added to today
+                          </div>
+                        ) : action === 'declined' ? (
+                          <div className="bg-slate-100 text-slate-700 text-sm font-medium rounded-lg px-3 py-2 text-center">
+                            Declined
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => acceptOpportunity(opportunity.id)}
+                              disabled={action === 'working'}
+                              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                            >
+                              Add to today
+                            </button>
+                            <button
+                              onClick={() => declineOpportunity(opportunity.id)}
+                              disabled={action === 'working'}
+                              className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                            >
+                              Decline
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
