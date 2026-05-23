@@ -161,7 +161,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       }
     } catch (err) {
       console.error('Error fetching tasks:', err);
-      setError('Failed to load tasks');
+      setError(err.response?.data?.detail || 'Failed to load tasks');
     } finally {
       setLoading(false);
     }

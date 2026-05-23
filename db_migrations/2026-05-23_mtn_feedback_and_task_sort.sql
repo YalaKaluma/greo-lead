@@ -8,8 +8,13 @@ ALTER TABLE tasks
 CREATE INDEX IF NOT EXISTS ix_tasks_user_sort_order
     ON tasks(user_number, sort_order);
 
-CREATE INDEX IF NOT EXISTS ix_task_priority_decisions_user_action
-    ON task_priority_decisions(user_number, user_action);
+DO $$
+BEGIN
+    IF to_regclass('public.task_priority_decisions') IS NOT NULL THEN
+        CREATE INDEX IF NOT EXISTS ix_task_priority_decisions_user_action
+            ON task_priority_decisions(user_number, user_action);
 
-CREATE INDEX IF NOT EXISTS ix_task_priority_decisions_task_decided_at
-    ON task_priority_decisions(task_id, decided_at DESC);
+        CREATE INDEX IF NOT EXISTS ix_task_priority_decisions_task_decided_at
+            ON task_priority_decisions(task_id, decided_at DESC);
+    END IF;
+END $$;
