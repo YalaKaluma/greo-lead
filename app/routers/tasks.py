@@ -93,6 +93,7 @@ class TaskReorderRequest(BaseModel):
 PRIORITY_ORDER = {"High": 1, "Medium": 2, "Low": 3}
 
 
+@router.get("", response_model=list[TaskResponse])
 @router.get("/", response_model=list[TaskResponse])
 def get_tasks(
         user_number: str,
