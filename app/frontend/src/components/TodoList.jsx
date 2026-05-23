@@ -6,7 +6,7 @@ import TaskItem from './TodoList/TaskItem';
 import TaskModal from './TodoList/TaskModal';
 import BulkActionModal from './TodoList/BulkActionModal';
 import FilterSection from './TodoList/FilterSection';
-import { getTodayET, isOverdueET, getSortedGoals } from '../utils/taskHelpers';
+import { getTodayET, getETDate, isOverdueET, getSortedGoals } from '../utils/taskHelpers';
 import { usePriority } from '../hooks/usePriority';
 
 /**
@@ -47,6 +47,8 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [opportunityError, setOpportunityError] = useState(null);
   const [opportunities, setOpportunities] = useState([]);
   const [opportunityActions, setOpportunityActions] = useState({});
+  const [showDeferModal, setShowDeferModal] = useState(false);
+  const [deferLoading, setDeferLoading] = useState(false);
 
   // Multi-select state
   const [selectedTasks, setSelectedTasks] = useState([]);
@@ -463,6 +465,55 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
   };
 
+  const getTomorrowET = () => {
+    const tomorrow = getETDate();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
+  };
+
+  const openDeferNonTop10Modal = () => {
+    if (sortedTasks.length <= 10) {
+      alert('There are no tasks outside the current Top 10.');
+      return;
+    }
+    setShowDeferModal(true);
+  };
+
+  const deferNonTop10Tasks = async () => {
+    const currentOrder = getSortedTasks();
+    const tasksToKeepToday = currentOrder.slice(0, 10);
+    const tasksToMove = currentOrder.slice(10);
+
+    if (tasksToMove.length === 0) {
+      setShowDeferModal(false);
+      alert('There are no tasks outside the current Top 10.');
+      return;
+    }
+
+    setDeferLoading(true);
+    try {
+      const targetDate = getTomorrowET();
+      const response = await axios.post(
+        `${apiUrl}/api/tasks/bulk-defer-non-top-10`,
+        {
+          task_ids_to_keep_today: tasksToKeepToday.map(task => task.id),
+          task_ids_to_move: tasksToMove.map(task => task.id),
+          target_date: targetDate
+        },
+        { params: { user_number: userNumber } }
+      );
+
+      await fetchTasks();
+      setShowDeferModal(false);
+      alert(`Moved ${response.data?.updated ?? tasksToMove.length} task(s) to tomorrow.`);
+    } catch (err) {
+      console.error('Error deferring non-Top-10 tasks:', err);
+      alert(err.response?.data?.detail || 'Failed to move tasks to tomorrow');
+    } finally {
+      setDeferLoading(false);
+    }
+  };
+
   // ============================================================================
   // MULTI-SELECT OPERATIONS
   // ============================================================================
@@ -586,73 +637,68 @@ export default function TodoList({ apiUrl, userNumber }) {
               )}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             {sortOrder.length > 0 && !selectionMode && !priorityMode && (
               <button
                 onClick={resetSortOrder}
-                className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-lg font-medium transition-colors text-sm"
-                title="Return to the default task order"
+                className="h-10 w-10 inline-flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
+                title="Reset manual sort"
+                aria-label="Reset manual sort"
               >
-                ↻ Reset Sort
+                <ResetIcon />
               </button>
             )}
             {!selectionMode && !priorityMode && (
               <>
                 <button
                   onClick={setOverdueToToday}
-                  className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-lg font-medium transition-colors text-sm hidden sm:inline-block"
-                  title="Set all overdue tasks to today"
+                  className="h-10 w-10 inline-flex items-center justify-center bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors"
+                  title="Move overdue tasks to today"
+                  aria-label="Move overdue tasks to today"
                 >
-                   Overdue → Today
-                </button>
-                <button
-                  onClick={setOverdueToToday}
-                  className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-lg font-medium transition-colors text-sm sm:hidden"
-                  title="Set all overdue tasks to today"
-                >
-                  📅
+                  <CalendarIcon />
                 </button>
                 <button
                   onClick={handleRunPrioritization}
                   disabled={priorityLoading || tasks.length === 0}
-                  className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="h-10 w-10 inline-flex items-center justify-center bg-slate-800 hover:bg-slate-900 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Prioritize tasks"
+                  aria-label="Prioritize tasks"
                 >
                   {priorityLoading ? (
-                    <span className="flex items-center gap-2">
-                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      <span className="hidden sm:inline">Analyzing...</span>
-                    </span>
+                    <SpinnerIcon />
                   ) : (
-                    <span className="hidden sm:inline">Move the Needle</span>
+                    <SparkIcon />
                   )}
-                  {!priorityLoading && <span className="sm:hidden">MTN</span>}
                 </button>
                 <button
                   onClick={openOpportunityModal}
                   disabled={opportunityLoading}
-                  className="bg-amber-400 hover:bg-amber-500 text-slate-900 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="h-10 w-10 inline-flex items-center justify-center bg-amber-400 hover:bg-amber-500 text-slate-900 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Suggest move-the-needle actions"
+                  aria-label="Suggest move-the-needle actions"
                 >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M9 18h6" />
-                    <path d="M10 22h4" />
-                    <path d="M12 2a7 7 0 0 0-4 12.74V16h8v-1.26A7 7 0 0 0 12 2Z" />
-                  </svg>
-                  <span className="hidden lg:inline">Suggest move-the-needle actions</span>
-                  <span className="lg:hidden">Suggest</span>
+                  <LightbulbIcon />
+                </button>
+                <button
+                  onClick={openDeferNonTop10Modal}
+                  disabled={sortedTasks.length <= 10}
+                  className="h-10 w-10 inline-flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Move non-Top-10 tasks to tomorrow"
+                  aria-label="Move non-Top-10 tasks to tomorrow"
+                >
+                  <CalendarArrowIcon />
                 </button>
                 <button
                   onClick={() => {
                     setEditingTask(null);
                     setShowTaskModal(true);
                   }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                  className="h-10 w-10 inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                  title="Add task"
+                  aria-label="Add task"
                 >
-                  <span className="hidden sm:inline">+ Add Task</span>
-                  <span className="sm:hidden">+</span>
+                  <PlusIcon />
                 </button>
               </>
             )}
@@ -791,6 +837,35 @@ export default function TodoList({ apiUrl, userNumber }) {
         />
       )}
 
+      {showDeferModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/40 flex items-center justify-center px-4 py-6">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-200">
+              <h2 className="text-lg font-semibold text-slate-900">Move all tasks outside today's Top 10 to tomorrow?</h2>
+              <p className="text-sm text-slate-600 mt-2">
+                The current first 10 visible tasks will stay as-is. The remaining {Math.max(sortedTasks.length - 10, 0)} task(s) will move to tomorrow.
+              </p>
+            </div>
+            <div className="px-5 py-4 flex items-center justify-end gap-2 bg-slate-50">
+              <button
+                onClick={() => setShowDeferModal(false)}
+                disabled={deferLoading}
+                className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={deferNonTop10Tasks}
+                disabled={deferLoading}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deferLoading ? 'Moving...' : 'Move to Tomorrow'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showOpportunityModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/40 flex items-center justify-center px-4 py-6">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
@@ -905,5 +980,82 @@ export default function TodoList({ apiUrl, userNumber }) {
         </div>
       )}
     </div>
+  );
+}
+
+function IconSvg({ children, className = '' }) {
+  return (
+    <svg className={`h-4 w-4 ${className}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
+
+function ResetIcon() {
+  return (
+    <IconSvg>
+      <path d="M3 12a9 9 0 1 0 3-6.7" />
+      <path d="M3 4v6h6" />
+    </IconSvg>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <IconSvg>
+      <path d="M8 2v4" />
+      <path d="M16 2v4" />
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M3 10h18" />
+    </IconSvg>
+  );
+}
+
+function SparkIcon() {
+  return (
+    <IconSvg>
+      <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
+    </IconSvg>
+  );
+}
+
+function LightbulbIcon() {
+  return (
+    <IconSvg>
+      <path d="M9 18h6" />
+      <path d="M10 22h4" />
+      <path d="M12 2a7 7 0 0 0-4 12.74V16h8v-1.26A7 7 0 0 0 12 2Z" />
+    </IconSvg>
+  );
+}
+
+function CalendarArrowIcon() {
+  return (
+    <IconSvg>
+      <path d="M8 2v4" />
+      <path d="M16 2v4" />
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M3 10h18" />
+      <path d="M8 15h7" />
+      <path d="m12 12 3 3-3 3" />
+    </IconSvg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <IconSvg>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </IconSvg>
+  );
+}
+
+function SpinnerIcon() {
+  return (
+    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4Z" />
+    </svg>
   );
 }

@@ -89,6 +89,12 @@ class TaskReorderRequest(BaseModel):
     ordered_task_ids: List[int]
 
 
+class BulkDeferNonTop10Request(BaseModel):
+    task_ids_to_keep_today: List[int]
+    task_ids_to_move: List[int]
+    target_date: date
+
+
 # Priority order for sorting
 PRIORITY_ORDER = {"High": 1, "Medium": 2, "Low": 3}
 
@@ -321,6 +327,50 @@ def reset_task_order(
     db.commit()
 
     return {"success": True, "updated": updated}
+
+
+@router.post("/bulk-defer-non-top-10")
+def bulk_defer_non_top_10(
+        user_number: str,
+        request: BulkDeferNonTop10Request,
+        db: Session = Depends(get_db)
+):
+    """
+    Move the provided non-Top-10 task IDs to a target date.
+
+    The frontend owns the current visible order for this action, so this
+    endpoint only validates ownership and applies the requested date update.
+    """
+    requested_ids = set(request.task_ids_to_keep_today + request.task_ids_to_move)
+    if not requested_ids:
+        return {"success": True, "updated": 0}
+
+    tasks = db.query(Task).filter(
+        Task.user_number == user_number,
+        Task.id.in_(requested_ids)
+    ).all()
+
+    found_task_ids = {task.id for task in tasks}
+    missing_task_ids = sorted(requested_ids - found_task_ids)
+    if missing_task_ids:
+        raise HTTPException(status_code=404, detail=f"Task(s) not found: {missing_task_ids}")
+
+    move_ids = set(request.task_ids_to_move)
+    updated = 0
+    for task in tasks:
+        if task.id in move_ids:
+            task.due_date = request.target_date
+            task.updated_at = datetime.now()
+            updated += 1
+
+    db.commit()
+
+    return {
+        "success": True,
+        "updated": updated,
+        "kept_today": len(request.task_ids_to_keep_today),
+        "target_date": request.target_date.isoformat()
+    }
 
 
 @router.patch("/{task_id}/toggle", response_model=TaskResponse)
