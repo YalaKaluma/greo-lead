@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Draggable } from 'react-beautiful-dnd';
 import { getPriorityIcon, formatDueDate, getDueDateColor } from '../../utils/taskHelpers';
 
@@ -328,12 +329,16 @@ function MtnFeedbackModal({
   onSubmit,
   onClose
 }) {
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-      onClick={(e) => e.stopPropagation()}
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4"
+      style={{ zIndex: 9999 }}
+      onClick={onClose}
     >
-      <div className="bg-white rounded-lg p-6 max-w-lg w-full shadow-2xl">
+      <div
+        className="bg-white rounded-lg p-6 max-w-lg w-full shadow-2xl max-h-[85vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
             <p className="text-xs uppercase text-slate-500 font-semibold">MTN Tag</p>
@@ -404,6 +409,7 @@ function MtnFeedbackModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
