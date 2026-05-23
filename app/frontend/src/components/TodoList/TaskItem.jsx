@@ -263,12 +263,6 @@ function TaskCard({
             )}
           </div>
 
-          {task.notes && (
-            <p className="text-sm text-slate-600 leading-snug mt-1">
-              {task.notes}
-            </p>
-          )}
-
           {task.delegated_to && (
             <div className="mt-1">
               <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">

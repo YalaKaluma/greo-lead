@@ -54,7 +54,6 @@ export default function TodoList({ apiUrl, userNumber }) {
     priorityLoading,
     priorityRecommendation,
     runPrioritization,
-    exitPriorityMode,
     submitMtnFeedback,
     getTaskScore
   } = usePriority(apiUrl, userNumber);
@@ -431,10 +430,6 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
   };
 
-  const handleExitPriority = () => {
-    exitPriorityMode();
-  };
-
   const handleApplyPrioritySort = () => {
     const newOrder = getSortedTasks().map(task => task.id);
     saveSortOrder(newOrder);
@@ -556,16 +551,6 @@ export default function TodoList({ apiUrl, userNumber }) {
                 >
                   <span className="hidden sm:inline">+ Add Task</span>
                   <span className="sm:hidden">+</span>
-                </button>
-              </>
-            )}
-            {priorityMode && (
-              <>
-                <button
-                  onClick={handleExitPriority}
-                  className="px-4 py-2 border border-gray-300 hover:bg-gray-50 rounded-lg font-medium transition-colors"
-                >
-                  Manual View
                 </button>
               </>
             )}
