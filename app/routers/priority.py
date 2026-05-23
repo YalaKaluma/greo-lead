@@ -284,6 +284,7 @@ def record_priority_feedback(
             raise HTTPException(status_code=404, detail="Task not in this prioritization run")
 
         feedback_payload = {
+            "source": "mtn_tag_feedback",
             "rating": request.rating,
             "tag": request.tag,
             "feedback": request.feedback
@@ -293,10 +294,10 @@ def record_priority_feedback(
             recommendation_id=request.recommendation_id,
             task_id=request.task_id,
             user_number=request.user_number,
-            action_recommended="mtn_tag",
+            action_recommended="unknown",
             llm_score=float(task_score.top10_likelihood),
             llm_reason=task_score.primary_reason,
-            user_action=f"feedback_{request.rating}",
+            user_action="skip",
             user_reason=json.dumps(feedback_payload)
         )
 
