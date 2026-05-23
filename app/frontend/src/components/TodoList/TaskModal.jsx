@@ -1,6 +1,7 @@
 // frontend/src/components/TodoList/TaskModal.jsx
 import { getTodayET, getETDate, getNextMonday, getSortedGoals, getGoalIndentation } from '../../utils/taskHelpers';
 import { useState, useEffect } from 'react';
+import VoiceRecorder from '../VoiceRecorder';
 
 /**
  * TaskModal Component
@@ -420,7 +421,14 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
 )}
 
               
-              <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <label className="block text-sm font-medium text-slate-700">Notes</label>
+                <VoiceRecorder
+                  onTranscript={(text) => setEditData(prev => ({ ...prev, notes: text }))}
+                  className="justify-end"
+                  size="compact"
+                />
+              </div>
               <textarea
                 value={editData.notes}
                 onChange={(e) => setEditData({ ...editData, notes: e.target.value })}
@@ -462,4 +470,3 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
     </>
   );
 }
-

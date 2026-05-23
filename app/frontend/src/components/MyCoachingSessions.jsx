@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import ReadAloudButton from './ReadAloudButton';
+import VoiceRecorder from './VoiceRecorder';
 
 // Session stage configurations
 const GOAL_REVIEW_STAGES = [
@@ -508,14 +510,23 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
                 `}
               >
                 <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
-                <div className={`
-                  text-xs mt-1 
-                  ${msg.role === 'user' ? 'text-blue-100' : 'text-gray-500'}
-                `}>
-                  {new Date(msg.timestamp).toLocaleTimeString([], { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                  })}
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <div className={`
+                    text-xs 
+                    ${msg.role === 'user' ? 'text-blue-100' : 'text-gray-500'}
+                  `}>
+                    {new Date(msg.timestamp).toLocaleTimeString([], { 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    })}
+                  </div>
+                  <ReadAloudButton
+                    text={msg.content}
+                    className={msg.role === 'user'
+                      ? 'text-blue-100 hover:bg-blue-500'
+                      : 'text-gray-600 hover:bg-gray-200'
+                    }
+                  />
                 </div>
               </div>
             </div>
@@ -546,6 +557,11 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
             placeholder={activeSession ? "Share your thoughts..." : "Type a message to Alfred..."}
             disabled={isLoading}
             className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+          />
+          <VoiceRecorder
+            apiUrl={apiUrl}
+            disabled={isLoading}
+            onTranscript={(text) => setInputMessage(text)}
           />
           <button
             type="submit"
