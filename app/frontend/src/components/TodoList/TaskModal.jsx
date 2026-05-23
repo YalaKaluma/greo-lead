@@ -171,13 +171,20 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
                   Task Title
                 </label>
 
-                <button
-                  onClick={handleAskAlfred}
-                  disabled={alfredLoading}
-                  className="text-sm px-3 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg transition-colors disabled:opacity-50"
-                >
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleAskAlfred}
+                    disabled={alfredLoading}
+                    className="text-sm px-3 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg transition-colors disabled:opacity-50"
+                  >
                   {alfredLoading ? 'Analyzing...' : '✨ Ask Alfred'}
-                </button>
+                  </button>
+                  <VoiceRecorder
+                    onTranscript={(text) => setEditData(prev => ({ ...prev, title: text }))}
+                    className="justify-end"
+                    size="compact"
+                  />
+                </div>
               </div>
 
               
@@ -421,14 +428,7 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
 )}
 
               
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <label className="block text-sm font-medium text-slate-700">Notes</label>
-                <VoiceRecorder
-                  onTranscript={(text) => setEditData(prev => ({ ...prev, notes: text }))}
-                  className="justify-end"
-                  size="compact"
-                />
-              </div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
               <textarea
                 value={editData.notes}
                 onChange={(e) => setEditData({ ...editData, notes: e.target.value })}
