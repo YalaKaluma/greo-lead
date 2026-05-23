@@ -6,6 +6,7 @@ This folder contains SQL migrations for Neon/PostgreSQL.
 
 - `2026-05-22_create_journey_belt_trials.sql` creates the `journey_belt_trials` table used to persist reflection, real-world, and behavioral integration trial work.
 - `2026-05-22_shift_journey_belt_trials_to_current_belt.sql` migrates earlier trial rows so `target_belt` represents the user's current belt trial row rather than the belt being earned next.
+- `2026-05-23_mtn_feedback_and_task_sort.sql` ensures task ordering persists in Neon and adds indexes for MTN feedback stored in `task_priority_decisions`.
 
 ## Migration Conventions
 
