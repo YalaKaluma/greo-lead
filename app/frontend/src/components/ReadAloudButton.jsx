@@ -23,13 +23,21 @@ export default function ReadAloudButton({ text, className = '' }) {
   const getPreferredVoice = () => {
     const englishVoices = voices.filter(voice => voice.lang?.toLowerCase().startsWith('en'));
     const preferredNames = [
-      'aria',
-      'jenny',
+      'microsoft david',
+      'microsoft mark',
+      'microsoft guy',
+      'google uk english male',
+      'google us english male',
+      'daniel',
+      'george',
+      'david',
+      'mark',
+      'richard',
+      'fred',
+      'ralph',
+      'alex',
+      'tom',
       'guy',
-      'ava',
-      'samantha',
-      'google us english',
-      'google uk english',
       'microsoft',
       'natural'
     ];
@@ -56,8 +64,8 @@ export default function ReadAloudButton({ text, className = '' }) {
       utterance.voice = voice;
       utterance.lang = voice.lang;
     }
-    utterance.rate = 0.92;
-    utterance.pitch = 1;
+    utterance.rate = 0.88;
+    utterance.pitch = 0.82;
     utterance.volume = 1;
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
