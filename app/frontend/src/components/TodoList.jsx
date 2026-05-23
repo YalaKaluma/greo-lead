@@ -55,6 +55,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     priorityRecommendation,
     runPrioritization,
     exitPriorityMode,
+    submitMtnFeedback,
     getTaskScore
   } = usePriority(apiUrl, userNumber);
 
@@ -173,6 +174,13 @@ export default function TodoList({ apiUrl, userNumber }) {
   const saveSortOrder = (order) => {
     localStorage.setItem('taskSortOrder', JSON.stringify(order));
     setSortOrder(order);
+
+    axios.post(`${apiUrl}/api/tasks/reorder`, {
+      user_number: userNumber,
+      ordered_task_ids: order
+    }).catch(err => {
+      console.error('Failed to persist task order:', err);
+    });
   };
 
   const getSortedTasks = () => {
@@ -334,6 +342,11 @@ export default function TodoList({ apiUrl, userNumber }) {
   const resetSortOrder = () => {
     localStorage.removeItem('taskSortOrder');
     setSortOrder([]);
+    axios.post(`${apiUrl}/api/tasks/reorder/reset`, null, {
+      params: { user_number: userNumber }
+    }).catch(err => {
+      console.error('Failed to reset persisted task order:', err);
+    });
   };
 
   const setOverdueToToday = async () => {
@@ -425,7 +438,20 @@ export default function TodoList({ apiUrl, userNumber }) {
   const handleApplyPrioritySort = () => {
     const newOrder = getSortedTasks().map(task => task.id);
     saveSortOrder(newOrder);
-    exitPriorityMode();
+  };
+
+  useEffect(() => {
+    if (priorityMode && priorityRecommendation?.all_scored_tasks) {
+      handleApplyPrioritySort();
+    }
+  }, [priorityMode, priorityRecommendation]);
+
+  const handleMtnFeedback = async (taskId, rating, feedback, tag) => {
+    const result = await submitMtnFeedback(taskId, rating, feedback, tag);
+    if (!result.success) {
+      alert(result.error);
+    }
+    return result;
   };
 
   // ============================================================================
@@ -463,7 +489,7 @@ export default function TodoList({ apiUrl, userNumber }) {
                 </span>
               ) : priorityMode ? (
                 <span className="text-blue-700 font-medium">
-                  Strategic View: Alfred's MTN lens is sorting this view only. Your manual order is unchanged.
+                  MTN sort applied. Click a tag to review the reasoning or leave feedback.
                 </span>
               ) : (
                 <>
@@ -535,12 +561,6 @@ export default function TodoList({ apiUrl, userNumber }) {
             )}
             {priorityMode && (
               <>
-                <button
-                  onClick={handleApplyPrioritySort}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-medium transition-colors"
-                >
-                  Apply MTN Sort
-                </button>
                 <button
                   onClick={handleExitPriority}
                   className="px-4 py-2 border border-gray-300 hover:bg-gray-50 rounded-lg font-medium transition-colors"
@@ -617,6 +637,7 @@ export default function TodoList({ apiUrl, userNumber }) {
                         goals={goals}
                         priorityMode={priorityMode}
                         priorityScore={scoreData}
+                        onMtnFeedback={(rating, feedback, tag) => handleMtnFeedback(task.id, rating, feedback, tag)}
                       />
                     );
                   })}

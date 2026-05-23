@@ -4,7 +4,7 @@ from app.db import get_db
 from app.models import Task
 from pydantic import BaseModel
 from datetime import datetime, date, timedelta
-from typing import Optional
+from typing import Optional, List
 from pytz import timezone
 from app.services.task_enrichment_service import enrich_task
 
@@ -76,11 +76,17 @@ class TaskResponse(BaseModel):
     alfred_help: Optional[list] = None
     enhanced_title: Optional[str] = None
     ai_enriched: Optional[bool] = False
+    sort_order: Optional[int] = None
 
 
 
     class Config:
         from_attributes = True
+
+
+class TaskReorderRequest(BaseModel):
+    user_number: str
+    ordered_task_ids: List[int]
 
 
 # Priority order for sorting
@@ -146,8 +152,10 @@ def get_tasks(
         tasks = query.all()
         print(f"[TASKS API] Found {len(tasks)} tasks before sorting")
 
-        # Sort by: status (open first), then priority, then due date
+        # Sort by: manual order if present, then status, priority, and due date.
         def sort_key(task):
+            manual_order_missing = 1 if task.sort_order is None else 0
+            manual_order_value = task.sort_order if task.sort_order is not None else 999999
             status_order = 0 if task.status == 'open' else 1
             priority_value = PRIORITY_ORDER.get(task.priority, 2)
             # Handle both DateTime and Date objects
@@ -155,7 +163,7 @@ def get_tasks(
                 due_value = task.due_date if isinstance(task.due_date, date) else task.due_date.date()
             else:
                 due_value = date(9999, 12, 31)
-            return (status_order, priority_value, due_value)
+            return (manual_order_missing, manual_order_value, status_order, priority_value, due_value)
 
         sorted_tasks = sorted(tasks, key=sort_key)
         print(f"[TASKS API] Successfully returning {len(sorted_tasks)} sorted tasks")
@@ -253,6 +261,51 @@ def update_task(
     db.refresh(task)
 
     return task
+
+
+@router.post("/reorder")
+def reorder_tasks(
+        request: TaskReorderRequest,
+        db: Session = Depends(get_db)
+):
+    """
+    Persist the user's current task order.
+    """
+    tasks = db.query(Task).filter(
+        Task.user_number == request.user_number,
+        Task.id.in_(request.ordered_task_ids)
+    ).all()
+
+    found_task_ids = {task.id for task in tasks}
+    missing_task_ids = [task_id for task_id in request.ordered_task_ids if task_id not in found_task_ids]
+    if missing_task_ids:
+        raise HTTPException(status_code=404, detail=f"Task(s) not found: {missing_task_ids}")
+
+    order_by_id = {task_id: index for index, task_id in enumerate(request.ordered_task_ids)}
+    for task in tasks:
+        task.sort_order = order_by_id[task.id]
+        task.updated_at = datetime.now()
+
+    db.commit()
+
+    return {"success": True, "updated": len(tasks)}
+
+
+@router.post("/reorder/reset")
+def reset_task_order(
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """
+    Clear persisted manual ordering for a user.
+    """
+    updated = db.query(Task).filter(Task.user_number == user_number).update({
+        "sort_order": None,
+        "updated_at": datetime.now()
+    })
+    db.commit()
+
+    return {"success": True, "updated": updated}
 
 
 @router.patch("/{task_id}/toggle", response_model=TaskResponse)

@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel, Field
+import json
 
 from app.db import get_db
 from app.services.priority_service import PriorityService
@@ -51,6 +52,16 @@ class UserDecisionRequest(BaseModel):
     user_number: str
     user_action: str = Field(..., description="One of: accept, reject, replace, skip")
     user_reason: Optional[str] = Field(None, description="Optional: why they made this choice")
+
+
+class PriorityFeedbackRequest(BaseModel):
+    """Request to record MTN tag feedback."""
+    recommendation_id: int
+    task_id: int
+    user_number: str
+    rating: int = Field(..., ge=1, le=5, description="User feedback rating from 1 to 5 stars")
+    tag: str = Field(..., description="MTN label shown to the user")
+    feedback: Optional[str] = Field(None, description="Optional user explanation")
 
 
 class ApplyChangesRequest(BaseModel):
@@ -242,6 +253,64 @@ def record_decision(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to record decision: {str(e)}"
+        )
+
+
+@router.post("/feedback")
+def record_priority_feedback(
+        request: PriorityFeedbackRequest,
+        db: Session = Depends(get_db)
+):
+    """
+    Record user feedback on an MTN tag.
+
+    This keeps MTN as a lightweight lens while still capturing learning data
+    for future scoring improvements.
+    """
+    priority_service = PriorityService(db)
+
+    try:
+        from app.models import TaskPriorityRecommendation, TaskPriorityScore
+
+        recommendation = db.query(TaskPriorityRecommendation).get(request.recommendation_id)
+        if not recommendation:
+            raise HTTPException(status_code=404, detail="Recommendation not found")
+
+        task_score = db.query(TaskPriorityScore).filter(
+            TaskPriorityScore.context_id == recommendation.context_id,
+            TaskPriorityScore.task_id == request.task_id
+        ).first()
+        if not task_score:
+            raise HTTPException(status_code=404, detail="Task not in this prioritization run")
+
+        feedback_payload = {
+            "rating": request.rating,
+            "tag": request.tag,
+            "feedback": request.feedback
+        }
+
+        decision = priority_service.record_user_decision(
+            recommendation_id=request.recommendation_id,
+            task_id=request.task_id,
+            user_number=request.user_number,
+            action_recommended="mtn_tag",
+            llm_score=float(task_score.top10_likelihood),
+            llm_reason=task_score.primary_reason,
+            user_action=f"feedback_{request.rating}",
+            user_reason=json.dumps(feedback_payload)
+        )
+
+        return {
+            "feedback_id": decision.id,
+            "message": "MTN feedback recorded successfully"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to record MTN feedback: {str(e)}"
         )
 
 

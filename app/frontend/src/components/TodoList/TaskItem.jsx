@@ -25,7 +25,8 @@ export default function TaskItem({
   onSelectToggle,
   goals,
   priorityMode = false,
-  priorityScore = null
+  priorityScore = null,
+  onMtnFeedback = null
 }) {
   const [swipeDistance, setSwipeDistance] = useState(0);
   const [touchStartX, setTouchStartX] = useState(0);
@@ -86,6 +87,7 @@ export default function TaskItem({
           goals={goals}
           priorityMode={priorityMode}
           priorityScore={priorityScore}
+          onMtnFeedback={onMtnFeedback}
         />
       )}
     </Draggable>
@@ -110,9 +112,14 @@ function TaskCard({
   onSelectToggle,
   goals,
   priorityMode,
-  priorityScore
+  priorityScore,
+  onMtnFeedback
 }) {
-  const [showMtnDetails, setShowMtnDetails] = useState(false);
+  const [showMtnFeedback, setShowMtnFeedback] = useState(false);
+  const [mtnRating, setMtnRating] = useState(0);
+  const [mtnFeedback, setMtnFeedback] = useState('');
+  const [mtnSaving, setMtnSaving] = useState(false);
+  const [mtnSaved, setMtnSaved] = useState(false);
 
   const goalLabel =
     goals.find(g => g.id === task.goal_id)?.title ||
@@ -136,15 +143,6 @@ function TaskCard({
   };
 
   const handleClick = (e) => {
-    if (priorityMode) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (priorityScore) {
-        setShowMtnDetails(prev => !prev);
-      }
-      return;
-    }
-
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
       e.stopPropagation();
@@ -164,6 +162,21 @@ function TaskCard({
     }
 
     onStartEdit();
+  };
+
+  const mtnLabel = priorityScore ? getMtnLabel(priorityScore.score) : '';
+
+  const submitMtnFeedback = async () => {
+    if (!mtnRating || !onMtnFeedback) return;
+
+    setMtnSaving(true);
+    const result = await onMtnFeedback(mtnRating, mtnFeedback.trim() || null, mtnLabel);
+    setMtnSaving(false);
+
+    if (result?.success) {
+      setMtnSaved(true);
+      setShowMtnFeedback(false);
+    }
   };
 
   return (
@@ -226,13 +239,9 @@ function TaskCard({
             className="font-medium text-slate-800 text-base break-words leading-tight cursor-pointer hover:text-blue-600 transition-colors"
             onClick={(e) => {
               e.stopPropagation();
-              if (priorityMode && priorityScore) {
-                setShowMtnDetails(prev => !prev);
-              } else {
-                onStartEdit();
-              }
+              onStartEdit();
             }}
-            title={priorityMode ? 'Click to see why Alfred scored it this way' : 'Click to edit/reschedule'}
+            title="Click to edit/reschedule"
           >
             {task.title}
           </div>
@@ -271,21 +280,130 @@ function TaskCard({
 
         {priorityMode && priorityScore && (
           <div className="flex-shrink-0 ml-3 flex items-center gap-2">
-            <span className={`whitespace-nowrap text-xs px-2 py-0.5 rounded border font-medium ${getMtnStyle(priorityScore.score)}`}>
-              MTN: {getMtnLabel(priorityScore.score)}
-            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowMtnFeedback(true);
+              }}
+              className={`whitespace-nowrap text-xs px-2 py-0.5 rounded border font-medium ${getMtnStyle(priorityScore.score)}`}
+              title="Review MTN reasoning"
+            >
+              MTN: {mtnLabel}
+            </button>
             {priorityScore.score >= 0.85 && (
               <div className="h-2 w-2 rounded-full bg-blue-500" title="Highest leverage" />
+            )}
+            {mtnSaved && (
+              <span className="text-xs text-emerald-700">Saved</span>
             )}
           </div>
         )}
       </div>
 
-      {priorityMode && priorityScore && showMtnDetails && (
-        <div className="mt-2 ml-10 border-t border-slate-200 pt-2 text-sm text-slate-700">
-          {priorityScore.reason || 'No explanation available for this MTN score.'}
-        </div>
+      {priorityMode && priorityScore && showMtnFeedback && (
+        <MtnFeedbackModal
+          tag={mtnLabel}
+          score={priorityScore}
+          rating={mtnRating}
+          setRating={setMtnRating}
+          feedback={mtnFeedback}
+          setFeedback={setMtnFeedback}
+          saving={mtnSaving}
+          onSubmit={submitMtnFeedback}
+          onClose={() => setShowMtnFeedback(false)}
+        />
       )}
+    </div>
+  );
+}
+
+function MtnFeedbackModal({
+  tag,
+  score,
+  rating,
+  setRating,
+  feedback,
+  setFeedback,
+  saving,
+  onSubmit,
+  onClose
+}) {
+  return (
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="bg-white rounded-lg p-6 max-w-lg w-full shadow-2xl">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <p className="text-xs uppercase text-slate-500 font-semibold">MTN Tag</p>
+            <h3 className="text-xl font-semibold text-slate-800">{tag}</h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-500 hover:text-slate-800 text-xl leading-none"
+            aria-label="Close"
+          >
+            x
+          </button>
+        </div>
+
+        <div className="space-y-3 mb-5">
+          <div>
+            <p className="text-sm font-medium text-slate-700 mb-1">Why Alfred tagged it this way</p>
+            <p className="text-sm text-slate-600">
+              {score.reason || 'No explanation available for this MTN score.'}
+            </p>
+          </div>
+
+          {score.risk_if_ignored && (
+            <div>
+              <p className="text-sm font-medium text-slate-700 mb-1">Risk if ignored</p>
+              <p className="text-sm text-slate-600">{score.risk_if_ignored}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="mb-4">
+          <p className="text-sm font-medium text-slate-700 mb-2">How useful is this MTN tag?</p>
+          <div className="flex gap-1">
+            {[1, 2, 3, 4, 5].map(value => (
+              <button
+                key={value}
+                onClick={() => setRating(value)}
+                className={`text-2xl leading-none ${value <= rating ? 'text-amber-500' : 'text-slate-300'}`}
+                aria-label={`${value} star${value > 1 ? 's' : ''}`}
+              >
+                {value <= rating ? '★' : '☆'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <textarea
+          value={feedback}
+          onChange={(e) => setFeedback(e.target.value)}
+          placeholder="Optional: what should Alfred learn from your reaction?"
+          className="w-full p-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          rows={4}
+        />
+
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={!rating || saving}
+            className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Saving...' : 'Save Feedback'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

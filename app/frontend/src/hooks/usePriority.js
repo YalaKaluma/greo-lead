@@ -45,6 +45,31 @@ export function usePriority(apiUrl, userNumber) {
     setPriorityRecommendation(null);
   };
 
+  const submitMtnFeedback = async (taskId, rating, feedback, tag) => {
+    if (!priorityRecommendation) {
+      return { success: false, error: 'No MTN run found for this feedback' };
+    }
+
+    try {
+      await axios.post(`${apiUrl}/api/priority/feedback`, {
+        recommendation_id: priorityRecommendation.recommendation_id,
+        task_id: taskId,
+        user_number: userNumber,
+        rating,
+        tag,
+        feedback
+      });
+
+      return { success: true };
+    } catch (err) {
+      console.error('Failed to submit MTN feedback:', err);
+      return {
+        success: false,
+        error: err.response?.data?.detail || 'Failed to save MTN feedback'
+      };
+    }
+  };
+
   // Get task score data from recommendation
   const getTaskScore = (taskId) => {
     if (!priorityRecommendation) return null;
@@ -62,6 +87,7 @@ export function usePriority(apiUrl, userNumber) {
     // Actions
     runPrioritization,
     exitPriorityMode,
+    submitMtnFeedback,
     getTaskScore
   };
 }
