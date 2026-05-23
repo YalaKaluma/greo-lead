@@ -165,6 +165,21 @@ function TaskCard({
     onStartEdit();
   };
 
+  const handleSelectionShortcut = (e) => {
+    if (!e.ctrlKey && !e.metaKey) {
+      return false;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    if (!selectionMode) {
+      onLongPress();
+    } else {
+      onSelectToggle();
+    }
+    return true;
+  };
+
   const mtnLabel = priorityScore ? getMtnLabel(priorityScore.score) : '';
 
   const submitMtnFeedback = async () => {
@@ -216,7 +231,10 @@ function TaskCard({
           <div
             {...provided.dragHandleProps}
             className="text-slate-300 cursor-grab active:cursor-grabbing mt-0.5"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              if (handleSelectionShortcut(e)) return;
+              e.stopPropagation();
+            }}
           >
             ::
           </div>
@@ -225,6 +243,7 @@ function TaskCard({
         {!selectionMode && (
           <button
             onClick={(e) => {
+              if (handleSelectionShortcut(e)) return;
               e.stopPropagation();
               onToggle();
             }}
@@ -239,6 +258,7 @@ function TaskCard({
           <div
             className="font-medium text-slate-800 text-base break-words leading-tight cursor-pointer hover:text-blue-600 transition-colors"
             onClick={(e) => {
+              if (handleSelectionShortcut(e)) return;
               e.stopPropagation();
               onStartEdit();
             }}
