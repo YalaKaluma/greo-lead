@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-export default function ReadAloudButton({ text, className = '' }) {
+export default function ReadAloudButton({ text, apiUrl = '', className = '' }) {
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [voices, setVoices] = useState([]);
+  const audioRef = useRef(null);
+  const audioUrlRef = useRef(null);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return undefined;
@@ -17,6 +20,19 @@ export default function ReadAloudButton({ text, className = '' }) {
     return () => {
       window.speechSynthesis.removeEventListener('voiceschanged', loadVoices);
       window.speechSynthesis.cancel();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+        audioUrlRef.current = null;
+      }
     };
   }, []);
 
@@ -47,14 +63,8 @@ export default function ReadAloudButton({ text, className = '' }) {
       .find(Boolean) || englishVoices[0] || voices[0] || null;
   };
 
-  const toggleSpeech = () => {
+  const playWithBrowserVoice = () => {
     if (!text?.trim() || typeof window === 'undefined' || !window.speechSynthesis) return;
-
-    if (window.speechSynthesis.speaking && isSpeaking) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
-      return;
-    }
 
     window.speechSynthesis.cancel();
 
@@ -74,7 +84,79 @@ export default function ReadAloudButton({ text, className = '' }) {
     window.speechSynthesis.speak(utterance);
   };
 
-  if (!text?.trim() || typeof window === 'undefined' || !window.speechSynthesis) {
+  const stopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setIsSpeaking(false);
+  };
+
+  const toggleSpeech = async () => {
+    if (!text?.trim() || typeof window === 'undefined') return;
+
+    if (isSpeaking || isLoading) {
+      stopAudio();
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(`${apiUrl}/api/audio/speech`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+
+      if (!response.ok) {
+        throw new Error('Speech request failed');
+      }
+
+      const blob = await response.blob();
+      const audioUrl = URL.createObjectURL(blob);
+      audioUrlRef.current = audioUrl;
+      const nextAudio = new Audio(audioUrl);
+      audioRef.current = nextAudio;
+
+      nextAudio.onended = () => {
+        if (audioUrlRef.current) {
+          URL.revokeObjectURL(audioUrlRef.current);
+          audioUrlRef.current = null;
+        }
+        audioRef.current = null;
+        setIsSpeaking(false);
+      };
+      nextAudio.onerror = () => {
+        if (audioUrlRef.current) {
+          URL.revokeObjectURL(audioUrlRef.current);
+          audioUrlRef.current = null;
+        }
+        audioRef.current = null;
+        setIsSpeaking(false);
+        playWithBrowserVoice();
+      };
+
+      setIsSpeaking(true);
+      await nextAudio.play();
+    } catch (error) {
+      console.error('OpenAI TTS playback error:', error);
+      playWithBrowserVoice();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!text?.trim() || typeof window === 'undefined') {
     return null;
   }
 
@@ -82,10 +164,10 @@ export default function ReadAloudButton({ text, className = '' }) {
     <button
       type="button"
       onClick={toggleSpeech}
-      title={isSpeaking ? 'Stop reading' : 'Read aloud'}
+      title={isSpeaking ? 'Stop Alfred voice' : 'Read aloud with Alfred AI voice'}
       className={`inline-flex h-7 items-center justify-center rounded-full px-2 text-xs transition-colors ${className}`}
     >
-      {isSpeaking ? 'Stop' : 'Audio'}
+      {isLoading ? 'Loading' : isSpeaking ? 'Stop' : 'Audio'}
     </button>
   );
 }

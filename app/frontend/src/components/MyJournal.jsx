@@ -505,6 +505,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
                   </div>
                   <ReadAloudButton
                     text={msg.content}
+                    apiUrl={apiUrl}
                     className={msg.role === 'user'
                       ? 'text-blue-100 hover:bg-blue-500'
                       : 'text-gray-600 hover:bg-gray-200'
