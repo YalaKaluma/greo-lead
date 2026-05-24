@@ -1,10 +1,24 @@
-export default function GoalsHeader({ onAddVision, onAddWave, onAddPillar }) {
+export default function GoalsHeader({
+  onAddVision,
+  onAddWave,
+  onAddPillar,
+  onGenerateRoadmap,
+  showGenerateRoadmap = false
+}) {
   return (
     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
       <h1 className="text-2xl lg:text-3xl font-bold text-slate-800">
         My Vision and Goals
       </h1>
       <div className="flex flex-wrap gap-2">
+        {showGenerateRoadmap && (
+          <button
+            onClick={onGenerateRoadmap}
+            className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            Generate Roadmap with Alfred
+          </button>
+        )}
         <button
           onClick={onAddVision}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"

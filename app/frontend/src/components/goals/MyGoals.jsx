@@ -55,6 +55,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const [parentGoalForChild, setParentGoalForChild] = useState(null);
   const [createGoalLevel, setCreateGoalLevel] = useState('vision');
   const [waveModalRequest, setWaveModalRequest] = useState(0);
+  const [roadmapGenerateRequest, setRoadmapGenerateRequest] = useState(0);
   const [reorderError, setReorderError] = useState('');
 
   /* ---------------- DATA FETCHING ---------------- */
@@ -178,6 +179,63 @@ export default function MyGoals({ apiUrl, userNumber }) {
     }
   };
 
+  const handleMoveGoalAcrossParents = async ({
+    goal,
+    goalType,
+    destinationParentId,
+    sourceParentId,
+    sourceGoals,
+    destinationGoals
+  }) => {
+    const previousGoals = goals;
+    const sourceOrderById = new Map((sourceGoals || []).map((item, index) => [item.id, index]));
+    const destinationOrderById = new Map((destinationGoals || []).map((item, index) => [item.id, index]));
+
+    setReorderError('');
+    setGoals(currentGoals =>
+      currentGoals.map(item => {
+        if (item.id === goal.id) {
+          return {
+            ...item,
+            parent_goal_id: destinationParentId,
+            sort_order: destinationOrderById.get(item.id) ?? item.sort_order
+          };
+        }
+        if (sourceOrderById.has(item.id)) {
+          return { ...item, sort_order: sourceOrderById.get(item.id) };
+        }
+        if (destinationOrderById.has(item.id)) {
+          return { ...item, sort_order: destinationOrderById.get(item.id) };
+        }
+        return item;
+      })
+    );
+
+    try {
+      await axios.put(
+        `${apiUrl}/api/journey/goals/${goal.id}`,
+        { parent_goal_id: destinationParentId, sort_order: destinationOrderById.get(goal.id) ?? 0 },
+        { params: { user_number: userNumber } }
+      );
+      await persistGoalOrder({
+        parentId: destinationParentId,
+        goalType,
+        orderedGoalIds: destinationGoals.map(item => item.id)
+      });
+      if ((sourceGoals || []).length > 0) {
+        await persistGoalOrder({
+          parentId: sourceParentId,
+          goalType,
+          orderedGoalIds: sourceGoals.map(item => item.id)
+        });
+      }
+    } catch (err) {
+      console.error('Error moving goal:', err);
+      setGoals(previousGoals);
+      setReorderError('Could not save the move. Your previous structure has been restored.');
+    }
+  };
+
   const handleEditClick = (goal) => {
     setEditingGoal(goal);
     setViewingGoal(null);
@@ -215,6 +273,15 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const handleCreatePillar = () => {
     setActiveTab('setting');
     openCreateGoalModal('pillar', expandedGoalId || null);
+  };
+
+  const handleGenerateRoadmap = () => {
+    if (!expandedGoalId) {
+      alert('Select a vision first, then generate a roadmap.');
+      return;
+    }
+    setActiveTab('roadmap');
+    setRoadmapGenerateRequest(count => count + 1);
   };
 
   /* ---------------- CRUD OPERATIONS ---------------- */
@@ -277,6 +344,8 @@ export default function MyGoals({ apiUrl, userNumber }) {
         onAddVision={() => openCreateGoalModal('vision')}
         onAddWave={handleCreateWave}
         onAddPillar={handleCreatePillar}
+        onGenerateRoadmap={handleGenerateRoadmap}
+        showGenerateRoadmap={expandedGoalId && activeTab === 'roadmap'}
       />
 
       {expandedGoalId && (
@@ -373,6 +442,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
                 onCardClick={handleCardClick}
                 onEditClick={handleEditClick}
                 onReorderGoals={handleReorderGoals}
+                onMoveGoalAcrossParents={handleMoveGoalAcrossParents}
                 onCreateChildGoal={handleCreateChildGoal}
                 taskCounts={taskCounts}
               />
@@ -388,6 +458,8 @@ export default function MyGoals({ apiUrl, userNumber }) {
                 onGoalsChanged={fetchGoals}
                 waveModalRequest={waveModalRequest}
                 onWaveModalRequestHandled={() => setWaveModalRequest(0)}
+                roadmapGenerateRequest={roadmapGenerateRequest}
+                onRoadmapGenerateRequestHandled={() => setRoadmapGenerateRequest(0)}
               />
             )}
 

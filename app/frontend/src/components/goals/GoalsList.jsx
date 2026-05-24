@@ -11,6 +11,7 @@ export default function GoalsList({
   onCardClick,
   onEditClick,
   onReorderGoals,
+  onMoveGoalAcrossParents,
   onCreateChildGoal,
   expandedGoalId,
   taskCounts = {}
@@ -70,10 +71,6 @@ export default function GoalsList({
       return;
     }
 
-    if (source.droppableId !== destination.droppableId) {
-      return;
-    }
-
     if (source.droppableId === 'vision-goals') {
       const orderedGoals = reorder(tree, source.index, destination.index);
       onReorderGoals({ goalType: 'vision', orderedGoals });
@@ -81,6 +78,8 @@ export default function GoalsList({
     }
 
     if (source.droppableId.startsWith('pillar-goals-')) {
+      if (source.droppableId !== destination.droppableId) return;
+
       const visionGoalId = Number(source.droppableId.replace('pillar-goals-', ''));
       const visionGoal = tree.find(goal => goal.id === visionGoalId);
       if (!visionGoal) return;
@@ -95,20 +94,81 @@ export default function GoalsList({
     }
 
     if (source.droppableId.startsWith('outcome-goals-')) {
-      const pillarGoalId = Number(source.droppableId.replace('outcome-goals-', ''));
-      const pillarGoal = tree
-        .flatMap(goal => goal.children || [])
-        .find(goal => goal.id === pillarGoalId);
-      if (!pillarGoal) return;
+      if (!destination.droppableId.startsWith('outcome-goals-')) return;
 
-      const orderedGoals = reorder(pillarGoal.children || [], source.index, destination.index);
-      onReorderGoals({
-        parentId: pillarGoalId,
+      const sourcePillarGoalId = Number(source.droppableId.replace('outcome-goals-', ''));
+      const destinationPillarGoalId = Number(destination.droppableId.replace('outcome-goals-', ''));
+      const allPillars = tree.flatMap(goal => goal.children || []);
+      const sourcePillarGoal = allPillars.find(goal => goal.id === sourcePillarGoalId);
+      const destinationPillarGoal = allPillars.find(goal => goal.id === destinationPillarGoalId);
+      if (!sourcePillarGoal || !destinationPillarGoal) return;
+
+      if (sourcePillarGoalId === destinationPillarGoalId) {
+        const orderedGoals = reorder(sourcePillarGoal.children || [], source.index, destination.index);
+        onReorderGoals({
+          parentId: sourcePillarGoalId,
+          goalType: 'outcome',
+          orderedGoals
+        });
+        return;
+      }
+
+      const sourceGoals = Array.from(sourcePillarGoal.children || []);
+      const destinationGoals = Array.from(destinationPillarGoal.children || []);
+      const [movedGoal] = sourceGoals.splice(source.index, 1);
+      if (!movedGoal) return;
+      destinationGoals.splice(destination.index, 0, movedGoal);
+
+      onMoveGoalAcrossParents?.({
+        goal: movedGoal,
         goalType: 'outcome',
-        orderedGoals
+        sourceParentId: sourcePillarGoalId,
+        destinationParentId: destinationPillarGoalId,
+        sourceGoals,
+        destinationGoals
       });
     }
   };
+
+  const renderOutcomeDropzone = (pillar) => (
+    <Droppable droppableId={`outcome-goals-${pillar.id}`} type="OUTCOME">
+      {(provided, snapshot) => (
+        <div
+          {...provided.droppableProps}
+          ref={provided.innerRef}
+          className={`mt-4 min-h-[48px] space-y-2 rounded-md transition-colors ${
+            snapshot.isDraggingOver ? 'bg-blue-50/70' : ''
+          }`}
+        >
+          {(pillar.children || []).map((outcome, index) => (
+            <Draggable
+              key={outcome.id}
+              draggableId={`outcome-${outcome.id}`}
+              index={index}
+            >
+              {(provided, snapshot) => (
+                <div
+                  ref={provided.innerRef}
+                  {...provided.draggableProps}
+                  style={provided.draggableProps.style}
+                >
+                  <GoalCard
+                    goal={outcome}
+                    onClick={onCardClick}
+                    taskCount={taskCounts[outcome.id] || 0}
+                    isInTree={true}
+                    dragHandleProps={provided.dragHandleProps}
+                    isDragging={snapshot.isDragging || recentlyDraggedId === `outcome-${outcome.id}`}
+                  />
+                </div>
+              )}
+            </Draggable>
+          ))}
+          {provided.placeholder}
+        </div>
+      )}
+    </Droppable>
+  );
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
@@ -130,32 +190,33 @@ export default function GoalsList({
             <div key={vision.id}>
               <div className="border border-blue-300 rounded p-1.5 lg:p-6 lg:rounded-xl bg-blue-50/20 lg:bg-blue-50/30">
                 {/* Vision in tree */}
-                <div className="mb-2 lg:mb-6">
+                <div className="relative mb-2 lg:mb-8">
                   <GoalCard
                     goal={vision}
                     onClick={onCardClick}
                     taskCount={taskCounts[vision.id] || 0}
                     isInTree={true}
                   />
+                  {hasChildren && (
+                    <div className="hidden lg:block absolute left-1/2 top-full h-8 border-l-2 border-slate-200" />
+                  )}
                 </div>
 
                 {/* Pillars - responsive grid */}
                 {hasChildren && (
-                  <Droppable droppableId={`pillar-goals-${vision.id}`} direction="horizontal">
+                  <Droppable droppableId={`pillar-goals-${vision.id}`} direction="horizontal" type="PILLAR">
                     {(provided) => (
                       <div
                         {...provided.droppableProps}
                         ref={provided.innerRef}
-                        className="grid gap-1.5 lg:gap-4"
-                        style={{ gridTemplateColumns: `repeat(${vision.children.length}, 1fr)` }}
+                        className="relative flex gap-4 lg:gap-6 overflow-x-auto pb-2"
                       >
+                        <div className="hidden lg:block absolute left-8 right-8 top-0 border-t-2 border-slate-200" />
                         {vision.children.map((pillar, index) => {
-                          const hasOutcomeChildren = pillar.children && pillar.children.length > 0;
-
                           return (
                             <Draggable
                               key={pillar.id}
-                              draggableId={String(pillar.id)}
+                              draggableId={`pillar-${pillar.id}`}
                               index={index}
                             >
                               {(provided, snapshot) => (
@@ -163,74 +224,22 @@ export default function GoalsList({
                                   ref={provided.innerRef}
                                   {...provided.draggableProps}
                                   style={provided.draggableProps.style}
+                                  className="relative min-w-[300px] lg:min-w-[320px] max-w-[340px]"
                                 >
-                                  {!hasOutcomeChildren ? (
-                                    <div className={`border border-slate-300 rounded p-1.5 lg:p-4 lg:rounded-lg bg-white ${snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-300' : ''}`}>
-                                      <GoalCard 
-                                        goal={pillar}
-                                        onClick={onCardClick}
-                                        onEdit={onEditClick}
-                                        taskCount={taskCounts[pillar.id] || 0}
-                                        isInTree={true}
-                                        dragHandleProps={provided.dragHandleProps}
-                                        isDragging={snapshot.isDragging || recentlyDraggedId === String(pillar.id)}
-                                      />
-                                      <AddOutcomeButton pillarId={pillar.id} />
-                                    </div>
-                                  ) : (
-                                    <div className={`border border-slate-300 rounded p-1.5 lg:p-4 lg:rounded-lg bg-white ${snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-300' : ''}`}>
-                                      {/* Pillar */}
-                                      <div className="mb-1.5 lg:mb-4">
-                                        <GoalCard
-                                          goal={pillar}
-                                          onClick={onCardClick}
-                                          onEdit={onEditClick}
-                                          taskCount={taskCounts[pillar.id] || 0}
-                                          isInTree={true}
-                                          dragHandleProps={provided.dragHandleProps}
-                                          isDragging={snapshot.isDragging || recentlyDraggedId === String(pillar.id)}
-                                        />
-                                      </div>
-
-                                      {/* Outcomes - aligned right edge, indented left */}
-                                      <Droppable droppableId={`outcome-goals-${pillar.id}`}>
-                                        {(provided) => (
-                                          <div
-                                            {...provided.droppableProps}
-                                            ref={provided.innerRef}
-                                            className="space-y-1.5 lg:space-y-3 pl-2 lg:pl-8 border-l border-slate-200 lg:border-l-2"
-                                          >
-                                            {pillar.children.map((outcome, index) => (
-                                              <Draggable
-                                                key={outcome.id}
-                                                draggableId={String(outcome.id)}
-                                                index={index}
-                                              >
-                                                {(provided, snapshot) => (
-                                                  <div
-                                                    ref={provided.innerRef}
-                                                    {...provided.draggableProps}
-                                                    style={provided.draggableProps.style}
-                                                  >
-                                                    <GoalCard
-                                                      goal={outcome}
-                                                      onClick={onCardClick}
-                                                      taskCount={taskCounts[outcome.id] || 0}
-                                                      isInTree={true}
-                                                      dragHandleProps={provided.dragHandleProps}
-                                                      isDragging={snapshot.isDragging || recentlyDraggedId === String(outcome.id)}
-                                                    />
-                                                  </div>
-                                                )}
-                                              </Draggable>
-                                            ))}
-                                            {provided.placeholder}
-                                          </div>
-                                        )}
-                                      </Droppable>
-                                      <AddOutcomeButton pillarId={pillar.id} />
-                                    </div>
-                                  )}
+                                  <div className="hidden lg:block absolute left-1/2 -top-8 h-8 border-l-2 border-slate-200" />
+                                  <div className={`border border-slate-300 rounded p-1.5 lg:p-4 lg:rounded-lg bg-white ${snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-300' : ''}`}>
+                                    <GoalCard
+                                      goal={pillar}
+                                      onClick={onCardClick}
+                                      onEdit={onEditClick}
+                                      taskCount={taskCounts[pillar.id] || 0}
+                                      isInTree={true}
+                                      dragHandleProps={provided.dragHandleProps}
+                                      isDragging={snapshot.isDragging || recentlyDraggedId === `pillar-${pillar.id}`}
+                                    />
+                                    {renderOutcomeDropzone(pillar)}
+                                    <AddOutcomeButton pillarId={pillar.id} />
+                                  </div>
                                 </div>
                               )}
                             </Draggable>
@@ -246,7 +255,7 @@ export default function GoalsList({
           );
         })
       ) : (
-        <Droppable droppableId="vision-goals">
+        <Droppable droppableId="vision-goals" type="VISION">
           {(provided) => (
             <div
               {...provided.droppableProps}
@@ -256,7 +265,7 @@ export default function GoalsList({
               {tree.map((vision, index) => (
                 <Draggable
                   key={vision.id}
-                  draggableId={String(vision.id)}
+                  draggableId={`vision-${vision.id}`}
                   index={index}
                 >
                   {(provided, snapshot) => (
@@ -272,7 +281,7 @@ export default function GoalsList({
                         taskCount={taskCounts[vision.id] || 0}
                         isInTree={false}
                         dragHandleProps={provided.dragHandleProps}
-                        isDragging={snapshot.isDragging || recentlyDraggedId === String(vision.id)}
+                        isDragging={snapshot.isDragging || recentlyDraggedId === `vision-${vision.id}`}
                       />
                     </div>
                   )}

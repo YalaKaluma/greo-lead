@@ -69,7 +69,9 @@ export default function TransformationRoadmap({
   goals,
   selectedVisionId: lockedVisionId = null,
   waveModalRequest = 0,
-  onWaveModalRequestHandled
+  onWaveModalRequestHandled,
+  roadmapGenerateRequest = 0,
+  onRoadmapGenerateRequestHandled
 }) {
   const visions = useMemo(() => goals.filter(isVision), [goals]);
   const [selectedVisionId, setSelectedVisionId] = useState('');
@@ -388,6 +390,13 @@ export default function TransformationRoadmap({
     }
   };
 
+  useEffect(() => {
+    if (roadmapGenerateRequest > 0) {
+      generateRoadmap();
+      onRoadmapGenerateRequestHandled?.();
+    }
+  }, [roadmapGenerateRequest, onRoadmapGenerateRequestHandled]);
+
   const saveDraft = async () => {
     for (const wave of (draft?.waves || []).filter(item => item.selected !== false)) {
       const created = await axios.post(`${apiUrl}/api/journey/visions/${selectedVisionId}/waves`, {
@@ -429,8 +438,8 @@ export default function TransformationRoadmap({
     <div className="space-y-5">
       {error && <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
-      <div className="flex flex-col lg:flex-row gap-3 lg:items-end lg:justify-between">
-        {!lockedVisionId && (
+      {!lockedVisionId && (
+        <div className="flex flex-col lg:flex-row gap-3 lg:items-end lg:justify-between">
           <div className="flex-1">
             <label className="block text-sm font-medium text-slate-700 mb-2">Vision</label>
             <select
@@ -445,15 +454,8 @@ export default function TransformationRoadmap({
               ))}
             </select>
           </div>
-        )}
-        <button
-          onClick={generateRoadmap}
-          disabled={loading}
-          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium disabled:opacity-60"
-        >
-          Generate Roadmap with Alfred
-        </button>
-      </div>
+        </div>
+      )}
 
       {draft && (
         <div className="border border-blue-200 bg-blue-50 rounded-lg p-4">
@@ -519,8 +521,8 @@ export default function TransformationRoadmap({
                         }`}
                       >
                         {index < (roadmap.waves || []).length - 1 && (
-                          <div className="hidden lg:flex absolute -right-8 top-1/2 -translate-y-1/2 h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 shadow-sm pointer-events-none">
-                            &rarr;
+                          <div className="hidden lg:block absolute -right-10 top-8 bottom-8 w-10 pointer-events-none">
+                            <div className="h-full w-full bg-slate-100 border-y border-r border-slate-300 shadow-sm" style={{ clipPath: 'polygon(0 0, 70% 0, 100% 50%, 70% 100%, 0 100%, 28% 50%)' }} />
                           </div>
                         )}
 
