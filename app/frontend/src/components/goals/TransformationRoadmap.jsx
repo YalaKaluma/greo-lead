@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { isVision, isPillar, isOutcome } from '../../utils/goalTaxonomy';
 
 const STATUS_OPTIONS = [
@@ -23,7 +24,9 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveM
   const [waveForm, setWaveForm] = useState(emptyWaveForm);
   const [showWaveModal, setShowWaveModal] = useState(false);
   const [editingWaveId, setEditingWaveId] = useState(null);
-  const [selectedOutcomeByWave, setSelectedOutcomeByWave] = useState({});
+  const [outcomeModalWave, setOutcomeModalWave] = useState(null);
+  const [selectedOutcomeId, setSelectedOutcomeId] = useState('');
+  const [newOutcomeForm, setNewOutcomeForm] = useState({ title: '', description: '' });
   const [draft, setDraft] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -127,10 +130,9 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveM
     await fetchRoadmap();
   };
 
-  const reorderWaves = async (sourceIndex, direction) => {
+  const reorderWaves = async (sourceIndex, destinationIndex) => {
+    if (destinationIndex < 0 || destinationIndex >= (roadmap.waves || []).length) return;
     const waves = [...roadmap.waves];
-    const destinationIndex = sourceIndex + direction;
-    if (destinationIndex < 0 || destinationIndex >= waves.length) return;
     const [moved] = waves.splice(sourceIndex, 1);
     waves.splice(destinationIndex, 0, moved);
     setRoadmap(prev => ({ ...prev, waves }));
@@ -139,13 +141,51 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveM
     }, { params: { user_number: userNumber } });
   };
 
-  const addOutcomeToWave = async (waveId) => {
-    const goalId = selectedOutcomeByWave[waveId];
+  const handleWaveDragEnd = (result) => {
+    const { source, destination } = result;
+    if (!destination || source.index === destination.index) return;
+    reorderWaves(source.index, destination.index);
+  };
+
+  const resetOutcomeModal = () => {
+    setOutcomeModalWave(null);
+    setSelectedOutcomeId('');
+    setNewOutcomeForm({ title: '', description: '' });
+  };
+
+  const addExistingOutcomeToWave = async () => {
+    const waveId = outcomeModalWave?.id;
+    const goalId = selectedOutcomeId;
     if (!goalId) return;
     await axios.post(`${apiUrl}/api/journey/waves/${waveId}/goals`, {
       goal_id: Number(goalId)
     }, { params: { user_number: userNumber } });
-    setSelectedOutcomeByWave(prev => ({ ...prev, [waveId]: '' }));
+    resetOutcomeModal();
+    await fetchRoadmap();
+  };
+
+  const createAndAddOutcomeToWave = async () => {
+    const waveId = outcomeModalWave?.id;
+    const fallbackPillar = pillars[0];
+    if (!waveId || !newOutcomeForm.title.trim()) return;
+    if (!fallbackPillar) {
+      setError('Create a pillar before adding a new outcome.');
+      return;
+    }
+
+    const res = await axios.post(`${apiUrl}/api/journey/goals`, {
+      title: newOutcomeForm.title,
+      goal_text: newOutcomeForm.description || newOutcomeForm.title,
+      why: '',
+      time_horizon: 'outcome',
+      parent_goal_id: fallbackPillar.id
+    }, { params: { user_number: userNumber } });
+
+    await axios.post(`${apiUrl}/api/journey/waves/${waveId}/goals`, {
+      goal_id: res.data.id
+    }, { params: { user_number: userNumber } });
+
+    resetOutcomeModal();
     await fetchRoadmap();
   };
 
@@ -292,65 +332,90 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveM
 
       {loading && <div className="text-center py-6 text-slate-500">Loading roadmap...</div>}
 
-      <div className="flex gap-4 overflow-x-auto pb-3">
-        {(roadmap.waves || []).map((wave, index) => (
-          <div key={wave.id} className="min-w-[320px] lg:min-w-[360px] max-w-[380px] flex-1 border border-slate-200 rounded-lg bg-white p-4">
-            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Wave {index + 1}</div>
-                <h3 className="text-lg font-semibold text-slate-900">{wave.title}</h3>
-                {wave.description && <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap">{wave.description}</p>}
-                <div className="mt-2 text-xs text-slate-500">{STATUS_OPTIONS.find(option => option.value === wave.status)?.label || wave.status}</div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button onClick={() => reorderWaves(index, -1)} className="px-2 py-1 border border-slate-300 rounded text-sm">Left</button>
-                <button onClick={() => reorderWaves(index, 1)} className="px-2 py-1 border border-slate-300 rounded text-sm">Right</button>
-                <button onClick={() => editWave(wave)} className="px-2 py-1 border border-slate-300 rounded text-sm">Edit</button>
-                <button onClick={() => deleteWave(wave.id)} className="px-2 py-1 border border-red-200 text-red-600 rounded text-sm">Delete</button>
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-2">
-              {(wave.goals || []).map(link => (
-                <div key={link.id} className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded p-3">
-                  <div className="font-medium text-slate-800">{link.goal?.title || link.goal?.goal_text}</div>
-                  <div className="flex gap-2">
-                    <select
-                      onChange={(event) => moveOutcome(wave.id, event.target.value, link.goal_id)}
-                      value=""
-                      className="px-2 py-1 border border-slate-300 rounded text-sm"
+      <DragDropContext onDragEnd={handleWaveDragEnd}>
+        <Droppable droppableId="roadmap-waves" direction="horizontal">
+          {(provided) => (
+            <div
+              {...provided.droppableProps}
+              ref={provided.innerRef}
+              className="flex gap-4 overflow-x-auto pb-3"
+            >
+              {(roadmap.waves || []).map((wave, index) => (
+                <Draggable key={wave.id} draggableId={String(wave.id)} index={index}>
+                  {(provided, snapshot) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.draggableProps}
+                      {...provided.dragHandleProps}
+                      style={provided.draggableProps.style}
+                      onClick={() => editWave(wave)}
+                      className={`min-w-[300px] lg:min-w-[320px] max-w-[340px] border border-slate-200 rounded-lg bg-white p-4 cursor-pointer ${
+                        snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-300' : ''
+                      }`}
                     >
-                      <option value="">Move to...</option>
-                      {(roadmap.waves || []).filter(other => other.id !== wave.id).map(other => (
-                        <option key={other.id} value={other.id}>{other.title}</option>
-                      ))}
-                    </select>
-                    <button onClick={() => removeOutcomeFromWave(wave.id, link.goal_id)} className="px-2 py-1 border border-slate-300 rounded text-sm">
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Wave {index + 1}</div>
+                          <h3 className="text-lg font-semibold text-slate-900 break-words">{wave.title}</h3>
+                          {wave.description && <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap break-words">{wave.description}</p>}
+                          <div className="mt-2 text-xs text-slate-500">{STATUS_OPTIONS.find(option => option.value === wave.status)?.label || wave.status}</div>
+                        </div>
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            deleteWave(wave.id);
+                          }}
+                          className="shrink-0 px-2 py-1 border border-red-200 text-red-600 rounded text-sm"
+                        >
+                          Delete
+                        </button>
+                      </div>
 
-            <div className="mt-4 grid gap-2">
-              <select
-                value={selectedOutcomeByWave[wave.id] || ''}
-                onChange={(event) => setSelectedOutcomeByWave(prev => ({ ...prev, [wave.id]: event.target.value }))}
-                className="px-3 py-2 border border-slate-300 rounded-lg"
-              >
-                <option value="">Add existing outcome...</option>
-                {availableOutcomes.map(outcome => (
-                  <option key={outcome.id} value={outcome.id}>{outcome.title || outcome.goal_text}</option>
-                ))}
-              </select>
-              <button onClick={() => addOutcomeToWave(wave.id)} className="px-3 py-2 border border-slate-300 rounded-lg text-slate-700">
-                Add Outcome
-              </button>
+                      <div className="mt-4 space-y-2">
+                        {(wave.goals || []).map(link => (
+                          <div
+                            key={link.id}
+                            onClick={(event) => event.stopPropagation()}
+                            className="bg-slate-50 border border-slate-200 rounded p-3"
+                          >
+                            <div className="font-medium text-slate-800 break-words">{link.goal?.title || link.goal?.goal_text}</div>
+                            <div className="mt-2 flex gap-2">
+                              <select
+                                onChange={(event) => moveOutcome(wave.id, event.target.value, link.goal_id)}
+                                value=""
+                                className="min-w-0 flex-1 px-2 py-1 border border-slate-300 rounded text-sm"
+                              >
+                                <option value="">Move to...</option>
+                                {(roadmap.waves || []).filter(other => other.id !== wave.id).map(other => (
+                                  <option key={other.id} value={other.id}>{other.title}</option>
+                                ))}
+                              </select>
+                              <button onClick={() => removeOutcomeFromWave(wave.id, link.goal_id)} className="shrink-0 px-2 py-1 border border-slate-300 rounded text-sm">
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setOutcomeModalWave(wave);
+                        }}
+                        className="mt-4 w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-700"
+                      >
+                        Add Outcome
+                      </button>
+                    </div>
+                  )}
+                </Draggable>
+              ))}
+              {provided.placeholder}
             </div>
-          </div>
-        ))}
-      </div>
+          )}
+        </Droppable>
+      </DragDropContext>
 
       {!loading && (roadmap.waves || []).length === 0 && (
         <div className="text-center py-10 bg-slate-50 border border-slate-200 rounded-lg">
@@ -423,6 +488,73 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveM
               </button>
               <button onClick={saveWave} className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium">
                 {editingWaveId ? 'Save Wave' : 'Create Wave'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {outcomeModalWave && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) resetOutcomeModal();
+          }}
+        >
+          <div className="bg-white rounded-xl max-w-xl w-full shadow-2xl">
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="text-xl font-semibold text-slate-800">Add Outcome</h3>
+              <button onClick={resetOutcomeModal} className="text-slate-400 hover:text-slate-600 transition-colors p-1">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Existing outcome</label>
+                <div className="flex gap-2">
+                  <select
+                    value={selectedOutcomeId}
+                    onChange={(event) => setSelectedOutcomeId(event.target.value)}
+                    className="min-w-0 flex-1 px-3 py-2 border border-slate-300 rounded-lg"
+                  >
+                    <option value="">Select outcome...</option>
+                    {availableOutcomes.map(outcome => (
+                      <option key={outcome.id} value={outcome.id}>{outcome.title || outcome.goal_text}</option>
+                    ))}
+                  </select>
+                  <button onClick={addExistingOutcomeToWave} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-200 pt-5 space-y-3">
+                <label className="block text-sm font-medium text-slate-700">New outcome</label>
+                <input
+                  value={newOutcomeForm.title}
+                  onChange={(event) => setNewOutcomeForm(prev => ({ ...prev, title: event.target.value }))}
+                  placeholder="Outcome title"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                />
+                <textarea
+                  value={newOutcomeForm.description}
+                  onChange={(event) => setNewOutcomeForm(prev => ({ ...prev, description: event.target.value }))}
+                  placeholder="Description"
+                  rows={3}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-200 flex gap-3">
+              <button onClick={resetOutcomeModal} className="flex-1 px-4 py-3 border-2 border-slate-300 hover:border-slate-400 text-slate-700 rounded-lg font-medium transition-colors">
+                Cancel
+              </button>
+              <button onClick={createAndAddOutcomeToWave} className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium">
+                Create Outcome
               </button>
             </div>
           </div>
