@@ -16,14 +16,14 @@ const emptyWaveForm = {
   target_end_date: ''
 };
 
-export default function TransformationRoadmap({ apiUrl, userNumber, goals, onGoalsChanged }) {
+export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveModalRequest = 0 }) {
   const visions = useMemo(() => goals.filter(isVision), [goals]);
   const [selectedVisionId, setSelectedVisionId] = useState('');
   const [roadmap, setRoadmap] = useState({ waves: [] });
   const [waveForm, setWaveForm] = useState(emptyWaveForm);
+  const [showWaveModal, setShowWaveModal] = useState(false);
   const [editingWaveId, setEditingWaveId] = useState(null);
   const [selectedOutcomeByWave, setSelectedOutcomeByWave] = useState({});
-  const [newOutcomeByWave, setNewOutcomeByWave] = useState({});
   const [draft, setDraft] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -71,6 +71,14 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, onGoa
     fetchRoadmap();
   }, [selectedVisionId]);
 
+  useEffect(() => {
+    if (waveModalRequest > 0) {
+      setEditingWaveId(null);
+      setWaveForm(emptyWaveForm);
+      setShowWaveModal(true);
+    }
+  }, [waveModalRequest]);
+
   const saveWave = async () => {
     if (!selectedVisionId || !waveForm.title.trim()) return;
     const payload = {
@@ -91,6 +99,7 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, onGoa
       }
       setWaveForm(emptyWaveForm);
       setEditingWaveId(null);
+      setShowWaveModal(false);
       await fetchRoadmap();
     } catch (err) {
       console.error('Error saving wave:', err);
@@ -107,6 +116,7 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, onGoa
       target_start_date: wave.target_start_date || '',
       target_end_date: wave.target_end_date || ''
     });
+    setShowWaveModal(true);
   };
 
   const deleteWave = async (waveId) => {
@@ -154,24 +164,6 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, onGoa
     await axios.post(`${apiUrl}/api/journey/waves/${toWaveId}/goals`, {
       goal_id: goalId
     }, { params: { user_number: userNumber } });
-    await fetchRoadmap();
-  };
-
-  const createOutcomeFromWave = async (waveId) => {
-    const draftOutcome = newOutcomeByWave[waveId] || {};
-    if (!draftOutcome.title?.trim() || !draftOutcome.parent_goal_id) return;
-    const res = await axios.post(`${apiUrl}/api/journey/goals`, {
-      title: draftOutcome.title,
-      goal_text: draftOutcome.description || draftOutcome.title,
-      why: '',
-      time_horizon: 'outcome',
-      parent_goal_id: Number(draftOutcome.parent_goal_id)
-    }, { params: { user_number: userNumber } });
-    await axios.post(`${apiUrl}/api/journey/waves/${waveId}/goals`, {
-      goal_id: res.data.id
-    }, { params: { user_number: userNumber } });
-    setNewOutcomeByWave(prev => ({ ...prev, [waveId]: {} }));
-    await onGoalsChanged?.();
     await fetchRoadmap();
   };
 
@@ -260,44 +252,6 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, onGoa
         </button>
       </div>
 
-      <div className="border border-slate-200 rounded-lg p-4 bg-white">
-        <h3 className="font-semibold text-slate-800 mb-3">{editingWaveId ? 'Edit Wave' : 'Create Wave'}</h3>
-        <div className="grid lg:grid-cols-5 gap-3">
-          <input
-            value={waveForm.title}
-            onChange={(event) => setWaveForm(prev => ({ ...prev, title: event.target.value }))}
-            placeholder="Wave title"
-            className="lg:col-span-2 px-3 py-2 border border-slate-300 rounded-lg"
-          />
-          <input
-            value={waveForm.description}
-            onChange={(event) => setWaveForm(prev => ({ ...prev, description: event.target.value }))}
-            placeholder="Focus or description"
-            className="lg:col-span-2 px-3 py-2 border border-slate-300 rounded-lg"
-          />
-          <select
-            value={waveForm.status}
-            onChange={(event) => setWaveForm(prev => ({ ...prev, status: event.target.value }))}
-            className="px-3 py-2 border border-slate-300 rounded-lg"
-          >
-            {STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-        </div>
-        <div className="mt-3 flex gap-2">
-          <button onClick={saveWave} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
-            {editingWaveId ? 'Save Wave' : 'Add Wave'}
-          </button>
-          {editingWaveId && (
-            <button
-              onClick={() => { setEditingWaveId(null); setWaveForm(emptyWaveForm); }}
-              className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700"
-            >
-              Cancel
-            </button>
-          )}
-        </div>
-      </div>
-
       {draft && (
         <div className="border border-blue-200 bg-blue-50 rounded-lg p-4">
           <div className="flex items-center justify-between mb-3">
@@ -338,9 +292,9 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, onGoa
 
       {loading && <div className="text-center py-6 text-slate-500">Loading roadmap...</div>}
 
-      <div className="space-y-4">
+      <div className="flex gap-4 overflow-x-auto pb-3">
         {(roadmap.waves || []).map((wave, index) => (
-          <div key={wave.id} className="border border-slate-200 rounded-lg bg-white p-4">
+          <div key={wave.id} className="min-w-[320px] lg:min-w-[360px] max-w-[380px] flex-1 border border-slate-200 rounded-lg bg-white p-4">
             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Wave {index + 1}</div>
@@ -349,8 +303,8 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, onGoa
                 <div className="mt-2 text-xs text-slate-500">{STATUS_OPTIONS.find(option => option.value === wave.status)?.label || wave.status}</div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button onClick={() => reorderWaves(index, -1)} className="px-2 py-1 border border-slate-300 rounded text-sm">Up</button>
-                <button onClick={() => reorderWaves(index, 1)} className="px-2 py-1 border border-slate-300 rounded text-sm">Down</button>
+                <button onClick={() => reorderWaves(index, -1)} className="px-2 py-1 border border-slate-300 rounded text-sm">Left</button>
+                <button onClick={() => reorderWaves(index, 1)} className="px-2 py-1 border border-slate-300 rounded text-sm">Right</button>
                 <button onClick={() => editWave(wave)} className="px-2 py-1 border border-slate-300 rounded text-sm">Edit</button>
                 <button onClick={() => deleteWave(wave.id)} className="px-2 py-1 border border-red-200 text-red-600 rounded text-sm">Delete</button>
               </div>
@@ -379,7 +333,7 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, onGoa
               ))}
             </div>
 
-            <div className="mt-4 grid lg:grid-cols-3 gap-2">
+            <div className="mt-4 grid gap-2">
               <select
                 value={selectedOutcomeByWave[wave.id] || ''}
                 onChange={(event) => setSelectedOutcomeByWave(prev => ({ ...prev, [wave.id]: event.target.value }))}
@@ -394,32 +348,6 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, onGoa
                 Add Outcome
               </button>
             </div>
-
-            <div className="mt-3 grid lg:grid-cols-4 gap-2">
-              <select
-                value={newOutcomeByWave[wave.id]?.parent_goal_id || ''}
-                onChange={(event) => setNewOutcomeByWave(prev => ({ ...prev, [wave.id]: { ...(prev[wave.id] || {}), parent_goal_id: event.target.value } }))}
-                className="px-3 py-2 border border-slate-300 rounded-lg"
-              >
-                <option value="">Pillar for new outcome...</option>
-                {pillars.map(pillar => <option key={pillar.id} value={pillar.id}>{pillar.title || pillar.goal_text}</option>)}
-              </select>
-              <input
-                value={newOutcomeByWave[wave.id]?.title || ''}
-                onChange={(event) => setNewOutcomeByWave(prev => ({ ...prev, [wave.id]: { ...(prev[wave.id] || {}), title: event.target.value } }))}
-                placeholder="New outcome title"
-                className="px-3 py-2 border border-slate-300 rounded-lg"
-              />
-              <input
-                value={newOutcomeByWave[wave.id]?.description || ''}
-                onChange={(event) => setNewOutcomeByWave(prev => ({ ...prev, [wave.id]: { ...(prev[wave.id] || {}), description: event.target.value } }))}
-                placeholder="Description"
-                className="px-3 py-2 border border-slate-300 rounded-lg"
-              />
-              <button onClick={() => createOutcomeFromWave(wave.id)} className="px-3 py-2 border border-slate-300 rounded-lg text-slate-700">
-                Create Outcome
-              </button>
-            </div>
           </div>
         ))}
       </div>
@@ -427,6 +355,77 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, onGoa
       {!loading && (roadmap.waves || []).length === 0 && (
         <div className="text-center py-10 bg-slate-50 border border-slate-200 rounded-lg">
           <p className="text-slate-600">No waves yet. Add a wave or ask Alfred to draft the transformation plan.</p>
+        </div>
+      )}
+
+      {showWaveModal && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setShowWaveModal(false);
+              setEditingWaveId(null);
+              setWaveForm(emptyWaveForm);
+            }
+          }}
+        >
+          <div className="bg-white rounded-xl max-w-xl w-full shadow-2xl">
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="text-xl font-semibold text-slate-800">{editingWaveId ? 'Edit Wave' : 'Create Wave'}</h3>
+              <button
+                onClick={() => {
+                  setShowWaveModal(false);
+                  setEditingWaveId(null);
+                  setWaveForm(emptyWaveForm);
+                }}
+                className="text-slate-400 hover:text-slate-600 transition-colors p-1"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <input
+                value={waveForm.title}
+                onChange={(event) => setWaveForm(prev => ({ ...prev, title: event.target.value }))}
+                placeholder="Wave title"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                autoFocus
+              />
+              <textarea
+                value={waveForm.description}
+                onChange={(event) => setWaveForm(prev => ({ ...prev, description: event.target.value }))}
+                placeholder="Focus or description"
+                rows={4}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg resize-none"
+              />
+              <select
+                value={waveForm.status}
+                onChange={(event) => setWaveForm(prev => ({ ...prev, status: event.target.value }))}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+              >
+                {STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-200 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowWaveModal(false);
+                  setEditingWaveId(null);
+                  setWaveForm(emptyWaveForm);
+                }}
+                className="flex-1 px-4 py-3 border-2 border-slate-300 hover:border-slate-400 text-slate-700 rounded-lg font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button onClick={saveWave} className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium">
+                {editingWaveId ? 'Save Wave' : 'Create Wave'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -53,6 +53,8 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const [editingGoal, setEditingGoal] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [parentGoalForChild, setParentGoalForChild] = useState(null);
+  const [createGoalLevel, setCreateGoalLevel] = useState('vision');
+  const [waveModalRequest, setWaveModalRequest] = useState(0);
   const [reorderError, setReorderError] = useState('');
 
   /* ---------------- DATA FETCHING ---------------- */
@@ -186,10 +188,33 @@ export default function MyGoals({ apiUrl, userNumber }) {
     setParentGoalForChild(null);
   };
 
-  const handleCreateChildGoal = (parentGoalId) => {
+  const openCreateGoalModal = (level, parentGoalId = null) => {
+    setCreateGoalLevel(level);
     setParentGoalForChild(parentGoalId);
     setShowCreateModal(true);
     setViewingGoal(null);
+    setEditingGoal(null);
+  };
+
+  const handleCreateChildGoal = (parentGoalId) => {
+    const parentGoal = goals.find(goal => goal.id === parentGoalId);
+    const parentLevel = normalizeGoalLevel(parentGoal?.time_horizon);
+    openCreateGoalModal(parentLevel === 'vision' ? 'pillar' : 'outcome', parentGoalId);
+  };
+
+  const handleCreateWave = () => {
+    setActiveTab('roadmap');
+    setWaveModalRequest(count => count + 1);
+  };
+
+  const handleCreatePillar = () => {
+    setActiveTab('setting');
+    openCreateGoalModal('pillar');
+  };
+
+  const handleCreateOutcome = () => {
+    setActiveTab('setting');
+    openCreateGoalModal('outcome');
   };
 
   /* ---------------- CRUD OPERATIONS ---------------- */
@@ -248,7 +273,12 @@ export default function MyGoals({ apiUrl, userNumber }) {
   return (
     <div className="max-w-7xl mx-auto p-4 lg:p-6">
       {/* Header */}
-      <GoalsHeader onAddClick={() => setShowCreateModal(true)} />
+      <GoalsHeader
+        onAddVision={() => openCreateGoalModal('vision')}
+        onAddWave={handleCreateWave}
+        onAddPillar={handleCreatePillar}
+        onAddOutcome={handleCreateOutcome}
+      />
 
       {/* Tab Navigation */}
       <div className="mb-6 border-b border-slate-200">
@@ -328,6 +358,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
                 userNumber={userNumber}
                 goals={goals}
                 onGoalsChanged={fetchGoals}
+                waveModalRequest={waveModalRequest}
               />
             )}
 
@@ -372,6 +403,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
       {showCreateModal && (
         <GoalCreateModal
           goals={goals}
+          initialGoalLevel={createGoalLevel}
           parentGoalId={parentGoalForChild}
           onClose={() => {
             setShowCreateModal(false);

@@ -5,16 +5,24 @@ import { getGoalLevelLabel, normalizeGoalLevel } from '../../utils/goalTaxonomy'
    MAIN COMPONENT
    ========================================================= */
 
-export default function GoalCreateModal({ goals, parentGoalId = null, onClose, onCreate }) {
+export default function GoalCreateModal({ goals, initialGoalLevel = 'vision', parentGoalId = null, onClose, onCreate }) {
   const [formData, setFormData] = useState({
     title: '',
     goal_text: '',
     why: '',
-    time_horizon: 'outcome',
+    time_horizon: initialGoalLevel,
     parent_goal_id: parentGoalId
   });
 
-  // Auto-suggest time horizon based on parent
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      time_horizon: initialGoalLevel,
+      parent_goal_id: parentGoalId
+    }));
+  }, [initialGoalLevel, parentGoalId]);
+
+  // Auto-suggest structural level based on parent
   useEffect(() => {
     if (parentGoalId) {
       const parentGoal = goals.find(g => g.id === parentGoalId);
@@ -48,6 +56,10 @@ export default function GoalCreateModal({ goals, parentGoalId = null, onClose, o
       alert(`Please enter a ${getGoalLevelLabel(formData.time_horizon).toLowerCase()} title`);
       return;
     }
+    if (selectedLevel !== 'vision' && !formData.parent_goal_id) {
+      alert(`Please select a parent ${selectedLevel === 'pillar' ? 'vision' : 'pillar'}`);
+      return;
+    }
     onCreate(formData);
   };
 
@@ -58,6 +70,14 @@ export default function GoalCreateModal({ goals, parentGoalId = null, onClose, o
   };
 
   const parentGoal = parentGoalId ? goals.find(g => g.id === parentGoalId) : null;
+  const selectedLevel = normalizeGoalLevel(formData.time_horizon);
+  const parentOptions = goals.filter(goal => {
+    const level = normalizeGoalLevel(goal.time_horizon);
+    if (selectedLevel === 'vision') return false;
+    if (selectedLevel === 'pillar') return level === 'vision';
+    if (selectedLevel === 'outcome') return level === 'pillar';
+    return false;
+  });
 
   return (
     <div 
@@ -71,7 +91,7 @@ export default function GoalCreateModal({ goals, parentGoalId = null, onClose, o
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
           <h2 className="text-xl font-semibold text-slate-800">
-            {parentGoalId ? 'Create Child Item' : 'Create Vision / Pillar / Outcome'}
+            Create {getGoalLevelLabel(formData.time_horizon)}
           </h2>
           <button
             onClick={onClose}
@@ -90,7 +110,7 @@ export default function GoalCreateModal({ goals, parentGoalId = null, onClose, o
           {parentGoal && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-sm text-blue-900">
-                <span className="font-medium">Creating child goal for:</span>
+                <span className="font-medium">Creating under:</span>
                 <br />
                 <span className="text-lg">{parentGoal.title || parentGoal.goal_text?.substring(0, 60)}</span>
               </p>
@@ -146,12 +166,12 @@ export default function GoalCreateModal({ goals, parentGoalId = null, onClose, o
           {/* Structural level */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
-              Structural Level
+              Type
             </label>
             <div className="grid grid-cols-3 gap-3">
               <button
                 type="button"
-                onClick={() => setFormData(prev => ({ ...prev, time_horizon: 'vision' }))}
+                onClick={() => setFormData(prev => ({ ...prev, time_horizon: 'vision', parent_goal_id: null }))}
                 className={`px-4 py-3 rounded-lg border-2 transition-all ${
                   normalizeGoalLevel(formData.time_horizon) === 'vision'
                     ? 'border-purple-500 bg-purple-50 text-purple-700 font-medium'
@@ -162,7 +182,7 @@ export default function GoalCreateModal({ goals, parentGoalId = null, onClose, o
               </button>
               <button
                 type="button"
-                onClick={() => setFormData(prev => ({ ...prev, time_horizon: 'pillar' }))}
+                onClick={() => setFormData(prev => ({ ...prev, time_horizon: 'pillar', parent_goal_id: null }))}
                 className={`px-4 py-3 rounded-lg border-2 transition-all ${
                   normalizeGoalLevel(formData.time_horizon) === 'pillar'
                     ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
@@ -173,7 +193,7 @@ export default function GoalCreateModal({ goals, parentGoalId = null, onClose, o
               </button>
               <button
                 type="button"
-                onClick={() => setFormData(prev => ({ ...prev, time_horizon: 'outcome' }))}
+                onClick={() => setFormData(prev => ({ ...prev, time_horizon: 'outcome', parent_goal_id: null }))}
                 className={`px-4 py-3 rounded-lg border-2 transition-all ${
                   normalizeGoalLevel(formData.time_horizon) === 'outcome'
                     ? 'border-green-500 bg-green-50 text-green-700 font-medium'
@@ -186,25 +206,27 @@ export default function GoalCreateModal({ goals, parentGoalId = null, onClose, o
           </div>
 
           {/* Parent selector */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Parent Vision/Pillar (Optional)
-            </label>
-            <select
-              name="parent_goal_id"
-              value={formData.parent_goal_id || ''}
-              onChange={handleChange}
-              disabled={!!parentGoalId} // Disable if pre-filled
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:cursor-not-allowed text-base"
-            >
-              <option value="">No Parent</option>
-              {goals.map(g => (
-                <option key={g.id} value={g.id}>
-                  {getGoalLevelLabel(g.time_horizon)}: {g.title || g.goal_text?.substring(0, 50) || 'Untitled'}
-                </option>
-              ))}
-            </select>
-          </div>
+          {selectedLevel !== 'vision' && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Parent {selectedLevel === 'pillar' ? 'Vision' : 'Pillar'} *
+              </label>
+              <select
+                name="parent_goal_id"
+                value={formData.parent_goal_id || ''}
+                onChange={handleChange}
+                disabled={!!parentGoalId}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:cursor-not-allowed text-base"
+              >
+                <option value="">Select parent...</option>
+                {parentOptions.map(g => (
+                  <option key={g.id} value={g.id}>
+                    {getGoalLevelLabel(g.time_horizon)}: {g.title || g.goal_text?.substring(0, 50) || 'Untitled'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
         </form>
 
