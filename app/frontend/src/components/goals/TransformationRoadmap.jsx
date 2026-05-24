@@ -9,6 +9,52 @@ const STATUS_OPTIONS = [
   { value: 'completed', label: 'Completed' }
 ];
 
+const OUTCOME_STATUS_OPTIONS = [
+  { value: 'done', label: 'Done' },
+  { value: 'ongoing', label: 'Ongoing' },
+  { value: 'at_risk', label: 'At risk' },
+  { value: 'blocked', label: 'Blocking issue' }
+];
+
+const OUTCOME_STATUS_STYLES = {
+  done: {
+    label: 'Done',
+    dot: 'bg-green-500',
+    card: 'border-green-200 bg-green-50 hover:bg-green-100',
+    wave: 'border-green-300'
+  },
+  ongoing: {
+    label: 'Ongoing',
+    dot: 'bg-slate-300',
+    card: 'border-slate-200 bg-slate-50 hover:bg-slate-100',
+    wave: 'border-slate-200'
+  },
+  at_risk: {
+    label: 'At risk',
+    dot: 'bg-orange-500',
+    card: 'border-orange-200 bg-orange-50 hover:bg-orange-100',
+    wave: 'border-orange-300'
+  },
+  blocked: {
+    label: 'Blocking issue',
+    dot: 'bg-red-500',
+    card: 'border-red-200 bg-red-50 hover:bg-red-100',
+    wave: 'border-red-300'
+  }
+};
+
+const getOutcomeStatusStyle = (status) => (
+  OUTCOME_STATUS_STYLES[status || 'ongoing'] || OUTCOME_STATUS_STYLES.ongoing
+);
+
+const getWaveStatusStyle = (wave) => {
+  const statuses = (wave.goals || []).map(link => link.status || 'ongoing');
+  if (statuses.includes('blocked')) return OUTCOME_STATUS_STYLES.blocked;
+  if (statuses.includes('at_risk')) return OUTCOME_STATUS_STYLES.at_risk;
+  if (statuses.length > 0 && statuses.every(status => status === 'done')) return OUTCOME_STATUS_STYLES.done;
+  return OUTCOME_STATUS_STYLES.ongoing;
+};
+
 const emptyWaveForm = {
   title: '',
   description: '',
@@ -27,7 +73,7 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, selec
   const [editingWaveTitle, setEditingWaveTitle] = useState('');
   const [outcomeModalWave, setOutcomeModalWave] = useState(null);
   const [editingOutcomeLink, setEditingOutcomeLink] = useState(null);
-  const [editingOutcomeForm, setEditingOutcomeForm] = useState({ title: '', goal_text: '' });
+  const [editingOutcomeForm, setEditingOutcomeForm] = useState({ title: '', goal_text: '', status: 'ongoing' });
   const [selectedOutcomeId, setSelectedOutcomeId] = useState('');
   const [newOutcomeForm, setNewOutcomeForm] = useState({ title: '', description: '' });
   const [draft, setDraft] = useState(null);
@@ -167,7 +213,8 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, selec
     const goalId = selectedOutcomeId;
     if (!goalId) return;
     await axios.post(`${apiUrl}/api/journey/waves/${waveId}/goals`, {
-      goal_id: Number(goalId)
+      goal_id: Number(goalId),
+      status: 'ongoing'
     }, { params: { user_number: userNumber } });
     resetOutcomeModal();
     await fetchRoadmap();
@@ -191,7 +238,8 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, selec
     }, { params: { user_number: userNumber } });
 
     await axios.post(`${apiUrl}/api/journey/waves/${waveId}/goals`, {
-      goal_id: res.data.id
+      goal_id: res.data.id,
+      status: 'ongoing'
     }, { params: { user_number: userNumber } });
 
     resetOutcomeModal();
@@ -203,7 +251,7 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, selec
       params: { user_number: userNumber }
     });
     setEditingOutcomeLink(null);
-    setEditingOutcomeForm({ title: '', goal_text: '' });
+    setEditingOutcomeForm({ title: '', goal_text: '', status: 'ongoing' });
     await fetchRoadmap();
   };
 
@@ -211,18 +259,24 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, selec
     setEditingOutcomeLink({ wave, link });
     setEditingOutcomeForm({
       title: link.goal?.title || '',
-      goal_text: link.goal?.goal_text || ''
+      goal_text: link.goal?.goal_text || '',
+      status: link.status || 'ongoing'
     });
   };
 
   const saveOutcome = async () => {
     if (!editingOutcomeLink?.link?.goal_id || !editingOutcomeForm.title.trim()) return;
-    await axios.put(`${apiUrl}/api/journey/goals/${editingOutcomeLink.link.goal_id}`, {
-      title: editingOutcomeForm.title,
-      goal_text: editingOutcomeForm.goal_text || editingOutcomeForm.title
-    }, { params: { user_number: userNumber } });
+    await Promise.all([
+      axios.put(`${apiUrl}/api/journey/goals/${editingOutcomeLink.link.goal_id}`, {
+        title: editingOutcomeForm.title,
+        goal_text: editingOutcomeForm.goal_text || editingOutcomeForm.title
+      }, { params: { user_number: userNumber } }),
+      axios.patch(`${apiUrl}/api/journey/waves/${editingOutcomeLink.wave.id}/goals/${editingOutcomeLink.link.goal_id}`, {
+        status: editingOutcomeForm.status || 'ongoing'
+      }, { params: { user_number: userNumber } })
+    ]);
     setEditingOutcomeLink(null);
-    setEditingOutcomeForm({ title: '', goal_text: '' });
+    setEditingOutcomeForm({ title: '', goal_text: '', status: 'ongoing' });
     await fetchRoadmap();
   };
 
@@ -363,54 +417,71 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, selec
             >
               {(roadmap.waves || []).map((wave, index) => (
                 <Draggable key={wave.id} draggableId={String(wave.id)} index={index}>
-                  {(provided, snapshot) => (
-                    <div
-                      ref={provided.innerRef}
-                      {...provided.draggableProps}
-                      {...provided.dragHandleProps}
-                      style={provided.draggableProps.style}
-                      onClick={() => editWave(wave)}
-                      className={`min-w-[300px] lg:min-w-[320px] max-w-[340px] border border-slate-200 rounded-lg bg-white p-4 cursor-pointer ${
-                        snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-300' : ''
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Wave {index + 1}</div>
-                        <h3 className="text-lg font-semibold text-slate-900 break-words">{wave.title}</h3>
-                        {wave.description && <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap break-words">{wave.description}</p>}
-                        <div className="mt-2 text-xs text-slate-500">{STATUS_OPTIONS.find(option => option.value === wave.status)?.label || wave.status}</div>
-                      </div>
+                  {(provided, snapshot) => {
+                    const waveStyle = getWaveStatusStyle(wave);
 
-                      <div className="mt-4 space-y-2">
-                        {(wave.goals || []).map(link => (
-                          <div
-                            key={link.id}
+                    return (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        {...provided.dragHandleProps}
+                        style={provided.draggableProps.style}
+                        onClick={() => editWave(wave)}
+                        className={`min-w-[300px] lg:min-w-[320px] max-w-[340px] border-2 ${waveStyle.wave} rounded-lg bg-white p-4 cursor-pointer ${
+                          snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-300' : ''
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Wave {index + 1}</div>
+                            <span className={`h-3 w-3 rounded-full ${waveStyle.dot}`} title={waveStyle.label} />
+                          </div>
+                          <h3 className="text-lg font-semibold text-slate-900 break-words">{wave.title}</h3>
+                          {wave.description && <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap break-words">{wave.description}</p>}
+                          <div className="mt-2 text-xs text-slate-500">{STATUS_OPTIONS.find(option => option.value === wave.status)?.label || wave.status}</div>
+                        </div>
+
+                        <div className="mt-4 space-y-2">
+                          {(wave.goals || []).map(link => {
+                            const outcomeStyle = getOutcomeStatusStyle(link.status);
+
+                            return (
+                              <div
+                                key={link.id}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  editOutcome(wave, link);
+                                }}
+                                className={`${outcomeStyle.card} border rounded p-3 cursor-pointer`}
+                              >
+                                <div className="flex items-start gap-2">
+                                  <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${outcomeStyle.dot}`} />
+                                  <div className="min-w-0">
+                                    <div className="font-medium text-slate-800 break-words">{link.goal?.title || link.goal?.goal_text}</div>
+                                    <div className="mt-1 text-xs text-slate-500">{outcomeStyle.label}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="mt-4 flex justify-start">
+                          <button
                             onClick={(event) => {
                               event.stopPropagation();
-                              editOutcome(wave, link);
+                              setOutcomeModalWave(wave);
                             }}
-                            className="bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded p-3 cursor-pointer"
+                            className="h-8 w-8 rounded-full border border-slate-300 hover:border-blue-500 hover:text-blue-600 text-slate-600 text-lg leading-none"
+                            aria-label="Add outcome"
+                            title="Add outcome"
                           >
-                            <div className="font-medium text-slate-800 break-words">{link.goal?.title || link.goal?.goal_text}</div>
-                          </div>
-                        ))}
+                            +
+                          </button>
+                        </div>
                       </div>
-
-                      <div className="mt-4 flex justify-start">
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setOutcomeModalWave(wave);
-                          }}
-                          className="h-8 w-8 rounded-full border border-slate-300 hover:border-blue-500 hover:text-blue-600 text-slate-600 text-lg leading-none"
-                          aria-label="Add outcome"
-                          title="Add outcome"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                    );
+                  }}
                 </Draggable>
               ))}
               {provided.placeholder}
@@ -582,7 +653,7 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, selec
           onClick={(event) => {
             if (event.target === event.currentTarget) {
               setEditingOutcomeLink(null);
-              setEditingOutcomeForm({ title: '', goal_text: '' });
+              setEditingOutcomeForm({ title: '', goal_text: '', status: 'ongoing' });
             }
           }}
         >
@@ -592,7 +663,7 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, selec
               <button
                 onClick={() => {
                   setEditingOutcomeLink(null);
-                  setEditingOutcomeForm({ title: '', goal_text: '' });
+                  setEditingOutcomeForm({ title: '', goal_text: '', status: 'ongoing' });
                 }}
                 className="text-slate-400 hover:text-slate-600 transition-colors p-1"
               >
@@ -617,13 +688,25 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, selec
                 rows={4}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg resize-none"
               />
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Status</label>
+                <select
+                  value={editingOutcomeForm.status}
+                  onChange={(event) => setEditingOutcomeForm(prev => ({ ...prev, status: event.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                >
+                  {OUTCOME_STATUS_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="px-6 py-4 border-t border-slate-200 flex gap-3">
               <button
                 onClick={() => {
                   setEditingOutcomeLink(null);
-                  setEditingOutcomeForm({ title: '', goal_text: '' });
+                  setEditingOutcomeForm({ title: '', goal_text: '', status: 'ongoing' });
                 }}
                 className="flex-1 px-4 py-3 border-2 border-slate-300 hover:border-slate-400 text-slate-700 rounded-lg font-medium transition-colors"
               >

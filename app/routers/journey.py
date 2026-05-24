@@ -56,6 +56,7 @@ LEGACY_LEVEL_ALIASES = {
 }
 
 ROADMAP_STATUSES = {"not_started", "active", "completed"}
+WAVE_GOAL_STATUSES = {"done", "ongoing", "at_risk", "blocked"}
 
 
 def normalize_goal_level(value: Optional[str], default: str = "pillar") -> str:
@@ -386,6 +387,11 @@ class WaveUpdate(BaseModel):
 class WaveGoalCreate(BaseModel):
     goal_id: int
     sequence_order: Optional[int] = None
+    status: Optional[str] = "ongoing"
+
+
+class WaveGoalUpdate(BaseModel):
+    status: Optional[str] = None
 
 
 class WaveReorderRequest(BaseModel):
@@ -404,6 +410,13 @@ def validate_wave_status(status: Optional[str]) -> str:
     normalized = (status or "not_started").strip().lower()
     if normalized not in ROADMAP_STATUSES:
         raise HTTPException(status_code=400, detail="Invalid wave status")
+    return normalized
+
+
+def validate_wave_goal_status(status: Optional[str]) -> str:
+    normalized = (status or "ongoing").strip().lower()
+    if normalized not in WAVE_GOAL_STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid outcome status")
     return normalized
 
 
@@ -427,6 +440,7 @@ def serialize_wave(wave: VisionRoadmapWave) -> dict[str, Any]:
                 "wave_id": item.wave_id,
                 "goal_id": item.goal_id,
                 "sequence_order": item.sequence_order,
+                "status": item.status or "ongoing",
                 "goal": serialize_goal(item.goal) if item.goal else None,
             }
             for item in wave_goals
@@ -1092,10 +1106,42 @@ def add_goal_to_wave(
         wave_id=wave_id,
         goal_id=goal.id,
         sequence_order=sequence_order,
+        status=validate_wave_goal_status(link_data.status),
         created_at=datetime.now(),
         updated_at=datetime.now(),
     )
     db.add(link)
+    db.commit()
+    db.refresh(wave)
+    return serialize_wave(wave)
+
+
+@router.patch("/waves/{wave_id}/goals/{goal_id}")
+def update_goal_in_wave(
+        wave_id: int,
+        goal_id: int,
+        link_data: WaveGoalUpdate,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    wave = db.query(VisionRoadmapWave).filter(
+        VisionRoadmapWave.id == wave_id,
+        VisionRoadmapWave.user_number == user_number,
+    ).first()
+    if not wave:
+        raise HTTPException(status_code=404, detail="Wave not found")
+
+    link = db.query(WaveGoal).filter(
+        WaveGoal.wave_id == wave_id,
+        WaveGoal.goal_id == goal_id,
+    ).first()
+    if not link:
+        raise HTTPException(status_code=404, detail="Wave goal link not found")
+
+    if link_data.status is not None:
+        link.status = validate_wave_goal_status(link_data.status)
+    link.updated_at = datetime.now()
+
     db.commit()
     db.refresh(wave)
     return serialize_wave(wave)

@@ -240,6 +240,7 @@ class WaveGoal(Base):
     wave_id = Column(Integer, ForeignKey("vision_roadmap_waves.id", ondelete="CASCADE"), nullable=False, index=True)
     goal_id = Column(Integer, ForeignKey("journey_goals.id", ondelete="CASCADE"), nullable=False, index=True)
     sequence_order = Column(Integer, default=0, nullable=False)
+    status = Column(String, default="ongoing", nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

@@ -24,8 +24,10 @@ CREATE TABLE IF NOT EXISTS wave_goals (
     wave_id INTEGER NOT NULL REFERENCES vision_roadmap_waves(id) ON DELETE CASCADE,
     goal_id INTEGER NOT NULL REFERENCES journey_goals(id) ON DELETE CASCADE,
     sequence_order INTEGER NOT NULL DEFAULT 0,
+    status VARCHAR NOT NULL DEFAULT 'ongoing',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT ck_wave_goals_status CHECK (status IN ('done', 'ongoing', 'at_risk', 'blocked')),
     CONSTRAINT uq_wave_goals_wave_goal UNIQUE (wave_id, goal_id)
 );
 
@@ -34,4 +36,3 @@ CREATE INDEX IF NOT EXISTS idx_wave_goals_wave
 
 CREATE INDEX IF NOT EXISTS idx_wave_goals_goal
     ON wave_goals (goal_id);
-
