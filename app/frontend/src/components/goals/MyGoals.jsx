@@ -130,7 +130,8 @@ export default function MyGoals({ apiUrl, userNumber }) {
 
   const handleCardClick = (goal) => {
     if (isVision(goal)) {
-      setExpandedGoalId(expandedGoalId === goal.id ? null : goal.id);
+      setExpandedGoalId(goal.id);
+      setActiveTab('setting');
       setViewingGoal(null);
       setEditingGoal(null);
     } else {
@@ -203,18 +204,17 @@ export default function MyGoals({ apiUrl, userNumber }) {
   };
 
   const handleCreateWave = () => {
+    if (!expandedGoalId) {
+      alert('Select a vision first, then add a wave.');
+      return;
+    }
     setActiveTab('roadmap');
     setWaveModalRequest(count => count + 1);
   };
 
   const handleCreatePillar = () => {
     setActiveTab('setting');
-    openCreateGoalModal('pillar');
-  };
-
-  const handleCreateOutcome = () => {
-    setActiveTab('setting');
-    openCreateGoalModal('outcome');
+    openCreateGoalModal('pillar', expandedGoalId || null);
   };
 
   /* ---------------- CRUD OPERATIONS ---------------- */
@@ -277,53 +277,68 @@ export default function MyGoals({ apiUrl, userNumber }) {
         onAddVision={() => openCreateGoalModal('vision')}
         onAddWave={handleCreateWave}
         onAddPillar={handleCreatePillar}
-        onAddOutcome={handleCreateOutcome}
       />
 
-      {/* Tab Navigation */}
-      <div className="mb-6 border-b border-slate-200">
-        <div className="flex gap-6">
+      {expandedGoalId && (
+        <>
           <button
-            onClick={() => setActiveTab('setting')}
-            className={`pb-3 px-2 font-medium transition-colors relative ${
-              activeTab === 'setting'
-                ? 'text-blue-600'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
+            onClick={() => {
+              setExpandedGoalId(null);
+              setActiveTab('setting');
+              setViewingGoal(null);
+              setEditingGoal(null);
+            }}
+            className="mb-4 text-sm text-slate-600 hover:text-slate-900"
           >
-            Goal Setting
-            {activeTab === 'setting' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-            )}
+            &larr; All visions
           </button>
-          <button
-            onClick={() => setActiveTab('roadmap')}
-            className={`pb-3 px-2 font-medium transition-colors relative ${
-              activeTab === 'roadmap'
-                ? 'text-blue-600'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Transformation Roadmap
-            {activeTab === 'roadmap' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('review')}
-            className={`pb-3 px-2 font-medium transition-colors relative ${
-              activeTab === 'review'
-                ? 'text-blue-600'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Progress Review
-            {activeTab === 'review' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-            )}
-          </button>
-        </div>
-      </div>
+
+          {/* Tab Navigation */}
+          <div className="mb-6 border-b border-slate-200">
+            <div className="flex gap-6">
+              <button
+                onClick={() => setActiveTab('setting')}
+                className={`pb-3 px-2 font-medium transition-colors relative ${
+                  activeTab === 'setting'
+                    ? 'text-blue-600'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Goal Setting
+                {activeTab === 'setting' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('roadmap')}
+                className={`pb-3 px-2 font-medium transition-colors relative ${
+                  activeTab === 'roadmap'
+                    ? 'text-blue-600'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Transformation Roadmap
+                {activeTab === 'roadmap' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab('review')}
+                className={`pb-3 px-2 font-medium transition-colors relative ${
+                  activeTab === 'review'
+                    ? 'text-blue-600'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Progress Review
+                {activeTab === 'review' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+                )}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Main content area */}
       <div className="relative">
@@ -333,8 +348,19 @@ export default function MyGoals({ apiUrl, userNumber }) {
           </div>
         ) : (
           <>
+            {!expandedGoalId && (
+              <GoalsList 
+                goals={organizedGoals}
+                expandedGoalId={null}
+                onCardClick={handleCardClick}
+                onEditClick={handleEditClick}
+                onReorderGoals={handleReorderGoals}
+                taskCounts={taskCounts}
+              />
+            )}
+
             {/* Goal Setting Tab */}
-            {activeTab === 'setting' && (
+            {expandedGoalId && activeTab === 'setting' && (
               <>
               {reorderError && (
                 <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -347,23 +373,25 @@ export default function MyGoals({ apiUrl, userNumber }) {
                 onCardClick={handleCardClick}
                 onEditClick={handleEditClick}
                 onReorderGoals={handleReorderGoals}
+                onCreateChildGoal={handleCreateChildGoal}
                 taskCounts={taskCounts}
               />
               </>
             )}
 
-            {activeTab === 'roadmap' && (
+            {expandedGoalId && activeTab === 'roadmap' && (
               <TransformationRoadmap
                 apiUrl={apiUrl}
                 userNumber={userNumber}
                 goals={goals}
+                selectedVisionId={expandedGoalId}
                 onGoalsChanged={fetchGoals}
                 waveModalRequest={waveModalRequest}
               />
             )}
 
             {/* Progress Review Tab */}
-            {activeTab === 'review' && (
+            {expandedGoalId && activeTab === 'review' && (
               <GoalReviewRecap
                 goals={organizedGoals}
                 reviewSessions={reviewSessions}

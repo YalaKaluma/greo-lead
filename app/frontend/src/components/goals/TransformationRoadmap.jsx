@@ -17,7 +17,7 @@ const emptyWaveForm = {
   target_end_date: ''
 };
 
-export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveModalRequest = 0 }) {
+export default function TransformationRoadmap({ apiUrl, userNumber, goals, selectedVisionId: lockedVisionId = null, waveModalRequest = 0 }) {
   const visions = useMemo(() => goals.filter(isVision), [goals]);
   const [selectedVisionId, setSelectedVisionId] = useState('');
   const [roadmap, setRoadmap] = useState({ waves: [] });
@@ -35,10 +35,14 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveM
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (lockedVisionId) {
+      setSelectedVisionId(String(lockedVisionId));
+      return;
+    }
     if (!selectedVisionId && visions.length > 0) {
       setSelectedVisionId(String(visions[0].id));
     }
-  }, [visions, selectedVisionId]);
+  }, [visions, selectedVisionId, lockedVisionId]);
 
   const selectedVision = visions.find(vision => String(vision.id) === String(selectedVisionId));
 
@@ -284,20 +288,22 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveM
       {error && <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
       <div className="flex flex-col lg:flex-row gap-3 lg:items-end lg:justify-between">
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-slate-700 mb-2">Vision</label>
-          <select
-            value={selectedVisionId}
-            onChange={(event) => setSelectedVisionId(event.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-          >
-            {visions.map(vision => (
-              <option key={vision.id} value={vision.id}>
-                {vision.title || vision.goal_text}
-              </option>
-            ))}
-          </select>
-        </div>
+        {!lockedVisionId && (
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-slate-700 mb-2">Vision</label>
+            <select
+              value={selectedVisionId}
+              onChange={(event) => setSelectedVisionId(event.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+            >
+              {visions.map(vision => (
+                <option key={vision.id} value={vision.id}>
+                  {vision.title || vision.goal_text}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <button
           onClick={generateRoadmap}
           disabled={loading}

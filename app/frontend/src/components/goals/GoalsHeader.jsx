@@ -1,4 +1,4 @@
-export default function GoalsHeader({ onAddVision, onAddWave, onAddPillar, onAddOutcome }) {
+export default function GoalsHeader({ onAddVision, onAddWave, onAddPillar }) {
   return (
     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
       <h1 className="text-2xl lg:text-3xl font-bold text-slate-800">
@@ -22,12 +22,6 @@ export default function GoalsHeader({ onAddVision, onAddWave, onAddPillar, onAdd
           className="bg-white border border-slate-300 hover:border-slate-400 text-slate-700 px-4 py-2 rounded-lg transition-colors"
         >
           + Pillar
-        </button>
-        <button
-          onClick={onAddOutcome}
-          className="bg-white border border-slate-300 hover:border-slate-400 text-slate-700 px-4 py-2 rounded-lg transition-colors"
-        >
-          + Outcome
         </button>
       </div>
     </div>

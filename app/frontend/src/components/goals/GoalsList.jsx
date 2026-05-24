@@ -11,6 +11,7 @@ export default function GoalsList({
   onCardClick,
   onEditClick,
   onReorderGoals,
+  onCreateChildGoal,
   expandedGoalId,
   taskCounts = {}
 }) {
@@ -33,6 +34,21 @@ export default function GoalsList({
   };
 
   const tree = buildTree();
+
+  const AddOutcomeButton = ({ pillarId }) => (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onCreateChildGoal?.(pillarId);
+      }}
+      className="mt-2 h-8 w-8 rounded-full border border-slate-300 hover:border-blue-500 hover:text-blue-600 text-slate-600 text-lg leading-none"
+      aria-label="Add outcome"
+      title="Add outcome"
+    >
+      +
+    </button>
+  );
 
   const reorder = (items, sourceIndex, destinationIndex) => {
     const nextItems = Array.from(items);
@@ -149,15 +165,18 @@ export default function GoalsList({
                                   style={provided.draggableProps.style}
                                 >
                                   {!hasOutcomeChildren ? (
-                                    <GoalCard 
-                                      goal={pillar}
-                                      onClick={onCardClick}
-                                      onEdit={onEditClick}
-                                      taskCount={taskCounts[pillar.id] || 0}
-                                      isInTree={true}
-                                      dragHandleProps={provided.dragHandleProps}
-                                      isDragging={snapshot.isDragging || recentlyDraggedId === String(pillar.id)}
-                                    />
+                                    <div className={`border border-slate-300 rounded p-1.5 lg:p-4 lg:rounded-lg bg-white ${snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-300' : ''}`}>
+                                      <GoalCard 
+                                        goal={pillar}
+                                        onClick={onCardClick}
+                                        onEdit={onEditClick}
+                                        taskCount={taskCounts[pillar.id] || 0}
+                                        isInTree={true}
+                                        dragHandleProps={provided.dragHandleProps}
+                                        isDragging={snapshot.isDragging || recentlyDraggedId === String(pillar.id)}
+                                      />
+                                      <AddOutcomeButton pillarId={pillar.id} />
+                                    </div>
                                   ) : (
                                     <div className={`border border-slate-300 rounded p-1.5 lg:p-4 lg:rounded-lg bg-white ${snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-300' : ''}`}>
                                       {/* Pillar */}
@@ -209,6 +228,7 @@ export default function GoalsList({
                                           </div>
                                         )}
                                       </Droppable>
+                                      <AddOutcomeButton pillarId={pillar.id} />
                                     </div>
                                   )}
                                 </div>
