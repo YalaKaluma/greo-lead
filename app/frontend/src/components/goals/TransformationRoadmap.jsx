@@ -63,7 +63,14 @@ const emptyWaveForm = {
   target_end_date: ''
 };
 
-export default function TransformationRoadmap({ apiUrl, userNumber, goals, selectedVisionId: lockedVisionId = null, waveModalRequest = 0 }) {
+export default function TransformationRoadmap({
+  apiUrl,
+  userNumber,
+  goals,
+  selectedVisionId: lockedVisionId = null,
+  waveModalRequest = 0,
+  onWaveModalRequestHandled
+}) {
   const visions = useMemo(() => goals.filter(isVision), [goals]);
   const [selectedVisionId, setSelectedVisionId] = useState('');
   const [roadmap, setRoadmap] = useState({ waves: [] });
@@ -132,8 +139,9 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, selec
       setEditingWaveId(null);
       setWaveForm(emptyWaveForm);
       setShowWaveModal(true);
+      onWaveModalRequestHandled?.();
     }
-  }, [waveModalRequest]);
+  }, [waveModalRequest, onWaveModalRequestHandled]);
 
   const saveWave = async () => {
     if (!selectedVisionId || !waveForm.title.trim()) return;
@@ -196,10 +204,90 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, selec
     }, { params: { user_number: userNumber } });
   };
 
-  const handleWaveDragEnd = (result) => {
-    const { source, destination } = result;
-    if (!destination || source.index === destination.index) return;
-    reorderWaves(source.index, destination.index);
+  const reorderItems = (items, sourceIndex, destinationIndex) => {
+    const nextItems = Array.from(items);
+    const [movedItem] = nextItems.splice(sourceIndex, 1);
+    nextItems.splice(destinationIndex, 0, movedItem);
+    return nextItems;
+  };
+
+  const getWaveIdFromOutcomeDroppable = (droppableId) => (
+    Number(String(droppableId).replace('wave-outcomes-', ''))
+  );
+
+  const persistWaveGoalOrder = async (waveId, orderedLinks) => {
+    await axios.patch(`${apiUrl}/api/journey/waves/${waveId}/goals/reorder`, {
+      ordered_goal_ids: orderedLinks.map(link => link.goal_id)
+    }, { params: { user_number: userNumber } });
+  };
+
+  const moveOutcomeLink = async ({ source, destination }) => {
+    const sourceWaveId = getWaveIdFromOutcomeDroppable(source.droppableId);
+    const destinationWaveId = getWaveIdFromOutcomeDroppable(destination.droppableId);
+    const sourceWave = (roadmap.waves || []).find(wave => wave.id === sourceWaveId);
+    const destinationWave = (roadmap.waves || []).find(wave => wave.id === destinationWaveId);
+    if (!sourceWave || !destinationWave) return;
+
+    if (sourceWaveId === destinationWaveId) {
+      const orderedLinks = reorderItems(sourceWave.goals || [], source.index, destination.index);
+      setRoadmap(prev => ({
+        ...prev,
+        waves: (prev.waves || []).map(wave => (
+          wave.id === sourceWaveId ? { ...wave, goals: orderedLinks } : wave
+        ))
+      }));
+      await persistWaveGoalOrder(sourceWaveId, orderedLinks);
+      return;
+    }
+
+    const sourceLinks = Array.from(sourceWave.goals || []);
+    const destinationLinks = Array.from(destinationWave.goals || []);
+    const [movedLink] = sourceLinks.splice(source.index, 1);
+    if (!movedLink) return;
+    destinationLinks.splice(destination.index, 0, movedLink);
+
+    setRoadmap(prev => ({
+      ...prev,
+      waves: (prev.waves || []).map(wave => {
+        if (wave.id === sourceWaveId) return { ...wave, goals: sourceLinks };
+        if (wave.id === destinationWaveId) return { ...wave, goals: destinationLinks };
+        return wave;
+      })
+    }));
+
+    await axios.post(`${apiUrl}/api/journey/waves/${destinationWaveId}/goals`, {
+      goal_id: movedLink.goal_id,
+      sequence_order: destination.index,
+      status: movedLink.status || 'ongoing'
+    }, { params: { user_number: userNumber } });
+
+    await Promise.all([
+      persistWaveGoalOrder(destinationWaveId, destinationLinks),
+      sourceLinks.length > 0
+        ? persistWaveGoalOrder(sourceWaveId, sourceLinks)
+        : Promise.resolve()
+    ]);
+  };
+
+  const handleRoadmapDragEnd = async (result) => {
+    const { source, destination, type } = result;
+    if (!destination) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
+
+    try {
+      if (type === 'WAVE') {
+        await reorderWaves(source.index, destination.index);
+        return;
+      }
+
+      if (type === 'OUTCOME') {
+        await moveOutcomeLink({ source, destination });
+      }
+    } catch (err) {
+      console.error('Error saving roadmap order:', err);
+      setError('Could not save the new roadmap order.');
+      await fetchRoadmap();
+    }
   };
 
   const resetOutcomeModal = () => {
@@ -407,13 +495,13 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, selec
 
       {loading && <div className="text-center py-6 text-slate-500">Loading roadmap...</div>}
 
-      <DragDropContext onDragEnd={handleWaveDragEnd}>
-        <Droppable droppableId="roadmap-waves" direction="horizontal">
+      <DragDropContext onDragEnd={handleRoadmapDragEnd}>
+        <Droppable droppableId="roadmap-waves" direction="horizontal" type="WAVE">
           {(provided) => (
             <div
               {...provided.droppableProps}
               ref={provided.innerRef}
-              className="flex gap-4 overflow-x-auto pb-3"
+              className="flex gap-10 overflow-x-auto pb-3"
             >
               {(roadmap.waves || []).map((wave, index) => (
                 <Draggable key={wave.id} draggableId={String(wave.id)} index={index}>
@@ -424,14 +512,19 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, selec
                       <div
                         ref={provided.innerRef}
                         {...provided.draggableProps}
-                        {...provided.dragHandleProps}
                         style={provided.draggableProps.style}
                         onClick={() => editWave(wave)}
-                        className={`min-w-[300px] lg:min-w-[320px] max-w-[340px] border-2 ${waveStyle.wave} rounded-lg bg-white p-4 cursor-pointer ${
+                        className={`relative min-w-[300px] lg:min-w-[320px] max-w-[340px] border-2 ${waveStyle.wave} rounded-lg bg-white p-4 cursor-pointer ${
                           snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-300' : ''
                         }`}
                       >
-                        <div className="min-w-0">
+                        {index < (roadmap.waves || []).length - 1 && (
+                          <div className="hidden lg:flex absolute -right-8 top-1/2 -translate-y-1/2 h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 shadow-sm pointer-events-none">
+                            &rarr;
+                          </div>
+                        )}
+
+                        <div className="min-w-0" {...provided.dragHandleProps}>
                           <div className="flex items-center justify-between gap-3">
                             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Wave {index + 1}</div>
                             <span className={`h-3 w-3 rounded-full ${waveStyle.dot}`} title={waveStyle.label} />
@@ -441,30 +534,51 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, selec
                           <div className="mt-2 text-xs text-slate-500">{STATUS_OPTIONS.find(option => option.value === wave.status)?.label || wave.status}</div>
                         </div>
 
-                        <div className="mt-4 space-y-2">
-                          {(wave.goals || []).map(link => {
-                            const outcomeStyle = getOutcomeStatusStyle(link.status);
+                        <Droppable droppableId={`wave-outcomes-${wave.id}`} type="OUTCOME">
+                          {(provided, snapshot) => (
+                            <div
+                              {...provided.droppableProps}
+                              ref={provided.innerRef}
+                              className={`mt-4 min-h-[48px] space-y-2 rounded-md transition-colors ${
+                                snapshot.isDraggingOver ? 'bg-blue-50/70' : ''
+                              }`}
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              {(wave.goals || []).map((link, linkIndex) => {
+                                const outcomeStyle = getOutcomeStatusStyle(link.status);
 
-                            return (
-                              <div
-                                key={link.id}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  editOutcome(wave, link);
-                                }}
-                                className={`${outcomeStyle.card} border rounded p-3 cursor-pointer`}
-                              >
-                                <div className="flex items-start gap-2">
-                                  <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${outcomeStyle.dot}`} />
-                                  <div className="min-w-0">
-                                    <div className="font-medium text-slate-800 break-words">{link.goal?.title || link.goal?.goal_text}</div>
-                                    <div className="mt-1 text-xs text-slate-500">{outcomeStyle.label}</div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                                return (
+                                  <Draggable key={link.id} draggableId={`wave-goal-${link.id}`} index={linkIndex}>
+                                    {(provided, snapshot) => (
+                                      <div
+                                        ref={provided.innerRef}
+                                        {...provided.draggableProps}
+                                        {...provided.dragHandleProps}
+                                        style={provided.draggableProps.style}
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          editOutcome(wave, link);
+                                        }}
+                                        className={`${outcomeStyle.card} border rounded p-3 cursor-grab active:cursor-grabbing ${
+                                          snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-200' : ''
+                                        }`}
+                                      >
+                                        <div className="flex items-start gap-2">
+                                          <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${outcomeStyle.dot}`} />
+                                          <div className="min-w-0">
+                                            <div className="font-medium text-slate-800 break-words">{link.goal?.title || link.goal?.goal_text}</div>
+                                            <div className="mt-1 text-xs text-slate-500">{outcomeStyle.label}</div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </Draggable>
+                                );
+                              })}
+                              {provided.placeholder}
+                            </div>
+                          )}
+                        </Droppable>
 
                         <div className="mt-4 flex justify-start">
                           <button

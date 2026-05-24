@@ -387,6 +387,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
                 selectedVisionId={expandedGoalId}
                 onGoalsChanged={fetchGoals}
                 waveModalRequest={waveModalRequest}
+                onWaveModalRequestHandled={() => setWaveModalRequest(0)}
               />
             )}
 
