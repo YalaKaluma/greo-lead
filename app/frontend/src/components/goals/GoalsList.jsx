@@ -215,9 +215,16 @@ export default function GoalsList({
           
           return (
             <div key={vision.id}>
-              <div>
+              <div className="inline-flex min-w-full flex-col">
                 {/* Vision in tree */}
-                <div className="relative mb-2 lg:mb-8 rounded-lg border border-slate-200 bg-white p-4">
+                <div
+                  className="mb-4 rounded-lg border border-slate-200 bg-white p-4"
+                  style={{
+                    width: hasChildren
+                      ? `${vision.children.length * 320 + Math.max(vision.children.length - 1, 0) * 24}px`
+                      : undefined
+                  }}
+                >
                   <div
                     onClick={() => onCardClick(vision)}
                     className="cursor-pointer"
@@ -232,9 +239,6 @@ export default function GoalsList({
                       <TaskBadge goalId={vision.id} />
                     </div>
                   </div>
-                  {hasChildren && (
-                    <div className="hidden lg:block absolute left-1/2 top-full h-8 border-l-2 border-slate-200" />
-                  )}
                 </div>
 
                 {/* Pillars - responsive grid */}
@@ -246,7 +250,6 @@ export default function GoalsList({
                         ref={provided.innerRef}
                         className="relative flex gap-4 lg:gap-6 overflow-x-auto pb-2"
                       >
-                        <div className="hidden lg:block absolute left-8 right-8 top-0 border-t-2 border-slate-200" />
                         {vision.children.map((pillar, index) => {
                           return (
                             <Draggable
@@ -261,7 +264,6 @@ export default function GoalsList({
                                   style={provided.draggableProps.style}
                                   className="relative min-w-[300px] lg:min-w-[320px] max-w-[340px]"
                                 >
-                                  <div className="hidden lg:block absolute left-1/2 -top-8 h-8 border-l-2 border-slate-200" />
                                   <div
                                     onClick={() => onCardClick(pillar)}
                                     className={`border-2 border-slate-200 rounded-lg bg-white p-4 cursor-pointer ${

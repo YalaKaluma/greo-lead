@@ -55,6 +55,8 @@ const getWaveStatusStyle = (wave) => {
   return OUTCOME_STATUS_STYLES.ongoing;
 };
 
+const getGoalTitle = (goal) => goal?.title || goal?.goal_text || '';
+
 const emptyWaveForm = {
   title: '',
   description: '',
@@ -425,6 +427,10 @@ export default function TransformationRoadmap({
   };
 
   const availableOutcomes = outcomes.filter(outcome => !linkedOutcomeIds.has(outcome.id));
+  const waveCount = (roadmap.waves || []).length;
+  const roadmapContentWidth = waveCount > 0
+    ? `${waveCount * 320 + Math.max(waveCount - 1, 0) * 40}px`
+    : undefined;
 
   if (visions.length === 0) {
     return (
@@ -496,6 +502,18 @@ export default function TransformationRoadmap({
       )}
 
       {loading && <div className="text-center py-6 text-slate-500">Loading roadmap...</div>}
+
+      {selectedVision && (
+        <div
+          className="rounded-lg border border-slate-200 bg-white p-4"
+          style={{ width: roadmapContentWidth }}
+        >
+          <h2 className="text-xl font-semibold text-slate-900 break-words">
+            {getGoalTitle(selectedVision)}
+          </h2>
+          <div className="mt-2 text-xs text-slate-500">Vision</div>
+        </div>
+      )}
 
       <DragDropContext onDragEnd={handleRoadmapDragEnd}>
         <Droppable droppableId="roadmap-waves" direction="horizontal" type="WAVE">
