@@ -36,6 +36,19 @@ export default function GoalsList({
 
   const tree = buildTree();
 
+  const getGoalTitle = (goal) => goal.title || goal.goal_text;
+
+  const TaskBadge = ({ goalId }) => {
+    const count = taskCounts[goalId] || 0;
+    if (!count) return null;
+
+    return (
+      <span className="shrink-0 rounded bg-blue-100 px-2 py-1 text-xs text-blue-700">
+        {count} {count === 1 ? 'task' : 'tasks'}
+      </span>
+    );
+  };
+
   const AddOutcomeButton = ({ pillarId }) => (
     <button
       type="button"
@@ -152,14 +165,28 @@ export default function GoalsList({
                   {...provided.draggableProps}
                   style={provided.draggableProps.style}
                 >
-                  <GoalCard
-                    goal={outcome}
-                    onClick={onCardClick}
-                    taskCount={taskCounts[outcome.id] || 0}
-                    isInTree={true}
-                    dragHandleProps={provided.dragHandleProps}
-                    isDragging={snapshot.isDragging || recentlyDraggedId === `outcome-${outcome.id}`}
-                  />
+                  <div
+                    {...provided.dragHandleProps}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onCardClick(outcome);
+                    }}
+                    className={`rounded border border-slate-200 bg-slate-50 p-3 cursor-grab active:cursor-grabbing hover:bg-slate-100 ${
+                      snapshot.isDragging || recentlyDraggedId === `outcome-${outcome.id}`
+                        ? 'shadow-lg ring-2 ring-blue-200'
+                        : ''
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-medium text-slate-800 break-words">
+                          {getGoalTitle(outcome)}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">Outcome</div>
+                      </div>
+                      <TaskBadge goalId={outcome.id} />
+                    </div>
+                  </div>
                 </div>
               )}
             </Draggable>
@@ -188,15 +215,23 @@ export default function GoalsList({
           
           return (
             <div key={vision.id}>
-              <div className="border border-blue-300 rounded p-1.5 lg:p-6 lg:rounded-xl bg-blue-50/20 lg:bg-blue-50/30">
+              <div>
                 {/* Vision in tree */}
-                <div className="relative mb-2 lg:mb-8">
-                  <GoalCard
-                    goal={vision}
-                    onClick={onCardClick}
-                    taskCount={taskCounts[vision.id] || 0}
-                    isInTree={true}
-                  />
+                <div className="relative mb-2 lg:mb-8 rounded-lg border border-slate-200 bg-white p-4">
+                  <div
+                    onClick={() => onCardClick(vision)}
+                    className="cursor-pointer"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h2 className="text-xl font-semibold text-slate-900 break-words">
+                          {getGoalTitle(vision)}
+                        </h2>
+                        <div className="mt-2 text-xs text-slate-500">Vision</div>
+                      </div>
+                      <TaskBadge goalId={vision.id} />
+                    </div>
+                  </div>
                   {hasChildren && (
                     <div className="hidden lg:block absolute left-1/2 top-full h-8 border-l-2 border-slate-200" />
                   )}
@@ -227,16 +262,28 @@ export default function GoalsList({
                                   className="relative min-w-[300px] lg:min-w-[320px] max-w-[340px]"
                                 >
                                   <div className="hidden lg:block absolute left-1/2 -top-8 h-8 border-l-2 border-slate-200" />
-                                  <div className={`border border-slate-300 rounded p-1.5 lg:p-4 lg:rounded-lg bg-white ${snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-300' : ''}`}>
-                                    <GoalCard
-                                      goal={pillar}
-                                      onClick={onCardClick}
-                                      onEdit={onEditClick}
-                                      taskCount={taskCounts[pillar.id] || 0}
-                                      isInTree={true}
-                                      dragHandleProps={provided.dragHandleProps}
-                                      isDragging={snapshot.isDragging || recentlyDraggedId === `pillar-${pillar.id}`}
-                                    />
+                                  <div
+                                    onClick={() => onCardClick(pillar)}
+                                    className={`border-2 border-slate-200 rounded-lg bg-white p-4 cursor-pointer ${
+                                      snapshot.isDragging || recentlyDraggedId === `pillar-${pillar.id}`
+                                        ? 'shadow-lg ring-2 ring-blue-300'
+                                        : ''
+                                    }`}
+                                  >
+                                    <div className="min-w-0" {...provided.dragHandleProps}>
+                                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                        Pillar {index + 1}
+                                      </div>
+                                      <div className="mt-1 flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <h3 className="text-lg font-semibold text-slate-900 break-words">
+                                            {getGoalTitle(pillar)}
+                                          </h3>
+                                          <div className="mt-2 text-xs text-slate-500">Pillar</div>
+                                        </div>
+                                        <TaskBadge goalId={pillar.id} />
+                                      </div>
+                                    </div>
                                     {renderOutcomeDropzone(pillar)}
                                     <AddOutcomeButton pillarId={pillar.id} />
                                   </div>
