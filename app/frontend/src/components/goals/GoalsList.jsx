@@ -118,7 +118,7 @@ export default function GoalsList({
                   <GoalCard
                     goal={vision}
                     onClick={onCardClick}
-                    taskCount={taskCounts[ltGoal.id] || 0}
+                    taskCount={taskCounts[vision.id] || 0}
                     isInTree={true}
                   />
                 </div>
@@ -156,7 +156,7 @@ export default function GoalsList({
                                       taskCount={taskCounts[pillar.id] || 0}
                                       isInTree={true}
                                       dragHandleProps={provided.dragHandleProps}
-                                      isDragging={snapshot.isDragging || recentlyDraggedId === String(mtGoal.id)}
+                                      isDragging={snapshot.isDragging || recentlyDraggedId === String(pillar.id)}
                                     />
                                   ) : (
                                     <div className={`border border-slate-300 rounded p-1.5 lg:p-4 lg:rounded-lg bg-white ${snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-300' : ''}`}>
@@ -169,7 +169,7 @@ export default function GoalsList({
                                           taskCount={taskCounts[pillar.id] || 0}
                                           isInTree={true}
                                           dragHandleProps={provided.dragHandleProps}
-                                          isDragging={snapshot.isDragging || recentlyDraggedId === String(mtGoal.id)}
+                                          isDragging={snapshot.isDragging || recentlyDraggedId === String(pillar.id)}
                                         />
                                       </div>
 
@@ -199,7 +199,7 @@ export default function GoalsList({
                                                       taskCount={taskCounts[outcome.id] || 0}
                                                       isInTree={true}
                                                       dragHandleProps={provided.dragHandleProps}
-                                                      isDragging={snapshot.isDragging || recentlyDraggedId === String(stGoal.id)}
+                                                      isDragging={snapshot.isDragging || recentlyDraggedId === String(outcome.id)}
                                                     />
                                                   </div>
                                                 )}
@@ -252,7 +252,7 @@ export default function GoalsList({
                         taskCount={taskCounts[vision.id] || 0}
                         isInTree={false}
                         dragHandleProps={provided.dragHandleProps}
-                        isDragging={snapshot.isDragging || recentlyDraggedId === String(ltGoal.id)}
+                        isDragging={snapshot.isDragging || recentlyDraggedId === String(vision.id)}
                       />
                     </div>
                   )}
