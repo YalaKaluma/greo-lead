@@ -24,6 +24,7 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveM
   const [waveForm, setWaveForm] = useState(emptyWaveForm);
   const [showWaveModal, setShowWaveModal] = useState(false);
   const [editingWaveId, setEditingWaveId] = useState(null);
+  const [editingWaveTitle, setEditingWaveTitle] = useState('');
   const [outcomeModalWave, setOutcomeModalWave] = useState(null);
   const [selectedOutcomeId, setSelectedOutcomeId] = useState('');
   const [newOutcomeForm, setNewOutcomeForm] = useState({ title: '', description: '' });
@@ -102,6 +103,7 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveM
       }
       setWaveForm(emptyWaveForm);
       setEditingWaveId(null);
+      setEditingWaveTitle('');
       setShowWaveModal(false);
       await fetchRoadmap();
     } catch (err) {
@@ -112,6 +114,7 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveM
 
   const editWave = (wave) => {
     setEditingWaveId(wave.id);
+    setEditingWaveTitle(wave.title || '');
     setWaveForm({
       title: wave.title || '',
       description: wave.description || '',
@@ -193,17 +196,6 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveM
     await axios.delete(`${apiUrl}/api/journey/waves/${waveId}/goals/${goalId}`, {
       params: { user_number: userNumber }
     });
-    await fetchRoadmap();
-  };
-
-  const moveOutcome = async (fromWaveId, toWaveId, goalId) => {
-    if (!toWaveId || Number(toWaveId) === Number(fromWaveId)) return;
-    await axios.delete(`${apiUrl}/api/journey/waves/${fromWaveId}/goals/${goalId}`, {
-      params: { user_number: userNumber }
-    });
-    await axios.post(`${apiUrl}/api/journey/waves/${toWaveId}/goals`, {
-      goal_id: goalId
-    }, { params: { user_number: userNumber } });
     await fetchRoadmap();
   };
 
@@ -353,22 +345,11 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveM
                         snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-300' : ''
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Wave {index + 1}</div>
-                          <h3 className="text-lg font-semibold text-slate-900 break-words">{wave.title}</h3>
-                          {wave.description && <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap break-words">{wave.description}</p>}
-                          <div className="mt-2 text-xs text-slate-500">{STATUS_OPTIONS.find(option => option.value === wave.status)?.label || wave.status}</div>
-                        </div>
-                        <button
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            deleteWave(wave.id);
-                          }}
-                          className="shrink-0 px-2 py-1 border border-red-200 text-red-600 rounded text-sm"
-                        >
-                          Delete
-                        </button>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Wave {index + 1}</div>
+                        <h3 className="text-lg font-semibold text-slate-900 break-words">{wave.title}</h3>
+                        {wave.description && <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap break-words">{wave.description}</p>}
+                        <div className="mt-2 text-xs text-slate-500">{STATUS_OPTIONS.find(option => option.value === wave.status)?.label || wave.status}</div>
                       </div>
 
                       <div className="mt-4 space-y-2">
@@ -379,17 +360,7 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveM
                             className="bg-slate-50 border border-slate-200 rounded p-3"
                           >
                             <div className="font-medium text-slate-800 break-words">{link.goal?.title || link.goal?.goal_text}</div>
-                            <div className="mt-2 flex gap-2">
-                              <select
-                                onChange={(event) => moveOutcome(wave.id, event.target.value, link.goal_id)}
-                                value=""
-                                className="min-w-0 flex-1 px-2 py-1 border border-slate-300 rounded text-sm"
-                              >
-                                <option value="">Move to...</option>
-                                {(roadmap.waves || []).filter(other => other.id !== wave.id).map(other => (
-                                  <option key={other.id} value={other.id}>{other.title}</option>
-                                ))}
-                              </select>
+                            <div className="mt-2 flex justify-end">
                               <button onClick={() => removeOutcomeFromWave(wave.id, link.goal_id)} className="shrink-0 px-2 py-1 border border-slate-300 rounded text-sm">
                                 Remove
                               </button>
@@ -430,6 +401,7 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveM
             if (event.target === event.currentTarget) {
               setShowWaveModal(false);
               setEditingWaveId(null);
+              setEditingWaveTitle('');
               setWaveForm(emptyWaveForm);
             }
           }}
@@ -441,6 +413,7 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveM
                 onClick={() => {
                   setShowWaveModal(false);
                   setEditingWaveId(null);
+                  setEditingWaveTitle('');
                   setWaveForm(emptyWaveForm);
                 }}
                 className="text-slate-400 hover:text-slate-600 transition-colors p-1"
@@ -480,6 +453,7 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveM
                 onClick={() => {
                   setShowWaveModal(false);
                   setEditingWaveId(null);
+                  setEditingWaveTitle('');
                   setWaveForm(emptyWaveForm);
                 }}
                 className="flex-1 px-4 py-3 border-2 border-slate-300 hover:border-slate-400 text-slate-700 rounded-lg font-medium transition-colors"
@@ -490,6 +464,16 @@ export default function TransformationRoadmap({ apiUrl, userNumber, goals, waveM
                 {editingWaveId ? 'Save Wave' : 'Create Wave'}
               </button>
             </div>
+            {editingWaveId && (
+              <div className="px-6 pb-4">
+                <button
+                  onClick={() => deleteWave(editingWaveId)}
+                  className="w-full px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-medium transition-colors border border-red-200"
+                >
+                  Delete {editingWaveTitle || 'Wave'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
