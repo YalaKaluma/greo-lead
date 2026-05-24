@@ -214,6 +214,39 @@ class JourneyGoal(Base):
     children = relationship("JourneyGoal", backref="parent", remote_side=[id])
 
 
+class VisionRoadmapWave(Base):
+    __tablename__ = "vision_roadmap_waves"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True, nullable=False)
+    vision_goal_id = Column(Integer, ForeignKey("journey_goals.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    sequence_order = Column(Integer, default=0, nullable=False)
+    status = Column(String, default="not_started", nullable=False)
+    target_start_date = Column(Date, nullable=True)
+    target_end_date = Column(Date, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    vision = relationship("JourneyGoal", foreign_keys=[vision_goal_id])
+    goals = relationship("WaveGoal", back_populates="wave", cascade="all, delete-orphan")
+
+
+class WaveGoal(Base):
+    __tablename__ = "wave_goals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    wave_id = Column(Integer, ForeignKey("vision_roadmap_waves.id", ondelete="CASCADE"), nullable=False, index=True)
+    goal_id = Column(Integer, ForeignKey("journey_goals.id", ondelete="CASCADE"), nullable=False, index=True)
+    sequence_order = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    wave = relationship("VisionRoadmapWave", back_populates="goals")
+    goal = relationship("JourneyGoal")
+
+
 class JourneyFailure(Base):
     __tablename__ = "journey_failures"
 

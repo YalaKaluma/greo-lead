@@ -26,6 +26,15 @@ from app.models import (
 
 ET = pytz.timezone("America/New_York")
 
+GOAL_LEVEL_ALIASES = {
+    "long": ["long", "long_term", "vision"],
+    "medium": ["medium", "medium_term", "pillar"],
+    "short": ["short", "short_term", "outcome"],
+    "vision": ["long", "long_term", "vision"],
+    "pillar": ["medium", "medium_term", "pillar"],
+    "outcome": ["short", "short_term", "outcome"],
+}
+
 
 class PriorityService:
     """Service for task prioritization recommendations."""
@@ -107,7 +116,7 @@ class PriorityService:
         """
         goals = self.db.query(JourneyGoal).filter(
             JourneyGoal.user_number == user_number,
-            JourneyGoal.time_horizon == horizon
+            JourneyGoal.time_horizon.in_(GOAL_LEVEL_ALIASES.get(horizon, [horizon]))
         ).order_by(JourneyGoal.sort_order).limit(5).all()
 
         return [

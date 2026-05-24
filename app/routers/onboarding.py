@@ -326,7 +326,7 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
                     user_number,
                     goal_text=goal_text,
                     why=why,
-                    time_horizon='medium'  # 6-12 months
+                    time_horizon='vision'
                 )
                 print(f"✅ DEBUG: Goal added successfully!")
                 print(f"   Goal ID: {goal.id}")

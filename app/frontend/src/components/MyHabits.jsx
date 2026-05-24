@@ -6,9 +6,21 @@ import axios from 'axios';
    ========================================================= */
 
 const getSortedGoals = (goals) => {
-  const longTerm = goals.filter(g => g.time_horizon === 'long');
-  const mediumTerm = goals.filter(g => g.time_horizon === 'medium');
-  const shortTerm = goals.filter(g => g.time_horizon === 'short');
+  const normalizeLevel = (value) => ({
+    long: 'vision',
+    long_term: 'vision',
+    vision: 'vision',
+    medium: 'pillar',
+    medium_term: 'pillar',
+    pillar: 'pillar',
+    short: 'outcome',
+    short_term: 'outcome',
+    outcome: 'outcome'
+  }[(value || '').toLowerCase()] || value);
+
+  const longTerm = goals.filter(g => normalizeLevel(g.time_horizon) === 'vision');
+  const mediumTerm = goals.filter(g => normalizeLevel(g.time_horizon) === 'pillar');
+  const shortTerm = goals.filter(g => normalizeLevel(g.time_horizon) === 'outcome');
 
   const result = [];
 
@@ -36,9 +48,10 @@ const getSortedGoals = (goals) => {
 };
 
 const getGoalIndentation = (timeHorizon) => {
-  if (timeHorizon === 'long') return '';
-  if (timeHorizon === 'medium') return '\u00A0\u00A0\u00A0\u00A0';
-  if (timeHorizon === 'short') return '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0';
+  const level = (timeHorizon || '').toLowerCase();
+  if (level === 'long' || level === 'long_term' || level === 'vision') return '';
+  if (level === 'medium' || level === 'medium_term' || level === 'pillar') return '\u00A0\u00A0\u00A0\u00A0';
+  if (level === 'short' || level === 'short_term' || level === 'outcome') return '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0';
   return '';
 };
 

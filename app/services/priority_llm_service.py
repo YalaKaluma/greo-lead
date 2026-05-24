@@ -174,11 +174,11 @@ Evaluate each task and return scores in JSON format as specified in the system p
         # Goals section
         context_str += "Active Goals:\n"
         if context.active_long_term_goals:
-            context_str += f"  Long-term: {self._format_goals(context.active_long_term_goals)}\n"
+            context_str += f"  Visions: {self._format_goals(context.active_long_term_goals)}\n"
         if context.active_short_term_goals:
-            context_str += f"  Short-term: {self._format_goals(context.active_short_term_goals)}\n"
+            context_str += f"  Outcomes: {self._format_goals(context.active_short_term_goals)}\n"
         if context.active_mid_term_goals:
-            context_str += f"  Mid-term: {self._format_goals(context.active_mid_term_goals)}\n"
+            context_str += f"  Pillars: {self._format_goals(context.active_mid_term_goals)}\n"
         
         if not any([context.active_long_term_goals, context.active_short_term_goals, context.active_mid_term_goals]):
             context_str += "  No active goals defined\n"

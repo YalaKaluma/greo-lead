@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getGoalLevelLabel, normalizeGoalLevel } from '../../utils/goalTaxonomy';
 
 /* =========================================================
    MAIN COMPONENT
@@ -9,7 +10,7 @@ export default function GoalCreateModal({ goals, parentGoalId = null, onClose, o
     title: '',
     goal_text: '',
     why: '',
-    time_horizon: 'short',
+    time_horizon: 'outcome',
     parent_goal_id: parentGoalId
   });
 
@@ -18,10 +19,11 @@ export default function GoalCreateModal({ goals, parentGoalId = null, onClose, o
     if (parentGoalId) {
       const parentGoal = goals.find(g => g.id === parentGoalId);
       if (parentGoal) {
-        // Child goals should be shorter term than parent
+        // Child goals should move one structural level down from parent
+        const parentLevel = normalizeGoalLevel(parentGoal.time_horizon);
         const childHorizon = 
-          parentGoal.time_horizon === 'long' ? 'medium' :
-          parentGoal.time_horizon === 'medium' ? 'short' : 'short';
+          parentLevel === 'vision' ? 'pillar' :
+          parentLevel === 'pillar' ? 'outcome' : 'outcome';
         
         setFormData(prev => ({
           ...prev,
@@ -43,7 +45,7 @@ export default function GoalCreateModal({ goals, parentGoalId = null, onClose, o
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.title.trim()) {
-      alert('Please enter a goal title');
+      alert(`Please enter a ${getGoalLevelLabel(formData.time_horizon).toLowerCase()} title`);
       return;
     }
     onCreate(formData);
@@ -69,7 +71,7 @@ export default function GoalCreateModal({ goals, parentGoalId = null, onClose, o
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
           <h2 className="text-xl font-semibold text-slate-800">
-            {parentGoalId ? 'Create Child Goal' : 'Create New Goal'}
+            {parentGoalId ? 'Create Child Item' : 'Create Vision / Pillar / Outcome'}
           </h2>
           <button
             onClick={onClose}
@@ -84,7 +86,7 @@ export default function GoalCreateModal({ goals, parentGoalId = null, onClose, o
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto max-h-[calc(90vh-140px)]">
           
-          {/* Parent Goal Indicator */}
+          {/* Parent indicator */}
           {parentGoal && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-sm text-blue-900">
@@ -98,14 +100,14 @@ export default function GoalCreateModal({ goals, parentGoalId = null, onClose, o
           {/* Title */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
-              Goal Title *
+              {getGoalLevelLabel(formData.time_horizon)} Title *
             </label>
             <input
               type="text"
               name="title"
               value={formData.title}
               onChange={handleChange}
-              placeholder="Enter a clear, concise goal title"
+              placeholder={`Enter a clear, concise ${getGoalLevelLabel(formData.time_horizon).toLowerCase()} title`}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
               autoFocus
             />
@@ -120,7 +122,7 @@ export default function GoalCreateModal({ goals, parentGoalId = null, onClose, o
               name="goal_text"
               value={formData.goal_text}
               onChange={handleChange}
-              placeholder="Describe your goal in detail..."
+              placeholder={`Describe this ${getGoalLevelLabel(formData.time_horizon).toLowerCase()} in detail...`}
               rows={4}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-base"
             />
@@ -135,58 +137,58 @@ export default function GoalCreateModal({ goals, parentGoalId = null, onClose, o
               name="why"
               value={formData.why}
               onChange={handleChange}
-              placeholder="Why is this goal important to you?"
+              placeholder={`Why is this ${getGoalLevelLabel(formData.time_horizon).toLowerCase()} important to you?`}
               rows={3}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-base"
             />
           </div>
 
-          {/* Time Horizon */}
+          {/* Structural level */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
-              Time Horizon
+              Structural Level
             </label>
             <div className="grid grid-cols-3 gap-3">
               <button
                 type="button"
-                onClick={() => setFormData(prev => ({ ...prev, time_horizon: 'long' }))}
+                onClick={() => setFormData(prev => ({ ...prev, time_horizon: 'vision' }))}
                 className={`px-4 py-3 rounded-lg border-2 transition-all ${
-                  formData.time_horizon === 'long'
+                  normalizeGoalLevel(formData.time_horizon) === 'vision'
                     ? 'border-purple-500 bg-purple-50 text-purple-700 font-medium'
                     : 'border-slate-200 hover:border-slate-300 text-slate-700'
                 }`}
               >
-                Long Term
+                Vision
               </button>
               <button
                 type="button"
-                onClick={() => setFormData(prev => ({ ...prev, time_horizon: 'medium' }))}
+                onClick={() => setFormData(prev => ({ ...prev, time_horizon: 'pillar' }))}
                 className={`px-4 py-3 rounded-lg border-2 transition-all ${
-                  formData.time_horizon === 'medium'
+                  normalizeGoalLevel(formData.time_horizon) === 'pillar'
                     ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
                     : 'border-slate-200 hover:border-slate-300 text-slate-700'
                 }`}
               >
-                Medium Term
+                Pillar
               </button>
               <button
                 type="button"
-                onClick={() => setFormData(prev => ({ ...prev, time_horizon: 'short' }))}
+                onClick={() => setFormData(prev => ({ ...prev, time_horizon: 'outcome' }))}
                 className={`px-4 py-3 rounded-lg border-2 transition-all ${
-                  formData.time_horizon === 'short'
+                  normalizeGoalLevel(formData.time_horizon) === 'outcome'
                     ? 'border-green-500 bg-green-50 text-green-700 font-medium'
                     : 'border-slate-200 hover:border-slate-300 text-slate-700'
                 }`}
               >
-                Short Term
+                Outcome
               </button>
             </div>
           </div>
 
-          {/* Parent Goal Selector */}
+          {/* Parent selector */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
-              Parent Goal (Optional)
+              Parent Vision/Pillar (Optional)
             </label>
             <select
               name="parent_goal_id"
@@ -195,10 +197,10 @@ export default function GoalCreateModal({ goals, parentGoalId = null, onClose, o
               disabled={!!parentGoalId} // Disable if pre-filled
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:cursor-not-allowed text-base"
             >
-              <option value="">No Parent Goal</option>
+              <option value="">No Parent</option>
               {goals.map(g => (
                 <option key={g.id} value={g.id}>
-                  {g.title || g.goal_text?.substring(0, 50) || 'Untitled Goal'}
+                  {getGoalLevelLabel(g.time_horizon)}: {g.title || g.goal_text?.substring(0, 50) || 'Untitled'}
                 </option>
               ))}
             </select>
@@ -218,7 +220,7 @@ export default function GoalCreateModal({ goals, parentGoalId = null, onClose, o
             onClick={handleSubmit}
             className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
           >
-            Create Goal
+            Create {getGoalLevelLabel(formData.time_horizon)}
           </button>
         </div>
       </div>

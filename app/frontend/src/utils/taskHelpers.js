@@ -56,9 +56,21 @@ export const getNextMonday = () => {
 
 // Helper function to sort goals hierarchically
 export const getSortedGoals = (goals) => {
-  const longTerm = goals.filter(g => g.time_horizon === 'long');
-  const mediumTerm = goals.filter(g => g.time_horizon === 'medium');
-  const shortTerm = goals.filter(g => g.time_horizon === 'short');
+  const normalizeLevel = (value) => ({
+    long: 'vision',
+    long_term: 'vision',
+    vision: 'vision',
+    medium: 'pillar',
+    medium_term: 'pillar',
+    pillar: 'pillar',
+    short: 'outcome',
+    short_term: 'outcome',
+    outcome: 'outcome'
+  }[(value || '').toLowerCase()] || value);
+
+  const longTerm = goals.filter(g => normalizeLevel(g.time_horizon) === 'vision');
+  const mediumTerm = goals.filter(g => normalizeLevel(g.time_horizon) === 'pillar');
+  const shortTerm = goals.filter(g => normalizeLevel(g.time_horizon) === 'outcome');
   
   const result = [];
   
@@ -89,9 +101,9 @@ export const getSortedGoals = (goals) => {
 // Helper function to get goal indentation
 export const getGoalIndentation = (timeHorizon) => {
   const h = timeHorizon?.toLowerCase();
-  if (h === 'long') return '';
-  if (h === 'medium') return '\u00A0\u00A0\u00A0\u00A0';
-  if (h === 'short') return '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0';
+  if (h === 'long' || h === 'long_term' || h === 'vision') return '';
+  if (h === 'medium' || h === 'medium_term' || h === 'pillar') return '\u00A0\u00A0\u00A0\u00A0';
+  if (h === 'short' || h === 'short_term' || h === 'outcome') return '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0';
   return '';
 };
 

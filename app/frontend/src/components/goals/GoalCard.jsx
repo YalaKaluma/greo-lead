@@ -1,3 +1,5 @@
+import { getGoalLevelLabel, isVision, isPillar } from '../../utils/goalTaxonomy';
+
 /* =========================================================
    RESPONSIVE CARD WITH HIERARCHY
    ========================================================= */
@@ -12,19 +14,9 @@ export default function GoalCard({
   isDragging = false
 }) {
   
-  // Full labels
-  const getHorizonLabel = (horizon) => {
-    const labels = {
-      long: 'Long Term',
-      medium: 'Medium Term',
-      short: 'Short Term'
-    };
-    return labels[horizon] || 'Goal';
-  };
-
-  // Visual hierarchy - LT goals are most prominent
-  const isLongTerm = goal.time_horizon === 'long';
-  const isMediumTerm = goal.time_horizon === 'medium';
+  // Visual hierarchy - visions are most prominent
+  const isVisionGoal = isVision(goal);
+  const isPillarGoal = isPillar(goal);
 
   return (
     <div
@@ -38,13 +30,13 @@ export default function GoalCard({
     relative rounded border border-slate-300 bg-white hover:bg-slate-50
     ${dragHandleProps ? (isDragging ? 'cursor-grabbing shadow-lg ring-2 ring-blue-300' : 'cursor-grab') : 'cursor-pointer'}
     ${isInTree ? 'p-1.5 lg:p-4' : 'p-3 lg:p-4'}
-    ${isLongTerm ? 'border-2 border-blue-300' : ''}
+    ${isVisionGoal ? 'border-2 border-blue-300' : ''}
   `}
 >
 
 
-{/* Edit button for Long Term goals */}
-{isLongTerm && onEdit && (
+{/* Edit button for visions */}
+{isVisionGoal && onEdit && (
   <button
     onClick={(e) => {
       e.stopPropagation();
@@ -82,10 +74,10 @@ export default function GoalCard({
       {/* Title - responsive sizing with hierarchy */}
       <div className={`
         font-medium text-slate-800 leading-tight line-clamp-2
-        ${!isInTree && isLongTerm ? 'text-base lg:text-xl lg:font-bold' : ''}
-        ${isInTree && isLongTerm ? 'text-xs lg:text-xl lg:font-bold' : ''}
-        ${isMediumTerm ? 'text-xs lg:text-base lg:font-semibold' : ''}
-        ${!isLongTerm && !isMediumTerm ? 'text-[11px] lg:text-sm' : ''}
+        ${!isInTree && isVisionGoal ? 'text-base lg:text-xl lg:font-bold' : ''}
+        ${isInTree && isVisionGoal ? 'text-xs lg:text-xl lg:font-bold' : ''}
+        ${isPillarGoal ? 'text-xs lg:text-base lg:font-semibold' : ''}
+        ${!isVisionGoal && !isPillarGoal ? 'text-[11px] lg:text-sm' : ''}
         ${isInTree ? 'mb-1 lg:mb-2' : 'mb-2'}
       `}>
         {goal.title || goal.goal_text?.substring(0, 60) || 'Untitled'}
@@ -95,13 +87,13 @@ export default function GoalCard({
       <div className={`
         flex items-center justify-between
         ${isInTree ? 'text-[10px] lg:text-xs' : 'text-xs lg:text-xs'}
-        ${isLongTerm ? 'lg:pt-2 lg:border-t lg:border-slate-200' : ''}
+        ${isVisionGoal ? 'lg:pt-2 lg:border-t lg:border-slate-200' : ''}
       `}>
         <span className={`
           text-slate-600
-          ${isLongTerm ? 'lg:font-medium' : ''}
+          ${isVisionGoal ? 'lg:font-medium' : ''}
         `}>
-          {getHorizonLabel(goal.time_horizon)}
+          {getGoalLevelLabel(goal.time_horizon)}
         </span>
         {taskCount > 0 && (
           <span className="text-blue-600 lg:px-2 lg:py-1 lg:bg-blue-100 lg:rounded">

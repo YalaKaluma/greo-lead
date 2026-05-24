@@ -349,7 +349,7 @@ See you inside."""
                     user_number,
                     goal_text=goal_text,
                     why=why,
-                    time_horizon='long'  # ✅ Changed from 'medium' to 'long' for 6-12 month onboarding goals
+                    time_horizon='vision'
                 )
                 print(f"✅ DEBUG [process_data]: Goal created with ID={goal.id}")
             except Exception as e:

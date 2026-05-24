@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import LinkedTasksSection from './LinkedTasksSection';
+import { getGoalLevelLabel, normalizeGoalLevel } from '../../utils/goalTaxonomy';
 
 /* =========================================================
    MAIN COMPONENT
@@ -10,7 +11,7 @@ export default function GoalEditPanel({ goal, goals, linkedTasks, onClose, onSav
     title: '',
     goal_text: '',
     why: '',
-    time_horizon: 'short',
+    time_horizon: 'outcome',
     parent_goal_id: null
   });
 
@@ -21,7 +22,7 @@ export default function GoalEditPanel({ goal, goals, linkedTasks, onClose, onSav
         title: goal.title || '',
         goal_text: goal.goal_text || '',
         why: goal.why || '',
-        time_horizon: goal.time_horizon || 'short',
+        time_horizon: normalizeGoalLevel(goal.time_horizon),
         parent_goal_id: goal.parent_goal_id || null
       });
     }
@@ -38,7 +39,7 @@ export default function GoalEditPanel({ goal, goals, linkedTasks, onClose, onSav
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.title.trim()) {
-      alert('Please enter a goal title');
+      alert(`Please enter a ${getGoalLevelLabel(formData.time_horizon).toLowerCase()} title`);
       return;
     }
     onSave(goal.id, formData);
@@ -59,7 +60,7 @@ export default function GoalEditPanel({ goal, goals, linkedTasks, onClose, onSav
       <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
         {/* Header */}
         <div className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between rounded-t-xl">
-          <h2 className="text-xl font-semibold text-slate-800">Edit Goal</h2>
+          <h2 className="text-xl font-semibold text-slate-800">Edit {getGoalLevelLabel(formData.time_horizon)}</h2>
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600 transition-colors p-1"
@@ -76,14 +77,14 @@ export default function GoalEditPanel({ goal, goals, linkedTasks, onClose, onSav
         {/* Title */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">
-            Goal Title *
+            {getGoalLevelLabel(formData.time_horizon)} Title *
           </label>
           <input
             type="text"
             name="title"
             value={formData.title}
             onChange={handleChange}
-            placeholder="Enter a clear, concise goal title"
+            placeholder={`Enter a clear, concise ${getGoalLevelLabel(formData.time_horizon).toLowerCase()} title`}
             className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             autoFocus
           />
@@ -98,7 +99,7 @@ export default function GoalEditPanel({ goal, goals, linkedTasks, onClose, onSav
             name="goal_text"
             value={formData.goal_text}
             onChange={handleChange}
-            placeholder="Describe your goal in detail..."
+            placeholder={`Describe this ${getGoalLevelLabel(formData.time_horizon).toLowerCase()} in detail...`}
             rows={4}
             className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
           />
@@ -113,58 +114,58 @@ export default function GoalEditPanel({ goal, goals, linkedTasks, onClose, onSav
             name="why"
             value={formData.why}
             onChange={handleChange}
-            placeholder="Why is this goal important to you?"
+            placeholder={`Why is this ${getGoalLevelLabel(formData.time_horizon).toLowerCase()} important to you?`}
             rows={3}
             className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
           />
         </div>
 
-        {/* Time Horizon */}
+        {/* Structural level */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">
-            Time Horizon
+            Structural Level
           </label>
           <div className="grid grid-cols-3 gap-3">
             <button
               type="button"
-              onClick={() => setFormData(prev => ({ ...prev, time_horizon: 'long' }))}
+              onClick={() => setFormData(prev => ({ ...prev, time_horizon: 'vision' }))}
               className={`px-4 py-3 rounded-lg border-2 transition-all ${
-                formData.time_horizon === 'long'
+                normalizeGoalLevel(formData.time_horizon) === 'vision'
                   ? 'border-purple-500 bg-purple-50 text-purple-700 font-medium'
                   : 'border-slate-200 hover:border-slate-300 text-slate-700'
               }`}
             >
-              Long Term
+              Vision
             </button>
             <button
               type="button"
-              onClick={() => setFormData(prev => ({ ...prev, time_horizon: 'medium' }))}
+              onClick={() => setFormData(prev => ({ ...prev, time_horizon: 'pillar' }))}
               className={`px-4 py-3 rounded-lg border-2 transition-all ${
-                formData.time_horizon === 'medium'
+                normalizeGoalLevel(formData.time_horizon) === 'pillar'
                   ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium'
                   : 'border-slate-200 hover:border-slate-300 text-slate-700'
               }`}
             >
-              Medium Term
+              Pillar
             </button>
             <button
               type="button"
-              onClick={() => setFormData(prev => ({ ...prev, time_horizon: 'short' }))}
+              onClick={() => setFormData(prev => ({ ...prev, time_horizon: 'outcome' }))}
               className={`px-4 py-3 rounded-lg border-2 transition-all ${
-                formData.time_horizon === 'short'
+                normalizeGoalLevel(formData.time_horizon) === 'outcome'
                   ? 'border-green-500 bg-green-50 text-green-700 font-medium'
                   : 'border-slate-200 hover:border-slate-300 text-slate-700'
               }`}
             >
-              Short Term
+              Outcome
             </button>
           </div>
         </div>
 
-        {/* Parent Goal */}
+        {/* Parent item */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">
-            Parent Goal (Optional)
+            Parent Vision/Pillar (Optional)
           </label>
           <select
             name="parent_goal_id"
@@ -172,10 +173,10 @@ export default function GoalEditPanel({ goal, goals, linkedTasks, onClose, onSav
             onChange={handleChange}
             className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
-            <option value="">No Parent Goal</option>
+            <option value="">No Parent</option>
             {availableParentGoals.map(g => (
               <option key={g.id} value={g.id}>
-                {g.title || g.goal_text?.substring(0, 50) || 'Untitled Goal'}
+                {getGoalLevelLabel(g.time_horizon)}: {g.title || g.goal_text?.substring(0, 50) || 'Untitled'}
               </option>
             ))}
           </select>
@@ -214,7 +215,7 @@ export default function GoalEditPanel({ goal, goals, linkedTasks, onClose, onSav
           onClick={handleDelete}
           className="w-full px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-medium transition-colors border border-red-200"
         >
-          Delete Goal
+          Delete {getGoalLevelLabel(formData.time_horizon)}
         </button>
       </div>
       </div>

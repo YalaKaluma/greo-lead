@@ -6,16 +6,18 @@ import GoalReviewRecap from './GoalReviewRecap';
 import GoalViewPanel from './GoalViewPanel';
 import GoalEditPanel from './GoalEditPanel';
 import GoalCreateModal from './GoalCreateModal';
+import TransformationRoadmap from './TransformationRoadmap';
+import { normalizeGoalLevel, isVision } from '../../utils/goalTaxonomy';
 
 /* =========================================================
    HELPER FUNCTIONS
    ========================================================= */
 
 const organizeGoalsByTimeHorizon = (goals) => {
-  const organized = { long: [], medium: [], short: [] };
+  const organized = { vision: [], pillar: [], outcome: [] };
   
   goals.forEach(goal => {
-    const horizon = goal.time_horizon || 'short';
+    const horizon = normalizeGoalLevel(goal.time_horizon);
     if (organized[horizon]) {
       organized[horizon].push(goal);
     }
@@ -125,7 +127,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
   /* ---------------- EVENT HANDLERS ---------------- */
 
   const handleCardClick = (goal) => {
-    if (goal.time_horizon === 'long') {
+    if (isVision(goal)) {
       setExpandedGoalId(expandedGoalId === goal.id ? null : goal.id);
       setViewingGoal(null);
       setEditingGoal(null);
@@ -265,6 +267,19 @@ export default function MyGoals({ apiUrl, userNumber }) {
             )}
           </button>
           <button
+            onClick={() => setActiveTab('roadmap')}
+            className={`pb-3 px-2 font-medium transition-colors relative ${
+              activeTab === 'roadmap'
+                ? 'text-blue-600'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Transformation Roadmap
+            {activeTab === 'roadmap' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+            )}
+          </button>
+          <button
             onClick={() => setActiveTab('review')}
             className={`pb-3 px-2 font-medium transition-colors relative ${
               activeTab === 'review'
@@ -305,6 +320,15 @@ export default function MyGoals({ apiUrl, userNumber }) {
                 taskCounts={taskCounts}
               />
               </>
+            )}
+
+            {activeTab === 'roadmap' && (
+              <TransformationRoadmap
+                apiUrl={apiUrl}
+                userNumber={userNumber}
+                goals={goals}
+                onGoalsChanged={fetchGoals}
+              />
             )}
 
             {/* Progress Review Tab */}

@@ -1,16 +1,12 @@
 import LinkedTasksSection from './LinkedTasksSection';
+import { getGoalLevelLabel } from '../../utils/goalTaxonomy';
 
 /* =========================================================
-   TIME HORIZON HELPERS
+   GOAL LEVEL HELPERS
    ========================================================= */
 
 const getHorizonLabel = (horizon) => {
-  const labels = {
-    long: 'Long Term Goal',
-    medium: 'Medium Term Goal',
-    short: 'Short Term Goal'
-  };
-  return labels[horizon] || 'Goal';
+  return getGoalLevelLabel(horizon);
 };
 
 /* =========================================================
@@ -29,7 +25,7 @@ export default function GoalViewPanel({ goal, linkedTasks, allGoals, onClose, on
       <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
         {/* Header with close button */}
         <div className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between rounded-t-xl">
-          <h2 className="text-xl font-semibold text-slate-800">Goal Details</h2>
+          <h2 className="text-xl font-semibold text-slate-800">{getHorizonLabel(goal.time_horizon)} Details</h2>
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600 transition-colors p-1"
@@ -43,7 +39,7 @@ export default function GoalViewPanel({ goal, linkedTasks, allGoals, onClose, on
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           
-          {/* Time Horizon Badge */}
+          {/* Structural level badge */}
           <div>
             <span className="inline-block px-3 py-1 rounded-full text-sm font-medium bg-slate-100 text-slate-700 border border-slate-200">
               {getHorizonLabel(goal.time_horizon)}
@@ -81,11 +77,11 @@ export default function GoalViewPanel({ goal, linkedTasks, allGoals, onClose, on
             </div>
           )}
 
-          {/* Parent Goal */}
+          {/* Parent item */}
           {parentGoal && (
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                Parent Goal
+                Parent Vision/Pillar
               </label>
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
                 <p className="text-sm font-medium text-slate-800">
@@ -104,7 +100,7 @@ export default function GoalViewPanel({ goal, linkedTasks, allGoals, onClose, on
               <LinkedTasksSection tasks={linkedTasks} />
             ) : (
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-center">
-                <p className="text-sm text-slate-500">No tasks linked to this goal yet</p>
+                <p className="text-sm text-slate-500">No tasks linked to this {getHorizonLabel(goal.time_horizon).toLowerCase()} yet</p>
               </div>
             )}
           </div>
@@ -116,14 +112,14 @@ export default function GoalViewPanel({ goal, linkedTasks, allGoals, onClose, on
             onClick={() => onEdit(goal)}
             className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
           >
-            Edit Goal
+            Edit {getHorizonLabel(goal.time_horizon)}
           </button>
           
           <button
             onClick={() => onCreateChildGoal(goal.id)}
             className="w-full px-4 py-3 bg-white border-2 border-slate-300 hover:border-slate-400 text-slate-700 rounded-lg font-medium transition-colors"
           >
-            + Create Child Goal
+            + Create Child {getHorizonLabel(goal.time_horizon) === 'Vision' ? 'Pillar' : 'Outcome'}
           </button>
         </div>
       </div>

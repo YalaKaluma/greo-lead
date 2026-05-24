@@ -1,3 +1,5 @@
+import { getGoalLevelLabel } from '../../utils/goalTaxonomy';
+
 /* =========================================================
    GOAL TREE COMPONENT
    Shows hierarchical structure: Parent → Children → Grandchildren
@@ -63,11 +65,10 @@ const GoalTreeNode = ({ goal, level = 0, isLast = false, isParent = false, onChi
             </div>
           )}
           
-          {/* Time horizon badge */}
+          {/* Structural level badge */}
           <div className="mt-2">
             <span className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600">
-              {goal.time_horizon === 'long' ? 'Long Term' : 
-               goal.time_horizon === 'medium' ? 'Medium Term' : 'Short Term'}
+              {getGoalLevelLabel(goal.time_horizon)}
             </span>
           </div>
         </div>
@@ -130,9 +131,9 @@ export default function GoalTree({ parentGoal, allGoals, onChildClick }) {
     <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
       <div className="mb-4 flex items-center justify-between">
         <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">
-          Goal Breakdown
+          Vision Breakdown
         </h4>
-        <p className="text-xs text-slate-500">Click any child goal to view/edit details</p>
+        <p className="text-xs text-slate-500">Click any child item to view/edit details</p>
       </div>
       
       {renderTree(parentGoal, 0, false, true)}
@@ -140,7 +141,7 @@ export default function GoalTree({ parentGoal, allGoals, onChildClick }) {
       {/* Empty state if no children */}
       {findChildren(parentGoal.id).length === 0 && (
         <div className="text-center py-4 text-sm text-slate-500 border-t border-slate-200 mt-4">
-          No breakdown yet. This long-term goal needs medium-term milestones.
+          No breakdown yet. This vision needs pillars and outcomes.
         </div>
       )}
     </div>

@@ -1,4 +1,5 @@
 import GoalCard from './GoalCard';
+import { getGoalLevelLabel } from '../../utils/goalTaxonomy';
 
 /* =========================================================
    PROGRESS REVIEW with Status Indicators
@@ -36,16 +37,16 @@ export default function GoalReviewRecap({
   };
 
   const buildTree = () => {
-    const longTermGoals = goals.long || [];
+    const longTermGoals = goals.vision || [];
     
     return longTermGoals.map(ltGoal => {
-      const mediumChildren = (goals.medium || []).filter(g => g.parent_goal_id === ltGoal.id);
+      const mediumChildren = (goals.pillar || []).filter(g => g.parent_goal_id === ltGoal.id);
       
       return {
         ...ltGoal,
         children: mediumChildren.map(mtGoal => ({
           ...mtGoal,
-          children: (goals.short || []).filter(g => g.parent_goal_id === mtGoal.id)
+          children: (goals.outcome || []).filter(g => g.parent_goal_id === mtGoal.id)
         }))
       };
     });
@@ -130,7 +131,7 @@ export default function GoalReviewRecap({
       <div className="space-y-4">
         {tree.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-slate-500">No goals yet</p>
+            <p className="text-slate-500">No visions yet</p>
           </div>
         ) : (
           tree.map(ltGoal => {
@@ -180,7 +181,7 @@ export default function GoalReviewRecap({
                   <>
                     {/* Goal breakdown card */}
                     <div className="border border-slate-300 rounded-lg p-5 bg-white">
-                      {/* Long-term goal header */}
+                      {/* Vision header */}
                       <div className="mb-5">
                         <div className="border-2 border-blue-400 rounded-lg p-4 bg-blue-50/30">
                           <div className="flex items-start justify-between mb-2">
@@ -194,7 +195,7 @@ export default function GoalReviewRecap({
                             )}
                           </div>
                           <div className="flex items-center gap-3 text-sm text-slate-600">
-                            <span>Long Term</span>
+                            <span>Vision</span>
                             {taskCounts[ltGoal.id] > 0 && (
                               <span className="text-blue-600 font-medium">
                                 • {taskCounts[ltGoal.id]} task{taskCounts[ltGoal.id] !== 1 ? 's' : ''}
@@ -208,7 +209,7 @@ export default function GoalReviewRecap({
                       {hasChildren && (
                         <div>
                           <h4 className="text-sm font-medium text-slate-600 mb-4">
-                            How this goal breaks down
+                            Structural breakdown
                           </h4>
                           
                           <div 
@@ -230,7 +231,7 @@ export default function GoalReviewRecap({
                                       {mtGoal.title || mtGoal.goal_text}
                                     </h5>
                                     <div className="text-xs text-slate-600 space-y-1">
-                                      <div>Medium Term</div>
+                                      <div>Pillar</div>
                                       {taskCounts[mtGoal.id] > 0 && (
                                         <div className="text-blue-600 font-medium">
                                           {taskCounts[mtGoal.id]} task{taskCounts[mtGoal.id] !== 1 ? 's' : ''}
@@ -242,7 +243,7 @@ export default function GoalReviewRecap({
                                   {hasSTChildren && (
                                     <div className="space-y-2">
                                       <div className="text-xs font-medium text-slate-500 uppercase tracking-wider pl-3">
-                                        Short-Term Goals
+                                        Outcomes
                                       </div>
                                       {mtGoal.children.map((stGoal) => (
                                         <div
@@ -254,7 +255,7 @@ export default function GoalReviewRecap({
                                             {stGoal.title || stGoal.goal_text}
                                           </h6>
                                           <div className="text-xs text-slate-500">
-                                            Short Term
+                                            {getGoalLevelLabel(stGoal.time_horizon)}
                                             {taskCounts[stGoal.id] > 0 && (
                                               <span className="text-blue-600 ml-2">
                                                 • {taskCounts[stGoal.id]} task{taskCounts[stGoal.id] !== 1 ? 's' : ''}

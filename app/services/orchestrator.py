@@ -778,6 +778,20 @@ def _collect_descendants(index: Dict[str, Any], root_id: int) -> List[int]:
     return out
 
 
+def _normalize_goal_level(value: str | None) -> str:
+    return {
+        "long": "vision",
+        "long_term": "vision",
+        "vision": "vision",
+        "medium": "pillar",
+        "medium_term": "pillar",
+        "pillar": "pillar",
+        "short": "outcome",
+        "short_term": "outcome",
+        "outcome": "outcome",
+    }.get((value or "").lower(), value or "")
+
+
 def _match_long_term_goal(long_goals: List[JourneyGoal], user_text: str) -> List[JourneyGoal]:
     q = _normalize_text(user_text)
     if not q:
@@ -802,8 +816,8 @@ def _match_long_term_goal(long_goals: List[JourneyGoal], user_text: str) -> List
 
 def _render_long_goal_menu(long_goals: List[JourneyGoal]) -> str:
     lines = [
-        "Which long-term goal would you like to review?",
-        "Reply with the number or the goal name. (You can type 'cancel' anytime.)"
+        "Which vision would you like to review?",
+        "Reply with the number or the vision name. (You can type 'cancel' anytime.)"
     ]
     for i, g in enumerate(long_goals, start=1):
         title = g.title or (g.goal_text[:60] + ("…" if g.goal_text and len(g.goal_text) > 60 else ""))
@@ -816,13 +830,13 @@ def _format_goal_tree_for_prompt(ctx: Dict[str, Any]) -> str:
     sg = ctx.get("short_goals") or []
     mg_txt = "\n".join([f"- {x['title']}" for x in mg]) or "- (none)"
     sg_txt = "\n".join([f"- {x['title']}" for x in sg]) or "- (none)"
-    return f"""LONG-TERM GOAL:
+    return f"""VISION:
 - {ctx.get('goal_title')}
 
-MEDIUM-TERM GOALS:
+PILLARS:
 {mg_txt}
 
-SHORT-TERM GOALS:
+OUTCOMES:
 {sg_txt}
 """
 
@@ -1006,11 +1020,11 @@ def handle_goal_review(
         )
 
     goals = _fetch_goals(db, user_number)
-    long_goals = [g for g in goals if (g.time_horizon or "").lower() == "long"]
+    long_goals = [g for g in goals if _normalize_goal_level(g.time_horizon) == "vision"]
 
     if not long_goals:
         return OrchestrationResult(
-            response="I don't see any long-term goals yet. Add one in My Vision & Goals, then we can do a review.",
+            response="I don't see any visions yet. Add one in My Vision & Goals, then we can do a review.",
             state=States.IDLE,
             data={"state_context": None}
         )
@@ -1069,10 +1083,10 @@ def handle_goal_review(
             g = index["by_id"].get(gid)
             if not g:
                 continue
-            th = (g.time_horizon or "").lower()
-            if th == "medium":
+            th = _normalize_goal_level(g.time_horizon)
+            if th == "pillar":
                 medium.append({"id": g.id, "title": g.title or (g.goal_text or "")[:80]})
-            elif th == "short":
+            elif th == "outcome":
                 short.append({"id": g.id, "title": g.title or (g.goal_text or "")[:80]})
 
         # >>> NEW: session bookkeeping
