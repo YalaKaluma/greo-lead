@@ -20,12 +20,17 @@ const BELT_IDS = BELTS.map((belt) => belt.id);
 const DIMENSIONS = [
   {
     id: "vision",
-    name: "Vision & Goals",
-    brief: "Purpose, values, alignment, and long-term direction.",
+    name: "Vision",
+    brief: "Purpose, values, strengths, and long-term direction.",
     topics: [
       { id: "values", label: "Values", endpoint: "values" },
       { id: "strengths", label: "Strengths", endpoint: "strengths" },
-      { id: "goals", label: "Goals", endpoint: "goals" },
+      {
+        id: "vision",
+        label: "Vision",
+        endpoint: "goals",
+        filter: (item) => normalizeGoalLevel(item.time_horizon) === "vision",
+      },
     ],
   },
   {
@@ -74,7 +79,7 @@ const DIMENSIONS = [
 const WHY_IT_MATTERS = {
   Values: "Values are the rules you follow when no one is watching. They make trade-offs easier to live with.",
   Strengths: "Leadership impact compounds when you deliberately use what already works.",
-  Goals: "Clear goals give direction and permission. They reduce noise and focus attention.",
+  Vision: "Vision names the direction your values and strengths are meant to serve.",
   "Team Composition": "The people around you shape your behavior more than your intentions.",
   Inspire: "Inspiration creates energy and alignment. Without it, leaders end up pushing instead of pulling.",
   "Coach & Delegate": "Coaching and delegation turn effort into leverage and protect your focus.",
@@ -100,11 +105,11 @@ const TOPIC_FORM_FIELDS = {
     { name: "strength", label: "Strength", type: "textarea", required: true },
     { name: "source", label: "Source", type: "input" },
   ],
-  Goals: [
+  Vision: [
     { name: "title", label: "Title", type: "input" },
-    { name: "goal_text", label: "Goal", type: "textarea", required: true },
+    { name: "goal_text", label: "Vision", type: "textarea", required: true },
     { name: "why", label: "Why", type: "textarea" },
-    { name: "time_horizon", label: "Time horizon", type: "input" },
+    { name: "time_horizon", label: "Level", type: "hidden", defaultValue: "vision" },
   ],
   "Team Composition": [
     { name: "composition_text", label: "Composition", type: "textarea", required: true },
@@ -180,15 +185,15 @@ const TOPIC_FORM_FIELDS = {
 const FALLBACK_YELLOW_BELT_REQUIREMENTS = {
   vision: {
     reflection: {
-      prompt: "Describe a goal that looks impressive on paper but may not be fully aligned with your values.",
+      prompt: "Describe a vision that looks impressive on paper but may not be fully aligned with your values.",
       completion_hint: "Show self-awareness, ownership, and pattern recognition.",
     },
     real_world: {
-      prompt: "Rewrite, retire, or clarify one goal so it better reflects what actually matters.",
+      prompt: "Rewrite, retire, or clarify one vision statement so it better reflects what actually matters.",
       completion_hint: "Do one concrete action outside the app, then reflect on what happened.",
     },
     behavioral: {
-      prompt: "Complete at least one weekly goal review and add alignment context to your active goals.",
+      prompt: "Capture your vision, values, and strengths in Alfred.",
       completion_hint: "Alfred needs usage evidence before recommending promotion.",
     },
   },
@@ -294,6 +299,23 @@ function getTopicItems(topic, topicData) {
 
   const endpointItems = topicData[topic.endpoint] || [];
   return topic.filter ? endpointItems.filter(topic.filter) : endpointItems;
+}
+
+function normalizeGoalLevel(value) {
+  const normalized = String(value || "vision").toLowerCase();
+  const aliases = {
+    long: "vision",
+    long_term: "vision",
+    vision: "vision",
+    medium: "pillar",
+    medium_term: "pillar",
+    pillar: "pillar",
+    short: "outcome",
+    short_term: "outcome",
+    outcome: "outcome",
+  };
+
+  return aliases[normalized] || normalized;
 }
 
 function getItemTitle(item) {
@@ -1508,29 +1530,33 @@ function SubdomainItemModal({ topic, item, saving, onClose, onSave, onDelete }) 
         </div>
 
         <div className="max-h-[65vh] space-y-4 overflow-y-auto px-6 py-5">
-          {fields.map((field) => (
-            <label key={field.name} className="block">
-              <span className="text-sm font-semibold text-slate-800">
-                {field.label}
-                {field.required ? " *" : ""}
-              </span>
-              {field.type === "textarea" ? (
-                <textarea
-                  value={formData[field.name] || ""}
-                  onChange={(event) => handleChange(field.name, event.target.value)}
-                  rows={field.required ? 4 : 2}
-                  className="mt-2 w-full resize-y rounded-lg border border-slate-300 px-4 py-3 text-sm leading-6 outline-none focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
-                />
-              ) : (
-                <input
-                  type="text"
-                  value={formData[field.name] || ""}
-                  onChange={(event) => handleChange(field.name, event.target.value)}
-                  className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
-                />
-              )}
-            </label>
-          ))}
+          {fields.map((field) => {
+            if (field.type === "hidden") return null;
+
+            return (
+              <label key={field.name} className="block">
+                <span className="text-sm font-semibold text-slate-800">
+                  {field.label}
+                  {field.required ? " *" : ""}
+                </span>
+                {field.type === "textarea" ? (
+                  <textarea
+                    value={formData[field.name] || ""}
+                    onChange={(event) => handleChange(field.name, event.target.value)}
+                    rows={field.required ? 4 : 2}
+                    className="mt-2 w-full resize-y rounded-lg border border-slate-300 px-4 py-3 text-sm leading-6 outline-none focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={formData[field.name] || ""}
+                    onChange={(event) => handleChange(field.name, event.target.value)}
+                    className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
+                  />
+                )}
+              </label>
+            );
+          })}
         </div>
 
         <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:justify-end">
