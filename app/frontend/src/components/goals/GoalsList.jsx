@@ -13,8 +13,7 @@ export default function GoalsList({
   onReorderGoals,
   onMoveGoalAcrossParents,
   onCreateChildGoal,
-  expandedGoalId,
-  taskCounts = {}
+  expandedGoalId
 }) {
   const [recentlyDraggedId, setRecentlyDraggedId] = useState(null);
   
@@ -37,17 +36,6 @@ export default function GoalsList({
   const tree = buildTree();
 
   const getGoalTitle = (goal) => goal.title || goal.goal_text;
-
-  const TaskBadge = ({ goalId }) => {
-    const count = taskCounts[goalId] || 0;
-    if (!count) return null;
-
-    return (
-      <span className="shrink-0 rounded bg-blue-100 px-2 py-1 text-xs text-blue-700">
-        {count} {count === 1 ? 'task' : 'tasks'}
-      </span>
-    );
-  };
 
   const AddOutcomeButton = ({ pillarId }) => (
     <button
@@ -184,7 +172,6 @@ export default function GoalsList({
                         </div>
                         <div className="mt-1 text-xs text-slate-500">Outcome</div>
                       </div>
-                      <TaskBadge goalId={outcome.id} />
                     </div>
                   </div>
                 </div>
@@ -236,7 +223,6 @@ export default function GoalsList({
                         </h2>
                         <div className="mt-2 text-xs text-slate-500">Vision</div>
                       </div>
-                      <TaskBadge goalId={vision.id} />
                     </div>
                   </div>
                 </div>
@@ -283,7 +269,6 @@ export default function GoalsList({
                                           </h3>
                                           <div className="mt-2 text-xs text-slate-500">Pillar</div>
                                         </div>
-                                        <TaskBadge goalId={pillar.id} />
                                       </div>
                                     </div>
                                     {renderOutcomeDropzone(pillar)}
@@ -327,7 +312,7 @@ export default function GoalsList({
                         goal={vision}
                         onClick={onCardClick}
                         onEdit={onEditClick}
-                        taskCount={taskCounts[vision.id] || 0}
+                        taskCount={0}
                         isInTree={false}
                         dragHandleProps={provided.dragHandleProps}
                         isDragging={snapshot.isDragging || recentlyDraggedId === `vision-${vision.id}`}
