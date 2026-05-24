@@ -168,9 +168,10 @@ def get_tasks(
             manual_order_value = sort_order if sort_order is not None else 999999
             status_order = 0 if task.status == 'open' else 1
             priority_value = PRIORITY_ORDER.get(task.priority, 2)
-            # Handle both DateTime and Date objects
+            # Handle both DateTime and Date objects. datetime is a date subclass,
+            # so check datetime first to avoid mixed date/datetime comparisons.
             if task.due_date:
-                due_value = task.due_date if isinstance(task.due_date, date) else task.due_date.date()
+                due_value = task.due_date.date() if isinstance(task.due_date, datetime) else task.due_date
             else:
                 due_value = date(9999, 12, 31)
             return (manual_order_missing, manual_order_value, status_order, priority_value, due_value)
