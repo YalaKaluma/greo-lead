@@ -2354,7 +2354,7 @@ function DimensionDeepDive({ dimension, dimensionState, belt, nextBelt, latestAs
         </div>
       </div>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="mt-5 space-y-4">
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
             Pattern Alfred Sees
