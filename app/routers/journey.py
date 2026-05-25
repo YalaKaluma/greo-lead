@@ -347,10 +347,10 @@ def get_behavioral_trial_status(db: Session, user_number: str, dimension_id: str
         result = validate_yellow_belt_dimension(db, user_number, dimension_id)
         if result["passed"]:
             return "submitted"
-        if stored and stored.status:
-            return normalize_trial_status(stored.status)
         if any(signal["actual"] > 0 for signal in result["signals"]):
             return "in_progress"
+        if stored and stored.status:
+            return normalize_trial_status(stored.status)
 
     return "not_started"
 

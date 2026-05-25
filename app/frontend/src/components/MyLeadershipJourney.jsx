@@ -531,7 +531,20 @@ function getWhiteBehavioralEvidenceStatus(dimensionId, topicData) {
   return "not_started";
 }
 
-function getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryAverage, topicData) {
+function getYellowValidationBehavioralStatus(dimensionId, yellowValidation) {
+  const dimensionValidation = yellowValidation?.dimensions?.find((item) => item.dimension === dimensionId);
+  if (!dimensionValidation?.signals?.length) return null;
+  if (dimensionValidation.passed) return "submitted";
+  if (dimensionValidation.signals.some((signal) => Number(signal.actual || 0) > 0)) return "in_progress";
+  return "not_started";
+}
+
+function getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryAverage, topicData, yellowValidation) {
+  if (targetBeltId === "yellow") {
+    const validationStatus = getYellowValidationBehavioralStatus(dimensionId, yellowValidation);
+    if (validationStatus && validationStatus !== "not_started") return validationStatus;
+  }
+
   const storedBehavioralTrial = getStoredTrial(trialRecords, dimensionId, targetBeltId, "behavioral");
   if (storedBehavioralTrial?.status) return normalizeStatus(storedBehavioralTrial.status);
 
@@ -546,12 +559,12 @@ function getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryA
   return "not_started";
 }
 
-function getTargetBeltProgress(dimensionId, targetBeltId, trialRecords, telemetryAverage, trialConfig, topicData) {
+function getTargetBeltProgress(dimensionId, targetBeltId, trialRecords, telemetryAverage, trialConfig, topicData, yellowValidation) {
   const requirements = getBeltRequirementsFromConfig(trialConfig, dimensionId, targetBeltId);
   const activeTrialTypes = getActiveTrialTypes(normalizeRequirements(requirements, dimensionId));
   const reflection = getStoredTrial(trialRecords, dimensionId, targetBeltId, "reflection");
   const realWorld = getStoredTrial(trialRecords, dimensionId, targetBeltId, "real_world");
-  const behavioralStatus = getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryAverage, topicData);
+  const behavioralStatus = getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryAverage, topicData, yellowValidation);
   const statuses = {
     reflection: reflection?.status,
     real_world: realWorld?.status,
@@ -577,13 +590,13 @@ function getTargetBeltProgress(dimensionId, targetBeltId, trialRecords, telemetr
   };
 }
 
-function getDimensionProgression(dimensionId, trialRecords, telemetryAverage, trialConfig, topicData) {
+function getDimensionProgression(dimensionId, trialRecords, telemetryAverage, trialConfig, topicData, yellowValidation) {
   let currentBeltId = "white";
   let activeBeltId = "white";
   let nextBeltId = "yellow";
 
   for (const beltId of BELT_IDS) {
-    const progress = getTargetBeltProgress(dimensionId, beltId, trialRecords, telemetryAverage, trialConfig, topicData);
+    const progress = getTargetBeltProgress(dimensionId, beltId, trialRecords, telemetryAverage, trialConfig, topicData, yellowValidation);
     if (!progress.isComplete) {
       activeBeltId = beltId;
       nextBeltId = getNextBeltId(beltId);
@@ -600,7 +613,7 @@ function getDimensionProgression(dimensionId, trialRecords, telemetryAverage, tr
     nextBeltId = "black";
   }
 
-  const activeProgress = getTargetBeltProgress(dimensionId, activeBeltId, trialRecords, telemetryAverage, trialConfig, topicData);
+  const activeProgress = getTargetBeltProgress(dimensionId, activeBeltId, trialRecords, telemetryAverage, trialConfig, topicData, yellowValidation);
 
   return {
     currentBeltId,
@@ -617,11 +630,11 @@ function getDimensionProgression(dimensionId, trialRecords, telemetryAverage, tr
   };
 }
 
-function buildDimensionStates(telemetry, trialRecords, trialConfig, topicData) {
+function buildDimensionStates(telemetry, trialRecords, trialConfig, topicData, yellowValidation) {
   const telemetryAverage = getTelemetryAverage(telemetry);
 
   return DIMENSIONS.reduce((states, dimension) => {
-    const progression = getDimensionProgression(dimension.id, trialRecords, telemetryAverage, trialConfig, topicData);
+    const progression = getDimensionProgression(dimension.id, trialRecords, telemetryAverage, trialConfig, topicData, yellowValidation);
     const hasAnyTrialEvidence = trialRecords.some((trial) => trial.dimension_id === dimension.id);
     const hasTelemetryEvidence = dimension.id === "execute" && telemetry.some((signal) => signal.value > 0);
     const hasEvidence = hasAnyTrialEvidence || hasTelemetryEvidence;
@@ -674,6 +687,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   const [loadingSignals, setLoadingSignals] = useState(false);
   const [activeTopic, setActiveTopic] = useState("Vision");
   const [trialRecords, setTrialRecords] = useState([]);
+  const [yellowValidation, setYellowValidation] = useState(null);
   const [trialConfig, setTrialConfig] = useState(null);
   const [subdomainPromptConfig, setSubdomainPromptConfig] = useState(null);
   const [selectedTrialBeltId, setSelectedTrialBeltId] = useState(null);
@@ -754,6 +768,27 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
       cancelled = true;
     };
   }, [apiUrl, userNumber]);
+
+  useEffect(() => {
+    if (apiUrl == null || !userNumber) return;
+
+    let cancelled = false;
+    const fetchYellowValidation = async () => {
+      try {
+        const response = await axios.get(`${apiUrl}/api/journey/validation/yellow`, {
+          params: { user_number: userNumber },
+        });
+        if (!cancelled) setYellowValidation(response.data || null);
+      } catch (error) {
+        console.error("Failed to load Yellow Belt validation", error);
+      }
+    };
+
+    fetchYellowValidation();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiUrl, userNumber, trialRecords, topicData]);
 
   const refreshAssessmentData = async () => {
     if (apiUrl == null || !userNumber) return;
@@ -867,8 +902,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   }, [signals]);
 
   const dimensionStates = useMemo(
-    () => buildDimensionStates(telemetry, trialRecords, trialConfig, topicData),
-    [telemetry, trialRecords, trialConfig, topicData]
+    () => buildDimensionStates(telemetry, trialRecords, trialConfig, topicData, yellowValidation),
+    [telemetry, trialRecords, trialConfig, topicData, yellowValidation]
   );
 
   const activeTopicConfig = useMemo(() => {
@@ -1008,7 +1043,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
     viewedBelt.id,
     trialRecords,
     getTelemetryAverage(telemetry),
-    topicData
+    topicData,
+    yellowValidation
   );
 
   const handleStartTrial = async (trialType, prompt) => {
