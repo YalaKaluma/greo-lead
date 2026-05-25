@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 #from app.models.message import Message
 from app.models import Message
+from app.services.message_signal_classifier import classify_message_signals
 
 def save_message(
     db: Session,
@@ -21,6 +22,13 @@ def save_message(
     db.add(msg)
     db.commit()
     db.refresh(msg)
+
+    if sender == "user":
+        try:
+            classify_message_signals(db, msg.id)
+        except Exception as error:
+            db.rollback()
+            print(f"Message signal classification failed for message {msg.id}: {error}")
 
     return msg
 

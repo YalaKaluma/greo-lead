@@ -43,6 +43,10 @@ import yaml
 import json
 from app.services.people_review_service import PeopleReviewService
 from app.models import GoalReviewSession
+from app.services.yellow_belt_validator import (
+    validate_yellow_belt,
+    validate_yellow_belt_dimension,
+)
 
 STRUCTURAL_LEVEL_ALIASES = {
     "long": "vision",
@@ -325,7 +329,7 @@ def get_behavioral_trial_status(db: Session, user_number: str, dimension_id: str
         JourneyBeltTrial.target_belt == belt_id,
         JourneyBeltTrial.trial_type == "behavioral",
     ).first()
-    if stored and stored.status:
+    if stored and stored.status and belt_id != "yellow":
         return normalize_trial_status(stored.status)
 
     if belt_id == "white":
@@ -337,6 +341,15 @@ def get_behavioral_trial_status(db: Session, user_number: str, dimension_id: str
         if completed == len(topics):
             return "submitted"
         if completed > 0:
+            return "in_progress"
+
+    if belt_id == "yellow":
+        result = validate_yellow_belt_dimension(db, user_number, dimension_id)
+        if result["passed"]:
+            return "submitted"
+        if stored and stored.status:
+            return normalize_trial_status(stored.status)
+        if any(signal["actual"] > 0 for signal in result["signals"]):
             return "in_progress"
 
     return "not_started"
@@ -910,6 +923,33 @@ def get_trial_config():
 @router.get("/subdomain-prompts")
 def get_subdomain_prompts():
     return load_journey_subdomain_prompts_config()
+
+
+@router.get("/validation/{belt}")
+def get_belt_validation(
+        belt: str,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    belt_id = (belt or "").strip().lower()
+    if belt_id != "yellow":
+        raise HTTPException(status_code=404, detail="Only Yellow Belt validation is available through this endpoint right now.")
+    return validate_yellow_belt(db, user_number)
+
+
+@router.get("/validation/{belt}/{dimension_id}")
+def get_belt_dimension_validation(
+        belt: str,
+        dimension_id: str,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    belt_id = (belt or "").strip().lower()
+    if belt_id != "yellow":
+        raise HTTPException(status_code=404, detail="Only Yellow Belt validation is available through this endpoint right now.")
+    if dimension_id not in JOURNEY_DIMENSIONS:
+        raise HTTPException(status_code=404, detail="Journey dimension not found.")
+    return validate_yellow_belt_dimension(db, user_number, dimension_id)
 
 
 class BeltTrialCreate(BaseModel):

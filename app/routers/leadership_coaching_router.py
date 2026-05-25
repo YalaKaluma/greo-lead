@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.services.leadership_coaching_service import LeadershipCoachingService
 from app.services.leadership_coaching_orchestrator import orchestrate_leadership_coaching
+from app.services.message_service import save_message
 from typing import Optional
 from pydantic import BaseModel
 
@@ -72,15 +73,30 @@ def process_message(
 ):
     """Process a message in the coaching conversation"""
     try:
+        save_message(
+            db=db,
+            sender="user",
+            user_number=request.user_number,
+            content=request.message,
+            message_type="leadership_coaching",
+        )
         result = orchestrate_leadership_coaching(
             db=db,
             user_number=request.user_number,
             user_message=request.message
         )
+        assistant_message = save_message(
+            db=db,
+            sender="assistant",
+            user_number=request.user_number,
+            content=result["response"],
+            message_type="leadership_coaching",
+        )
         
         return {
             "success": True,
             "response": result["response"],
+            "message_id": assistant_message.id,
             "session_id": result.get("session_id"),
             "completed": result.get("completed", False),
             "next_phase": result.get("next_phase")

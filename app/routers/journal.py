@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_db
-from app.models import JournalEntry
+from app.models import JournalEntry, User
+from app.services.message_service import save_message
 
 router = APIRouter(prefix="/journal", tags=["journal"])
 
@@ -14,6 +15,19 @@ def create_entry(user_id: int, text: str, db: Session = Depends(get_db)):
     db.add(entry)
     db.commit()
     db.refresh(entry)
+    user = db.query(User).filter(User.id == user_id).first()
+    if user and user.phone_number:
+        try:
+            save_message(
+                db=db,
+                sender="user",
+                user_number=user.phone_number,
+                content=text,
+                message_type="journal",
+            )
+        except Exception as error:
+            db.rollback()
+            print(f"Journal signal classification failed for journal entry {entry.id}: {error}")
     return {"status": "created", "entry": entry}
 
 

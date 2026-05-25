@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Text, Boolean, DECIMAL, Float, Enum as SQLEnum, CheckConstraint
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Text, Boolean, DECIMAL, Float, Enum as SQLEnum, CheckConstraint, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Date
@@ -53,6 +53,42 @@ class MessageFeedback(Base):
     rating = Column(Integer, nullable=False)
     feedback_text = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    message = relationship("Message")
+
+
+class MessageSignalFlag(Base):
+    __tablename__ = "message_signal_flags"
+    __table_args__ = (
+        UniqueConstraint(
+            "message_id",
+            "signal_type",
+            "prompt_version",
+            "model_version",
+            name="uq_message_signal_flags_message_signal_version",
+        ),
+        Index("idx_message_signal_flags_user", "user_id"),
+        Index("idx_message_signal_flags_message", "message_id"),
+        Index("idx_message_signal_flags_signal", "signal_type"),
+        Index("idx_message_signal_flags_source", "source_type"),
+        Index("idx_message_signal_flags_confidence", "confidence_score"),
+        Index("idx_message_signal_flags_created", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    message_id = Column(Integer, ForeignKey("messages.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_type = Column(String, nullable=False, index=True)
+    signal_type = Column(String, nullable=False, index=True)
+    is_met = Column(Boolean, default=False, nullable=False)
+    confidence_score = Column(Float, nullable=False, default=0.0)
+    evidence_excerpt = Column(Text, nullable=True)
+    reasoning_summary = Column(Text, nullable=True)
+    prompt_version = Column(String, nullable=False)
+    model_version = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User")
     message = relationship("Message")

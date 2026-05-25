@@ -8,7 +8,7 @@ import sys
 import os
 from datetime import datetime
 from app.db import Base, engine
-from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits, waitlist, onboarding, chat, priority, leadership_coaching_router, audio, message_feedback, opportunities
+from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits, waitlist, onboarding, chat, priority, leadership_coaching_router, audio, message_feedback, opportunities, message_signals
 from app.routers import auth
 from sqlalchemy import text
 import threading
@@ -132,6 +132,7 @@ routers_to_register = [
     (chat.router, "/api", "Chat"),
     (audio.router, "/api/audio", "Audio"),
     (message_feedback.router, "/api", "Message-Feedback"),
+    (message_signals.router, "/api/message-signals", "Message-Signals"),
     (opportunities.router, "/api/opportunities", "Opportunities"),
     (priority.router, "/api/priority", "Priority"),
     (leadership_coaching_router.router, "/api/leadership-coaching", "Leadership-Coaching"),
