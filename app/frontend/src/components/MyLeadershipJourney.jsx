@@ -182,6 +182,10 @@ const TOPIC_FORM_FIELDS = {
   ],
 };
 
+function getSubdomainQuestion(promptConfig, topic) {
+  return promptConfig?.subdomains?.[topic?.id]?.question || WHY_IT_MATTERS[topic?.label] || "";
+}
+
 const FALLBACK_YELLOW_BELT_REQUIREMENTS = {
   vision: {
     reflection: {
@@ -416,6 +420,16 @@ function isStarted(status) {
   return getStatusProgress(status) > 0;
 }
 
+function isRequirementActive(requirement) {
+  return requirement?.active !== false;
+}
+
+function getActiveTrialTypes(requirements) {
+  return ["reflection", "real_world", "behavioral"].filter((trialType) =>
+    isRequirementActive(requirements?.[trialType])
+  );
+}
+
 function getStoredTrial(trialRecords, dimensionId, targetBeltId, trialType) {
   if (!dimensionId || !targetBeltId || !trialType) return null;
 
@@ -438,47 +452,44 @@ function getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryA
   return "not_started";
 }
 
-function getTargetBeltProgress(dimensionId, targetBeltId, trialRecords, telemetryAverage) {
+function getTargetBeltProgress(dimensionId, targetBeltId, trialRecords, telemetryAverage, trialConfig) {
+  const requirements = getBeltRequirementsFromConfig(trialConfig, dimensionId, targetBeltId);
+  const activeTrialTypes = getActiveTrialTypes(normalizeRequirements(requirements, dimensionId));
   const reflection = getStoredTrial(trialRecords, dimensionId, targetBeltId, "reflection");
   const realWorld = getStoredTrial(trialRecords, dimensionId, targetBeltId, "real_world");
   const behavioralStatus = getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryAverage);
+  const statuses = {
+    reflection: reflection?.status,
+    real_world: realWorld?.status,
+    behavioral: behavioralStatus,
+  };
 
-  const completed = [
-    isPassed(reflection?.status),
-    isPassed(realWorld?.status),
-    isPassed(behavioralStatus),
-  ].filter(Boolean).length;
-  const submitted = [
-    normalizeStatus(reflection?.status) === "submitted",
-    normalizeStatus(realWorld?.status) === "submitted",
-    normalizeStatus(behavioralStatus) === "submitted",
-  ].filter(Boolean).length;
-  const started = [
-    isStarted(reflection?.status),
-    isStarted(realWorld?.status),
-    isStarted(behavioralStatus),
-  ].filter(Boolean).length;
-  const weightedProgress =
-    getStatusProgress(reflection?.status) +
-    getStatusProgress(realWorld?.status) +
-    getStatusProgress(behavioralStatus);
+  const completed = activeTrialTypes.filter((trialType) => isPassed(statuses[trialType])).length;
+  const submitted = activeTrialTypes.filter((trialType) => normalizeStatus(statuses[trialType]) === "submitted").length;
+  const started = activeTrialTypes.filter((trialType) => isStarted(statuses[trialType])).length;
+  const weightedProgress = activeTrialTypes.reduce(
+    (sum, trialType) => sum + getStatusProgress(statuses[trialType]),
+    0
+  );
+  const requirementCount = Math.max(activeTrialTypes.length, 1);
 
   return {
     completed,
     submitted,
     started,
-    percent: Math.round((weightedProgress / 3) * 100),
-    isComplete: completed === 3,
+    requirementCount,
+    percent: Math.round((weightedProgress / requirementCount) * 100),
+    isComplete: completed === activeTrialTypes.length,
   };
 }
 
-function getDimensionProgression(dimensionId, trialRecords, telemetryAverage) {
+function getDimensionProgression(dimensionId, trialRecords, telemetryAverage, trialConfig) {
   let currentBeltId = "white";
   let activeBeltId = "white";
   let nextBeltId = "yellow";
 
   for (const beltId of BELT_IDS) {
-    const progress = getTargetBeltProgress(dimensionId, beltId, trialRecords, telemetryAverage);
+    const progress = getTargetBeltProgress(dimensionId, beltId, trialRecords, telemetryAverage, trialConfig);
     if (!progress.isComplete) {
       activeBeltId = beltId;
       nextBeltId = getNextBeltId(beltId);
@@ -495,7 +506,7 @@ function getDimensionProgression(dimensionId, trialRecords, telemetryAverage) {
     nextBeltId = "black";
   }
 
-  const activeProgress = getTargetBeltProgress(dimensionId, activeBeltId, trialRecords, telemetryAverage);
+  const activeProgress = getTargetBeltProgress(dimensionId, activeBeltId, trialRecords, telemetryAverage, trialConfig);
 
   return {
     currentBeltId,
@@ -508,14 +519,15 @@ function getDimensionProgression(dimensionId, trialRecords, telemetryAverage) {
     completedRequirements: activeProgress.completed,
     submittedRequirements: activeProgress.submitted,
     startedRequirements: activeProgress.started,
+    requirementCount: activeProgress.requirementCount,
   };
 }
 
-function buildDimensionStates(telemetry, trialRecords) {
+function buildDimensionStates(telemetry, trialRecords, trialConfig) {
   const telemetryAverage = getTelemetryAverage(telemetry);
 
   return DIMENSIONS.reduce((states, dimension) => {
-    const progression = getDimensionProgression(dimension.id, trialRecords, telemetryAverage);
+    const progression = getDimensionProgression(dimension.id, trialRecords, telemetryAverage, trialConfig);
     const hasAnyTrialEvidence = trialRecords.some((trial) => trial.dimension_id === dimension.id);
     const hasTelemetryEvidence = dimension.id === "execute" && telemetry.some((signal) => signal.value > 0);
     const hasEvidence = hasAnyTrialEvidence || hasTelemetryEvidence;
@@ -532,12 +544,12 @@ function buildDimensionStates(telemetry, trialRecords) {
       assessment: progression.currentBeltId === "black"
         ? `You are working the ${activeBelt.name} trials for this dimension. The work now is transmission: helping others develop this capability with judgment and humility.`
         : hasEvidence
-          ? `Alfred sees ${progression.startedRequirements} of 3 ${activeBelt.name} requirements started, with ${progression.submittedRequirements} submitted and ${progression.completedRequirements} passed. Passing these trials is what moves you toward ${nextBelt.name}.`
+          ? `Alfred sees ${progression.startedRequirements} of ${progression.requirementCount} ${activeBelt.name} requirements started, with ${progression.submittedRequirements} submitted and ${progression.completedRequirements} passed. Passing these trials is what moves you toward ${nextBelt.name}.`
           : `Start the ${activeBelt.name} trials. Passing them is what moves you toward ${nextBelt.name}.`,
       evidenceLabel: progression.currentBeltId === "black"
-        ? `${progression.startedRequirements}/3 active`
+        ? `${progression.startedRequirements}/${progression.requirementCount} active`
         : hasEvidence
-          ? `${progression.startedRequirements}/3 started`
+          ? `${progression.startedRequirements}/${progression.requirementCount} started`
           : "No earned evidence yet",
     };
 
@@ -568,6 +580,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   const [activeTopic, setActiveTopic] = useState("Execution System");
   const [trialRecords, setTrialRecords] = useState([]);
   const [trialConfig, setTrialConfig] = useState(null);
+  const [subdomainPromptConfig, setSubdomainPromptConfig] = useState(null);
+  const [selectedTrialBeltId, setSelectedTrialBeltId] = useState(null);
   const [activeTrial, setActiveTrial] = useState(null);
   const [trialDraft, setTrialDraft] = useState("");
   const [savingTrial, setSavingTrial] = useState(false);
@@ -659,6 +673,25 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   }, [apiUrl]);
 
   useEffect(() => {
+    if (apiUrl == null) return;
+
+    let cancelled = false;
+    const fetchSubdomainPrompts = async () => {
+      try {
+        const response = await axios.get(`${apiUrl}/api/journey/subdomain-prompts`);
+        if (!cancelled) setSubdomainPromptConfig(response.data);
+      } catch (error) {
+        console.error("Failed to load journey subdomain prompts", error);
+      }
+    };
+
+    fetchSubdomainPrompts();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiUrl]);
+
+  useEffect(() => {
     if (apiUrl == null || !userNumber) return;
 
     let cancelled = false;
@@ -709,7 +742,10 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
     ];
   }, [signals]);
 
-  const dimensionStates = useMemo(() => buildDimensionStates(telemetry, trialRecords), [telemetry, trialRecords]);
+  const dimensionStates = useMemo(
+    () => buildDimensionStates(telemetry, trialRecords, trialConfig),
+    [telemetry, trialRecords, trialConfig]
+  );
 
   const activeTopicConfig = useMemo(() => {
     return selectedDimension.topics.find((topic) => topic.label === activeTopic) || selectedDimension.topics[0];
@@ -722,6 +758,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   const handleSelectDimension = (dimensionId) => {
     const nextDimension = DIMENSIONS.find((dimension) => dimension.id === dimensionId);
     setSelectedDimensionId(dimensionId);
+    setSelectedTrialBeltId(null);
     if (nextDimension?.topics?.length) {
       setActiveTopic(nextDimension.topics[0].label);
     }
@@ -729,6 +766,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
 
   const handleSelectSubdomain = (dimensionId, topic) => {
     setSelectedDimensionId(dimensionId);
+    setSelectedTrialBeltId(null);
     setActiveTopic(topic.label);
   };
 
@@ -761,7 +799,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   const handleAddSubdomainItem = (topic) => {
     const fields = TOPIC_FORM_FIELDS[topic.label] || [];
     const draft = fields.reduce((item, field) => {
-      item[field.name] = field.defaultValue || "";
+      item[field.name] = field.defaultValue || (field.name === "title" ? topic.label : "");
       return item;
     }, { id: null, isNew: true });
 
@@ -828,18 +866,20 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
   const selectedState = dimensionStates[selectedDimension.id];
   const selectedBelt = getBelt(selectedState.beltIndex);
   const activeBelt = getBeltById(selectedState.activeBeltId);
-  const nextBelt = getBeltById(selectedState.nextBeltId);
-  const activeBeltRequirements = getBeltRequirementsFromConfig(
+  const viewedBelt = getBeltById(selectedTrialBeltId || selectedState.activeBeltId);
+  const viewedNextBelt = getBeltById(getNextBeltId(viewedBelt.id));
+  const activeNextBelt = getBeltById(selectedState.nextBeltId);
+  const viewedBeltRequirements = getBeltRequirementsFromConfig(
     trialConfig,
     selectedDimension.id,
-    selectedState.activeBeltId
+    viewedBelt.id
   );
 
   const handleStartTrial = async (trialType, prompt) => {
     const existing = trialRecords.find(
       (trial) =>
         trial.dimension_id === selectedDimension.id &&
-        trial.target_belt === selectedState.activeBeltId &&
+        trial.target_belt === viewedBelt.id &&
         trial.trial_type === trialType
     );
 
@@ -849,7 +889,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
         id: null,
         user_number: userNumber,
         dimension_id: selectedDimension.id,
-        target_belt: selectedState.activeBeltId,
+        target_belt: viewedBelt.id,
         trial_type: trialType,
         prompt,
         response_text: "",
@@ -929,16 +969,22 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
 
           <div className="flex flex-wrap gap-2">
             {BELTS.map((belt) => (
-              <div
+              <button
                 key={belt.name}
-                className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shadow-sm"
+                type="button"
+                onClick={() => setSelectedTrialBeltId(belt.id)}
+                className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs shadow-sm transition ${
+                  viewedBelt.id === belt.id
+                    ? "border-slate-950 bg-slate-950 text-white"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
+                }`}
               >
                 <span
                   className="h-3 w-3 rounded-full border border-slate-300"
                   style={{ backgroundColor: belt.color }}
                 />
                 <span>{belt.shortName}</span>
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -961,6 +1007,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
               activeTopic={activeTopic}
               setActiveTopic={setActiveTopic}
               items={topicItems}
+              promptConfig={subdomainPromptConfig}
               onAddItem={handleAddSubdomainItem}
               onEditItem={handleEditSubdomainItem}
             />
@@ -971,16 +1018,17 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
               dimension={selectedDimension}
               dimensionState={selectedState}
               belt={selectedBelt}
-              nextBelt={nextBelt}
+              nextBelt={activeNextBelt}
               telemetry={telemetry}
               loadingSignals={loadingSignals}
             />
 
             <PathToNextBeltPanel
               dimension={selectedDimension}
-              targetBelt={activeBelt}
-              nextBelt={nextBelt}
-              requirements={activeBeltRequirements}
+              currentBelt={activeBelt}
+              targetBelt={viewedBelt}
+              nextBelt={viewedNextBelt}
+              requirements={viewedBeltRequirements}
               trialRecords={trialRecords}
               savingTrial={savingTrial}
               onStartTrial={handleStartTrial}
@@ -1010,6 +1058,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber }) {
         <SubdomainItemModal
           topic={editingSubdomainTopic}
           item={editingSubdomainItem}
+          promptConfig={subdomainPromptConfig}
           saving={savingSubdomainItem}
           onClose={() => {
             setEditingSubdomainItem(null);
@@ -1218,12 +1267,40 @@ function normalizeRequirements(requirements, dimensionId) {
   };
 }
 
-function PathToNextBeltPanel({ dimension, targetBelt, nextBelt, requirements, trialRecords, savingTrial, onStartTrial }) {
+function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, requirements, trialRecords, savingTrial, onStartTrial }) {
   const safeTargetBelt = targetBelt || getBeltById("yellow");
   const safeNextBelt = nextBelt || getBeltById(getNextBeltId(safeTargetBelt.id));
   const safeRequirements = normalizeRequirements(requirements, dimension.id);
   const reflectionTrial = getStoredTrial(trialRecords, dimension.id, safeTargetBelt.id, "reflection");
   const realWorldTrial = getStoredTrial(trialRecords, dimension.id, safeTargetBelt.id, "real_world");
+  const isViewingCurrentBelt = currentBelt?.id === safeTargetBelt.id;
+  const activeCards = [
+    isRequirementActive(safeRequirements.reflection) && {
+      number: "1",
+      title: safeRequirements.reflection.title || "Reflection Trial",
+      body: safeRequirements.reflection.prompt,
+      footer: safeRequirements.reflection.completion_hint,
+      status: formatTrialStatus(reflectionTrial?.status),
+      buttonLabel: isViewingCurrentBelt ? (reflectionTrial ? "Continue Reflection" : "Start Reflection") : null,
+      onClick: () => onStartTrial("reflection", safeRequirements.reflection.prompt),
+    },
+    isRequirementActive(safeRequirements.real_world) && {
+      number: "2",
+      title: safeRequirements.real_world.title || "Real-World Trial",
+      body: safeRequirements.real_world.prompt,
+      footer: safeRequirements.real_world.completion_hint,
+      status: formatTrialStatus(realWorldTrial?.status),
+      buttonLabel: isViewingCurrentBelt ? (realWorldTrial ? "Log Trial" : "Start Trial") : null,
+      onClick: () => onStartTrial("real_world", safeRequirements.real_world.prompt),
+    },
+    isRequirementActive(safeRequirements.behavioral) && {
+      number: "3",
+      title: safeRequirements.behavioral.title || "Behavioral Evidence",
+      body: safeRequirements.behavioral.prompt,
+      footer: safeRequirements.behavioral.completion_hint,
+      status: "Auto-tracked",
+    },
+  ].filter(Boolean);
 
   return (
     <div className="rounded-lg border border-amber-200 bg-white p-5 shadow-sm">
@@ -1235,40 +1312,31 @@ function PathToNextBeltPanel({ dimension, targetBelt, nextBelt, requirements, tr
           <h3 className="mt-1 text-xl font-semibold text-slate-950">
             What Alfred needs to see in {dimension.name}
           </h3>
+          {!isViewingCurrentBelt && (
+            <p className="mt-1 text-xs font-semibold text-slate-500">
+              Previewing future requirements
+            </p>
+          )}
         </div>
         <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
           Earn {safeNextBelt.name}
         </span>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-3">
-        <RequirementCard
-          number="1"
-          title={safeRequirements.reflection.title || "Reflection Trial"}
-          body={safeRequirements.reflection.prompt}
-          footer={safeRequirements.reflection.completion_hint}
-          status={formatTrialStatus(reflectionTrial?.status)}
-          buttonLabel={reflectionTrial ? "Continue Reflection" : "Start Reflection"}
-          disabled={savingTrial}
-          onClick={() => onStartTrial("reflection", safeRequirements.reflection.prompt)}
-        />
-        <RequirementCard
-          number="2"
-          title={safeRequirements.real_world.title || "Real-World Trial"}
-          body={safeRequirements.real_world.prompt}
-          footer={safeRequirements.real_world.completion_hint}
-          status={formatTrialStatus(realWorldTrial?.status)}
-          buttonLabel={realWorldTrial ? "Log Trial" : "Start Trial"}
-          disabled={savingTrial}
-          onClick={() => onStartTrial("real_world", safeRequirements.real_world.prompt)}
-        />
-        <RequirementCard
-          number="3"
-          title={safeRequirements.behavioral.title || "Behavioral Evidence"}
-          body={safeRequirements.behavioral.prompt}
-          footer={safeRequirements.behavioral.completion_hint}
-          status="Auto-tracked"
-        />
+      <div className={`grid gap-3 ${activeCards.length >= 3 ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
+        {activeCards.map((card) => (
+          <RequirementCard
+            key={card.title}
+            number={card.number}
+            title={card.title}
+            body={card.body}
+            footer={card.footer}
+            status={card.status}
+            buttonLabel={card.buttonLabel}
+            disabled={savingTrial}
+            onClick={card.onClick}
+          />
+        ))}
       </div>
     </div>
   );
@@ -1408,8 +1476,9 @@ function TelemetryPanel({ telemetry, loading }) {
   );
 }
 
-function TopicEvidencePanel({ dimension, activeTopic, setActiveTopic, items, onAddItem, onEditItem }) {
+function TopicEvidencePanel({ dimension, activeTopic, setActiveTopic, items, promptConfig, onAddItem, onEditItem }) {
   const activeTopicConfig = dimension.topics.find((topic) => topic.label === activeTopic) || dimension.topics[0];
+  const subdomainQuestion = getSubdomainQuestion(promptConfig, activeTopicConfig);
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -1417,7 +1486,7 @@ function TopicEvidencePanel({ dimension, activeTopic, setActiveTopic, items, onA
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Evidence Library</p>
           <h3 className="mt-1 text-xl font-semibold text-slate-950">{activeTopicConfig.label} Inputs</h3>
-          <p className="mt-2 text-sm leading-6 text-slate-600">{WHY_IT_MATTERS[activeTopicConfig.label]}</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{subdomainQuestion}</p>
         </div>
         <div className="flex flex-col gap-2 sm:items-end">
           <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1">
@@ -1479,19 +1548,21 @@ function EvidenceItem({ item, onClick }) {
   );
 }
 
-function SubdomainItemModal({ topic, item, saving, onClose, onSave, onDelete }) {
+function SubdomainItemModal({ topic, item, promptConfig, saving, onClose, onSave, onDelete }) {
   const [formData, setFormData] = useState(item || {});
   const fields = TOPIC_FORM_FIELDS[topic.label] || [];
-  const whyItMatters = WHY_IT_MATTERS[topic.label];
+  const primaryField = fields.find((field) => field.required && field.type !== "hidden") ||
+    fields.find((field) => field.type === "textarea") ||
+    fields.find((field) => field.type !== "hidden");
+  const subdomainQuestion = getSubdomainQuestion(promptConfig, topic);
 
   const handleChange = (fieldName, value) => {
     setFormData((current) => ({ ...current, [fieldName]: value }));
   };
 
   const handleSubmit = () => {
-    const missingRequired = fields.find((field) => field.required && !String(formData[field.name] || "").trim());
-    if (missingRequired) {
-      alert(`${missingRequired.label} is required.`);
+    if (primaryField?.required && !String(formData[primaryField.name] || "").trim()) {
+      alert("Please answer the question before saving.");
       return;
     }
 
@@ -1516,7 +1587,7 @@ function SubdomainItemModal({ topic, item, saving, onClose, onSave, onDelete }) 
               <h3 className="mt-1 text-xl font-semibold text-slate-950">
                 {item?.id ? "Edit" : "Add"} {topic.label}
               </h3>
-              {whyItMatters && <p className="mt-2 text-sm leading-6 text-slate-600">{whyItMatters}</p>}
+              {subdomainQuestion && <p className="mt-2 text-sm leading-6 text-slate-600">{subdomainQuestion}</p>}
             </div>
             <button
               type="button"
@@ -1529,34 +1600,18 @@ function SubdomainItemModal({ topic, item, saving, onClose, onSave, onDelete }) 
           </div>
         </div>
 
-        <div className="max-h-[65vh] space-y-4 overflow-y-auto px-6 py-5">
-          {fields.map((field) => {
-            if (field.type === "hidden") return null;
-
-            return (
-              <label key={field.name} className="block">
-                <span className="text-sm font-semibold text-slate-800">
-                  {field.label}
-                  {field.required ? " *" : ""}
-                </span>
-                {field.type === "textarea" ? (
-                  <textarea
-                    value={formData[field.name] || ""}
-                    onChange={(event) => handleChange(field.name, event.target.value)}
-                    rows={field.required ? 4 : 2}
-                    className="mt-2 w-full resize-y rounded-lg border border-slate-300 px-4 py-3 text-sm leading-6 outline-none focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
-                  />
-                ) : (
-                  <input
-                    type="text"
-                    value={formData[field.name] || ""}
-                    onChange={(event) => handleChange(field.name, event.target.value)}
-                    className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
-                  />
-                )}
-              </label>
-            );
-          })}
+        <div className="max-h-[65vh] overflow-y-auto px-6 py-5">
+          {primaryField && (
+            <label className="block">
+              <span className="text-sm font-semibold text-slate-800">Your answer</span>
+              <textarea
+                value={formData[primaryField.name] || ""}
+                onChange={(event) => handleChange(primaryField.name, event.target.value)}
+                rows={8}
+                className="mt-2 w-full resize-y rounded-lg border border-slate-300 px-4 py-3 text-sm leading-6 outline-none focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
+              />
+            </label>
+          )}
         </div>
 
         <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:justify-end">

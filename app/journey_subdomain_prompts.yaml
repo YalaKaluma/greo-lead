@@ -1,0 +1,38 @@
+# journey_subdomain_prompts.yaml
+#
+# User-facing questions for the My Journey subdomain add/edit modal.
+# Keep one question per subdomain so the Journey UI stays easy to tune.
+
+version: 1
+
+subdomains:
+  values:
+    question: "What principles or beliefs most strongly guide your decisions and leadership style? Describe moments where those values were tested."
+  strengths:
+    question: "What do you believe are your greatest strengths as a leader? How have they helped you succeed - and where might they sometimes become weaknesses?"
+  vision:
+    question: "When you imagine the life, impact, or legacy you truly want to create, what do you see? What excites you most about that future?"
+  team_composition:
+    question: "What types of people do you naturally surround yourself with? What personalities or strengths do you tend to seek - or avoid - in a team?"
+  inspiration:
+    question: "Using a few real examples, how do you typically try to inspire or motivate people? What tends to work best for you?"
+  coaching_moments:
+    question: "When coaching others or delegating important work, what do you naturally do well - and what do you tend to struggle with?"
+  prioritization:
+    question: "How effective are you at identifying and focusing on the few actions that truly move the needle? Where do you most often lose focus?"
+  execution_system:
+    question: "What systems, routines, habits, or environments help you consistently execute at a high level? How do you actually get important things done?"
+  procrastination:
+    question: "What types of tasks, situations, or emotions tend to trigger procrastination for you? What do you think sits underneath that pattern?"
+  energy_sources:
+    question: "What activities, people, or environments consistently give you energy, clarity, and momentum?"
+  energy_drains:
+    question: "What tends to drain your energy the most - mentally, emotionally, or physically? What patterns do you notice?"
+  recovery:
+    question: "How do you recover when stressed, overwhelmed, or exhausted? What genuinely helps you reset?"
+  failures:
+    question: "What failures, painful experiences, or difficult chapters shaped you the most as a leader or person? What lasting lessons or scars came from them?"
+  development_opportunities:
+    question: "What areas of your leadership or life still need the most growth or improvement? Why?"
+  development_plan:
+    question: "How intentional are you about your own growth? What systems, practices, or goals do you currently use to develop yourself?"

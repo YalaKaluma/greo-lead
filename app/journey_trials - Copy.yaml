@@ -42,7 +42,6 @@ dimensions:
           grading_focus: [meaning, achievement reflection, values awareness, fulfillment clarity]
           completion_hint: Connect achievement to values, strengths, and genuine meaning.
         real_world:
-          active: false
           title: Real-World Trial
           prompt: Share your vision with someone you trust and discuss whether it feels authentic and aligned with who you truly are.
           completion_hint: Test your vision in conversation with someone who can reflect honestly.
@@ -128,7 +127,6 @@ dimensions:
           grading_focus: [impact awareness, honesty, emotional specificity, ownership]
           completion_hint: Notice how your behavior landed on another person.
         real_world:
-          active: false
           title: Real-World Trial
           prompt: Ask one person for feedback on how they experience your leadership.
           completion_hint: Invite reality from outside your own interpretation.
@@ -214,7 +212,6 @@ dimensions:
           grading_focus: [execution awareness, procrastination insight, emotional resistance, ownership]
           completion_hint: Identify what was driving the execution pattern beneath the surface behavior.
         real_world:
-          active: false
           title: Real-World Trial
           prompt: Track your distractions, avoidance patterns, and reactive behaviors for one full week. Identify the situations, emotions, or triggers most commonly associated with them.
           completion_hint: Observe distraction and avoidance patterns long enough to see the triggers clearly.
@@ -300,7 +297,6 @@ dimensions:
           grading_focus: [energy awareness, stress patterns, recovery insight, ownership]
           completion_hint: Connect energy, recovery, stress, and performance through a concrete period in your life.
         real_world:
-          active: false
           title: Real-World Trial
           prompt: Track your energy levels, stress levels, and recovery quality for one full week. Identify the situations, people, or habits that most strongly impact your energy.
           completion_hint: Observe the people, habits, and environments that shape your capacity.
@@ -386,7 +382,6 @@ dimensions:
           grading_focus: [failure reflection, identity insight, honesty, growth mindset]
           completion_hint: Extract self-knowledge from a difficult setback without collapsing into shame.
         real_world:
-          active: false
           title: Real-World Trial
           prompt: Have an honest conversation with someone you trust about a personal weakness, fear, or growth area you typically avoid discussing openly.
           completion_hint: Practice vulnerable learning through a conversation you would normally avoid.

@@ -147,9 +147,24 @@ def load_journey_trials_config():
         }
 
 
+def load_journey_subdomain_prompts_config():
+    config_path = Path(__file__).parent.parent / "journey_subdomain_prompts.yaml"
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        return {"version": 0, "subdomains": {}}
+
+
 @router.get("/trial-config")
 def get_trial_config():
     return load_journey_trials_config()
+
+
+@router.get("/subdomain-prompts")
+def get_subdomain_prompts():
+    return load_journey_subdomain_prompts_config()
 
 
 class BeltTrialCreate(BaseModel):
