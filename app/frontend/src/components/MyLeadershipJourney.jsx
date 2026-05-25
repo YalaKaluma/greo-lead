@@ -2331,9 +2331,6 @@ function DimensionDeepDive({ dimension, dimensionState, belt, nextBelt, latestAs
           </p>
           <h2 className="mt-2 text-2xl font-semibold text-slate-950">{headline}</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{description}</p>
-          <p className="mt-3 inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-            Current focus: {dimension.name}
-          </p>
         </div>
 
         <div className="grid min-w-[260px] grid-cols-2 overflow-hidden rounded-lg border border-slate-200">
