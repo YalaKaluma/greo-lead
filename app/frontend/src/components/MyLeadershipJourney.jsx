@@ -2688,16 +2688,11 @@ function TopicEvidencePanel({ dimension, activeTopic, setActiveTopic, items, pro
   );
 }
 
-function getFirstLine(text) {
-  return String(text || "").split(/\r?\n/)[0].trim();
-}
-
 function EvidenceItem({ item, collapsible, onClick }) {
   const [expanded, setExpanded] = useState(false);
   const title = getItemTitle(item);
   const body = getItemBody(item);
-  const firstLine = getFirstLine(body);
-  const shouldCollapse = collapsible && body && firstLine && firstLine.length < body.trim().length;
+  const shouldCollapse = collapsible && body && body.trim().length > 120;
 
   return (
     <article
@@ -2706,8 +2701,16 @@ function EvidenceItem({ item, collapsible, onClick }) {
     >
       <p className="text-sm font-semibold text-slate-900">{title}</p>
       {body && (
-        <p className="mt-2 text-sm leading-6 text-slate-600">
-          {shouldCollapse && !expanded ? firstLine : body}
+        <p
+          className="mt-2 text-sm leading-6 text-slate-600"
+          style={shouldCollapse && !expanded ? {
+            display: "-webkit-box",
+            WebkitLineClamp: 1,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+          } : undefined}
+        >
+          {body}
         </p>
       )}
       {shouldCollapse && (
