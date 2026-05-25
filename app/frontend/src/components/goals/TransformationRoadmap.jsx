@@ -286,23 +286,6 @@ export default function TransformationRoadmap({
     await fetchRoadmap();
   };
 
-  const moveOutcomeWithinWave = async (waveId, sourceIndex, direction) => {
-    const wave = (roadmap.waves || []).find(item => item.id === waveId);
-    const destinationIndex = sourceIndex + direction;
-    if (!wave || destinationIndex < 0 || destinationIndex >= (wave.goals || []).length) return;
-
-    try {
-      await moveOutcomeLink({
-        source: { droppableId: `wave-outcomes-${waveId}`, index: sourceIndex },
-        destination: { droppableId: `wave-outcomes-${waveId}`, index: destinationIndex }
-      });
-    } catch (err) {
-      console.error('Error moving outcome:', err);
-      setError('Could not save the new roadmap order.');
-      await fetchRoadmap();
-    }
-  };
-
   const handleRoadmapDragEnd = async (result) => {
     const { source, destination, type } = result;
     if (!destination) return;
@@ -625,33 +608,7 @@ export default function TransformationRoadmap({
                                           </span>
                                           <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${outcomeStyle.dot}`} />
                                           <div className="min-w-0 flex-1">
-                                            <div className="flex items-start justify-between gap-2">
-                                              <div className="font-medium text-slate-800 break-words">{link.goal?.title || link.goal?.goal_text}</div>
-                                              <div className="flex shrink-0 gap-1">
-                                                <button
-                                                  type="button"
-                                                  disabled={linkIndex === 0}
-                                                  onClick={(event) => {
-                                                    event.stopPropagation();
-                                                    moveOutcomeWithinWave(wave.id, linkIndex, -1);
-                                                  }}
-                                                  className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-35"
-                                                >
-                                                  Up
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  disabled={linkIndex === (wave.goals || []).length - 1}
-                                                  onClick={(event) => {
-                                                    event.stopPropagation();
-                                                    moveOutcomeWithinWave(wave.id, linkIndex, 1);
-                                                  }}
-                                                  className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-35"
-                                                >
-                                                  Down
-                                                </button>
-                                              </div>
-                                            </div>
+                                            <div className="font-medium text-slate-800 break-words">{link.goal?.title || link.goal?.goal_text}</div>
                                             <div className="mt-1 text-xs text-slate-500">{outcomeStyle.label}</div>
                                           </div>
                                         </div>

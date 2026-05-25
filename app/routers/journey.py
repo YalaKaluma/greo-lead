@@ -2069,6 +2069,37 @@ def add_goal_to_wave(
     return serialize_wave(wave)
 
 
+@router.patch("/waves/{wave_id}/goals/reorder")
+def reorder_wave_goals(
+        wave_id: int,
+        reorder_data: WaveGoalReorderRequest,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    wave = db.query(VisionRoadmapWave).filter(
+        VisionRoadmapWave.id == wave_id,
+        VisionRoadmapWave.user_number == user_number,
+    ).first()
+    if not wave:
+        raise HTTPException(status_code=404, detail="Wave not found")
+
+    links = db.query(WaveGoal).filter(
+        WaveGoal.wave_id == wave_id,
+        WaveGoal.goal_id.in_(reorder_data.ordered_goal_ids),
+    ).all()
+    if len(links) != len(reorder_data.ordered_goal_ids):
+        raise HTTPException(status_code=400, detail="All reordered goals must belong to this wave")
+
+    by_goal_id = {link.goal_id: link for link in links}
+    for index, goal_id in enumerate(reorder_data.ordered_goal_ids):
+        by_goal_id[goal_id].sequence_order = index
+        by_goal_id[goal_id].updated_at = datetime.now()
+
+    db.commit()
+    db.refresh(wave)
+    return serialize_wave(wave)
+
+
 @router.patch("/waves/{wave_id}/goals/{goal_id}")
 def update_goal_in_wave(
         wave_id: int,
@@ -2149,37 +2180,6 @@ def reorder_waves(
 
     db.commit()
     return {"success": True}
-
-
-@router.patch("/waves/{wave_id}/goals/reorder")
-def reorder_wave_goals(
-        wave_id: int,
-        reorder_data: WaveGoalReorderRequest,
-        user_number: str,
-        db: Session = Depends(get_db)
-):
-    wave = db.query(VisionRoadmapWave).filter(
-        VisionRoadmapWave.id == wave_id,
-        VisionRoadmapWave.user_number == user_number,
-    ).first()
-    if not wave:
-        raise HTTPException(status_code=404, detail="Wave not found")
-
-    links = db.query(WaveGoal).filter(
-        WaveGoal.wave_id == wave_id,
-        WaveGoal.goal_id.in_(reorder_data.ordered_goal_ids),
-    ).all()
-    if len(links) != len(reorder_data.ordered_goal_ids):
-        raise HTTPException(status_code=400, detail="All reordered goals must belong to this wave")
-
-    by_goal_id = {link.goal_id: link for link in links}
-    for index, goal_id in enumerate(reorder_data.ordered_goal_ids):
-        by_goal_id[goal_id].sequence_order = index
-        by_goal_id[goal_id].updated_at = datetime.now()
-
-    db.commit()
-    db.refresh(wave)
-    return serialize_wave(wave)
 
 
 @router.post("/visions/{vision_id}/generate-roadmap")
