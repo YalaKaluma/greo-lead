@@ -553,9 +553,8 @@ export default function TransformationRoadmap({
                         }`}
                       >
                         {index < (roadmap.waves || []).length - 1 && (
-                          <div className="hidden lg:flex absolute -right-10 top-16 w-10 items-center pointer-events-none">
-                            <div className="h-px flex-1 bg-slate-500" />
-                            <div className="h-2 w-2 rotate-45 border-r border-t border-slate-500" />
+                          <div className="hidden lg:flex absolute -right-10 top-10 w-10 justify-center pointer-events-none">
+                            <span className="text-3xl font-extralight leading-none text-slate-500">&gt;</span>
                           </div>
                         )}
 
