@@ -647,11 +647,11 @@ def compute_journey_depth_score(wheel_scores: dict) -> int:
 
 
 def recommendation_from_score(score: int) -> str:
-    if score >= 85:
+    if score >= 60:
         return "ready_for_promotion"
-    if score >= 70:
-        return "almost_ready"
     if score >= 50:
+        return "almost_ready"
+    if score >= 35:
         return "not_ready"
     return "needs_more_evidence"
 
@@ -828,7 +828,7 @@ def fallback_assessment_from_evidence(evidence: dict) -> dict:
     trial_count = len(evidence.get("belt_trials") or [])
     score = min(84, 55 + trial_count * 3)
     base = {
-        "recommendation": "almost_ready" if score >= 70 else "not_ready",
+        "recommendation": recommendation_from_score(score),
         "readiness_score": score,
         "direct_summary": "Your current belt work is ready to review, but some parts of the wheel need deeper, more specific reflection before promotion. This is about strengthening the homework, not judging your leadership worth.",
         "leadership_profile": {

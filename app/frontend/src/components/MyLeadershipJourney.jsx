@@ -1556,7 +1556,11 @@ function BeltAssessmentTab({ readinessStatus, latestAssessment, assessmentHistor
         </div>
       )}
 
-      <DevelopmentalScoringAccordion scores={assessment.journey_depth_scores || assessment.developmental_dimension_scores || assessment.dimension_scores} />
+      <DevelopmentalScoringAccordion
+        assessment={assessment}
+        wheelScores={wheelScores}
+        scores={assessment.journey_depth_scores || assessment.developmental_dimension_scores || assessment.dimension_scores}
+      />
 
       {assessmentHistory.length > 1 && (
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -1980,17 +1984,172 @@ function AssessmentScores({ scores }) {
   );
 }
 
-function DevelopmentalScoringAccordion({ scores }) {
-  if (!scores || Object.keys(scores).length === 0) return null;
+function compactText(value, maxLength = 280) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength).trim()}...`;
+}
+
+function domainNameFromId(dimensionId) {
+  return DIMENSIONS.find((dimension) => dimension.id === dimensionId)?.name || dimensionId || "Unknown domain";
+}
+
+function getSubdomainDebugRows(wheelScores) {
+  const rows = [];
+  DIMENSIONS.forEach((dimension) => {
+    const domain = wheelScores?.[dimension.name] || {};
+    dimension.topics.forEach((topic) => {
+      const feedback = domain?.subdomains?.[topic.label] || {};
+      rows.push({
+        domain: dimension.name,
+        subdomain: topic.label,
+        score: Number(feedback.score) || 0,
+        status: feedback.status,
+        why: feedback.why,
+        currentReadiness: feedback.current_readiness,
+        improve: feedback.improve || [],
+      });
+    });
+  });
+  return rows;
+}
+
+function getEvidenceCounts(evidence) {
+  const subdomainEvidence = evidence?.belt_subdomain_evidence || {};
+  return DIMENSIONS.map((dimension) => {
+    const count = dimension.topics.reduce((sum, topic) => {
+      const items = subdomainEvidence?.[dimension.name]?.[topic.label] || [];
+      return sum + items.length;
+    }, 0);
+    return { domain: dimension.name, count };
+  });
+}
+
+function DevelopmentalScoringAccordion({ assessment, wheelScores, scores }) {
+  const evidence = assessment?.evidence_snapshot || {};
+  const subdomainRows = getSubdomainDebugRows(wheelScores);
+  const scoreValues = subdomainRows.map((row) => row.score).filter(Boolean);
+  const averageScore = scoreValues.length ? (scoreValues.reduce((sum, score) => sum + score, 0) / scoreValues.length) : 0;
+  const trials = evidence?.belt_trials || [];
+  const evidenceCounts = getEvidenceCounts(evidence);
+  if (!scores && subdomainRows.length === 0 && trials.length === 0) return null;
 
   return (
     <details className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <summary className="cursor-pointer text-sm font-semibold text-slate-950">How Alfred graded this</summary>
       <p className="mt-2 text-sm leading-6 text-slate-600">
-        These dimensions grade the depth and usefulness of your Journey work, not your worth or capability as a leader.
+        Debug view: this shows the inputs considered and how the Journey Depth score was calculated.
       </p>
-      <div className="mt-4">
-        <AssessmentScores scores={scores} />
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Formula</p>
+          <p className="mt-2 text-sm leading-6 text-slate-700">
+            Average of 15 subdomain scores x 20.
+          </p>
+          <p className="mt-2 text-sm font-semibold text-slate-950">
+            {averageScore.toFixed(2)} / 5 = {Math.round(averageScore * 20)} / 100
+          </p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pass Threshold</p>
+          <p className="mt-2 text-sm leading-6 text-slate-700">
+            3.0 / 5 average passes.
+          </p>
+          <p className="mt-2 text-sm font-semibold text-slate-950">
+            60+ = Ready for promotion
+          </p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Inputs Considered</p>
+          <p className="mt-2 text-sm leading-6 text-slate-700">
+            {trials.length} belt trial submission{trials.length === 1 ? "" : "s"} and subdomain Journey inputs.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {evidenceCounts.map((item) => (
+              <span key={item.domain} className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600">
+                {item.domain}: {item.count}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {scores && Object.keys(scores).length > 0 && (
+        <div className="mt-4">
+          <AssessmentScores scores={scores} />
+        </div>
+      )}
+
+      <div className="mt-4 rounded-lg border border-slate-200">
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Subdomain Grade Breakdown</p>
+        </div>
+        <div className="divide-y divide-slate-200">
+          {subdomainRows.map((row) => (
+            <div key={`${row.domain}-${row.subdomain}`} className="grid gap-3 p-4 lg:grid-cols-[220px_90px_1fr]">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{row.domain}</p>
+                <p className="mt-1 text-sm font-semibold text-slate-950">{row.subdomain}</p>
+              </div>
+              <div>
+                <span
+                  className="inline-flex rounded-full px-2 py-1 text-xs font-semibold"
+                  style={{ background: heatmapColor(row.score), color: heatmapTextColor(row.score) }}
+                >
+                  {row.score}/5
+                </span>
+                {row.status && <p className="mt-2 text-xs capitalize text-slate-500">{row.status}</p>}
+              </div>
+              <div className="space-y-2 text-sm leading-6 text-slate-700">
+                {row.currentReadiness && <p><span className="font-semibold text-slate-950">Readiness of work: </span>{row.currentReadiness}</p>}
+                {row.why && <p><span className="font-semibold text-slate-950">Why: </span>{row.why}</p>}
+                {row.improve?.length > 0 && (
+                  <p><span className="font-semibold text-slate-950">Improve: </span>{row.improve.join(" ")}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-lg border border-slate-200">
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Trial Inputs Considered</p>
+        </div>
+        {trials.length > 0 ? (
+          <div className="divide-y divide-slate-200">
+            {trials.map((trial) => (
+              <div key={trial.id || `${trial.dimension_id}-${trial.trial_type}`} className="p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      {domainNameFromId(trial.dimension_id)} / {String(trial.trial_type || "").replaceAll("_", " ")}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-950">{compactText(trial.prompt, 180)}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="w-fit rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold capitalize text-slate-600">
+                      {String(trial.status || "unknown").replaceAll("_", " ")}
+                    </span>
+                    {wheelScores?.[domainNameFromId(trial.dimension_id)]?.domain_score && (
+                      <span className="w-fit rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600">
+                        Domain grade: {wheelScores[domainNameFromId(trial.dimension_id)].domain_score}/5
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {trial.response_text && (
+                  <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+                    {compactText(trial.response_text, 520)}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="p-4 text-sm leading-6 text-slate-600">No belt trial submissions were stored in this assessment snapshot.</p>
+        )}
       </div>
     </details>
   );

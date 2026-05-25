@@ -94,10 +94,10 @@ user_template: |
   5 = exceptional depth, vulnerability, specificity, and intentionality
 
   Recommendation values:
-  - ready_for_promotion
-  - almost_ready
-  - not_ready
-  - needs_more_evidence
+  - ready_for_promotion: average wheel score is at least 3/5 and the Journey work is complete enough to coach from
+  - almost_ready: average wheel score is close to 3/5 but one or two important areas need more depth
+  - not_ready: several required areas are too shallow, vague, or incomplete
+  - needs_more_evidence: Alfred cannot derive meaningful coaching guidance from the current submission
 
   The backend will recompute readiness_score from the fifteen wheel_scores.
   Still provide your best estimate, but never copy numbers or wording from this schema.
