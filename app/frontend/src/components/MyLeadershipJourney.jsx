@@ -1365,6 +1365,33 @@ function formatDateTime(value) {
   }
 }
 
+function directAssessmentCopy(value) {
+  if (typeof value === "string") {
+    const replacements = {
+      "the user is": "you are",
+      "the user has": "you have",
+      "the user shows": "you show",
+      "the user demonstrates": "you demonstrate",
+      "the user needs": "you need",
+      "the user's": "your",
+      "The user is": "You are",
+      "The user has": "You have",
+      "The user shows": "You show",
+      "The user demonstrates": "You demonstrate",
+      "The user needs": "You need",
+      "The user's": "Your",
+      "the user": "you",
+      "The user": "You",
+    };
+    return Object.entries(replacements).reduce((text, [from, to]) => text.replaceAll(from, to), value);
+  }
+  if (Array.isArray(value)) return value.map(directAssessmentCopy);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, directAssessmentCopy(item)]));
+  }
+  return value;
+}
+
 function BeltAssessmentTab({ readinessStatus, latestAssessment, assessmentHistory, acceptingPromotion, error, onSubmit, onAcceptPromotion }) {
   if (!latestAssessment) {
     return (
@@ -1391,10 +1418,12 @@ function BeltAssessmentTab({ readinessStatus, latestAssessment, assessmentHistor
     );
   }
 
-  const currentBelt = getBeltById(latestAssessment.current_belt);
-  const targetBelt = getBeltById(latestAssessment.target_belt);
-  const recommendation = RECOMMENDATION_LABELS[latestAssessment.recommendation] || latestAssessment.recommendation || "Assessment complete";
-  const isReady = latestAssessment.recommendation === "ready_for_promotion";
+  const assessment = directAssessmentCopy(latestAssessment);
+  const currentBelt = getBeltById(assessment.current_belt);
+  const targetBelt = getBeltById(assessment.target_belt);
+  const recommendation = RECOMMENDATION_LABELS[assessment.recommendation] || assessment.recommendation || "Assessment complete";
+  const isReady = assessment.recommendation === "ready_for_promotion";
+  const coachingNote = assessment.alfred_coaching_note || assessment.final_coaching_note;
 
   return (
     <div className="space-y-5">
@@ -1405,50 +1434,50 @@ function BeltAssessmentTab({ readinessStatus, latestAssessment, assessmentHistor
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Belt Assessment</p>
             <h2 className="mt-2 text-2xl font-semibold text-slate-950">{recommendation}</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">{latestAssessment.assessment_summary}</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{assessment.assessment_summary}</p>
           </div>
           <div className="grid min-w-[280px] grid-cols-2 overflow-hidden rounded-lg border border-slate-200">
             <div className="bg-slate-50 p-4">
               <p className="text-xs uppercase tracking-wide text-slate-500">Current Belt</p>
               <p className="mt-1 font-semibold" style={{ color: currentBelt.color }}>{currentBelt.name}</p>
-              <p className="mt-2 text-xs text-slate-500">{formatDateTime(latestAssessment.created_at)}</p>
+              <p className="mt-2 text-xs text-slate-500">{formatDateTime(assessment.created_at)}</p>
             </div>
             <div className="bg-white p-4">
               <p className="text-xs uppercase tracking-wide text-slate-500">Target Belt</p>
               <p className="mt-1 font-semibold" style={{ color: targetBelt.color }}>{targetBelt.name}</p>
-              <p className="mt-2 text-3xl font-semibold text-slate-950">{latestAssessment.readiness_score ?? "--"}</p>
+              <p className="mt-2 text-3xl font-semibold text-slate-950">{assessment.readiness_score ?? "--"}</p>
             </div>
           </div>
         </div>
 
-        {isReady && !latestAssessment.accepted_at && (
+        {isReady && !assessment.accepted_at && (
           <button
             type="button"
             disabled={acceptingPromotion}
-            onClick={() => onAcceptPromotion(latestAssessment)}
+            onClick={() => onAcceptPromotion(assessment)}
             className="mt-5 rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {acceptingPromotion ? "Recording promotion..." : `Accept Belt Promotion`}
           </button>
         )}
-        {latestAssessment.accepted_at && (
+        {assessment.accepted_at && (
           <p className="mt-5 rounded-lg border border-green-200 bg-green-50 p-4 text-sm font-semibold text-green-700">
-            Promotion accepted on {formatDateTime(latestAssessment.accepted_at)}.
+            Promotion accepted on {formatDateTime(assessment.accepted_at)}.
           </p>
         )}
       </div>
 
-      <AssessmentListSection title="Strengths" items={latestAssessment.strengths} />
-      <AssessmentListSection title="Growth Edges" items={latestAssessment.growth_edges} />
-      <AssessmentScores scores={latestAssessment.dimension_scores} />
-      <AssessmentFeedback title="Domain Feedback" feedback={latestAssessment.domain_feedback} />
-      <AssessmentFeedback title="Subdomain Feedback" feedback={latestAssessment.subdomain_feedback} />
-      <AssessmentListSection title="Required Next Actions" items={latestAssessment.required_next_actions} />
+      <LeadershipProfileSection profile={assessment.leadership_profile} />
+      <WheelDomainSummary title="Strengths By Domain" feedback={assessment.wheel_feedback} mode="strengths" />
+      <WheelDomainSummary title="Growth Edges By Domain" feedback={assessment.wheel_feedback} mode="growth" />
+      <AssessmentScores scores={assessment.dimension_scores} />
+      <WheelFeedbackSection feedback={assessment.wheel_feedback} />
+      <PriorityNextActions actions={assessment.priority_next_actions || assessment.required_next_actions} />
 
-      {latestAssessment.final_coaching_note && (
+      {coachingNote && (
         <div className="rounded-lg border border-[#ded7c8] bg-[#fbfaf7] p-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#7c4a2d]">Alfred's Coaching Note</p>
-          <p className="mt-3 text-sm leading-6 text-slate-700">{latestAssessment.final_coaching_note}</p>
+          <p className="mt-3 text-sm leading-6 text-slate-700">{coachingNote}</p>
         </div>
       )}
 
@@ -1465,6 +1494,149 @@ function BeltAssessmentTab({ readinessStatus, latestAssessment, assessmentHistor
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function LeadershipProfileSection({ profile }) {
+  if (!profile) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Leadership Profile</p>
+      <h3 className="mt-2 text-xl font-semibold text-slate-950">{profile.headline || "Emerging Leadership Profile"}</h3>
+      {profile.description && <p className="mt-3 text-sm leading-6 text-slate-700">{profile.description}</p>}
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <AssessmentListBlock title="Likely Strengths" items={profile.likely_strengths} />
+        <AssessmentListBlock title="Likely Risks" items={profile.likely_risks} />
+      </div>
+    </div>
+  );
+}
+
+function AssessmentListBlock({ title, items }) {
+  if (!items?.length) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <p className="text-sm font-semibold text-slate-900">{title}</p>
+      <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-600">
+        {items.map((item, index) => (
+          <li key={`${title}-${index}`}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function WheelDomainSummary({ title, feedback, mode }) {
+  if (!feedback || Object.keys(feedback).length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{title}</p>
+      <div className="mt-4 grid gap-3 lg:grid-cols-5">
+        {Object.entries(feedback).map(([domainName, domain]) => {
+          const subdomains = domain?.subdomains || {};
+          const scored = Object.entries(subdomains).map(([name, value]) => ({
+            name,
+            score: Number(value?.score) || 0,
+            feedback: value || {},
+          }));
+          const selected = scored.sort((a, b) => mode === "strengths" ? b.score - a.score : a.score - b.score)[0];
+          const items = mode === "strengths" ? domain?.strengths : domain?.growth_edges;
+          const detail = selected?.feedback || {};
+
+          return (
+            <article key={domainName} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <h3 className="text-sm font-semibold text-slate-950">{domainName}</h3>
+              {selected && (
+                <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {mode === "strengths" ? "Strongest" : "Weakest"}: {selected.name}
+                </p>
+              )}
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {mode === "strengths"
+                  ? detail.evidence_observed || items?.[0] || domain?.overall_assessment
+                  : detail.missing_evidence || detail.next_actions_in_alfred?.[0] || items?.[0]}
+              </p>
+            </article>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function WheelFeedbackSection({ feedback }) {
+  if (!feedback || Object.keys(feedback).length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Leadership Wheel Feedback</p>
+      <div className="mt-4 space-y-3">
+        {Object.entries(feedback).map(([domainName, domain]) => (
+          <details key={domainName} className="rounded-lg border border-slate-200 bg-slate-50 p-4" open>
+            <summary className="cursor-pointer text-base font-semibold text-slate-950">{domainName}</summary>
+            {domain?.overall_assessment && (
+              <p className="mt-3 text-sm leading-6 text-slate-700">{domain.overall_assessment}</p>
+            )}
+            <div className="mt-4 grid gap-3 lg:grid-cols-3">
+              {Object.entries(domain?.subdomains || {}).map(([subdomainName, subdomain]) => (
+                <article key={subdomainName} className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <h4 className="text-sm font-semibold text-slate-950">{subdomainName}</h4>
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">
+                      {subdomain?.score ?? "--"}/5
+                    </span>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-slate-700">{subdomain?.assessment}</p>
+                  <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Evidence Observed</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">{subdomain?.evidence_observed}</p>
+                  <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Missing Evidence</p>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">{subdomain?.missing_evidence}</p>
+                  {subdomain?.next_actions_in_alfred?.length > 0 && (
+                    <>
+                      <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Next Actions In Alfred</p>
+                      <ul className="mt-1 space-y-1 text-sm leading-6 text-slate-600">
+                        {subdomain.next_actions_in_alfred.map((action, index) => (
+                          <li key={`${subdomainName}-action-${index}`}>{action}</li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </article>
+              ))}
+            </div>
+          </details>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PriorityNextActions({ actions }) {
+  if (!actions?.length) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Priority Next Actions</p>
+      <div className="mt-4 space-y-3">
+        {actions.map((item, index) => {
+          const action = typeof item === "string" ? { action: item } : item;
+          return (
+            <article key={`priority-action-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              {(action.domain || action.subdomain) && (
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {[action.domain, action.subdomain].filter(Boolean).join(" / ")}
+                </p>
+              )}
+              <p className="mt-2 text-sm font-semibold text-slate-950">{action.action}</p>
+              {action.why_it_matters && <p className="mt-2 text-sm leading-6 text-slate-600">{action.why_it_matters}</p>}
+            </article>
+          );
+        })}
+      </div>
     </div>
   );
 }
