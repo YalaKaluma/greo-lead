@@ -8,4 +8,5 @@ ALTER TABLE belt_assessments
     ADD COLUMN IF NOT EXISTS strongest_areas JSONB,
     ADD COLUMN IF NOT EXISTS priority_next_actions JSONB,
     ADD COLUMN IF NOT EXISTS developmental_dimension_scores JSONB,
+    ADD COLUMN IF NOT EXISTS journey_depth_scores JSONB,
     ADD COLUMN IF NOT EXISTS alfred_coaching_note TEXT;

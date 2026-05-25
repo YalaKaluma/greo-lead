@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS belt_assessments (
     strongest_areas JSONB,
     priority_next_actions JSONB,
     developmental_dimension_scores JSONB,
+    journey_depth_scores JSONB,
     final_coaching_note TEXT,
     alfred_coaching_note TEXT,
     evidence_snapshot JSONB,

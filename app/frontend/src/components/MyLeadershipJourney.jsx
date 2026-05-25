@@ -1340,8 +1340,8 @@ function BeltAssessmentConfirmModal({ readinessStatus, submitting, error, onClos
 
         <div className="space-y-4 px-6 py-5">
           <p className="text-sm leading-6 text-slate-700">
-            Alfred will review your completed {currentBelt.name} curriculum evidence and assess whether it shows
-            enough maturity, reflection depth, and behavioral application for {targetBelt.name}.
+            Alfred will review your completed {currentBelt.name} Journey work and assess whether your answers show
+            enough reflection depth, honesty, specificity, and actionability for {targetBelt.name}.
           </p>
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
             {readinessStatus?.completed_trials || 0} of {readinessStatus?.required_trials || 0} required items complete
@@ -1432,15 +1432,15 @@ function normalizeAssessmentWheel(assessment) {
       subdomains[topic.label] = {
         score: Number(item.score) || 1,
         status: item.status || "needs evidence",
-        current_readiness: item.current_readiness || item.assessment || `Limited evidence observed in the current belt work for ${topic.label}.`,
-        why: item.why || item.evidence_observed || item.missing_evidence || `This part of the wheel needs clearer belt-specific examples before it can strongly support promotion.`,
+        current_readiness: item.current_readiness || item.assessment || `Your current belt work in ${topic.label} needs deeper, more specific reflection before Alfred can coach from it with confidence.`,
+        why: item.why || item.evidence_observed || item.missing_evidence || `This part of the wheel needs clearer examples, more honest detail, and more actionable reflection before it can support promotion.`,
         improve: item.improve || item.next_actions_in_alfred || [WHY_IT_MATTERS[topic.label] || `Add one concrete reflection for ${topic.label}.`],
       };
     });
     const domainScores = Object.values(subdomains).map((item) => Number(item.score) || 1);
     wheel[dimension.name] = {
       domain_score: Number(domain.domain_score) || Math.round(domainScores.reduce((sum, score) => sum + score, 0) / domainScores.length),
-      summary: domain.summary || domain.overall_assessment || `Your ${dimension.name} readiness is based on the current belt work.`,
+      summary: domain.summary || domain.overall_assessment || `Your ${dimension.name} score reflects the depth, specificity, and actionability of the current belt work.`,
       subdomains,
     };
   });
@@ -1467,7 +1467,7 @@ function BeltAssessmentTab({ readinessStatus, latestAssessment, assessmentHistor
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Belt Assessment</p>
         <h2 className="mt-2 text-2xl font-semibold text-slate-950">No assessment yet</h2>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-          Once all required belt work is complete, Alfred can review your current belt evidence and give a developmental readiness assessment.
+          Once all required belt work is complete, Alfred can review the depth, honesty, and actionability of your Journey work.
         </p>
         {readinessStatus?.is_eligible_to_submit ? (
           <button
@@ -1515,6 +1515,7 @@ function BeltAssessmentTab({ readinessStatus, latestAssessment, assessmentHistor
             <div className="bg-white p-4">
               <p className="text-xs uppercase tracking-wide text-slate-500">Target Belt</p>
               <p className="mt-1 font-semibold" style={{ color: targetBelt.color }}>{targetBelt.name}</p>
+              <p className="mt-2 text-xs uppercase tracking-wide text-slate-500">Journey Depth</p>
               <p className="mt-2 text-3xl font-semibold text-slate-950">{assessment.readiness_score ?? "--"}</p>
             </div>
           </div>
@@ -1555,7 +1556,7 @@ function BeltAssessmentTab({ readinessStatus, latestAssessment, assessmentHistor
         </div>
       )}
 
-      <DevelopmentalScoringAccordion scores={assessment.developmental_dimension_scores || assessment.dimension_scores} />
+      <DevelopmentalScoringAccordion scores={assessment.journey_depth_scores || assessment.developmental_dimension_scores || assessment.dimension_scores} />
 
       {assessmentHistory.length > 1 && (
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -1605,7 +1606,7 @@ function BeltHeatmapAssessment({ wheelScores, selected, onSelect }) {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Leadership Wheel Heatmap</p>
-          <h3 className="mt-2 text-xl font-semibold text-slate-950">Where you are ready, and where you are not yet ready</h3>
+          <h3 className="mt-2 text-xl font-semibold text-slate-950">Where your Journey work is deep, and where it needs more depth</h3>
         </div>
         <div className="flex flex-wrap gap-2 text-xs font-semibold text-slate-700">
           {[1, 2, 3, 4, 5].map((score) => (
@@ -1747,7 +1748,7 @@ function SubdomainDetailPanel({ selection }) {
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Current Readiness</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Journey Work Depth</p>
           <p className="mt-2 text-sm leading-6 text-slate-700">{feedback.current_readiness}</p>
         </div>
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -1770,7 +1771,7 @@ function PromotionLimitersPanel({ items }) {
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">What Is Currently Limiting Promotion</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">What Needs Deeper Work Before Promotion</p>
       <div className="mt-4 grid gap-3 lg:grid-cols-3">
         {items.slice(0, 3).map((item, index) => (
           <article key={`limiter-${index}`} className="rounded-lg border border-orange-200 bg-orange-50 p-4">
@@ -1795,7 +1796,7 @@ function StrongestAreasPanel({ items }) {
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Strongest Areas</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Deepest Reflection Areas</p>
       <div className="mt-4 grid gap-3 lg:grid-cols-3">
         {items.slice(0, 3).map((item, index) => (
           <article key={`strongest-${index}`} className="rounded-lg border border-green-200 bg-green-50 p-4">
@@ -1961,7 +1962,7 @@ function AssessmentScores({ scores }) {
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Developmental Dimensions</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Journey Depth Dimensions</p>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         {Object.entries(scores).map(([key, value]) => (
           <div key={key} className="rounded-lg border border-slate-200 p-3">
@@ -1986,7 +1987,7 @@ function DevelopmentalScoringAccordion({ scores }) {
     <details className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <summary className="cursor-pointer text-sm font-semibold text-slate-950">How Alfred graded this</summary>
       <p className="mt-2 text-sm leading-6 text-slate-600">
-        These developmental dimensions inform the score, but the main feedback is shown through the Leadership Wheel.
+        These dimensions grade the depth and usefulness of your Journey work, not your worth or capability as a leader.
       </p>
       <div className="mt-4">
         <AssessmentScores scores={scores} />
@@ -2467,7 +2468,7 @@ function TopicEvidencePanel({ dimension, activeTopic, setActiveTopic, items, pro
         {items.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5 text-sm leading-6 text-slate-600">
             No {activeTopic.toLowerCase()} evidence has been captured yet. Alfred can still guide the trial,
-            but maturity scoring becomes more trustworthy as real usage accumulates.
+            but Journey feedback becomes more useful as your examples get more concrete.
           </div>
         ) : (
           items.slice(0, 5).map((item) => (

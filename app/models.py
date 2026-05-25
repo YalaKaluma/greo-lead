@@ -475,6 +475,7 @@ class BeltAssessment(Base):
     strongest_areas = Column(JSONB, nullable=True)
     priority_next_actions = Column(JSONB, nullable=True)
     developmental_dimension_scores = Column(JSONB, nullable=True)
+    journey_depth_scores = Column(JSONB, nullable=True)
     final_coaching_note = Column(Text, nullable=True)
     alfred_coaching_note = Column(Text, nullable=True)
     evidence_snapshot = Column(JSONB, nullable=True)
