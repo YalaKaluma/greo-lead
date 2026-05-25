@@ -64,7 +64,7 @@ dimensions:
           completion_hint: Practice translating values into the direction you actually pursue.
         behavioral:
           title: Behavioral Evidence
-          prompt: Journal on how values, strengths, and vision affect energy and fulfillment.
+          prompt: Journal on 3 different occasions how values, strengths, and vision affect energy and fulfillment on a given day.
           signals: [vision_completed, values_strengths_energy_journals, fulfillment_reflections]
           completion_hint: Alfred looks for repeated reflection on how values and strengths shape fulfillment.
       green:
@@ -150,7 +150,7 @@ dimensions:
           completion_hint: Invite honest feedback and look for what you did not already know.
         behavioral:
           title: Behavioral Evidence
-          prompt: Enter at least 5 team members into Alfred.
+          prompt: Enter at least 5 team members (direct report, peers or supervisors) into Alfred and be specific about their strength, weakness and aspirations.
           signals: [five_team_members_entered]
           completion_hint: Alfred looks for your leadership context to be mapped through real people.
       green:
@@ -236,7 +236,7 @@ dimensions:
           completion_hint: Practice acting from strategic priority before reactive demand.
         behavioral:
           title: Behavioral Evidence
-          prompt: Tasks consistently entered and maintained in Alfred.
+          prompt: Start using Alfred's todolist feature consistently. Aim to log 20 Tasks in the next couple of weeks.
           signals: [tasks_consistently_entered, tasks_maintained]
           completion_hint: Alfred looks for task capture and maintenance becoming consistent.
       green:
@@ -318,11 +318,11 @@ dimensions:
           completion_hint: Identify which recurring conditions raise or drain your energy.
         real_world:
           title: Real-World Trial
-          prompt: Intentionally redesign one part of your weekly routine to improve recovery, focus, or sustainability. Follow the new routine consistently for one week and reflect on the impact.
+          prompt: Journal on at least 3 seperate occasions about your energy level and what drives it.
           completion_hint: Change one weekly routine and observe its effect on energy and focus.
         behavioral:
           title: Behavioral Evidence
-          prompt: Identify the habits needed to maintain high energy and complete 3 journal entries where you call out your energy level explicitly.
+          prompt: In the light of what you learned in the other exercises, define 3-5 habits in the "MyHabits" section that will help you maintain high energy levels. 
           signals: [high_energy_habits_identified, three_energy_level_journals]
           completion_hint: Alfred looks for explicit energy awareness in your habits and journal reflections.
       green:
@@ -408,7 +408,7 @@ dimensions:
           completion_hint: Turn one growth area into a two-week behavioral experiment.
         behavioral:
           title: Behavioral Evidence
-          prompt: Complete 3 journal reflections on behavioral change and self-awareness, including how scars and failures impact your behavior.
+          prompt: Complete 3 journal reflections on how scars and past failures impact your behavior.
           signals: [three_behavior_change_journals, self_awareness_reflections, scars_failures_behavior_reflections]
           completion_hint: Alfred looks for repeated reflection on behavior change, self-awareness, scars, and failures.
       green:
