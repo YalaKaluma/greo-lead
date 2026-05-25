@@ -639,6 +639,23 @@ def flatten_wheel_scores(wheel_scores: dict) -> list[dict[str, Any]]:
     return items
 
 
+def compute_journey_depth_score(wheel_scores: dict) -> int:
+    scores = [item["score"] for item in flatten_wheel_scores(wheel_scores)]
+    if not scores:
+        return 0
+    return round((sum(scores) / len(scores)) * 20)
+
+
+def recommendation_from_score(score: int) -> str:
+    if score >= 85:
+        return "ready_for_promotion"
+    if score >= 70:
+        return "almost_ready"
+    if score >= 50:
+        return "not_ready"
+    return "needs_more_evidence"
+
+
 def derive_promotion_limiters(wheel_scores: dict, result: dict) -> list[dict[str, Any]]:
     raw_limiters = result.get("promotion_limiters")
     if isinstance(raw_limiters, list) and raw_limiters:
@@ -714,16 +731,64 @@ def wheel_scores_to_legacy_feedback(wheel_scores: dict) -> dict:
     return legacy
 
 
+def is_placeholder_text(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    stripped = value.strip().lower()
+    return stripped.startswith("write ") or "based only on the submitted journey work" in stripped
+
+
+def clean_profile(profile: dict) -> dict:
+    if not isinstance(profile, dict):
+        profile = {}
+    cleaned = {
+        "headline": profile.get("headline"),
+        "description": profile.get("description"),
+        "likely_strengths": profile.get("likely_strengths"),
+        "likely_risks": profile.get("likely_risks"),
+        "current_growth_edge": profile.get("current_growth_edge"),
+    }
+    if is_placeholder_text(cleaned["headline"]):
+        cleaned["headline"] = None
+    if is_placeholder_text(cleaned["description"]):
+        cleaned["description"] = None
+    if is_placeholder_text(cleaned["current_growth_edge"]):
+        cleaned["current_growth_edge"] = None
+    cleaned["likely_strengths"] = [
+        item for item in (cleaned["likely_strengths"] or [])
+        if not is_placeholder_text(item)
+    ]
+    cleaned["likely_risks"] = [
+        item for item in (cleaned["likely_risks"] or [])
+        if not is_placeholder_text(item)
+    ]
+    return cleaned
+
+
 def normalize_assessment_result(result: dict, evidence: dict, target_belt: str) -> dict:
     result = direct_address_text(result or {})
     wheel_scores = normalize_wheel_scores(result, evidence)
-    profile = result.get("leadership_profile") or {
-        "headline": "The Reflective Builder",
-        "description": "Your Journey work suggests you are building self-awareness through the current belt. Your next edge is turning insight into clearer examples and more actionable reflection.",
-        "likely_strengths": ["Willingness to reflect", "Interest in intentional growth"],
-        "likely_risks": ["Insight that stays abstract", "Uneven reflection depth across the wheel"],
-        "current_growth_edge": "Turning reflection into specific, coachable next steps.",
+    journey_depth_score = compute_journey_depth_score(wheel_scores)
+    recommendation = recommendation_from_score(journey_depth_score)
+    profile = clean_profile(result.get("leadership_profile") or {})
+    profile = {
+        **{
+            "headline": "The Reflective Builder",
+            "description": "Your Journey work suggests you are building self-awareness through the current belt. Your next edge is turning insight into clearer examples and more actionable reflection.",
+            "likely_strengths": ["Willingness to reflect", "Interest in intentional growth"],
+            "likely_risks": ["Insight that stays abstract", "Uneven reflection depth across the wheel"],
+            "current_growth_edge": "Turning reflection into specific, coachable next steps.",
+        },
+        **{key: value for key, value in profile.items() if value},
     }
+    direct_summary = result.get("direct_summary") or result.get("summary") or result.get("assessment_summary") or ""
+    if is_placeholder_text(direct_summary):
+        direct_summary = ""
+    if not direct_summary:
+        direct_summary = (
+            "Alfred reviewed the depth, honesty, specificity, and actionability of your current belt work. "
+            "Use the heatmap to see which sections are already coachable and which need deeper reflection."
+        )
     limiters = derive_promotion_limiters(wheel_scores, result)
     strongest = derive_strongest_areas(wheel_scores, result)
     priority_actions = derive_priority_actions(wheel_scores, result)
@@ -742,8 +807,10 @@ def normalize_assessment_result(result: dict, evidence: dict, target_belt: str) 
 
     return {
         **result,
+        "recommendation": recommendation,
+        "readiness_score": journey_depth_score,
         "target_belt": result.get("target_belt") or display_belt_name(target_belt),
-        "direct_summary": result.get("direct_summary") or result.get("summary") or result.get("assessment_summary") or "",
+        "direct_summary": direct_summary,
         "leadership_profile": direct_address_text(profile),
         "wheel_scores": wheel_scores,
         "wheel_feedback": result.get("wheel_feedback") or wheel_scores_to_legacy_feedback(wheel_scores),

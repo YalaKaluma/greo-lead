@@ -99,60 +99,64 @@ user_template: |
   - not_ready
   - needs_more_evidence
 
+  The backend will recompute readiness_score from the fifteen wheel_scores.
+  Still provide your best estimate, but never copy numbers or wording from this schema.
+  Every sentence must be specific to the submitted Journey work.
+
   Return JSON with this exact shape:
   {{
     "recommendation": "almost_ready",
-    "readiness_score": 73,
+    "readiness_score": 0,
     "current_belt": "white",
     "target_belt": "yellow",
-    "direct_summary": "You have completed the required belt work and show strong self-awareness in several areas, but some sections need deeper, more specific reflection before promotion.",
+    "direct_summary": "Write an evidence-specific summary of the depth, honesty, specificity, and actionability of the submitted Journey work.",
     "leadership_profile": {{
-      "headline": "The Reflective Strategist",
-      "description": "Your Journey work suggests you are thoughtful and introspective, with a natural pull toward clarity and meaning. Your current growth edge is turning insight into more concrete examples, patterns, and next steps.",
+      "headline": "Write a personalized profile headline based only on the submitted Journey work",
+      "description": "Write a personalized description of the type of leader the Journey reflections suggest, framed as developmental insight rather than judgment.",
       "likely_strengths": [
-        "Self-awareness",
-        "Ownership",
-        "Long-term thinking"
+        "Write one evidence-specific likely strength",
+        "Write one evidence-specific likely strength",
+        "Write one evidence-specific likely strength"
       ],
       "likely_risks": [
-        "Overthinking",
-        "Staying abstract when the answer needs a concrete example",
-        "Naming growth areas without translating them into next actions"
+        "Write one evidence-specific risk in the Journey work",
+        "Write one evidence-specific risk in the Journey work",
+        "Write one evidence-specific risk in the Journey work"
       ],
-      "current_growth_edge": "Turning insight into specific, actionable reflection."
+      "current_growth_edge": "Write the most important growth edge in the Journey work."
     }},
     "wheel_scores": {{
       "Vision": {{
-        "domain_score": 4,
-        "summary": "Your Vision work shows meaningful reflection, especially around values and self-understanding.",
+        "domain_score": 0,
+        "summary": "Write a specific summary of the depth of Journey work in this domain.",
         "subdomains": {{
           "Values": {{
-            "score": 4,
-            "status": "deeply explored",
-            "current_readiness": "Your reflection shows clear awareness of the values that guide your decisions.",
-            "why": "Your answers connect values to real choices and show honest introspection.",
+            "score": 0,
+            "status": "write a score label",
+            "current_readiness": "Write one sentence about how deeply this subdomain was explored.",
+            "why": "Explain specifically why this score was assigned based on the submitted answer.",
             "improve": [
-              "Add one example of a recent moment where your values were tested.",
-              "Describe what you chose and what it cost you."
+              "Write one concrete next action inside Alfred.",
+              "Write one concrete next action inside Alfred."
             ]
           }},
           "Strengths": {{
-            "score": 4,
-            "status": "deeply explored",
-            "current_readiness": "Your reflection shows thoughtful awareness of your strengths and how they shape your leadership.",
-            "why": "Your answers identify strengths with enough specificity to create useful coaching insight.",
+            "score": 0,
+            "status": "write a score label",
+            "current_readiness": "Write one sentence about how deeply this subdomain was explored.",
+            "why": "Explain specifically why this score was assigned based on the submitted answer.",
             "improve": [
-              "Add one example of a strength becoming a weakness under pressure."
+              "Write one concrete next action inside Alfred."
             ]
           }},
           "Vision": {{
-            "score": 3,
-            "status": "meaningful foundation",
-            "current_readiness": "Your long-term direction is emerging, but the reflection needs clearer translation into action.",
-            "why": "Your answers show aspiration, but need more concrete milestones and examples to become fully coachable.",
+            "score": 0,
+            "status": "write a score label",
+            "current_readiness": "Write one sentence about how deeply this subdomain was explored.",
+            "why": "Explain specifically why this score was assigned based on the submitted answer.",
             "improve": [
-              "Update your Development Plan with 3 concrete milestones.",
-              "Link one weekly action to your long-term vision."
+              "Write one concrete next action inside Alfred.",
+              "Write one concrete next action inside Alfred."
             ]
           }}
         }}
@@ -162,25 +166,25 @@ user_template: |
       {{
         "domain": "Prioritize & Execute",
         "subdomain": "Execution System",
-        "score": 2,
-        "why_it_limits_promotion": "This section does not yet provide enough specific reflection about where your execution system breaks down and what pattern you notice.",
-        "what_to_do_next": "Go back to Execution System and add one concrete example from a difficult week: what broke down, what pattern you noticed, and what support structure would help."
+        "score": 0,
+        "why_it_limits_promotion": "Write a specific reason this section needs deeper Journey work before promotion.",
+        "what_to_do_next": "Write a concrete next action inside Alfred."
       }}
     ],
     "strongest_areas": [
       {{
         "domain": "Vision",
         "subdomain": "Values",
-        "score": 4,
-        "why_it_is_strong": "Your reflection connects choices to principles and gives Alfred useful material to coach from."
+        "score": 0,
+        "why_it_is_strong": "Write why this is one of the deepest, most coachable areas of the submitted Journey work."
       }}
     ],
     "priority_next_actions": [
       {{
         "domain": "Prioritize & Execute",
         "subdomain": "Execution System",
-        "action": "Revisit your Execution System answer and add one concrete example from the past week.",
-        "why_it_matters": "Specific examples make your reflection more coachable and help Alfred identify the pattern underneath the issue."
+        "action": "Write a concrete action the user can take inside Alfred.",
+        "why_it_matters": "Write why this will deepen the Journey work."
       }}
     ],
     "developmental_dimension_scores": {{
@@ -201,7 +205,7 @@ user_template: |
       "actionability": 3,
       "self_awareness": 4
     }},
-    "alfred_coaching_note": "To strengthen your submission, go back to the lowest-scoring sections and add one concrete example, one pattern you notice, and one next action Alfred can help you practice."
+    "alfred_coaching_note": "Write a short, specific coaching note explaining how to deepen the Journey work inside Alfred."
   }}
 
   The wheel_scores object must include all five domains and all fifteen subdomains.
