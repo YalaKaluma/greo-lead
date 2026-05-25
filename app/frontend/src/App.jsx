@@ -218,7 +218,7 @@ function App() {
           <MyTeam apiUrl={API_URL} userNumber={userNumber} />
         )}
         {currentPage === 'my-journey' && (
-          <MyLeadershipJourney apiUrl={API_URL} userNumber={userNumber} />
+          <MyLeadershipJourney apiUrl={API_URL} userNumber={userNumber} onNavigate={handleNavigate} />
         )}
         {currentPage === 'my-habits' && (
           <MyHabits apiUrl={API_URL} userNumber={userNumber} />
