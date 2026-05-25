@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import (
@@ -20,17 +21,24 @@ from app.models import (
     JourneyCoachingMoment,
     JourneyTeamComposition,
     JourneyBeltTrial,
+    BeltAssessment,
     RelationshipReview,
     VisionRoadmapWave,
     WaveGoal,
     Task,
     Habit,
+    HabitCompletion,
+    JournalEntry,
+    MessageFeedback,
+    LeadershipCoachingSession,
+    User,
 )
 from pydantic import BaseModel
 from datetime import datetime, date
 from typing import Optional, Any
 from pathlib import Path
 import yaml
+import json
 from app.services.people_review_service import PeopleReviewService
 from app.models import GoalReviewSession
 
@@ -57,6 +65,51 @@ LEGACY_LEVEL_ALIASES = {
 
 ROADMAP_STATUSES = {"not_started", "active", "completed"}
 WAVE_GOAL_STATUSES = {"done", "ongoing", "at_risk", "blocked"}
+BELT_IDS = ["white", "yellow", "green", "brown", "black"]
+ASSESSMENT_STATUS_VALUES = {"ready_for_promotion", "almost_ready", "not_ready", "needs_more_evidence", "submitted"}
+
+JOURNEY_DIMENSIONS = {
+    "vision": {
+        "name": "Vision",
+        "topics": [
+            {"id": "values", "label": "Values", "endpoint": "values", "primary_field": "value_text", "requires_title": True},
+            {"id": "strengths", "label": "Strengths", "endpoint": "strengths", "primary_field": "strength", "requires_title": True},
+            {"id": "vision", "label": "Vision", "endpoint": "goals", "primary_field": "goal_text", "filter": "vision"},
+        ],
+    },
+    "people": {
+        "name": "People",
+        "topics": [
+            {"id": "team_composition", "label": "Team Composition", "endpoint": "people", "primary_field": "name"},
+            {"id": "inspiration", "label": "Inspire", "endpoint": "inspiration", "primary_field": "inspiration_text"},
+            {"id": "coaching_moments", "label": "Coach & Delegate", "endpoint": "coaching-moments", "primary_field": "moment_text"},
+        ],
+    },
+    "execute": {
+        "name": "Prioritize & Execute",
+        "topics": [
+            {"id": "prioritization", "label": "Prioritization", "endpoint": "execution-systems", "primary_field": "system_text", "filter": "prioritization"},
+            {"id": "execution_system", "label": "Execution System", "endpoint": "execution-systems", "primary_field": "system_text"},
+            {"id": "procrastination", "label": "Procrastination", "endpoint": "procrastination-patterns", "primary_field": "pattern_text"},
+        ],
+    },
+    "energy": {
+        "name": "Time & Energy",
+        "topics": [
+            {"id": "energy_sources", "label": "Energy Sources", "endpoint": "energy-sources", "primary_field": "source_text", "requires_title": True},
+            {"id": "energy_drains", "label": "Energy Drains", "endpoint": "energy-drains", "primary_field": "drain_text", "requires_title": True},
+            {"id": "recovery", "label": "Recovery", "endpoint": "recovery-methods", "primary_field": "method_text"},
+        ],
+    },
+    "learning": {
+        "name": "Learning & Development",
+        "topics": [
+            {"id": "failures", "label": "Failures & Scars", "endpoint": "failures", "primary_field": "failure_text", "requires_title": True},
+            {"id": "development_opportunities", "label": "Development Opportunities", "endpoint": "development-areas", "primary_field": "skill", "requires_title": True},
+            {"id": "development_plan", "label": "Development Plan", "endpoint": "opportunities", "primary_field": "opportunity_text"},
+        ],
+    },
+}
 
 
 def normalize_goal_level(value: Optional[str], default: str = "pillar") -> str:
@@ -157,6 +210,317 @@ def load_journey_subdomain_prompts_config():
         return {"version": 0, "subdomains": {}}
 
 
+def load_belt_assessment_prompt():
+    config_path = Path(__file__).parent.parent / "prompts" / "journey" / "belt_assessment.yaml"
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        return {
+            "system": "You are Alfred. Return valid JSON assessing belt readiness.",
+            "user_template": "Assess readiness from this evidence: {evidence_json}",
+        }
+
+
+def get_next_belt_id(current_belt: str) -> str:
+    current_index = max(0, BELT_IDS.index(current_belt)) if current_belt in BELT_IDS else 0
+    return BELT_IDS[min(current_index + 1, len(BELT_IDS) - 1)]
+
+
+def normalize_trial_status(status: Optional[str]) -> str:
+    return (status or "not_started").strip().lower()
+
+
+def is_requirement_complete(status: Optional[str]) -> bool:
+    return normalize_trial_status(status) in {"submitted", "passed"}
+
+
+def active_trial_types_for_dimension(config: dict, dimension_id: str, belt_id: str) -> list[str]:
+    requirements = config.get("dimensions", {}).get(dimension_id, {}).get("belts", {}).get(belt_id, {})
+    trial_types = []
+    for trial_type in ["reflection", "real_world", "behavioral"]:
+        requirement = requirements.get(trial_type)
+        if requirement is None:
+            continue
+        if requirement.get("active") is False:
+            continue
+        trial_types.append(trial_type)
+    return trial_types
+
+
+def get_topic_items_for_evidence(db: Session, user_number: str, topic: dict) -> list[Any]:
+    endpoint = topic.get("endpoint")
+
+    if endpoint == "values":
+        return db.query(JourneyValue).filter(JourneyValue.user_number == user_number).all()
+    if endpoint == "strengths":
+        return db.query(JourneyStrength).filter(JourneyStrength.user_number == user_number).all()
+    if endpoint == "goals":
+        goals = db.query(JourneyGoal).filter(JourneyGoal.user_number == user_number).all()
+        if topic.get("filter") == "vision":
+            return [goal for goal in goals if normalize_goal_level(goal.time_horizon) == "vision"]
+        return goals
+    if endpoint == "people":
+        return db.query(JourneyPerson).filter(JourneyPerson.user_number == user_number).all()
+    if endpoint == "inspiration":
+        return db.query(JourneyInspiration).filter(JourneyInspiration.user_number == user_number).all()
+    if endpoint == "coaching-moments":
+        return db.query(JourneyCoachingMoment).filter(JourneyCoachingMoment.user_number == user_number).all()
+    if endpoint == "execution-systems":
+        systems = db.query(JourneyExecutionSystem).filter(JourneyExecutionSystem.user_number == user_number).all()
+        if topic.get("filter") == "prioritization":
+            return [system for system in systems if (system.category or "").strip().lower() == "prioritization"]
+        return systems
+    if endpoint == "procrastination-patterns":
+        return db.query(JourneyProcrastinationPattern).filter(JourneyProcrastinationPattern.user_number == user_number).all()
+    if endpoint == "energy-sources":
+        return db.query(JourneyEnergySource).filter(JourneyEnergySource.user_number == user_number).all()
+    if endpoint == "energy-drains":
+        return db.query(JourneyEnergyDrain).filter(JourneyEnergyDrain.user_number == user_number).all()
+    if endpoint == "recovery-methods":
+        return db.query(JourneyRecoveryMethod).filter(JourneyRecoveryMethod.user_number == user_number).all()
+    if endpoint == "failures":
+        return db.query(JourneyFailure).filter(JourneyFailure.user_number == user_number).all()
+    if endpoint == "development-areas":
+        return db.query(JourneyDevelopmentArea).filter(JourneyDevelopmentArea.user_number == user_number).all()
+    if endpoint == "opportunities":
+        return db.query(JourneyOpportunity).filter(JourneyOpportunity.user_number == user_number).all()
+
+    return []
+
+
+def has_text(value: Any) -> bool:
+    return bool(str(value or "").strip())
+
+
+def topic_has_filled_evidence(db: Session, user_number: str, topic: dict) -> bool:
+    items = get_topic_items_for_evidence(db, user_number, topic)
+    primary_field = topic.get("primary_field")
+
+    for item in items:
+        if topic.get("id") == "team_composition":
+            if has_text(getattr(item, "name", None)) and (
+                has_text(getattr(item, "relation", None)) or has_text(getattr(item, "context", None))
+            ):
+                return True
+            continue
+
+        has_primary = has_text(getattr(item, primary_field, None)) if primary_field else False
+        has_title = has_text(getattr(item, "title", None)) if topic.get("requires_title") else True
+        if has_primary and has_title:
+            return True
+
+    return False
+
+
+def get_behavioral_trial_status(db: Session, user_number: str, dimension_id: str, belt_id: str) -> str:
+    stored = db.query(JourneyBeltTrial).filter(
+        JourneyBeltTrial.user_number == user_number,
+        JourneyBeltTrial.dimension_id == dimension_id,
+        JourneyBeltTrial.target_belt == belt_id,
+        JourneyBeltTrial.trial_type == "behavioral",
+    ).first()
+    if stored and stored.status:
+        return normalize_trial_status(stored.status)
+
+    if belt_id == "white":
+        dimension = JOURNEY_DIMENSIONS.get(dimension_id, {})
+        topics = dimension.get("topics", [])
+        if not topics:
+            return "not_started"
+        completed = sum(1 for topic in topics if topic_has_filled_evidence(db, user_number, topic))
+        if completed == len(topics):
+            return "submitted"
+        if completed > 0:
+            return "in_progress"
+
+    return "not_started"
+
+
+def get_belt_completion_for_dimension(db: Session, user_number: str, config: dict, dimension_id: str, belt_id: str) -> dict:
+    active_trial_types = active_trial_types_for_dimension(config, dimension_id, belt_id)
+    missing = []
+    completed = 0
+
+    for trial_type in active_trial_types:
+        requirement = config.get("dimensions", {}).get(dimension_id, {}).get("belts", {}).get(belt_id, {}).get(trial_type, {})
+        status = get_behavioral_trial_status(db, user_number, dimension_id, belt_id) if trial_type == "behavioral" else None
+        trial = None
+        if trial_type != "behavioral":
+            trial = db.query(JourneyBeltTrial).filter(
+                JourneyBeltTrial.user_number == user_number,
+                JourneyBeltTrial.dimension_id == dimension_id,
+                JourneyBeltTrial.target_belt == belt_id,
+                JourneyBeltTrial.trial_type == trial_type,
+            ).first()
+            status = normalize_trial_status(trial.status if trial else None)
+
+        if is_requirement_complete(status):
+            completed += 1
+        else:
+            missing.append({
+                "domain": JOURNEY_DIMENSIONS.get(dimension_id, {}).get("name", dimension_id.title()),
+                "dimension_id": dimension_id,
+                "trial_type": trial_type,
+                "trial_title": requirement.get("title") or trial_type.replace("_", " ").title(),
+                "status": status,
+            })
+
+    return {
+        "completed": completed,
+        "required": len(active_trial_types),
+        "missing": missing,
+        "is_complete": completed == len(active_trial_types),
+    }
+
+
+def get_current_belt_status(db: Session, user_number: str, config: dict) -> dict:
+    accepted_assessment = db.query(BeltAssessment).filter(
+        BeltAssessment.user_number == user_number,
+        BeltAssessment.accepted_at.isnot(None),
+    ).order_by(BeltAssessment.accepted_at.desc()).first()
+    current_belt = accepted_assessment.target_belt if accepted_assessment else "white"
+    target_belt = get_next_belt_id(current_belt)
+
+    if current_belt == "black":
+        return {
+            "current_belt": "black",
+            "target_belt": "black",
+            "completed_trials": 0,
+            "required_trials": 0,
+            "missing_trials": [],
+            "is_eligible_to_submit": False,
+        }
+
+    totals = {"completed": 0, "required": 0, "missing": []}
+    for dimension_id in JOURNEY_DIMENSIONS.keys():
+        progress = get_belt_completion_for_dimension(db, user_number, config, dimension_id, current_belt)
+        totals["completed"] += progress["completed"]
+        totals["required"] += progress["required"]
+        totals["missing"].extend(progress["missing"])
+
+    return {
+        "current_belt": current_belt,
+        "target_belt": target_belt,
+        "completed_trials": totals["completed"],
+        "required_trials": totals["required"],
+        "missing_trials": totals["missing"],
+        "is_eligible_to_submit": totals["required"] > 0 and totals["completed"] == totals["required"],
+    }
+
+
+def get_auto_progress_belt_status(db: Session, user_number: str, config: dict) -> dict:
+    for belt_id in BELT_IDS:
+        totals = {"completed": 0, "required": 0, "missing": []}
+        for dimension_id in JOURNEY_DIMENSIONS.keys():
+            progress = get_belt_completion_for_dimension(db, user_number, config, dimension_id, belt_id)
+            totals["completed"] += progress["completed"]
+            totals["required"] += progress["required"]
+            totals["missing"].extend(progress["missing"])
+        if totals["completed"] < totals["required"]:
+            return {
+                "current_belt": belt_id,
+                "target_belt": get_next_belt_id(belt_id),
+                "completed_trials": totals["completed"],
+                "required_trials": totals["required"],
+                "missing_trials": totals["missing"],
+                "is_eligible_to_submit": False,
+            }
+    return {
+        "current_belt": "black",
+        "target_belt": "black",
+        "completed_trials": 0,
+        "required_trials": 0,
+        "missing_trials": [],
+        "is_eligible_to_submit": False,
+    }
+
+
+def serialize_items(items: list[Any], limit: int = 20) -> list[dict[str, Any]]:
+    return jsonable_encoder(items[:limit])
+
+
+def gather_belt_assessment_evidence(db: Session, user_number: str, current_belt: str) -> dict:
+    user = db.query(User).filter(User.phone_number == user_number).first()
+    trials = db.query(JourneyBeltTrial).filter(
+        JourneyBeltTrial.user_number == user_number,
+        JourneyBeltTrial.target_belt == current_belt,
+    ).order_by(JourneyBeltTrial.updated_at.desc()).all()
+
+    subdomains = {}
+    for dimension_id, dimension in JOURNEY_DIMENSIONS.items():
+        subdomains[dimension["name"]] = {}
+        for topic in dimension["topics"]:
+            subdomains[dimension["name"]][topic["label"]] = serialize_items(
+                get_topic_items_for_evidence(db, user_number, topic),
+                limit=10,
+            )
+
+    journal_entries = []
+    if user:
+        journal_entries = db.query(JournalEntry).filter(JournalEntry.user_id == user.id).order_by(JournalEntry.created_at.desc()).limit(20).all()
+
+    goal_reviews = db.query(GoalReviewSession).filter(GoalReviewSession.user_number == user_number).order_by(GoalReviewSession.session_ended_at.desc()).limit(10).all()
+    coaching_sessions = db.query(LeadershipCoachingSession).filter(LeadershipCoachingSession.user_number == user_number).order_by(LeadershipCoachingSession.created_at.desc()).limit(10).all()
+    tasks = db.query(Task).filter(Task.user_number == user_number).order_by(Task.updated_at.desc()).limit(30).all()
+    habits = db.query(Habit).filter(Habit.user_number == user_number).order_by(Habit.updated_at.desc()).limit(20).all()
+    feedback = []
+    if user:
+        feedback = db.query(MessageFeedback).filter(MessageFeedback.user_id == user.id).order_by(MessageFeedback.created_at.desc()).limit(10).all()
+    previous_assessment = db.query(BeltAssessment).filter(BeltAssessment.user_number == user_number).order_by(BeltAssessment.created_at.desc()).first()
+
+    return {
+        "user_number": user_number,
+        "current_belt": current_belt,
+        "belt_trials": serialize_items(trials, limit=50),
+        "subdomain_evidence": subdomains,
+        "journal_entries": serialize_items(journal_entries),
+        "goal_review_sessions": serialize_items(goal_reviews),
+        "leadership_coaching_sessions": serialize_items(coaching_sessions),
+        "recent_tasks": serialize_items(tasks),
+        "active_habits": serialize_items(habits),
+        "message_feedback": serialize_items(feedback),
+        "previous_belt_assessment": jsonable_encoder(previous_assessment) if previous_assessment else None,
+    }
+
+
+def parse_assessment_response(raw_text: str) -> dict:
+    cleaned = (raw_text or "").strip()
+    if cleaned.startswith("```json"):
+        cleaned = cleaned[7:]
+    if cleaned.startswith("```"):
+        cleaned = cleaned[3:]
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3]
+    return json.loads(cleaned.strip())
+
+
+def fallback_assessment_from_evidence(evidence: dict) -> dict:
+    trial_count = len(evidence.get("belt_trials") or [])
+    score = min(84, 55 + trial_count * 3)
+    return {
+        "recommendation": "almost_ready" if score >= 70 else "not_ready",
+        "readiness_score": score,
+        "summary": "Alfred could not complete the live assessment, so this provisional assessment is based on completed evidence volume. Please resubmit when assessment generation is available.",
+        "dimension_scores": {
+            "self_awareness": 3,
+            "ownership": 3,
+            "behavioral_consistency": 3,
+            "emotional_maturity": 3,
+            "reflection_depth": 3,
+            "integration": 3,
+            "transformational_evidence": 3,
+        },
+        "strengths": ["Required evidence has been gathered for assessment."],
+        "growth_edges": ["Resubmit for Alfred's full developmental review when the AI service is available."],
+        "domain_feedback": {},
+        "subdomain_feedback": {},
+        "required_next_actions": ["Review your evidence and resubmit for a full assessment."],
+        "final_coaching_note": "The evidence is ready for review. The next useful step is a full Alfred assessment, not another checklist.",
+    }
+
+
 @router.get("/trial-config")
 def get_trial_config():
     return load_journey_trials_config()
@@ -202,6 +566,176 @@ class BeltTrialResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class BeltReadinessSubmit(BaseModel):
+    current_belt: str
+    target_belt: str
+
+
+class BeltAssessmentResponse(BaseModel):
+    id: int
+    user_number: str
+    current_belt: str
+    target_belt: str
+    status: str
+    readiness_score: Optional[int]
+    recommendation: Optional[str]
+    assessment_summary: Optional[str]
+    dimension_scores: Optional[dict]
+    strengths: Optional[list]
+    growth_edges: Optional[list]
+    domain_feedback: Optional[dict]
+    subdomain_feedback: Optional[dict]
+    required_next_actions: Optional[list]
+    final_coaching_note: Optional[str]
+    evidence_snapshot: Optional[dict]
+    llm_raw_response: Optional[dict]
+    accepted_at: Optional[datetime]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/belt-readiness/status")
+def get_belt_readiness_status(
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    config = load_journey_trials_config()
+    status = get_current_belt_status(db, user_number, config)
+    latest_assessment = db.query(BeltAssessment).filter(
+        BeltAssessment.user_number == user_number,
+        BeltAssessment.current_belt == status["current_belt"],
+        BeltAssessment.target_belt == status["target_belt"],
+    ).order_by(BeltAssessment.created_at.desc()).first()
+
+    status["latest_assessment_status"] = latest_assessment.status if latest_assessment else None
+    status["latest_assessment_id"] = latest_assessment.id if latest_assessment else None
+    return status
+
+
+@router.get("/belt-assessments/latest", response_model=Optional[BeltAssessmentResponse])
+def get_latest_belt_assessment(
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    return db.query(BeltAssessment).filter(
+        BeltAssessment.user_number == user_number
+    ).order_by(BeltAssessment.created_at.desc()).first()
+
+
+@router.get("/belt-assessments", response_model=list[BeltAssessmentResponse])
+def get_belt_assessments(
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    return db.query(BeltAssessment).filter(
+        BeltAssessment.user_number == user_number
+    ).order_by(BeltAssessment.created_at.desc()).all()
+
+
+@router.post("/belt-assessments/submit", response_model=BeltAssessmentResponse)
+def submit_belt_assessment(
+        request: BeltReadinessSubmit,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    config = load_journey_trials_config()
+    readiness = get_current_belt_status(db, user_number, config)
+    if request.current_belt != readiness["current_belt"] or request.target_belt != readiness["target_belt"]:
+        raise HTTPException(status_code=400, detail="Requested belt pair does not match current Journey readiness.")
+    if not readiness["is_eligible_to_submit"]:
+        raise HTTPException(status_code=400, detail={"message": "Belt assessment is locked until all required trials are complete.", "readiness": readiness})
+
+    evidence = gather_belt_assessment_evidence(db, user_number, request.current_belt)
+    prompt_config = load_belt_assessment_prompt()
+    system_prompt = prompt_config.get("system", "You are Alfred. Return valid JSON.")
+    user_template = prompt_config.get("user_template", "{evidence_json}")
+    evidence_json = json.dumps(jsonable_encoder(evidence), ensure_ascii=False, indent=2)
+    user_prompt = user_template.format(
+        current_belt=request.current_belt,
+        target_belt=request.target_belt,
+        evidence_json=evidence_json,
+    )
+
+    try:
+        from openai import OpenAI
+        from app.config import OPENAI_API_KEY, OPENAI_MODEL
+
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.25,
+            max_tokens=1800,
+        )
+        raw_text = response.choices[0].message.content or "{}"
+        result = parse_assessment_response(raw_text)
+    except Exception as error:
+        print(f"Error generating belt assessment: {error}")
+        result = fallback_assessment_from_evidence(evidence)
+
+    recommendation = result.get("recommendation") or "needs_more_evidence"
+    if recommendation not in ASSESSMENT_STATUS_VALUES:
+        recommendation = "needs_more_evidence"
+    readiness_score = result.get("readiness_score")
+    try:
+        readiness_score = int(readiness_score) if readiness_score is not None else None
+    except (TypeError, ValueError):
+        readiness_score = None
+
+    assessment = BeltAssessment(
+        user_number=user_number,
+        current_belt=request.current_belt,
+        target_belt=request.target_belt,
+        status=recommendation,
+        readiness_score=readiness_score,
+        recommendation=recommendation,
+        assessment_summary=result.get("summary") or result.get("assessment_summary"),
+        dimension_scores=result.get("dimension_scores") or {},
+        strengths=result.get("strengths") or [],
+        growth_edges=result.get("growth_edges") or [],
+        domain_feedback=result.get("domain_feedback") or {},
+        subdomain_feedback=result.get("subdomain_feedback") or {},
+        required_next_actions=result.get("required_next_actions") or [],
+        final_coaching_note=result.get("final_coaching_note"),
+        evidence_snapshot=jsonable_encoder(evidence),
+        llm_raw_response=jsonable_encoder(result),
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    db.add(assessment)
+    db.commit()
+    db.refresh(assessment)
+    return assessment
+
+
+@router.post("/belt-assessments/{assessment_id}/accept-promotion", response_model=BeltAssessmentResponse)
+def accept_belt_promotion(
+        assessment_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    assessment = db.query(BeltAssessment).filter(
+        BeltAssessment.id == assessment_id,
+        BeltAssessment.user_number == user_number,
+    ).first()
+    if not assessment:
+        raise HTTPException(status_code=404, detail="Belt assessment not found")
+    if assessment.recommendation != "ready_for_promotion":
+        raise HTTPException(status_code=400, detail="Alfred has not recommended promotion for this assessment.")
+
+    assessment.accepted_at = datetime.now()
+    assessment.updated_at = datetime.now()
+    db.commit()
+    db.refresh(assessment)
+    return assessment
 
 
 @router.get("/belt-trials", response_model=list[BeltTrialResponse])

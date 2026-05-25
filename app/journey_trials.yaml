@@ -124,7 +124,7 @@ dimensions:
         criteria: Recognizes impact on others.
         reflection:
           title: Reflection Trial
-          prompt: Describe a poor interaction.
+          prompt: How would you describe your leadership style?.
           grading_focus: [impact awareness, honesty, emotional specificity, ownership]
           completion_hint: Notice how your behavior landed on another person.
         real_world:
@@ -134,7 +134,7 @@ dimensions:
           completion_hint: Invite reality from outside your own interpretation.
         behavioral:
           title: Behavioral Evidence
-          prompt: Capture relationship reflections in Alfred.
+          prompt: Complete team composition, inspire, and delegate section in Alfred.
           signals: [relationship_reflections, people_reviews, journal_entries]
           completion_hint: Alfred looks for early relationship awareness.
       yellow:

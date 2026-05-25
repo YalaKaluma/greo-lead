@@ -90,6 +90,14 @@ const TOPICS_REQUIRING_TITLES = new Set([
   "failures",
 ]);
 
+const RECOMMENDATION_LABELS = {
+  ready_for_promotion: "Ready for promotion",
+  almost_ready: "Almost ready",
+  not_ready: "Not yet ready",
+  needs_more_evidence: "Needs more evidence",
+  submitted: "Submitted",
+};
+
 const WHY_IT_MATTERS = {
   Values: "Values are the rules you follow when no one is watching. They make trade-offs easier to live with.",
   Strengths: "Leadership impact compounds when you deliberately use what already works.",
@@ -626,6 +634,7 @@ function getBeltRequirementsFromConfig(config, dimensionId, beltId) {
 }
 
 export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) {
+  const [activeJourneyTab, setActiveJourneyTab] = useState("journey");
   const [selectedDimensionId, setSelectedDimensionId] = useState("execute");
   const [signals, setSignals] = useState({
     goals: [],
@@ -643,6 +652,13 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   const [activeTrial, setActiveTrial] = useState(null);
   const [trialDraft, setTrialDraft] = useState("");
   const [savingTrial, setSavingTrial] = useState(false);
+  const [readinessStatus, setReadinessStatus] = useState(null);
+  const [latestAssessment, setLatestAssessment] = useState(null);
+  const [assessmentHistory, setAssessmentHistory] = useState([]);
+  const [showAssessmentConfirm, setShowAssessmentConfirm] = useState(false);
+  const [submittingAssessment, setSubmittingAssessment] = useState(false);
+  const [acceptingPromotion, setAcceptingPromotion] = useState(false);
+  const [assessmentError, setAssessmentError] = useState("");
   const [editingSubdomainItem, setEditingSubdomainItem] = useState(null);
   const [editingSubdomainTopic, setEditingSubdomainTopic] = useState(null);
   const [savingSubdomainItem, setSavingSubdomainItem] = useState(false);
@@ -710,6 +726,28 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
       cancelled = true;
     };
   }, [apiUrl, userNumber]);
+
+  const refreshAssessmentData = async () => {
+    if (apiUrl == null || !userNumber) return;
+
+    try {
+      const [statusResponse, latestResponse, historyResponse] = await Promise.allSettled([
+        axios.get(`${apiUrl}/api/journey/belt-readiness/status`, { params: { user_number: userNumber } }),
+        axios.get(`${apiUrl}/api/journey/belt-assessments/latest`, { params: { user_number: userNumber } }),
+        axios.get(`${apiUrl}/api/journey/belt-assessments`, { params: { user_number: userNumber } }),
+      ]);
+
+      if (statusResponse.status === "fulfilled") setReadinessStatus(statusResponse.value.data);
+      if (latestResponse.status === "fulfilled") setLatestAssessment(latestResponse.value.data || null);
+      if (historyResponse.status === "fulfilled") setAssessmentHistory(historyResponse.value.data || []);
+    } catch (error) {
+      console.error("Failed to load belt assessment data", error);
+    }
+  };
+
+  useEffect(() => {
+    refreshAssessmentData();
+  }, [apiUrl, userNumber, trialRecords, topicData]);
 
   useEffect(() => {
     if (apiUrl == null) return;
@@ -1022,6 +1060,53 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
     await saveTrialResponse("submitted");
   };
 
+  const handleSubmitAssessment = async () => {
+    if (!readinessStatus?.is_eligible_to_submit) return;
+
+    setSubmittingAssessment(true);
+    setAssessmentError("");
+    try {
+      const response = await axios.post(
+        `${apiUrl}/api/journey/belt-assessments/submit`,
+        {
+          current_belt: readinessStatus.current_belt,
+          target_belt: readinessStatus.target_belt,
+        },
+        { params: { user_number: userNumber } }
+      );
+      setLatestAssessment(response.data);
+      await refreshAssessmentData();
+      setShowAssessmentConfirm(false);
+      setActiveJourneyTab("assessment");
+    } catch (error) {
+      console.error("Failed to submit belt assessment", error);
+      setAssessmentError("Alfred could not complete the belt assessment yet. Please try again.");
+    } finally {
+      setSubmittingAssessment(false);
+    }
+  };
+
+  const handleAcceptPromotion = async (assessment) => {
+    if (!assessment?.id) return;
+
+    setAcceptingPromotion(true);
+    setAssessmentError("");
+    try {
+      const response = await axios.post(
+        `${apiUrl}/api/journey/belt-assessments/${assessment.id}/accept-promotion`,
+        {},
+        { params: { user_number: userNumber } }
+      );
+      setLatestAssessment(response.data);
+      await refreshAssessmentData();
+    } catch (error) {
+      console.error("Failed to accept belt promotion", error);
+      setAssessmentError("Alfred could not record the promotion yet. Please try again.");
+    } finally {
+      setAcceptingPromotion(false);
+    }
+  };
+
   return (
     <div className="min-h-full bg-[#f6f5f1] px-4 py-5 text-slate-900 md:px-10 md:py-8">
       <div className="mx-auto max-w-7xl">
@@ -1039,28 +1124,77 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {BELTS.map((belt) => (
+          <div className="flex flex-col gap-2 sm:items-end">
+            {readinessStatus?.is_eligible_to_submit ? (
               <button
-                key={belt.name}
                 type="button"
-                onClick={() => setSelectedTrialBeltId(belt.id)}
-                className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs shadow-sm transition ${
-                  viewedBelt.id === belt.id
-                    ? "border-slate-950 bg-slate-950 text-white"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
-                }`}
+                onClick={() => setShowAssessmentConfirm(true)}
+                className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
               >
-                <span
-                  className="h-3 w-3 rounded-full border border-slate-300"
-                  style={{ backgroundColor: belt.color }}
-                />
-                <span>{belt.shortName}</span>
+                Submit for Belt Assessment
               </button>
-            ))}
+            ) : readinessStatus?.required_trials ? (
+              <p className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
+                {Math.max((readinessStatus.required_trials || 0) - (readinessStatus.completed_trials || 0), 0)} trials remaining before belt assessment
+              </p>
+            ) : null}
+            <div className="flex flex-wrap justify-end gap-2">
+              {BELTS.map((belt) => (
+                <button
+                  key={belt.name}
+                  type="button"
+                  onClick={() => setSelectedTrialBeltId(belt.id)}
+                  className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs shadow-sm transition ${
+                    viewedBelt.id === belt.id
+                      ? "border-slate-950 bg-slate-950 text-white"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
+                  }`}
+                >
+                  <span
+                    className="h-3 w-3 rounded-full border border-slate-300"
+                    style={{ backgroundColor: belt.color }}
+                  />
+                  <span>{belt.shortName}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
+        <div className="mb-5 flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setActiveJourneyTab("journey")}
+            className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
+              activeJourneyTab === "journey" ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            Journey Map
+          </button>
+          {(latestAssessment || assessmentHistory.length > 0 || activeJourneyTab === "assessment") && (
+            <button
+              type="button"
+              onClick={() => setActiveJourneyTab("assessment")}
+              className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
+                activeJourneyTab === "assessment" ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              Belt Assessment
+            </button>
+          )}
+        </div>
+
+        {activeJourneyTab === "assessment" ? (
+          <BeltAssessmentTab
+            readinessStatus={readinessStatus}
+            latestAssessment={latestAssessment}
+            assessmentHistory={assessmentHistory}
+            acceptingPromotion={acceptingPromotion}
+            error={assessmentError}
+            onSubmit={() => setShowAssessmentConfirm(true)}
+            onAcceptPromotion={handleAcceptPromotion}
+          />
+        ) : (
         <div className="grid gap-6 xl:grid-cols-[520px_minmax(0,1fr)]">
           <section className="space-y-5">
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -1112,7 +1246,18 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
             {selectedDimension.mvp && <TelemetryPanel telemetry={telemetry} loading={loadingSignals} />}
           </section>
         </div>
+        )}
       </div>
+
+      {showAssessmentConfirm && (
+        <BeltAssessmentConfirmModal
+          readinessStatus={readinessStatus}
+          submitting={submittingAssessment}
+          error={assessmentError}
+          onClose={() => setShowAssessmentConfirm(false)}
+          onSubmit={handleSubmitAssessment}
+        />
+      )}
 
       {activeTrial && (
         <TrialModal
@@ -1143,6 +1288,246 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           onDelete={handleDeleteSubdomainItem}
         />
       )}
+    </div>
+  );
+}
+
+function BeltAssessmentConfirmModal({ readinessStatus, submitting, error, onClose, onSubmit }) {
+  const currentBelt = getBeltById(readinessStatus?.current_belt || "white");
+  const targetBelt = getBeltById(readinessStatus?.target_belt || "yellow");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+      <div className="w-full max-w-xl overflow-hidden rounded-lg bg-white shadow-2xl">
+        <div className="border-b border-slate-200 px-6 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">
+                Belt Readiness
+              </p>
+              <h3 className="mt-1 text-xl font-semibold text-slate-950">Submit your case to Alfred?</h3>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md px-2 py-1 text-xl leading-none text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+              aria-label="Close assessment confirmation"
+            >
+              x
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-4 px-6 py-5">
+          <p className="text-sm leading-6 text-slate-700">
+            Alfred will review your completed {currentBelt.name} trials, subdomain evidence, coaching history,
+            habits, tasks, and reflections to assess whether you are ready for {targetBelt.name}.
+          </p>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
+            {readinessStatus?.completed_trials || 0} of {readinessStatus?.required_trials || 0} required items complete
+          </div>
+          {error && <p className="text-sm font-semibold text-red-700">{error}</p>}
+        </div>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={onClose}
+            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={submitting}
+            onClick={onSubmit}
+            className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            {submitting ? "Alfred is reviewing..." : "Submit for Assessment"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatDateTime(value) {
+  if (!value) return "Not submitted yet";
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return value;
+  }
+}
+
+function BeltAssessmentTab({ readinessStatus, latestAssessment, assessmentHistory, acceptingPromotion, error, onSubmit, onAcceptPromotion }) {
+  if (!latestAssessment) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Belt Assessment</p>
+        <h2 className="mt-2 text-2xl font-semibold text-slate-950">No assessment yet</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+          Once all required belt work is complete, Alfred can review your full Journey evidence and give a developmental readiness assessment.
+        </p>
+        {readinessStatus?.is_eligible_to_submit ? (
+          <button
+            type="button"
+            onClick={onSubmit}
+            className="mt-5 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            Submit for Belt Assessment
+          </button>
+        ) : (
+          <p className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-600">
+            Complete all remaining trials to unlock belt assessment.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  const currentBelt = getBeltById(latestAssessment.current_belt);
+  const targetBelt = getBeltById(latestAssessment.target_belt);
+  const recommendation = RECOMMENDATION_LABELS[latestAssessment.recommendation] || latestAssessment.recommendation || "Assessment complete";
+  const isReady = latestAssessment.recommendation === "ready_for_promotion";
+
+  return (
+    <div className="space-y-5">
+      {error && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div>}
+
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Belt Assessment</p>
+            <h2 className="mt-2 text-2xl font-semibold text-slate-950">{recommendation}</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{latestAssessment.assessment_summary}</p>
+          </div>
+          <div className="grid min-w-[280px] grid-cols-2 overflow-hidden rounded-lg border border-slate-200">
+            <div className="bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Current Belt</p>
+              <p className="mt-1 font-semibold" style={{ color: currentBelt.color }}>{currentBelt.name}</p>
+              <p className="mt-2 text-xs text-slate-500">{formatDateTime(latestAssessment.created_at)}</p>
+            </div>
+            <div className="bg-white p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Target Belt</p>
+              <p className="mt-1 font-semibold" style={{ color: targetBelt.color }}>{targetBelt.name}</p>
+              <p className="mt-2 text-3xl font-semibold text-slate-950">{latestAssessment.readiness_score ?? "--"}</p>
+            </div>
+          </div>
+        </div>
+
+        {isReady && !latestAssessment.accepted_at && (
+          <button
+            type="button"
+            disabled={acceptingPromotion}
+            onClick={() => onAcceptPromotion(latestAssessment)}
+            className="mt-5 rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            {acceptingPromotion ? "Recording promotion..." : `Accept Belt Promotion`}
+          </button>
+        )}
+        {latestAssessment.accepted_at && (
+          <p className="mt-5 rounded-lg border border-green-200 bg-green-50 p-4 text-sm font-semibold text-green-700">
+            Promotion accepted on {formatDateTime(latestAssessment.accepted_at)}.
+          </p>
+        )}
+      </div>
+
+      <AssessmentListSection title="Strengths" items={latestAssessment.strengths} />
+      <AssessmentListSection title="Growth Edges" items={latestAssessment.growth_edges} />
+      <AssessmentScores scores={latestAssessment.dimension_scores} />
+      <AssessmentFeedback title="Domain Feedback" feedback={latestAssessment.domain_feedback} />
+      <AssessmentFeedback title="Subdomain Feedback" feedback={latestAssessment.subdomain_feedback} />
+      <AssessmentListSection title="Required Next Actions" items={latestAssessment.required_next_actions} />
+
+      {latestAssessment.final_coaching_note && (
+        <div className="rounded-lg border border-[#ded7c8] bg-[#fbfaf7] p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#7c4a2d]">Alfred's Coaching Note</p>
+          <p className="mt-3 text-sm leading-6 text-slate-700">{latestAssessment.final_coaching_note}</p>
+        </div>
+      )}
+
+      {assessmentHistory.length > 1 && (
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">History</p>
+          <div className="mt-3 space-y-2">
+            {assessmentHistory.slice(1).map((assessment) => (
+              <div key={assessment.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                <span>{formatDateTime(assessment.created_at)}</span>
+                <span className="font-semibold">{RECOMMENDATION_LABELS[assessment.recommendation] || assessment.recommendation}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AssessmentListSection({ title, items }) {
+  if (!items?.length) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{title}</p>
+      <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
+        {items.map((item, index) => (
+          <li key={`${title}-${index}`} className="rounded-lg bg-slate-50 p-3">{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function AssessmentScores({ scores }) {
+  if (!scores || Object.keys(scores).length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Developmental Dimensions</p>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {Object.entries(scores).map(([key, value]) => (
+          <div key={key} className="rounded-lg border border-slate-200 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold capitalize text-slate-800">{key.replaceAll("_", " ")}</p>
+              <span className="text-sm font-semibold text-slate-950">{value}/5</span>
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-amber-500" style={{ width: `${Math.min(Number(value) || 0, 5) * 20}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AssessmentFeedback({ title, feedback }) {
+  if (!feedback || Object.keys(feedback).length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{title}</p>
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        {Object.entries(feedback).map(([name, value]) => (
+          <article key={name} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h3 className="text-sm font-semibold text-slate-950">{name}</h3>
+            {typeof value === "string" ? (
+              <p className="mt-2 text-sm leading-6 text-slate-600">{value}</p>
+            ) : (
+              <div className="mt-2 space-y-2 text-sm leading-6 text-slate-600">
+                {Object.entries(value || {}).map(([field, detail]) => (
+                  <p key={field}>
+                    <span className="font-semibold capitalize text-slate-800">{field.replaceAll("_", " ")}: </span>
+                    {Array.isArray(detail) ? detail.join(", ") : String(detail || "")}
+                  </p>
+                ))}
+              </div>
+            )}
+          </article>
+        ))}
+      </div>
     </div>
   );
 }

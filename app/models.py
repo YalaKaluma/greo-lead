@@ -450,6 +450,32 @@ class JourneyBeltTrial(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class BeltAssessment(Base):
+    """Alfred's developmental readiness assessment for belt promotion."""
+    __tablename__ = "belt_assessments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True, nullable=False)
+    current_belt = Column(String, nullable=False)
+    target_belt = Column(String, nullable=False)
+    status = Column(String, default="submitted", nullable=False)
+    readiness_score = Column(Integer, nullable=True)
+    recommendation = Column(String, nullable=True)
+    assessment_summary = Column(Text, nullable=True)
+    dimension_scores = Column(JSONB, nullable=True)
+    strengths = Column(JSONB, nullable=True)
+    growth_edges = Column(JSONB, nullable=True)
+    domain_feedback = Column(JSONB, nullable=True)
+    subdomain_feedback = Column(JSONB, nullable=True)
+    required_next_actions = Column(JSONB, nullable=True)
+    final_coaching_note = Column(Text, nullable=True)
+    evidence_snapshot = Column(JSONB, nullable=True)
+    llm_raw_response = Column(JSONB, nullable=True)
+    accepted_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class ConversationState(Base):
     """
     Alfred's Brain - stores conversation state for intent-driven orchestration.
