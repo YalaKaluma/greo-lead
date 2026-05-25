@@ -48,8 +48,8 @@ const DIMENSIONS = [
     name: "Prioritize & Execute",
     brief: "Focus, discipline, prioritization, and delivery.",
     topics: [
-      { id: "prioritization", label: "Prioritization", endpoint: "execution-systems", filter: (item) => item.category === "prioritization" },
-      { id: "execution_system", label: "Execution System", endpoint: "execution-systems" },
+      { id: "prioritization", label: "Prioritization", endpoint: "execution-systems", filter: (item) => normalizeCategory(item.category) === "prioritization" },
+      { id: "execution_system", label: "Execution System", endpoint: "execution-systems", filter: (item) => normalizeCategory(item.category) !== "prioritization" },
       { id: "procrastination", label: "Procrastination", endpoint: "procrastination-patterns" },
     ],
     mvp: true,
@@ -325,6 +325,10 @@ function getTopicItems(topic, topicData) {
 
   const endpointItems = topicData[topic.endpoint] || [];
   return topic.filter ? endpointItems.filter(topic.filter) : endpointItems;
+}
+
+function normalizeCategory(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 function normalizeGoalLevel(value) {

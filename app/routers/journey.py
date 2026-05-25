@@ -89,7 +89,7 @@ JOURNEY_DIMENSIONS = {
         "name": "Prioritize & Execute",
         "topics": [
             {"id": "prioritization", "label": "Prioritization", "endpoint": "execution-systems", "primary_field": "system_text", "filter": "prioritization"},
-            {"id": "execution_system", "label": "Execution System", "endpoint": "execution-systems", "primary_field": "system_text"},
+            {"id": "execution_system", "label": "Execution System", "endpoint": "execution-systems", "primary_field": "system_text", "filter": "execution_system"},
             {"id": "procrastination", "label": "Procrastination", "endpoint": "procrastination-patterns", "primary_field": "pattern_text"},
         ],
     },
@@ -271,6 +271,8 @@ def get_topic_items_for_evidence(db: Session, user_number: str, topic: dict) -> 
         systems = db.query(JourneyExecutionSystem).filter(JourneyExecutionSystem.user_number == user_number).all()
         if topic.get("filter") == "prioritization":
             return [system for system in systems if (system.category or "").strip().lower() == "prioritization"]
+        if topic.get("filter") == "execution_system":
+            return [system for system in systems if (system.category or "").strip().lower() != "prioritization"]
         return systems
     if endpoint == "procrastination-patterns":
         return db.query(JourneyProcrastinationPattern).filter(JourneyProcrastinationPattern.user_number == user_number).all()
@@ -2749,6 +2751,19 @@ class ProcrastinationPatternResponse(BaseModel):
         from_attributes = True
 
 
+def serialize_procrastination_pattern(pattern: JourneyProcrastinationPattern) -> dict[str, Any]:
+    return {
+        "id": pattern.id,
+        "user_number": pattern.user_number,
+        "title": pattern.title,
+        "pattern_text": pattern.pattern_text,
+        "underlying_reason": pattern.trigger,
+        "strategy": pattern.mitigation,
+        "first_seen_at": pattern.first_seen_at,
+        "updated_at": pattern.updated_at,
+    }
+
+
 @router.get("/procrastination-patterns", response_model=list[ProcrastinationPatternResponse])
 def get_procrastination_patterns(
         user_number: str,
@@ -2758,7 +2773,7 @@ def get_procrastination_patterns(
     patterns = db.query(JourneyProcrastinationPattern).filter(
         JourneyProcrastinationPattern.user_number == user_number
     ).order_by(JourneyProcrastinationPattern.first_seen_at.desc()).all()
-    return patterns
+    return [serialize_procrastination_pattern(pattern) for pattern in patterns]
 
 
 @router.post("/procrastination-patterns", response_model=ProcrastinationPatternResponse)
@@ -2772,15 +2787,15 @@ def create_procrastination_pattern(
         user_number=user_number,
         title=pattern_data.title,
         pattern_text=pattern_data.pattern_text,
-        underlying_reason=pattern_data.underlying_reason,
-        strategy=pattern_data.strategy,
+        trigger=pattern_data.underlying_reason,
+        mitigation=pattern_data.strategy,
         first_seen_at=datetime.now(),
         updated_at=datetime.now()
     )
     db.add(new_pattern)
     db.commit()
     db.refresh(new_pattern)
-    return new_pattern
+    return serialize_procrastination_pattern(new_pattern)
 
 
 @router.put("/procrastination-patterns/{pattern_id}", response_model=ProcrastinationPatternResponse)
@@ -2804,14 +2819,14 @@ def update_procrastination_pattern(
     if pattern_data.pattern_text is not None:
         pattern.pattern_text = pattern_data.pattern_text
     if pattern_data.underlying_reason is not None:
-        pattern.underlying_reason = pattern_data.underlying_reason
+        pattern.trigger = pattern_data.underlying_reason
     if pattern_data.strategy is not None:
-        pattern.strategy = pattern_data.strategy
+        pattern.mitigation = pattern_data.strategy
 
     pattern.updated_at = datetime.now()
     db.commit()
     db.refresh(pattern)
-    return pattern
+    return serialize_procrastination_pattern(pattern)
 
 
 @router.delete("/procrastination-patterns/{pattern_id}")
