@@ -404,6 +404,7 @@ dimensions:
           completion_hint: Name the recurring inner pattern that most constrains your growth.
         real_world:
           title: Real-World Trial
+          active: false
           prompt: Choose one meaningful growth area and intentionally work on it for two weeks through exercises, habit changes, learning, or behavioral experiments.
           completion_hint: Turn one growth area into a two-week behavioral experiment.
         behavioral:
