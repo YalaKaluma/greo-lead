@@ -1459,6 +1459,7 @@ function firstHeatmapSelection(wheelScores) {
 
 function BeltAssessmentTab({ readinessStatus, latestAssessment, assessmentHistory, acceptingPromotion, error, onSubmit, onAcceptPromotion }) {
   const [selectedHeatmapSubdomain, setSelectedHeatmapSubdomain] = useState(null);
+  const [selectedAssessmentId, setSelectedAssessmentId] = useState(null);
 
   if (!latestAssessment) {
     return (
@@ -1485,7 +1486,10 @@ function BeltAssessmentTab({ readinessStatus, latestAssessment, assessmentHistor
     );
   }
 
-  const assessment = directAssessmentCopy(latestAssessment);
+  const selectedAssessment =
+    assessmentHistory.find((item) => item.id === selectedAssessmentId) ||
+    latestAssessment;
+  const assessment = directAssessmentCopy(selectedAssessment);
   const currentBelt = getBeltById(assessment.current_belt);
   const targetBelt = getBeltById(assessment.target_belt);
   const recommendation = RECOMMENDATION_LABELS[assessment.recommendation] || assessment.recommendation || "Assessment complete";
@@ -1565,11 +1569,21 @@ function BeltAssessmentTab({ readinessStatus, latestAssessment, assessmentHistor
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">History</p>
           <div className="mt-3 space-y-2">
-            {assessmentHistory.slice(1).map((assessment) => (
-              <div key={assessment.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                <span>{formatDateTime(assessment.created_at)}</span>
-                <span className="font-semibold">{RECOMMENDATION_LABELS[assessment.recommendation] || assessment.recommendation}</span>
-              </div>
+            {assessmentHistory.map((historyItem) => (
+              <button
+                key={historyItem.id}
+                type="button"
+                onClick={() => {
+                  setSelectedAssessmentId(historyItem.id);
+                  setSelectedHeatmapSubdomain(null);
+                }}
+                className={`flex w-full items-center justify-between rounded-lg border p-3 text-left text-sm transition hover:border-slate-400 ${
+                  historyItem.id === assessment.id ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-slate-50 text-slate-700"
+                }`}
+              >
+                <span>{formatDateTime(historyItem.created_at)}</span>
+                <span className="font-semibold">{RECOMMENDATION_LABELS[historyItem.recommendation] || historyItem.recommendation}</span>
+              </button>
             ))}
           </div>
         </div>
@@ -2340,15 +2354,7 @@ function DimensionDeepDive({ dimension, dimensionState, belt, nextBelt, latestAs
         </div>
       </div>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <div className="rounded-lg border border-[#ded7c8] bg-[#fbfaf7] p-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#7c4a2d]">
-            Growth Edge
-          </p>
-          <p className="text-sm leading-6 text-slate-700">
-            {profile.current_growth_edge || assessment?.alfred_coaching_note || "Complete a belt assessment to unlock a sharper leadership-style summary."}
-          </p>
-        </div>
+      <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
             Pattern Alfred Sees
@@ -2371,6 +2377,14 @@ function DimensionDeepDive({ dimension, dimensionState, belt, nextBelt, latestAs
               </ul>
             </div>
           </div>
+        </div>
+        <div className="rounded-lg border border-[#ded7c8] bg-[#fbfaf7] p-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#7c4a2d]">
+            Growth Edge
+          </p>
+          <p className="text-sm leading-6 text-slate-700">
+            {profile.current_growth_edge || assessment?.alfred_coaching_note || "Complete a belt assessment to unlock a sharper leadership-style summary."}
+          </p>
         </div>
       </div>
     </div>
