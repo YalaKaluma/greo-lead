@@ -273,7 +273,7 @@ def validate_high_energy_habits_identified(db: Session, user_number: str) -> dic
         (
             f"You have defined {len(habits)} active habits."
             if len(habits) >= 3
-            else f"Add {max(3 - len(habits), 0)} active habits connected to energy, recovery, focus, or well-being."
+            else f"Add {max(3 - len(habits), 0)} more active habits in MyHabits."
         ),
         [_evidence_item(item, ["title", "frequency", "created_at", "updated_at"]) for item in habits[:10]],
     )
@@ -350,7 +350,7 @@ def _next_action_for_signal(signal: dict[str, Any]) -> Optional[str]:
         "five_team_members_entered": f"Complete {remaining} more team member profiles with strengths, growth areas, and aspirations.",
         "tasks_consistently_entered": f"Log {remaining} more tasks in Alfred's todo list.",
         "tasks_maintained": "Update, complete, reprioritize, or reschedule tasks across at least 3 days.",
-        "high_energy_habits_identified": f"Add {remaining} more active habits connected to energy, recovery, focus, or well-being.",
+        "high_energy_habits_identified": f"Add {remaining} more active habits in MyHabits.",
         "three_energy_level_journals": f"Add {remaining} more journal reflections about your energy level and what drove it.",
         "three_behavior_change_journals": f"Add {remaining} more journal reflections about behavior change or limiting patterns.",
         "self_awareness_reflections": "Add one journal reflection that names what you noticed about your own patterns.",
