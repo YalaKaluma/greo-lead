@@ -90,6 +90,14 @@ const TOPICS_REQUIRING_TITLES = new Set([
   "failures",
 ]);
 
+const COLLAPSIBLE_EVIDENCE_TOPICS = new Set([
+  "inspiration",
+  "coaching_moments",
+  "execution_system",
+  "procrastination",
+  "development_plan",
+]);
+
 const RECOMMENDATION_LABELS = {
   ready_for_promotion: "Ready for promotion",
   almost_ready: "Almost ready",
@@ -655,7 +663,7 @@ function getBeltRequirementsFromConfig(config, dimensionId, beltId) {
 
 export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) {
   const [activeJourneyTab, setActiveJourneyTab] = useState("journey");
-  const [selectedDimensionId, setSelectedDimensionId] = useState("execute");
+  const [selectedDimensionId, setSelectedDimensionId] = useState("vision");
   const [signals, setSignals] = useState({
     goals: [],
     executionSystems: [],
@@ -664,7 +672,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   });
   const [topicData, setTopicData] = useState({});
   const [loadingSignals, setLoadingSignals] = useState(false);
-  const [activeTopic, setActiveTopic] = useState("Execution System");
+  const [activeTopic, setActiveTopic] = useState("Vision");
   const [trialRecords, setTrialRecords] = useState([]);
   const [trialConfig, setTrialConfig] = useState(null);
   const [subdomainPromptConfig, setSubdomainPromptConfig] = useState(null);
@@ -2664,6 +2672,7 @@ function TopicEvidencePanel({ dimension, activeTopic, setActiveTopic, items, pro
             <EvidenceItem
               key={item.id}
               item={item}
+              collapsible={COLLAPSIBLE_EVIDENCE_TOPICS.has(activeTopicConfig.id)}
               onClick={() => {
                 if (redirect && onNavigate) {
                   onNavigate(redirect.page);
@@ -2679,9 +2688,16 @@ function TopicEvidencePanel({ dimension, activeTopic, setActiveTopic, items, pro
   );
 }
 
-function EvidenceItem({ item, onClick }) {
+function getFirstLine(text) {
+  return String(text || "").split(/\r?\n/)[0].trim();
+}
+
+function EvidenceItem({ item, collapsible, onClick }) {
+  const [expanded, setExpanded] = useState(false);
   const title = getItemTitle(item);
   const body = getItemBody(item);
+  const firstLine = getFirstLine(body);
+  const shouldCollapse = collapsible && body && firstLine && firstLine.length < body.trim().length;
 
   return (
     <article
@@ -2689,7 +2705,23 @@ function EvidenceItem({ item, onClick }) {
       onClick={onClick}
     >
       <p className="text-sm font-semibold text-slate-900">{title}</p>
-      {body && <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>}
+      {body && (
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          {shouldCollapse && !expanded ? firstLine : body}
+        </p>
+      )}
+      {shouldCollapse && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            setExpanded((current) => !current);
+          }}
+          className="mt-2 text-xs font-semibold text-slate-700 underline-offset-2 hover:underline"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
     </article>
   );
 }
