@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import (
@@ -37,6 +38,7 @@ from pydantic import BaseModel
 from datetime import datetime, date
 from typing import Optional, Any
 from pathlib import Path
+from types import SimpleNamespace
 import yaml
 import json
 from app.services.people_review_service import PeopleReviewService
@@ -275,7 +277,7 @@ def get_topic_items_for_evidence(db: Session, user_number: str, topic: dict) -> 
             return [system for system in systems if (system.category or "").strip().lower() != "prioritization"]
         return systems
     if endpoint == "procrastination-patterns":
-        return db.query(JourneyProcrastinationPattern).filter(JourneyProcrastinationPattern.user_number == user_number).all()
+        return [SimpleNamespace(**pattern) for pattern in get_procrastination_pattern_rows(db, user_number)]
     if endpoint == "energy-sources":
         return db.query(JourneyEnergySource).filter(JourneyEnergySource.user_number == user_number).all()
     if endpoint == "energy-drains":
@@ -2751,7 +2753,39 @@ class ProcrastinationPatternResponse(BaseModel):
         from_attributes = True
 
 
-def serialize_procrastination_pattern(pattern: JourneyProcrastinationPattern) -> dict[str, Any]:
+def get_table_columns(db: Session, table_name: str) -> set[str]:
+    rows = db.execute(
+        text(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = :table_name
+            """
+        ),
+        {"table_name": table_name},
+    ).scalars().all()
+    return set(rows)
+
+
+def get_procrastination_pattern_columns(db: Session) -> set[str]:
+    return get_table_columns(db, "journey_procrastination_patterns")
+
+
+def serialize_procrastination_pattern(pattern: Any) -> dict[str, Any]:
+    if isinstance(pattern, dict):
+        now = datetime.now()
+        return {
+            "id": pattern.get("id"),
+            "user_number": pattern.get("user_number"),
+            "title": pattern.get("title"),
+            "pattern_text": pattern.get("pattern_text"),
+            "underlying_reason": pattern.get("underlying_reason") or pattern.get("trigger"),
+            "strategy": pattern.get("strategy") or pattern.get("mitigation"),
+            "first_seen_at": pattern.get("first_seen_at") or pattern.get("updated_at") or now,
+            "updated_at": pattern.get("updated_at") or pattern.get("first_seen_at") or now,
+        }
+
     return {
         "id": pattern.id,
         "user_number": pattern.user_number,
@@ -2764,16 +2798,163 @@ def serialize_procrastination_pattern(pattern: JourneyProcrastinationPattern) ->
     }
 
 
+def get_procrastination_pattern_rows(db: Session, user_number: str) -> list[dict[str, Any]]:
+    columns = get_procrastination_pattern_columns(db)
+    if not columns:
+        return []
+
+    optional_columns = [
+        "id",
+        "user_number",
+        "title",
+        "pattern_text",
+        "underlying_reason",
+        "strategy",
+        "trigger",
+        "mitigation",
+        "first_seen_at",
+        "updated_at",
+    ]
+    select_columns = [column for column in optional_columns if column in columns]
+    if not {"id", "user_number", "pattern_text"}.issubset(columns):
+        return []
+
+    order_column = "first_seen_at" if "first_seen_at" in columns else "id"
+    rows = db.execute(
+        text(
+            f"""
+            SELECT {", ".join(select_columns)}
+            FROM journey_procrastination_patterns
+            WHERE user_number = :user_number
+            ORDER BY {order_column} DESC
+            """
+        ),
+        {"user_number": user_number},
+    ).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def write_procrastination_pattern(
+    db: Session,
+    user_number: str,
+    pattern_data: ProcrastinationPatternCreate | ProcrastinationPatternUpdate,
+    pattern_id: Optional[int] = None,
+) -> dict[str, Any]:
+    columns = get_procrastination_pattern_columns(db)
+    if not {"id", "user_number", "pattern_text"}.issubset(columns):
+        raise HTTPException(status_code=500, detail="Procrastination table is missing required columns")
+
+    now = datetime.now()
+    values = {
+        "user_number": user_number,
+        "title": pattern_data.title,
+        "pattern_text": pattern_data.pattern_text,
+        "underlying_reason": getattr(pattern_data, "underlying_reason", None),
+        "strategy": getattr(pattern_data, "strategy", None),
+        "now": now,
+        "pattern_id": pattern_id,
+    }
+
+    reason_column = "underlying_reason" if "underlying_reason" in columns else "trigger" if "trigger" in columns else None
+    strategy_column = "strategy" if "strategy" in columns else "mitigation" if "mitigation" in columns else None
+
+    if pattern_id is None:
+        insert_fields = ["user_number", "pattern_text"]
+        insert_values = [":user_number", ":pattern_text"]
+
+        if "title" in columns:
+            insert_fields.append("title")
+            insert_values.append(":title")
+        if reason_column:
+            insert_fields.append(reason_column)
+            insert_values.append(":underlying_reason")
+        if strategy_column:
+            insert_fields.append(strategy_column)
+            insert_values.append(":strategy")
+        if "first_seen_at" in columns:
+            insert_fields.append("first_seen_at")
+            insert_values.append(":now")
+        if "updated_at" in columns:
+            insert_fields.append("updated_at")
+            insert_values.append(":now")
+
+        row = db.execute(
+            text(
+                f"""
+                INSERT INTO journey_procrastination_patterns ({", ".join(insert_fields)})
+                VALUES ({", ".join(insert_values)})
+                RETURNING id
+                """
+            ),
+            values,
+        ).mappings().first()
+    else:
+        existing = db.execute(
+            text(
+                """
+                SELECT id
+                FROM journey_procrastination_patterns
+                WHERE id = :pattern_id AND user_number = :user_number
+                """
+            ),
+            values,
+        ).mappings().first()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Procrastination pattern not found")
+
+        updates = []
+        if pattern_data.pattern_text is not None:
+            updates.append("pattern_text = :pattern_text")
+        if "title" in columns and pattern_data.title is not None:
+            updates.append("title = :title")
+        if reason_column and getattr(pattern_data, "underlying_reason", None) is not None:
+            updates.append(f"{reason_column} = :underlying_reason")
+        if strategy_column and getattr(pattern_data, "strategy", None) is not None:
+            updates.append(f"{strategy_column} = :strategy")
+        if "updated_at" in columns:
+            updates.append("updated_at = :now")
+
+        if updates:
+            db.execute(
+                text(
+                    f"""
+                    UPDATE journey_procrastination_patterns
+                    SET {", ".join(updates)}
+                    WHERE id = :pattern_id AND user_number = :user_number
+                    """
+                ),
+                values,
+            )
+        row = {"id": pattern_id}
+
+    db.commit()
+    saved_id = row["id"]
+    saved = db.execute(
+        text(
+            """
+            SELECT id
+            FROM journey_procrastination_patterns
+            WHERE id = :pattern_id AND user_number = :user_number
+            """
+        ),
+        {"pattern_id": saved_id, "user_number": user_number},
+    ).mappings().first()
+    if not saved:
+        raise HTTPException(status_code=404, detail="Procrastination pattern not found")
+
+    return next(
+        pattern for pattern in get_procrastination_pattern_rows(db, user_number)
+        if pattern.get("id") == saved_id
+    )
+
+
 @router.get("/procrastination-patterns", response_model=list[ProcrastinationPatternResponse])
 def get_procrastination_patterns(
         user_number: str,
         db: Session = Depends(get_db)
 ):
     """Get all procrastination patterns for a user"""
-    patterns = db.query(JourneyProcrastinationPattern).filter(
-        JourneyProcrastinationPattern.user_number == user_number
-    ).order_by(JourneyProcrastinationPattern.first_seen_at.desc()).all()
-    return [serialize_procrastination_pattern(pattern) for pattern in patterns]
+    return [serialize_procrastination_pattern(pattern) for pattern in get_procrastination_pattern_rows(db, user_number)]
 
 
 @router.post("/procrastination-patterns", response_model=ProcrastinationPatternResponse)
@@ -2783,18 +2964,7 @@ def create_procrastination_pattern(
         db: Session = Depends(get_db)
 ):
     """Create a new procrastination pattern"""
-    new_pattern = JourneyProcrastinationPattern(
-        user_number=user_number,
-        title=pattern_data.title,
-        pattern_text=pattern_data.pattern_text,
-        trigger=pattern_data.underlying_reason,
-        mitigation=pattern_data.strategy,
-        first_seen_at=datetime.now(),
-        updated_at=datetime.now()
-    )
-    db.add(new_pattern)
-    db.commit()
-    db.refresh(new_pattern)
+    new_pattern = write_procrastination_pattern(db, user_number, pattern_data)
     return serialize_procrastination_pattern(new_pattern)
 
 
@@ -2806,26 +2976,7 @@ def update_procrastination_pattern(
         db: Session = Depends(get_db)
 ):
     """Update a procrastination pattern"""
-    pattern = db.query(JourneyProcrastinationPattern).filter(
-        JourneyProcrastinationPattern.id == pattern_id,
-        JourneyProcrastinationPattern.user_number == user_number
-    ).first()
-
-    if not pattern:
-        raise HTTPException(status_code=404, detail="Procrastination pattern not found")
-
-    if pattern_data.title is not None:
-        pattern.title = pattern_data.title
-    if pattern_data.pattern_text is not None:
-        pattern.pattern_text = pattern_data.pattern_text
-    if pattern_data.underlying_reason is not None:
-        pattern.trigger = pattern_data.underlying_reason
-    if pattern_data.strategy is not None:
-        pattern.mitigation = pattern_data.strategy
-
-    pattern.updated_at = datetime.now()
-    db.commit()
-    db.refresh(pattern)
+    pattern = write_procrastination_pattern(db, user_number, pattern_data, pattern_id)
     return serialize_procrastination_pattern(pattern)
 
 
@@ -2836,15 +2987,29 @@ def delete_procrastination_pattern(
         db: Session = Depends(get_db)
 ):
     """Delete a procrastination pattern"""
-    pattern = db.query(JourneyProcrastinationPattern).filter(
-        JourneyProcrastinationPattern.id == pattern_id,
-        JourneyProcrastinationPattern.user_number == user_number
-    ).first()
+    pattern = db.execute(
+        text(
+            """
+            SELECT id
+            FROM journey_procrastination_patterns
+            WHERE id = :pattern_id AND user_number = :user_number
+            """
+        ),
+        {"pattern_id": pattern_id, "user_number": user_number},
+    ).mappings().first()
 
     if not pattern:
         raise HTTPException(status_code=404, detail="Procrastination pattern not found")
 
-    db.delete(pattern)
+    db.execute(
+        text(
+            """
+            DELETE FROM journey_procrastination_patterns
+            WHERE id = :pattern_id AND user_number = :user_number
+            """
+        ),
+        {"pattern_id": pattern_id, "user_number": user_number},
+    )
     db.commit()
     return {"success": True, "message": "Procrastination pattern deleted"}
 
