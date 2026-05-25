@@ -2046,6 +2046,10 @@ function getEvidenceCounts(evidence) {
   });
 }
 
+function countGoalTreeNodes(goals) {
+  return (goals || []).reduce((sum, goal) => sum + 1 + countGoalTreeNodes(goal.children || []), 0);
+}
+
 function DevelopmentalScoringAccordion({ assessment, wheelScores, scores }) {
   const evidence = assessment?.evidence_snapshot || {};
   const subdomainRows = getSubdomainDebugRows(wheelScores);
@@ -2053,6 +2057,9 @@ function DevelopmentalScoringAccordion({ assessment, wheelScores, scores }) {
   const averageScore = scoreValues.length ? (scoreValues.reduce((sum, score) => sum + score, 0) / scoreValues.length) : 0;
   const trials = evidence?.belt_trials || [];
   const evidenceCounts = getEvidenceCounts(evidence);
+  const visionTree = evidence?.vision_goal_tree || [];
+  const visionNodeCount = countGoalTreeNodes(visionTree);
+  const roadmapWaveCount = visionTree.reduce((sum, vision) => sum + (vision.roadmap_waves?.length || 0), 0);
   if (!scores && subdomainRows.length === 0 && trials.length === 0) return null;
 
   return (
@@ -2087,6 +2094,12 @@ function DevelopmentalScoringAccordion({ assessment, wheelScores, scores }) {
             {trials.length} belt trial submission{trials.length === 1 ? "" : "s"} and subdomain Journey inputs.
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
+            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600">
+              Vision tree: {visionNodeCount} goal node{visionNodeCount === 1 ? "" : "s"}
+            </span>
+            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600">
+              Roadmap waves: {roadmapWaveCount}
+            </span>
             {evidenceCounts.map((item) => (
               <span key={item.domain} className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-600">
                 {item.domain}: {item.count}
@@ -2133,6 +2146,30 @@ function DevelopmentalScoringAccordion({ assessment, wheelScores, scores }) {
           ))}
         </div>
       </div>
+
+      {visionTree.length > 0 && (
+        <div className="mt-4 rounded-lg border border-slate-200">
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Vision Tree Considered</p>
+          </div>
+          <div className="divide-y divide-slate-200">
+            {visionTree.map((vision) => (
+              <div key={vision.id} className="p-4">
+                <p className="text-sm font-semibold text-slate-950">{vision.title || "Untitled vision"}</p>
+                <p className="mt-1 text-sm leading-6 text-slate-700">{compactText(vision.goal_text, 320)}</p>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
+                    {countGoalTreeNodes(vision.children || [])} child goal{countGoalTreeNodes(vision.children || []) === 1 ? "" : "s"}
+                  </span>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
+                    {(vision.roadmap_waves || []).length} roadmap wave{(vision.roadmap_waves || []).length === 1 ? "" : "s"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 rounded-lg border border-slate-200">
         <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">

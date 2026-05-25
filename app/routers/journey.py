@@ -445,6 +445,47 @@ def serialize_items(items: list[Any], limit: int = 20) -> list[dict[str, Any]]:
     return jsonable_encoder(items[:limit])
 
 
+def build_goal_children(goal: JourneyGoal, goals_by_parent: dict[Optional[int], list[JourneyGoal]]) -> dict[str, Any]:
+    children = sorted(
+        goals_by_parent.get(goal.id, []),
+        key=lambda item: (item.sort_order or 0, item.updated_at or datetime.min),
+    )
+    serialized = serialize_goal(goal)
+    serialized["children"] = [
+        build_goal_children(child, goals_by_parent)
+        for child in children
+    ]
+    return serialized
+
+
+def serialize_vision_tree_for_assessment(db: Session, user_number: str) -> list[dict[str, Any]]:
+    goals = db.query(JourneyGoal).filter(JourneyGoal.user_number == user_number).all()
+    goals_by_parent: dict[Optional[int], list[JourneyGoal]] = {}
+    for goal in goals:
+        goals_by_parent.setdefault(goal.parent_goal_id, []).append(goal)
+
+    visions = sorted(
+        [goal for goal in goals if normalize_goal_level(goal.time_horizon) == "vision"],
+        key=lambda item: (item.sort_order or 0, item.updated_at or datetime.min),
+    )
+    waves = db.query(VisionRoadmapWave).filter(
+        VisionRoadmapWave.user_number == user_number,
+    ).order_by(VisionRoadmapWave.sequence_order, VisionRoadmapWave.created_at).all()
+    waves_by_vision: dict[int, list[VisionRoadmapWave]] = {}
+    for wave in waves:
+        waves_by_vision.setdefault(wave.vision_goal_id, []).append(wave)
+
+    vision_trees = []
+    for vision in visions:
+        tree = build_goal_children(vision, goals_by_parent)
+        tree["roadmap_waves"] = [
+            serialize_wave(wave)
+            for wave in waves_by_vision.get(vision.id, [])
+        ]
+        vision_trees.append(tree)
+    return vision_trees
+
+
 def gather_belt_assessment_evidence(db: Session, user_number: str, current_belt: str) -> dict:
     trials = db.query(JourneyBeltTrial).filter(
         JourneyBeltTrial.user_number == user_number,
@@ -470,6 +511,7 @@ def gather_belt_assessment_evidence(db: Session, user_number: str, current_belt:
         },
         "belt_trials": serialize_items(trials, limit=50),
         "belt_subdomain_evidence": subdomains,
+        "vision_goal_tree": serialize_vision_tree_for_assessment(db, user_number),
     }
 
 
