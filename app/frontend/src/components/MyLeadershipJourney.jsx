@@ -955,7 +955,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
     );
 
     const trial =
-      existing ||
+      (existing && { ...existing, prompt }) ||
       {
         id: null,
         user_number: userNumber,
@@ -992,6 +992,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
             {
               response_text: trialDraft.trim(),
               status,
+              prompt: activeTrial.prompt,
             },
             { params: { user_number: userNumber } }
           )

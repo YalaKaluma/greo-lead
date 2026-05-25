@@ -180,6 +180,7 @@ class BeltTrialCreate(BaseModel):
 class BeltTrialSubmit(BaseModel):
     response_text: str
     status: Optional[str] = "submitted"
+    prompt: Optional[str] = None
 
 
 class BeltTrialResponse(BaseModel):
@@ -278,6 +279,8 @@ def submit_belt_trial(
 
     trial.response_text = trial_data.response_text
     trial.status = trial_data.status or "submitted"
+    if trial_data.prompt is not None:
+        trial.prompt = trial_data.prompt
     trial.submitted_at = datetime.now()
     trial.updated_at = datetime.now()
     db.commit()
