@@ -32,9 +32,9 @@ const OUTCOME_STATUS_STYLES = {
   },
   ongoing: {
     label: 'Ongoing',
-    dot: 'bg-slate-500',
-    card: 'border-slate-300 bg-slate-100 hover:bg-slate-200',
-    wave: 'border-slate-400'
+    dot: 'bg-blue-500',
+    card: 'border-blue-200 bg-blue-50 hover:bg-blue-100',
+    wave: 'border-blue-300'
   },
   at_risk: {
     label: 'At risk',
@@ -81,7 +81,8 @@ export default function TransformationRoadmap({
   waveModalRequest = 0,
   onWaveModalRequestHandled,
   roadmapGenerateRequest = 0,
-  onRoadmapGenerateRequestHandled
+  onRoadmapGenerateRequestHandled,
+  onRoadmapChanged
 }) {
   const visions = useMemo(() => goals.filter(isVision), [goals]);
   const [selectedVisionId, setSelectedVisionId] = useState('');
@@ -134,6 +135,7 @@ export default function TransformationRoadmap({
         params: { user_number: userNumber }
       });
       setRoadmap(res.data || { waves: [] });
+      onRoadmapChanged?.();
     } catch (err) {
       console.error('Error fetching roadmap:', err);
       setError('Could not load the roadmap.');
@@ -214,6 +216,7 @@ export default function TransformationRoadmap({
     await axios.patch(`${apiUrl}/api/journey/visions/${selectedVisionId}/waves/reorder`, {
       ordered_wave_ids: waves.map(wave => wave.id)
     }, { params: { user_number: userNumber } });
+    onRoadmapChanged?.();
   };
 
   const reorderItems = (items, sourceIndex, destinationIndex) => {
@@ -249,6 +252,7 @@ export default function TransformationRoadmap({
         ))
       }));
       await persistWaveGoalOrder(sourceWaveId, orderedLinks);
+      await fetchRoadmap();
       return;
     }
 
@@ -279,6 +283,24 @@ export default function TransformationRoadmap({
         ? persistWaveGoalOrder(sourceWaveId, sourceLinks)
         : Promise.resolve()
     ]);
+    await fetchRoadmap();
+  };
+
+  const moveOutcomeWithinWave = async (waveId, sourceIndex, direction) => {
+    const wave = (roadmap.waves || []).find(item => item.id === waveId);
+    const destinationIndex = sourceIndex + direction;
+    if (!wave || destinationIndex < 0 || destinationIndex >= (wave.goals || []).length) return;
+
+    try {
+      await moveOutcomeLink({
+        source: { droppableId: `wave-outcomes-${waveId}`, index: sourceIndex },
+        destination: { droppableId: `wave-outcomes-${waveId}`, index: destinationIndex }
+      });
+    } catch (err) {
+      console.error('Error moving outcome:', err);
+      setError('Could not save the new roadmap order.');
+      await fetchRoadmap();
+    }
   };
 
   const handleRoadmapDragEnd = async (result) => {
@@ -353,6 +375,7 @@ export default function TransformationRoadmap({
     setEditingOutcomeLink(null);
     setEditingOutcomeForm({ title: '', goal_text: '', status: 'not_started' });
     await fetchRoadmap();
+    onRoadmapChanged?.();
   };
 
   const editOutcome = (wave, link) => {
@@ -581,20 +604,54 @@ export default function TransformationRoadmap({
                                       <div
                                         ref={provided.innerRef}
                                         {...provided.draggableProps}
-                                        {...provided.dragHandleProps}
                                         style={provided.draggableProps.style}
                                         onClick={(event) => {
                                           event.stopPropagation();
                                           editOutcome(wave, link);
                                         }}
-                                        className={`${outcomeStyle.card} border rounded p-3 cursor-grab active:cursor-grabbing ${
+                                        className={`${outcomeStyle.card} border rounded p-3 cursor-pointer ${
                                           snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-200' : ''
                                         }`}
                                       >
                                         <div className="flex items-start gap-2">
+                                          <span
+                                            {...provided.dragHandleProps}
+                                            onClick={(event) => event.stopPropagation()}
+                                            className="mt-0.5 select-none rounded px-1 text-slate-400 hover:bg-white/70 hover:text-slate-700 cursor-grab active:cursor-grabbing"
+                                            aria-label="Move outcome"
+                                            title="Drag to reorder"
+                                          >
+                                            ::
+                                          </span>
                                           <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${outcomeStyle.dot}`} />
-                                          <div className="min-w-0">
-                                            <div className="font-medium text-slate-800 break-words">{link.goal?.title || link.goal?.goal_text}</div>
+                                          <div className="min-w-0 flex-1">
+                                            <div className="flex items-start justify-between gap-2">
+                                              <div className="font-medium text-slate-800 break-words">{link.goal?.title || link.goal?.goal_text}</div>
+                                              <div className="flex shrink-0 gap-1">
+                                                <button
+                                                  type="button"
+                                                  disabled={linkIndex === 0}
+                                                  onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    moveOutcomeWithinWave(wave.id, linkIndex, -1);
+                                                  }}
+                                                  className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-35"
+                                                >
+                                                  Up
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  disabled={linkIndex === (wave.goals || []).length - 1}
+                                                  onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    moveOutcomeWithinWave(wave.id, linkIndex, 1);
+                                                  }}
+                                                  className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-35"
+                                                >
+                                                  Down
+                                                </button>
+                                              </div>
+                                            </div>
                                             <div className="mt-1 text-xs text-slate-500">{outcomeStyle.label}</div>
                                           </div>
                                         </div>

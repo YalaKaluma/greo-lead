@@ -1,5 +1,7 @@
+-- Allow roadmap outcomes to explicitly be not started.
+
 ALTER TABLE wave_goals
-    ADD COLUMN IF NOT EXISTS status VARCHAR NOT NULL DEFAULT 'not_started';
+    ALTER COLUMN status SET DEFAULT 'not_started';
 
 ALTER TABLE wave_goals
     DROP CONSTRAINT IF EXISTS ck_wave_goals_status;

@@ -13,9 +13,48 @@ export default function GoalsList({
   onReorderGoals,
   onMoveGoalAcrossParents,
   onCreateChildGoal,
+  outcomeStatusByGoalId = {},
   expandedGoalId
 }) {
   const [recentlyDraggedId, setRecentlyDraggedId] = useState(null);
+
+  const outcomeStatusStyles = {
+    not_started: {
+      label: 'Not started',
+      dot: 'bg-slate-300',
+      card: 'border-slate-200 bg-slate-50 hover:bg-slate-100',
+      badge: 'text-slate-500'
+    },
+    done: {
+      label: 'Done',
+      dot: 'bg-green-500',
+      card: 'border-green-200 bg-green-50 hover:bg-green-100',
+      badge: 'text-green-700'
+    },
+    ongoing: {
+      label: 'Ongoing',
+      dot: 'bg-blue-500',
+      card: 'border-blue-200 bg-blue-50 hover:bg-blue-100',
+      badge: 'text-blue-700'
+    },
+    at_risk: {
+      label: 'At risk',
+      dot: 'bg-orange-500',
+      card: 'border-orange-200 bg-orange-50 hover:bg-orange-100',
+      badge: 'text-orange-700'
+    },
+    blocked: {
+      label: 'Blocking issue',
+      dot: 'bg-red-500',
+      card: 'border-red-200 bg-red-50 hover:bg-red-100',
+      badge: 'text-red-700'
+    }
+  };
+
+  const getOutcomeStatusStyle = (goalId) => {
+    const status = outcomeStatusByGoalId[goalId] || 'not_started';
+    return outcomeStatusStyles[status] || outcomeStatusStyles.not_started;
+  };
   
   const buildTree = () => {
     const visionGoals = goals.vision || [];
@@ -141,43 +180,48 @@ export default function GoalsList({
             snapshot.isDraggingOver ? 'bg-blue-50/70' : ''
           }`}
         >
-          {(pillar.children || []).map((outcome, index) => (
-            <Draggable
-              key={outcome.id}
-              draggableId={`outcome-${outcome.id}`}
-              index={index}
-            >
-              {(provided, snapshot) => (
-                <div
-                  ref={provided.innerRef}
-                  {...provided.draggableProps}
-                  style={provided.draggableProps.style}
-                >
+          {(pillar.children || []).map((outcome, index) => {
+            const statusStyle = getOutcomeStatusStyle(outcome.id);
+
+            return (
+              <Draggable
+                key={outcome.id}
+                draggableId={`outcome-${outcome.id}`}
+                index={index}
+              >
+                {(provided, snapshot) => (
                   <div
-                    {...provided.dragHandleProps}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onCardClick(outcome);
-                    }}
-                    className={`rounded border border-slate-200 bg-slate-50 p-3 cursor-grab active:cursor-grabbing hover:bg-slate-100 ${
-                      snapshot.isDragging || recentlyDraggedId === `outcome-${outcome.id}`
-                        ? 'shadow-lg ring-2 ring-blue-200'
-                        : ''
-                    }`}
+                    ref={provided.innerRef}
+                    {...provided.draggableProps}
+                    style={provided.draggableProps.style}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-medium text-slate-800 break-words">
-                          {getGoalTitle(outcome)}
+                    <div
+                      {...provided.dragHandleProps}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onCardClick(outcome);
+                      }}
+                      className={`rounded border ${statusStyle.card} p-3 cursor-grab active:cursor-grabbing ${
+                        snapshot.isDragging || recentlyDraggedId === `outcome-${outcome.id}`
+                          ? 'shadow-lg ring-2 ring-blue-200'
+                          : ''
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${statusStyle.dot}`} />
+                        <div className="min-w-0">
+                          <div className="font-medium text-slate-800 break-words">
+                            {getGoalTitle(outcome)}
+                          </div>
+                          <div className={`mt-1 text-xs ${statusStyle.badge}`}>{statusStyle.label}</div>
                         </div>
-                        <div className="mt-1 text-xs text-slate-500">Outcome</div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </Draggable>
-          ))}
+                )}
+              </Draggable>
+            );
+          })}
           {provided.placeholder}
         </div>
       )}

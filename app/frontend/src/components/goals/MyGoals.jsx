@@ -57,6 +57,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const [waveModalRequest, setWaveModalRequest] = useState(0);
   const [roadmapGenerateRequest, setRoadmapGenerateRequest] = useState(0);
   const [reorderError, setReorderError] = useState('');
+  const [outcomeStatusByGoalId, setOutcomeStatusByGoalId] = useState({});
 
   /* ---------------- DATA FETCHING ---------------- */
 
@@ -118,6 +119,31 @@ export default function MyGoals({ apiUrl, userNumber }) {
     }
   };
 
+  const fetchGoalRoadmapStatuses = async (visionGoalId = expandedGoalId) => {
+    if (!visionGoalId) {
+      setOutcomeStatusByGoalId({});
+      return;
+    }
+
+    try {
+      const res = await axios.get(`${apiUrl}/api/journey/visions/${visionGoalId}/roadmap`, {
+        params: { user_number: userNumber }
+      });
+      const nextStatuses = {};
+      (res.data?.waves || []).forEach(wave => {
+        (wave.goals || []).forEach(link => {
+          if (link.goal_id) {
+            nextStatuses[link.goal_id] = link.status || 'not_started';
+          }
+        });
+      });
+      setOutcomeStatusByGoalId(nextStatuses);
+    } catch (err) {
+      console.error('Error fetching roadmap statuses:', err);
+      setOutcomeStatusByGoalId({});
+    }
+  };
+
   useEffect(() => {
     const loadData = async () => {
       await fetchGoals();
@@ -126,6 +152,11 @@ export default function MyGoals({ apiUrl, userNumber }) {
     };
     loadData();
   }, [userNumber]);
+
+  useEffect(() => {
+    if (!expandedGoalId || activeTab !== 'setting') return;
+    fetchGoalRoadmapStatuses(expandedGoalId);
+  }, [expandedGoalId, activeTab, userNumber]);
 
   /* ---------------- EVENT HANDLERS ---------------- */
 
@@ -444,6 +475,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
                 onReorderGoals={handleReorderGoals}
                 onMoveGoalAcrossParents={handleMoveGoalAcrossParents}
                 onCreateChildGoal={handleCreateChildGoal}
+                outcomeStatusByGoalId={outcomeStatusByGoalId}
                 taskCounts={taskCounts}
               />
               </>
@@ -460,6 +492,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
                 onWaveModalRequestHandled={() => setWaveModalRequest(0)}
                 roadmapGenerateRequest={roadmapGenerateRequest}
                 onRoadmapGenerateRequestHandled={() => setRoadmapGenerateRequest(0)}
+                onRoadmapChanged={() => fetchGoalRoadmapStatuses(expandedGoalId)}
               />
             )}
 

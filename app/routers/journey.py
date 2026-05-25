@@ -1340,7 +1340,7 @@ class WaveUpdate(BaseModel):
 class WaveGoalCreate(BaseModel):
     goal_id: int
     sequence_order: Optional[int] = None
-    status: Optional[str] = "ongoing"
+    status: Optional[str] = "not_started"
 
 
 class WaveGoalUpdate(BaseModel):
@@ -1367,7 +1367,7 @@ def validate_wave_status(status: Optional[str]) -> str:
 
 
 def validate_wave_goal_status(status: Optional[str]) -> str:
-    normalized = (status or "ongoing").strip().lower()
+    normalized = (status or "not_started").strip().lower()
     if normalized not in WAVE_GOAL_STATUSES:
         raise HTTPException(status_code=400, detail="Invalid outcome status")
     return normalized
@@ -1393,7 +1393,7 @@ def serialize_wave(wave: VisionRoadmapWave) -> dict[str, Any]:
                 "wave_id": item.wave_id,
                 "goal_id": item.goal_id,
                 "sequence_order": item.sequence_order,
-                "status": item.status or "ongoing",
+                "status": item.status or "not_started",
                 "goal": serialize_goal(item.goal) if item.goal else None,
             }
             for item in wave_goals
