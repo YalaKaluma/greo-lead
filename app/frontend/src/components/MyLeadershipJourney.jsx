@@ -98,6 +98,22 @@ const RECOMMENDATION_LABELS = {
   submitted: "Submitted",
 };
 
+const HEATMAP_COLORS = {
+  1: "#DC2626",
+  2: "#F97316",
+  3: "#FACC15",
+  4: "#86EFAC",
+  5: "#16A34A",
+};
+
+const HEATMAP_TEXT = {
+  1: "#FFFFFF",
+  2: "#111827",
+  3: "#111827",
+  4: "#064E3B",
+  5: "#FFFFFF",
+};
+
 const WHY_IT_MATTERS = {
   Values: "Values are the rules you follow when no one is watching. They make trade-offs easier to live with.",
   Strengths: "Leadership impact compounds when you deliberately use what already works.",
@@ -1084,7 +1100,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
       setActiveJourneyTab("assessment");
     } catch (error) {
       console.error("Failed to submit belt assessment", error);
-      setAssessmentError("Alfred could not complete the belt assessment yet. Please try again.");
+      setAssessmentError("Assessment generation ran into a problem. Please try again.");
     } finally {
       setSubmittingAssessment(false);
     }
@@ -1324,8 +1340,8 @@ function BeltAssessmentConfirmModal({ readinessStatus, submitting, error, onClos
 
         <div className="space-y-4 px-6 py-5">
           <p className="text-sm leading-6 text-slate-700">
-            Alfred will review your completed {currentBelt.name} trials, subdomain evidence, coaching history,
-            habits, tasks, and reflections to assess whether you are ready for {targetBelt.name}.
+            Alfred will review your completed {currentBelt.name} curriculum evidence and assess whether it shows
+            enough maturity, reflection depth, and behavioral application for {targetBelt.name}.
           </p>
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">
             {readinessStatus?.completed_trials || 0} of {readinessStatus?.required_trials || 0} required items complete
@@ -1392,14 +1408,66 @@ function directAssessmentCopy(value) {
   return value;
 }
 
+function heatmapColor(score) {
+  const value = Math.max(1, Math.min(5, Number(score) || 1));
+  return HEATMAP_COLORS[value] || "#E5E7EB";
+}
+
+function heatmapTextColor(score) {
+  const value = Math.max(1, Math.min(5, Number(score) || 1));
+  return HEATMAP_TEXT[value] || "#111827";
+}
+
+function normalizeAssessmentWheel(assessment) {
+  if (assessment?.wheel_scores && Object.keys(assessment.wheel_scores).length > 0) {
+    return assessment.wheel_scores;
+  }
+  const legacy = assessment?.wheel_feedback || {};
+  const wheel = {};
+  DIMENSIONS.forEach((dimension) => {
+    const domain = legacy[dimension.name] || {};
+    const subdomains = {};
+    dimension.topics.forEach((topic) => {
+      const item = domain?.subdomains?.[topic.label] || {};
+      subdomains[topic.label] = {
+        score: Number(item.score) || 1,
+        status: item.status || "needs evidence",
+        current_readiness: item.current_readiness || item.assessment || `Limited evidence observed in the current belt work for ${topic.label}.`,
+        why: item.why || item.evidence_observed || item.missing_evidence || `This part of the wheel needs clearer belt-specific examples before it can strongly support promotion.`,
+        improve: item.improve || item.next_actions_in_alfred || [WHY_IT_MATTERS[topic.label] || `Add one concrete reflection for ${topic.label}.`],
+      };
+    });
+    const domainScores = Object.values(subdomains).map((item) => Number(item.score) || 1);
+    wheel[dimension.name] = {
+      domain_score: Number(domain.domain_score) || Math.round(domainScores.reduce((sum, score) => sum + score, 0) / domainScores.length),
+      summary: domain.summary || domain.overall_assessment || `Your ${dimension.name} readiness is based on the current belt work.`,
+      subdomains,
+    };
+  });
+  return wheel;
+}
+
+function firstHeatmapSelection(wheelScores) {
+  for (const dimension of DIMENSIONS) {
+    const subdomainName = dimension.topics[0]?.label;
+    const feedback = wheelScores?.[dimension.name]?.subdomains?.[subdomainName];
+    if (feedback) {
+      return { domain: dimension.name, subdomain: subdomainName, feedback };
+    }
+  }
+  return null;
+}
+
 function BeltAssessmentTab({ readinessStatus, latestAssessment, assessmentHistory, acceptingPromotion, error, onSubmit, onAcceptPromotion }) {
+  const [selectedHeatmapSubdomain, setSelectedHeatmapSubdomain] = useState(null);
+
   if (!latestAssessment) {
     return (
       <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Belt Assessment</p>
         <h2 className="mt-2 text-2xl font-semibold text-slate-950">No assessment yet</h2>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-          Once all required belt work is complete, Alfred can review your full Journey evidence and give a developmental readiness assessment.
+          Once all required belt work is complete, Alfred can review your current belt evidence and give a developmental readiness assessment.
         </p>
         {readinessStatus?.is_eligible_to_submit ? (
           <button
@@ -1424,6 +1492,8 @@ function BeltAssessmentTab({ readinessStatus, latestAssessment, assessmentHistor
   const recommendation = RECOMMENDATION_LABELS[assessment.recommendation] || assessment.recommendation || "Assessment complete";
   const isReady = assessment.recommendation === "ready_for_promotion";
   const coachingNote = assessment.alfred_coaching_note || assessment.final_coaching_note;
+  const wheelScores = normalizeAssessmentWheel(assessment);
+  const selectedSubdomain = selectedHeatmapSubdomain || firstHeatmapSelection(wheelScores);
 
   return (
     <div className="space-y-5">
@@ -1468,10 +1538,14 @@ function BeltAssessmentTab({ readinessStatus, latestAssessment, assessmentHistor
       </div>
 
       <LeadershipProfileSection profile={assessment.leadership_profile} />
-      <WheelDomainSummary title="Strengths By Domain" feedback={assessment.wheel_feedback} mode="strengths" />
-      <WheelDomainSummary title="Growth Edges By Domain" feedback={assessment.wheel_feedback} mode="growth" />
-      <AssessmentScores scores={assessment.dimension_scores} />
-      <WheelFeedbackSection feedback={assessment.wheel_feedback} />
+      <BeltHeatmapAssessment
+        wheelScores={wheelScores}
+        selected={selectedSubdomain}
+        onSelect={setSelectedHeatmapSubdomain}
+      />
+      <SubdomainDetailPanel selection={selectedSubdomain} />
+      <PromotionLimitersPanel items={assessment.promotion_limiters} />
+      <StrongestAreasPanel items={assessment.strongest_areas} />
       <PriorityNextActions actions={assessment.priority_next_actions || assessment.required_next_actions} />
 
       {coachingNote && (
@@ -1480,6 +1554,8 @@ function BeltAssessmentTab({ readinessStatus, latestAssessment, assessmentHistor
           <p className="mt-3 text-sm leading-6 text-slate-700">{coachingNote}</p>
         </div>
       )}
+
+      <DevelopmentalScoringAccordion scores={assessment.developmental_dimension_scores || assessment.dimension_scores} />
 
       {assessmentHistory.length > 1 && (
         <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -1506,9 +1582,233 @@ function LeadershipProfileSection({ profile }) {
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Leadership Profile</p>
       <h3 className="mt-2 text-xl font-semibold text-slate-950">{profile.headline || "Emerging Leadership Profile"}</h3>
       {profile.description && <p className="mt-3 text-sm leading-6 text-slate-700">{profile.description}</p>}
+      {profile.current_growth_edge && (
+        <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
+          Growth edge: {profile.current_growth_edge}
+        </p>
+      )}
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <AssessmentListBlock title="Likely Strengths" items={profile.likely_strengths} />
         <AssessmentListBlock title="Likely Risks" items={profile.likely_risks} />
+      </div>
+    </div>
+  );
+}
+
+function BeltHeatmapAssessment({ wheelScores, selected, onSelect }) {
+  if (!wheelScores || Object.keys(wheelScores).length === 0) return null;
+
+  const domainAngle = 360 / DIMENSIONS.length;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Leadership Wheel Heatmap</p>
+          <h3 className="mt-2 text-xl font-semibold text-slate-950">Where you are ready, and where you are not yet ready</h3>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs font-semibold text-slate-700">
+          {[1, 2, 3, 4, 5].map((score) => (
+            <span key={`legend-${score}`} className="inline-flex items-center gap-1">
+              <span className="h-3 w-3 rounded-sm" style={{ background: heatmapColor(score) }} />
+              {score}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(320px,520px)_1fr] lg:items-center">
+        <div className="mx-auto w-full max-w-[520px]">
+          <svg viewBox="0 0 1000 1000" className="h-auto w-full" role="img" aria-label="Leadership Wheel heatmap">
+            <circle cx={CENTER.x} cy={CENTER.y} r={R_CENTER - 8} fill="#020617" />
+            <text x={CENTER.x} y={CENTER.y - 8} textAnchor="middle" className="fill-white text-[38px] font-semibold">Alfred</text>
+            <text x={CENTER.x} y={CENTER.y + 34} textAnchor="middle" className="fill-amber-200 text-[20px] font-semibold">Assessment</text>
+
+            {DIMENSIONS.map((dimension, domainIndex) => {
+              const a1 = -90 + domainIndex * domainAngle;
+              const a2 = a1 + domainAngle;
+              const domain = wheelScores[dimension.name] || {};
+              return (
+                <g key={`heat-domain-${dimension.id}`}>
+                  <path d={wedgePath(R_CENTER, R_DOMAIN, a1, a2)} fill="#F8FAFC" stroke="#CBD5E1" strokeWidth="2" />
+                  {(() => {
+                    const mid = (a1 + a2) / 2;
+                    const pos = polar(CENTER.x, CENTER.y, (R_CENTER + R_DOMAIN) / 2, mid);
+                    return splitLabel(dimension.name, 13).map((line, index, lines) => (
+                      <text
+                        key={`${dimension.id}-label-${line}`}
+                        x={pos.x}
+                        y={pos.y + (index - (lines.length - 1) / 2) * 20}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        className="pointer-events-none fill-slate-950 text-[18px] font-semibold"
+                      >
+                        {line}
+                      </text>
+                    ));
+                  })()}
+                  {dimension.topics.map((topic, topicIndex) => {
+                    const topicAngle = domainAngle / dimension.topics.length;
+                    const ta1 = a1 + topicIndex * topicAngle;
+                    const ta2 = ta1 + topicAngle;
+                    const feedback = domain?.subdomains?.[topic.label] || {};
+                    const score = Number(feedback.score) || 1;
+                    const active = selected?.domain === dimension.name && selected?.subdomain === topic.label;
+                    const mid = (ta1 + ta2) / 2;
+                    const pos = polar(CENTER.x, CENTER.y, (R_DOMAIN + R_SUBDOMAIN) / 2, mid);
+                    return (
+                      <g key={`heat-topic-${topic.id}`}>
+                        <path
+                          d={wedgePath(R_DOMAIN, R_SUBDOMAIN, ta1, ta2)}
+                          fill={heatmapColor(score)}
+                          stroke={active ? "#020617" : "#F8FAFC"}
+                          strokeWidth={active ? "6" : "3"}
+                          className="cursor-pointer transition-opacity hover:opacity-80"
+                          onClick={() => onSelect({ domain: dimension.name, subdomain: topic.label, feedback })}
+                        />
+                        {splitLabel(topic.label, 12).map((line, index, lines) => (
+                          <text
+                            key={`${topic.id}-heat-label-${line}`}
+                            x={pos.x}
+                            y={pos.y + (index - (lines.length - 1) / 2) * 18}
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                            className="pointer-events-none text-[15px] font-semibold"
+                            fill={heatmapTextColor(score)}
+                          >
+                            {line}
+                          </text>
+                        ))}
+                      </g>
+                    );
+                  })}
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+
+        <div className="space-y-3">
+          {DIMENSIONS.map((dimension) => {
+            const domain = wheelScores[dimension.name] || {};
+            return (
+              <button
+                type="button"
+                key={`domain-summary-${dimension.id}`}
+                onClick={() => {
+                  const topic = dimension.topics[0];
+                  onSelect({
+                    domain: dimension.name,
+                    subdomain: topic.label,
+                    feedback: domain?.subdomains?.[topic.label] || {},
+                  });
+                }}
+                className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-left hover:border-slate-400"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-slate-950">{dimension.name}</p>
+                  <span
+                    className="rounded-full px-2 py-1 text-xs font-semibold"
+                    style={{ background: heatmapColor(domain.domain_score), color: heatmapTextColor(domain.domain_score) }}
+                  >
+                    {domain.domain_score ?? "--"}/5
+                  </span>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{domain.summary}</p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SubdomainDetailPanel({ selection }) {
+  if (!selection) return null;
+  const feedback = selection.feedback || {};
+  const improve = feedback.improve || feedback.next_actions_in_alfred || [];
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{selection.domain}</p>
+          <h3 className="mt-2 text-xl font-semibold text-slate-950">{selection.subdomain}</h3>
+          {feedback.status && <p className="mt-1 text-sm font-semibold capitalize text-slate-500">{feedback.status}</p>}
+        </div>
+        <span
+          className="inline-flex w-fit items-center rounded-full px-3 py-1 text-sm font-semibold"
+          style={{ background: heatmapColor(feedback.score), color: heatmapTextColor(feedback.score) }}
+        >
+          {feedback.score ?? "--"} / 5
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Current Readiness</p>
+          <p className="mt-2 text-sm leading-6 text-slate-700">{feedback.current_readiness}</p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Why Alfred Scored This Way</p>
+          <p className="mt-2 text-sm leading-6 text-slate-700">{feedback.why}</p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">What Would Improve This Score</p>
+          <ul className="mt-2 space-y-2 text-sm leading-6 text-slate-700">
+            {improve.map((item, index) => <li key={`improve-${index}`}>{item}</li>)}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PromotionLimitersPanel({ items }) {
+  if (!items?.length) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">What Is Currently Limiting Promotion</p>
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        {items.slice(0, 3).map((item, index) => (
+          <article key={`limiter-${index}`} className="rounded-lg border border-orange-200 bg-orange-50 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-orange-700">{item.domain}</p>
+                <h3 className="mt-1 text-sm font-semibold text-slate-950">{item.subdomain}</h3>
+              </div>
+              <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-orange-700">{item.score}/5</span>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-slate-700">{item.why_it_limits_promotion}</p>
+            <p className="mt-3 text-sm font-semibold leading-6 text-slate-950">{item.what_to_do_next}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StrongestAreasPanel({ items }) {
+  if (!items?.length) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Strongest Areas</p>
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        {items.slice(0, 3).map((item, index) => (
+          <article key={`strongest-${index}`} className="rounded-lg border border-green-200 bg-green-50 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-green-700">{item.domain}</p>
+                <h3 className="mt-1 text-sm font-semibold text-slate-950">{item.subdomain}</h3>
+              </div>
+              <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-green-700">{item.score}/5</span>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-slate-700">{item.why_it_is_strong}</p>
+          </article>
+        ))}
       </div>
     </div>
   );
@@ -1676,6 +1976,22 @@ function AssessmentScores({ scores }) {
         ))}
       </div>
     </div>
+  );
+}
+
+function DevelopmentalScoringAccordion({ scores }) {
+  if (!scores || Object.keys(scores).length === 0) return null;
+
+  return (
+    <details className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <summary className="cursor-pointer text-sm font-semibold text-slate-950">How Alfred graded this</summary>
+      <p className="mt-2 text-sm leading-6 text-slate-600">
+        These developmental dimensions inform the score, but the main feedback is shown through the Leadership Wheel.
+      </p>
+      <div className="mt-4">
+        <AssessmentScores scores={scores} />
+      </div>
+    </details>
   );
 }
 

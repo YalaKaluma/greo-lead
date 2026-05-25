@@ -446,7 +446,6 @@ def serialize_items(items: list[Any], limit: int = 20) -> list[dict[str, Any]]:
 
 
 def gather_belt_assessment_evidence(db: Session, user_number: str, current_belt: str) -> dict:
-    user = db.query(User).filter(User.phone_number == user_number).first()
     trials = db.query(JourneyBeltTrial).filter(
         JourneyBeltTrial.user_number == user_number,
         JourneyBeltTrial.target_belt == current_belt,
@@ -461,35 +460,16 @@ def gather_belt_assessment_evidence(db: Session, user_number: str, current_belt:
                 limit=10,
             )
 
-    journal_entries = []
-    if user:
-        journal_entries = db.query(JournalEntry).filter(JournalEntry.user_id == user.id).order_by(JournalEntry.created_at.desc()).limit(20).all()
-
-    goal_reviews = db.query(GoalReviewSession).filter(GoalReviewSession.user_number == user_number).order_by(GoalReviewSession.session_ended_at.desc()).limit(10).all()
-    coaching_sessions = db.query(LeadershipCoachingSession).filter(LeadershipCoachingSession.user_number == user_number).order_by(LeadershipCoachingSession.created_at.desc()).limit(10).all()
-    tasks = db.query(Task).filter(Task.user_number == user_number).order_by(Task.updated_at.desc()).limit(30).all()
-    habits = db.query(Habit).filter(Habit.user_number == user_number).order_by(Habit.updated_at.desc()).limit(20).all()
-    feedback = []
-    if user:
-        feedback = db.query(MessageFeedback).filter(MessageFeedback.user_id == user.id).order_by(MessageFeedback.created_at.desc()).limit(10).all()
-    previous_assessment = db.query(BeltAssessment).filter(BeltAssessment.user_number == user_number).order_by(BeltAssessment.created_at.desc()).first()
-
     return {
         "user_number": user_number,
         "current_belt": current_belt,
+        "assessment_scope": "Score only current belt curriculum evidence: completed belt trials, reflection answers, real-world trial submissions, and belt-specific development exercises.",
         "leadership_wheel": {
             dimension["name"]: [topic["label"] for topic in dimension["topics"]]
             for dimension in JOURNEY_DIMENSIONS.values()
         },
         "belt_trials": serialize_items(trials, limit=50),
-        "subdomain_evidence": subdomains,
-        "journal_entries": serialize_items(journal_entries),
-        "goal_review_sessions": serialize_items(goal_reviews),
-        "leadership_coaching_sessions": serialize_items(coaching_sessions),
-        "recent_tasks": serialize_items(tasks),
-        "active_habits": serialize_items(habits),
-        "message_feedback": serialize_items(feedback),
-        "previous_belt_assessment": jsonable_encoder(previous_assessment) if previous_assessment else None,
+        "belt_subdomain_evidence": subdomains,
     }
 
 
@@ -560,29 +540,64 @@ def build_subdomain_feedback(domain_name: str, subdomain_name: str, evidence_ite
     has_evidence = bool(evidence_items)
     return {
         "score": 3 if has_evidence else 1,
-        "assessment": (
-            f"You have started building evidence for {subdomain_name}."
+        "status": "developing" if has_evidence else "needs evidence",
+        "current_readiness": (
+            f"You show an early foundation in {subdomain_name}, but Alfred needs sharper examples from this belt before it can strongly support promotion."
             if has_evidence else
-            f"Limited evidence observed for {subdomain_name}."
+            f"Limited evidence observed in the current belt work for {subdomain_name}."
         ),
-        "evidence_observed": (
-            f"{len(evidence_items)} evidence item(s) observed in Alfred."
+        "why": (
+            f"The submitted belt evidence touches {subdomain_name}, but it needs clearer examples of choices, behavior, and learning under pressure."
             if has_evidence else
-            "limited evidence observed"
+            f"This part of the wheel does not yet show enough belt-specific reflection or behavioral application for Alfred to score it strongly."
         ),
-        "missing_evidence": (
-            "Add more specific examples showing how this behavior appears under pressure and over time."
-            if has_evidence else
-            f"Alfred needs direct evidence in {subdomain_name} before this part of the wheel can strongly support promotion."
-        ),
-        "next_actions_in_alfred": default_subdomain_actions(domain_name, subdomain_name),
+        "improve": default_subdomain_actions(domain_name, subdomain_name),
     }
 
 
-def normalize_wheel_feedback(result: dict, evidence: dict) -> dict:
-    raw = result.get("wheel_feedback") or {}
-    evidence_by_domain = evidence.get("subdomain_evidence") or {}
-    wheel_feedback = {}
+def score_to_status(score: Any) -> str:
+    try:
+        score_value = int(score)
+    except (TypeError, ValueError):
+        score_value = 3
+    if score_value <= 1:
+        return "weak"
+    if score_value == 2:
+        return "emerging"
+    if score_value == 3:
+        return "developing"
+    if score_value == 4:
+        return "strong"
+    return "excellent"
+
+
+def clean_score(score: Any, default: int = 3) -> int:
+    try:
+        return max(1, min(5, int(score)))
+    except (TypeError, ValueError):
+        return default
+
+
+def normalize_subdomain_score(raw_subdomain: Any, default_feedback: dict) -> dict:
+    if not isinstance(raw_subdomain, dict):
+        raw_subdomain = {}
+    score = clean_score(raw_subdomain.get("score"), default_feedback["score"])
+    improve = raw_subdomain.get("improve") or raw_subdomain.get("next_actions_in_alfred") or default_feedback["improve"]
+    if isinstance(improve, str):
+        improve = [improve]
+    return {
+        "score": score,
+        "status": raw_subdomain.get("status") or score_to_status(score),
+        "current_readiness": raw_subdomain.get("current_readiness") or raw_subdomain.get("assessment") or default_feedback["current_readiness"],
+        "why": raw_subdomain.get("why") or raw_subdomain.get("evidence_observed") or default_feedback["why"],
+        "improve": improve[:3] if isinstance(improve, list) else default_feedback["improve"],
+    }
+
+
+def normalize_wheel_scores(result: dict, evidence: dict) -> dict:
+    raw = result.get("wheel_scores") or result.get("wheel_feedback") or {}
+    evidence_by_domain = evidence.get("belt_subdomain_evidence") or evidence.get("subdomain_evidence") or {}
+    wheel_scores = {}
 
     for domain in JOURNEY_DIMENSIONS.values():
         domain_name = domain["name"]
@@ -598,64 +613,131 @@ def normalize_wheel_feedback(result: dict, evidence: dict) -> dict:
                 subdomain_name,
                 evidence_domain.get(subdomain_name) or [],
             )
-            if isinstance(raw_subdomain, dict):
-                merged = {**default_feedback, **raw_subdomain}
-                if not merged.get("next_actions_in_alfred"):
-                    merged["next_actions_in_alfred"] = default_feedback["next_actions_in_alfred"]
-                subdomains[subdomain_name] = merged
-            else:
-                subdomains[subdomain_name] = default_feedback
+            subdomains[subdomain_name] = normalize_subdomain_score(raw_subdomain, default_feedback)
 
-        wheel_feedback[domain_name] = {
-            "overall_assessment": raw_domain.get("overall_assessment") or f"Alfred reviewed your evidence across {domain_name}.",
-            "strengths": raw_domain.get("strengths") or [],
-            "growth_edges": raw_domain.get("growth_edges") or [
-                "Add more behavioral proof inside Alfred for the weaker subdomains."
-            ],
+        scores = [item["score"] for item in subdomains.values()]
+        domain_score = clean_score(raw_domain.get("domain_score"), round(sum(scores) / len(scores)) if scores else 3)
+        wheel_scores[domain_name] = {
+            "domain_score": domain_score,
+            "summary": raw_domain.get("summary") or raw_domain.get("overall_assessment") or f"Your {domain_name} readiness is {score_to_status(domain_score)} based on the current belt work.",
             "subdomains": subdomains,
         }
 
-    return direct_address_text(wheel_feedback)
+    return direct_address_text(wheel_scores)
 
 
-def derive_priority_actions(wheel_feedback: dict, result: dict) -> list[dict[str, str]]:
+def flatten_wheel_scores(wheel_scores: dict) -> list[dict[str, Any]]:
+    items = []
+    for domain_name, domain in wheel_scores.items():
+        for subdomain_name, feedback in (domain.get("subdomains") or {}).items():
+            items.append({
+                "domain": domain_name,
+                "subdomain": subdomain_name,
+                "score": clean_score(feedback.get("score")),
+                "feedback": feedback,
+            })
+    return items
+
+
+def derive_promotion_limiters(wheel_scores: dict, result: dict) -> list[dict[str, Any]]:
+    raw_limiters = result.get("promotion_limiters")
+    if isinstance(raw_limiters, list) and raw_limiters:
+        return direct_address_text(raw_limiters[:3])
+
+    limiters = []
+    for item in sorted(flatten_wheel_scores(wheel_scores), key=lambda entry: entry["score"])[:3]:
+        feedback = item["feedback"]
+        improve = feedback.get("improve") or default_subdomain_actions(item["domain"], item["subdomain"])
+        limiters.append({
+            "domain": item["domain"],
+            "subdomain": item["subdomain"],
+            "score": item["score"],
+            "why_it_limits_promotion": feedback.get("why") or f"{item['subdomain']} needs clearer belt-specific examples before it can support promotion.",
+            "what_to_do_next": improve[0] if improve else f"Add one concrete {item['subdomain']} reflection inside Alfred.",
+        })
+    return direct_address_text(limiters)
+
+
+def derive_strongest_areas(wheel_scores: dict, result: dict) -> list[dict[str, Any]]:
+    raw_strongest = result.get("strongest_areas")
+    if isinstance(raw_strongest, list) and raw_strongest:
+        return direct_address_text(raw_strongest[:3])
+
+    strongest = []
+    for item in sorted(flatten_wheel_scores(wheel_scores), key=lambda entry: entry["score"], reverse=True)[:3]:
+        feedback = item["feedback"]
+        strongest.append({
+            "domain": item["domain"],
+            "subdomain": item["subdomain"],
+            "score": item["score"],
+            "why_it_is_strong": feedback.get("why") or f"{item['subdomain']} is one of the clearer signals in your current belt work.",
+        })
+    return direct_address_text(strongest)
+
+
+def derive_priority_actions(wheel_scores: dict, result: dict) -> list[dict[str, str]]:
     raw_actions = result.get("priority_next_actions")
     if isinstance(raw_actions, list) and raw_actions:
-        return direct_address_text(raw_actions)
+        return direct_address_text(raw_actions[:5])
 
     actions = []
-    for domain_name, domain in wheel_feedback.items():
+    for item in sorted(flatten_wheel_scores(wheel_scores), key=lambda entry: entry["score"])[:5]:
+        feedback = item["feedback"]
+        next_action = (feedback.get("improve") or default_subdomain_actions(item["domain"], item["subdomain"]))[0]
+        actions.append({
+            "domain": item["domain"],
+            "subdomain": item["subdomain"],
+            "action": next_action,
+            "why_it_matters": "This is one of the clearest places to create stronger behavioral proof for your next assessment.",
+        })
+    return direct_address_text(actions[:5])
+
+
+def wheel_scores_to_legacy_feedback(wheel_scores: dict) -> dict:
+    legacy = {}
+    for domain_name, domain in wheel_scores.items():
+        subdomains = {}
         for subdomain_name, feedback in (domain.get("subdomains") or {}).items():
-            score = feedback.get("score")
-            try:
-                score_value = int(score)
-            except (TypeError, ValueError):
-                score_value = 3
-            if score_value <= 2:
-                next_action = (feedback.get("next_actions_in_alfred") or default_subdomain_actions(domain_name, subdomain_name))[0]
-                actions.append({
-                    "domain": domain_name,
-                    "subdomain": subdomain_name,
-                    "action": next_action,
-                    "why_it_matters": "This is one of the clearest places to create stronger behavioral proof for your next assessment.",
-                })
-            if len(actions) >= 5:
-                return actions
-    return actions[:5]
+            subdomains[subdomain_name] = {
+                "score": feedback.get("score"),
+                "assessment": feedback.get("current_readiness"),
+                "evidence_observed": feedback.get("why"),
+                "missing_evidence": feedback.get("why"),
+                "next_actions_in_alfred": feedback.get("improve") or [],
+            }
+        legacy[domain_name] = {
+            "overall_assessment": domain.get("summary"),
+            "strengths": [],
+            "growth_edges": [],
+            "subdomains": subdomains,
+        }
+    return legacy
 
 
 def normalize_assessment_result(result: dict, evidence: dict, target_belt: str) -> dict:
     result = direct_address_text(result or {})
-    wheel_feedback = normalize_wheel_feedback(result, evidence)
+    wheel_scores = normalize_wheel_scores(result, evidence)
     profile = result.get("leadership_profile") or {
         "headline": "The Reflective Builder",
-        "description": "You appear to be a thoughtful leader who is building self-awareness. Your next edge is turning insight into repeated behavior inside Alfred.",
+        "description": "You appear to be a thoughtful leader who is building self-awareness through the current belt work. Your next edge is turning insight into clearer behavior under pressure.",
         "likely_strengths": ["Willingness to reflect", "Interest in intentional growth"],
-        "likely_risks": ["Insight without enough behavioral proof", "Uneven evidence across the wheel"],
+        "likely_risks": ["Insight without enough behavioral proof", "Uneven readiness across the wheel"],
+        "current_growth_edge": "Turning reflection into repeatable leadership behavior.",
     }
-    priority_actions = derive_priority_actions(wheel_feedback, result)
+    limiters = derive_promotion_limiters(wheel_scores, result)
+    strongest = derive_strongest_areas(wheel_scores, result)
+    priority_actions = derive_priority_actions(wheel_scores, result)
+    developmental_scores = result.get("developmental_dimension_scores") or result.get("dimension_scores") or {
+        "self_awareness": 3,
+        "ownership": 3,
+        "behavioral_consistency": 3,
+        "emotional_maturity": 3,
+        "reflection_depth": 3,
+        "integration": 3,
+        "transformational_evidence": 3,
+    }
     coaching_note = result.get("alfred_coaching_note") or result.get("final_coaching_note") or (
-        "To improve your readiness, add specific evidence inside Alfred: complete missing trials, write journal reflections after difficult moments, create tasks tied to your development plan, track one habit, and run a coaching session for the weakest subdomain."
+        "Focus on the weakest subdomains in the heatmap. Add concrete examples, complete the suggested belt work, and resubmit once those areas show behavior under pressure."
     )
 
     return {
@@ -663,8 +745,13 @@ def normalize_assessment_result(result: dict, evidence: dict, target_belt: str) 
         "target_belt": result.get("target_belt") or display_belt_name(target_belt),
         "direct_summary": result.get("direct_summary") or result.get("summary") or result.get("assessment_summary") or "",
         "leadership_profile": direct_address_text(profile),
-        "wheel_feedback": wheel_feedback,
+        "wheel_scores": wheel_scores,
+        "wheel_feedback": result.get("wheel_feedback") or wheel_scores_to_legacy_feedback(wheel_scores),
+        "promotion_limiters": limiters,
+        "strongest_areas": strongest,
         "priority_next_actions": priority_actions,
+        "developmental_dimension_scores": direct_address_text(developmental_scores),
+        "dimension_scores": direct_address_text(developmental_scores),
         "alfred_coaching_note": direct_address_text(coaching_note),
     }
 
@@ -675,14 +762,15 @@ def fallback_assessment_from_evidence(evidence: dict) -> dict:
     base = {
         "recommendation": "almost_ready" if score >= 70 else "not_ready",
         "readiness_score": score,
-        "direct_summary": "Alfred could not complete the live assessment, so this provisional assessment is based on completed evidence volume. Please resubmit when assessment generation is available.",
+        "direct_summary": "Your current belt work is ready to review, but the readiness picture is still uneven across the wheel. Focus first on the lowest-scoring subdomains and add sharper behavioral examples.",
         "leadership_profile": {
-            "headline": "The Evidence Builder",
-            "description": "You have enough completed evidence to request review. Your next edge is making that evidence more specific, repeated, and visible across the full Leadership Wheel.",
-            "likely_strengths": ["You are engaging with the Journey system.", "You have completed required evidence for this belt."],
-            "likely_risks": ["Some feedback may be thinner until Alfred can complete the full live review."],
+            "headline": "The Reflective Builder",
+            "description": "You appear to be engaging seriously with the current belt work. Your next edge is making your reflections more concrete and showing how insight changes behavior.",
+            "likely_strengths": ["Willingness to reflect", "Interest in structured growth"],
+            "likely_risks": ["Staying at the level of insight", "Uneven behavioral proof across the wheel"],
+            "current_growth_edge": "Turning completed exercises into specific examples of leadership behavior.",
         },
-        "dimension_scores": {
+        "developmental_dimension_scores": {
             "self_awareness": 3,
             "ownership": 3,
             "behavioral_consistency": 3,
@@ -695,11 +783,11 @@ def fallback_assessment_from_evidence(evidence: dict) -> dict:
             {
                 "domain": "Learning & Development",
                 "subdomain": "Development Plan",
-                "action": "Review your evidence and resubmit for a full assessment.",
-                "why_it_matters": "A live Alfred assessment will provide more precise developmental next steps.",
+                "action": "Update your Development Plan with 3 specific behaviors you will practice before the next assessment.",
+                "why_it_matters": "Specific practice goals make the next belt feel earned through behavior, not completion alone.",
             }
         ],
-        "alfred_coaching_note": "Your evidence is ready for review. The next useful step is a full Alfred assessment, not another checklist.",
+        "alfred_coaching_note": "Use the weakest areas in the heatmap as your practice plan. Add concrete examples, complete the suggested belt work, and resubmit when those areas show behavior under pressure.",
     }
     return normalize_assessment_result(base, evidence, evidence.get("target_belt") or "")
 
@@ -773,7 +861,11 @@ class BeltAssessmentResponse(BaseModel):
     required_next_actions: Optional[list]
     leadership_profile: Optional[dict]
     wheel_feedback: Optional[dict]
+    wheel_scores: Optional[dict]
+    promotion_limiters: Optional[list]
+    strongest_areas: Optional[list]
     priority_next_actions: Optional[list]
+    developmental_dimension_scores: Optional[dict]
     final_coaching_note: Optional[str]
     alfred_coaching_note: Optional[str]
     evidence_snapshot: Optional[dict]
@@ -861,7 +953,7 @@ def submit_belt_assessment(
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.25,
-            max_tokens=1800,
+            max_tokens=5000,
         )
         raw_text = response.choices[0].message.content or "{}"
         result = parse_assessment_response(raw_text)
@@ -895,7 +987,11 @@ def submit_belt_assessment(
         required_next_actions=result.get("required_next_actions") or [],
         leadership_profile=result.get("leadership_profile") or {},
         wheel_feedback=result.get("wheel_feedback") or {},
+        wheel_scores=result.get("wheel_scores") or {},
+        promotion_limiters=result.get("promotion_limiters") or [],
+        strongest_areas=result.get("strongest_areas") or [],
         priority_next_actions=result.get("priority_next_actions") or [],
+        developmental_dimension_scores=result.get("developmental_dimension_scores") or result.get("dimension_scores") or {},
         final_coaching_note=result.get("final_coaching_note") or result.get("alfred_coaching_note"),
         alfred_coaching_note=result.get("alfred_coaching_note") or result.get("final_coaching_note"),
         evidence_snapshot=jsonable_encoder(evidence),
