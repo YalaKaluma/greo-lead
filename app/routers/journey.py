@@ -66,7 +66,7 @@ LEGACY_LEVEL_ALIASES = {
 }
 
 ROADMAP_STATUSES = {"not_started", "active", "completed"}
-WAVE_GOAL_STATUSES = {"done", "ongoing", "at_risk", "blocked"}
+WAVE_GOAL_STATUSES = {"not_started", "done", "ongoing", "at_risk", "blocked"}
 BELT_IDS = ["white", "yellow", "green", "brown", "black"]
 ASSESSMENT_STATUS_VALUES = {"ready_for_promotion", "almost_ready", "not_ready", "needs_more_evidence", "submitted"}
 

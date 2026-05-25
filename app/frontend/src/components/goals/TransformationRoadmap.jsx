@@ -10,6 +10,7 @@ const STATUS_OPTIONS = [
 ];
 
 const OUTCOME_STATUS_OPTIONS = [
+  { value: 'not_started', label: 'Not started' },
   { value: 'done', label: 'Done' },
   { value: 'ongoing', label: 'Ongoing' },
   { value: 'at_risk', label: 'At risk' },
@@ -17,6 +18,12 @@ const OUTCOME_STATUS_OPTIONS = [
 ];
 
 const OUTCOME_STATUS_STYLES = {
+  not_started: {
+    label: 'Not started',
+    dot: 'bg-slate-300',
+    card: 'border-slate-200 bg-slate-50 hover:bg-slate-100',
+    wave: 'border-slate-200'
+  },
   done: {
     label: 'Done',
     dot: 'bg-green-500',
@@ -25,9 +32,9 @@ const OUTCOME_STATUS_STYLES = {
   },
   ongoing: {
     label: 'Ongoing',
-    dot: 'bg-slate-300',
-    card: 'border-slate-200 bg-slate-50 hover:bg-slate-100',
-    wave: 'border-slate-200'
+    dot: 'bg-slate-500',
+    card: 'border-slate-300 bg-slate-100 hover:bg-slate-200',
+    wave: 'border-slate-400'
   },
   at_risk: {
     label: 'At risk',
@@ -44,15 +51,16 @@ const OUTCOME_STATUS_STYLES = {
 };
 
 const getOutcomeStatusStyle = (status) => (
-  OUTCOME_STATUS_STYLES[status || 'ongoing'] || OUTCOME_STATUS_STYLES.ongoing
+  OUTCOME_STATUS_STYLES[status || 'not_started'] || OUTCOME_STATUS_STYLES.not_started
 );
 
 const getWaveStatusStyle = (wave) => {
-  const statuses = (wave.goals || []).map(link => link.status || 'ongoing');
+  const statuses = (wave.goals || []).map(link => link.status || 'not_started');
   if (statuses.includes('blocked')) return OUTCOME_STATUS_STYLES.blocked;
   if (statuses.includes('at_risk')) return OUTCOME_STATUS_STYLES.at_risk;
+  if (statuses.includes('ongoing')) return OUTCOME_STATUS_STYLES.ongoing;
   if (statuses.length > 0 && statuses.every(status => status === 'done')) return OUTCOME_STATUS_STYLES.done;
-  return OUTCOME_STATUS_STYLES.ongoing;
+  return OUTCOME_STATUS_STYLES.not_started;
 };
 
 const getGoalTitle = (goal) => goal?.title || goal?.goal_text || '';
@@ -84,7 +92,7 @@ export default function TransformationRoadmap({
   const [editingWaveTitle, setEditingWaveTitle] = useState('');
   const [outcomeModalWave, setOutcomeModalWave] = useState(null);
   const [editingOutcomeLink, setEditingOutcomeLink] = useState(null);
-  const [editingOutcomeForm, setEditingOutcomeForm] = useState({ title: '', goal_text: '', status: 'ongoing' });
+  const [editingOutcomeForm, setEditingOutcomeForm] = useState({ title: '', goal_text: '', status: 'not_started' });
   const [selectedOutcomeId, setSelectedOutcomeId] = useState('');
   const [newOutcomeForm, setNewOutcomeForm] = useState({ title: '', description: '' });
   const [draft, setDraft] = useState(null);
@@ -262,7 +270,7 @@ export default function TransformationRoadmap({
     await axios.post(`${apiUrl}/api/journey/waves/${destinationWaveId}/goals`, {
       goal_id: movedLink.goal_id,
       sequence_order: destination.index,
-      status: movedLink.status || 'ongoing'
+      status: movedLink.status || 'not_started'
     }, { params: { user_number: userNumber } });
 
     await Promise.all([
@@ -306,7 +314,7 @@ export default function TransformationRoadmap({
     if (!goalId) return;
     await axios.post(`${apiUrl}/api/journey/waves/${waveId}/goals`, {
       goal_id: Number(goalId),
-      status: 'ongoing'
+      status: 'not_started'
     }, { params: { user_number: userNumber } });
     resetOutcomeModal();
     await fetchRoadmap();
@@ -331,7 +339,7 @@ export default function TransformationRoadmap({
 
     await axios.post(`${apiUrl}/api/journey/waves/${waveId}/goals`, {
       goal_id: res.data.id,
-      status: 'ongoing'
+      status: 'not_started'
     }, { params: { user_number: userNumber } });
 
     resetOutcomeModal();
@@ -343,7 +351,7 @@ export default function TransformationRoadmap({
       params: { user_number: userNumber }
     });
     setEditingOutcomeLink(null);
-    setEditingOutcomeForm({ title: '', goal_text: '', status: 'ongoing' });
+    setEditingOutcomeForm({ title: '', goal_text: '', status: 'not_started' });
     await fetchRoadmap();
   };
 
@@ -352,7 +360,7 @@ export default function TransformationRoadmap({
     setEditingOutcomeForm({
       title: link.goal?.title || '',
       goal_text: link.goal?.goal_text || '',
-      status: link.status || 'ongoing'
+      status: link.status || 'not_started'
     });
   };
 
@@ -364,11 +372,11 @@ export default function TransformationRoadmap({
         goal_text: editingOutcomeForm.goal_text || editingOutcomeForm.title
       }, { params: { user_number: userNumber } }),
       axios.patch(`${apiUrl}/api/journey/waves/${editingOutcomeLink.wave.id}/goals/${editingOutcomeLink.link.goal_id}`, {
-        status: editingOutcomeForm.status || 'ongoing'
+        status: editingOutcomeForm.status || 'not_started'
       }, { params: { user_number: userNumber } })
     ]);
     setEditingOutcomeLink(null);
-    setEditingOutcomeForm({ title: '', goal_text: '', status: 'ongoing' });
+    setEditingOutcomeForm({ title: '', goal_text: '', status: 'not_started' });
     await fetchRoadmap();
   };
 
@@ -787,7 +795,7 @@ export default function TransformationRoadmap({
           onClick={(event) => {
             if (event.target === event.currentTarget) {
               setEditingOutcomeLink(null);
-              setEditingOutcomeForm({ title: '', goal_text: '', status: 'ongoing' });
+              setEditingOutcomeForm({ title: '', goal_text: '', status: 'not_started' });
             }
           }}
         >
@@ -797,7 +805,7 @@ export default function TransformationRoadmap({
               <button
                 onClick={() => {
                   setEditingOutcomeLink(null);
-                  setEditingOutcomeForm({ title: '', goal_text: '', status: 'ongoing' });
+                  setEditingOutcomeForm({ title: '', goal_text: '', status: 'not_started' });
                 }}
                 className="text-slate-400 hover:text-slate-600 transition-colors p-1"
               >
@@ -840,7 +848,7 @@ export default function TransformationRoadmap({
               <button
                 onClick={() => {
                   setEditingOutcomeLink(null);
-                  setEditingOutcomeForm({ title: '', goal_text: '', status: 'ongoing' });
+                  setEditingOutcomeForm({ title: '', goal_text: '', status: 'not_started' });
                 }}
                 className="flex-1 px-4 py-3 border-2 border-slate-300 hover:border-slate-400 text-slate-700 rounded-lg font-medium transition-colors"
               >
