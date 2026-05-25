@@ -986,11 +986,10 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   };
 
   const selectedState = dimensionStates[selectedDimension.id];
-  const selectedBelt = getBelt(selectedState.beltIndex);
-  const activeBelt = getBeltById(selectedState.activeBeltId);
-  const viewedBelt = getBeltById(selectedTrialBeltId || selectedState.activeBeltId);
+  const journeyCurrentBelt = getBeltById(readinessStatus?.current_belt || latestAssessment?.target_belt || selectedState.currentBeltId);
+  const journeyNextBelt = getBeltById(readinessStatus?.target_belt || getNextBeltId(journeyCurrentBelt.id));
+  const viewedBelt = getBeltById(selectedTrialBeltId || journeyCurrentBelt.id);
   const viewedNextBelt = getBeltById(getNextBeltId(viewedBelt.id));
-  const activeNextBelt = getBeltById(selectedState.nextBeltId);
   const viewedBeltRequirements = getBeltRequirementsFromConfig(
     trialConfig,
     selectedDimension.id,
@@ -1155,7 +1154,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
               </button>
             ) : readinessStatus?.required_trials ? (
               <p className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
-                {Math.max((readinessStatus.required_trials || 0) - (readinessStatus.completed_trials || 0), 0)} trials remaining before belt assessment
+                {Math.max((readinessStatus.required_trials || 0) - (readinessStatus.completed_trials || 0), 0)} trials remaining before {journeyNextBelt.name} assessment
               </p>
             ) : null}
             <div className="flex flex-wrap justify-end gap-2">
@@ -1223,6 +1222,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
                 activeTopic={activeTopic}
                 dimensionStates={dimensionStates}
                 topicData={topicData}
+                journeyBelt={journeyCurrentBelt}
                 onSelectDimension={handleSelectDimension}
                 onSelectSubdomain={handleSelectSubdomain}
               />
@@ -1244,15 +1244,14 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
             <DimensionDeepDive
               dimension={selectedDimension}
               dimensionState={selectedState}
-              belt={selectedBelt}
-              nextBelt={activeNextBelt}
-              telemetry={telemetry}
-              loadingSignals={loadingSignals}
+              belt={journeyCurrentBelt}
+              nextBelt={journeyNextBelt}
+              latestAssessment={latestAssessment}
             />
 
             <PathToNextBeltPanel
               dimension={selectedDimension}
-              currentBelt={activeBelt}
+              currentBelt={journeyCurrentBelt}
               targetBelt={viewedBelt}
               nextBelt={viewedNextBelt}
               requirements={viewedBeltRequirements}
@@ -2184,8 +2183,9 @@ function AssessmentFeedback({ title, feedback }) {
   );
 }
 
-function LeadershipWheel({ selectedDimensionId, activeTopic, dimensionStates, topicData, onSelectDimension, onSelectSubdomain }) {
+function LeadershipWheel({ selectedDimensionId, activeTopic, dimensionStates, topicData, journeyBelt, onSelectDimension, onSelectSubdomain }) {
   const anglePerDim = 360 / DIMENSIONS.length;
+  const haloBelt = journeyBelt || getBeltById("white");
 
   return (
     <svg viewBox="0 0 1000 1000" className="h-auto w-full">
@@ -2270,7 +2270,7 @@ function LeadershipWheel({ selectedDimensionId, activeTopic, dimensionStates, to
                   <path
                     d={arcPath(R_BELT, topicStart + 2, topicEnd - 2)}
                     fill="none"
-                    stroke={belt.color}
+                    stroke={haloBelt.color}
                     strokeWidth="12"
                     strokeLinecap="butt"
                     pointerEvents="none"
@@ -2300,20 +2300,25 @@ function LeadershipWheel({ selectedDimensionId, activeTopic, dimensionStates, to
   );
 }
 
-function DimensionDeepDive({ dimension, dimensionState, belt, nextBelt, telemetry, loadingSignals }) {
-  const integrationAverage = dimension.mvp ? getTelemetryAverage(telemetry) : null;
+function DimensionDeepDive({ dimension, dimensionState, belt, nextBelt, latestAssessment }) {
+  const assessment = latestAssessment ? directAssessmentCopy(latestAssessment) : null;
+  const profile = assessment?.leadership_profile || {};
+  const headline = profile.headline || "Your leadership style is still emerging";
+  const description = profile.description || dimensionState.assessment;
+  const strengths = profile.likely_strengths || [];
+  const risks = profile.likely_risks || [];
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-            Dimension Deep Dive
+            Leadership Style Summary
           </p>
-          <h2 className="mt-2 text-2xl font-semibold text-slate-950">{dimension.name}</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{dimension.brief}</p>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-950">{headline}</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{description}</p>
           <p className="mt-3 inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-            {dimensionState.evidenceLabel}
+            Current focus: {dimension.name}
           </p>
         </div>
 
@@ -2335,23 +2340,37 @@ function DimensionDeepDive({ dimension, dimensionState, belt, nextBelt, telemetr
         </div>
       </div>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-[#ded7c8] bg-[#fbfaf7] p-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#7c4a2d]">
-            Alfred Leadership Assessment
+            Growth Edge
           </p>
-          <p className="text-sm leading-6 text-slate-700">{dimensionState.assessment}</p>
+          <p className="text-sm leading-6 text-slate-700">
+            {profile.current_growth_edge || assessment?.alfred_coaching_note || "Complete a belt assessment to unlock a sharper leadership-style summary."}
+          </p>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-slate-950 p-4 text-white">
-          <p className="text-xs uppercase tracking-wide text-slate-300">Integration Readiness</p>
-          <p className="mt-3 text-4xl font-semibold">
-            {loadingSignals || integrationAverage === null ? "--" : `${integrationAverage}%`}
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Pattern Alfred Sees
           </p>
-          <p className="mt-2 text-xs leading-5 text-slate-300">
-            {dimension.mvp
-              ? "Behavioral evidence from Alfred usage. Advancement is recommended when the pattern holds."
-              : "Behavioral scoring for this dimension is not connected yet."}
-          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Likely strengths</p>
+              <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-700">
+                {(strengths.length ? strengths : ["Complete your assessment to populate this."]).slice(0, 3).map((item, index) => (
+                  <li key={`style-strength-${index}`}>{item}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Likely risks</p>
+              <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-700">
+                {(risks.length ? risks : ["Complete your assessment to populate this."]).slice(0, 3).map((item, index) => (
+                  <li key={`style-risk-${index}`}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
     </div>
