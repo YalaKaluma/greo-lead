@@ -227,7 +227,7 @@ dimensions:
         criteria: Apply intentional systems for prioritization, focus, planning, and execution. Begin aligning daily behavior with strategic priorities instead of reactive impulses.
         reflection:
           title: Reflection Trial
-          prompt: Describe a goal or responsibility you failed to execute well. What patterns or behaviors held you back?
+          prompt: Describe the moments or conditions under which your execution system tends to break down. What patterns, emotions, distractions, or behaviors usually cause you to lose focus, discipline, or momentum?
           grading_focus: [execution ownership, pattern recognition, responsibility, behavioral insight]
           completion_hint: Identify the patterns that interfered with execution.
         real_world:
