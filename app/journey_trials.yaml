@@ -313,7 +313,7 @@ dimensions:
         criteria: Apply intentional habits and routines to improve energy, focus, recovery, and sustainability. Begin aligning your lifestyle with long-term performance and well-being.
         reflection:
           title: Reflection Trial
-          prompt: What habits, environments, or relationships most consistently improve - or damage - your energy and well-being?
+          prompt: How do you intentionally use your energy sources and manage your energy drains throughout the week to sustain performance and well-being?
           grading_focus: [habit awareness, environment awareness, relationship patterns, sustainability]
           completion_hint: Identify which recurring conditions raise or drain your energy.
         real_world:
