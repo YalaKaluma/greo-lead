@@ -557,6 +557,8 @@ function getTrialTypeValidation(dimensionId, targetBeltId, trialType, beltValida
 function getSignalUnit(signal) {
   if (signal?.signal === "high_energy_habits_identified") return "habits";
   if (signal?.signal === "three_energy_level_journals") return "journals";
+  if (signal?.signal === "five_team_members_entered") return "team members";
+  if (signal?.signal === "tasks_consistently_entered" || signal?.signal === "tasks_maintained") return "tasks";
   return null;
 }
 

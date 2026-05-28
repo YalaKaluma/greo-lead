@@ -172,6 +172,9 @@ class JourneyPerson(Base):
     phone = Column(String, nullable=True)
     relation = Column(String, nullable=True)  # colleague, client, partner…
     context = Column(Text, nullable=True)  # optional notes
+    strengths = Column(Text, nullable=True)
+    growth_areas = Column(Text, nullable=True)
+    aspirations = Column(Text, nullable=True)
 
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

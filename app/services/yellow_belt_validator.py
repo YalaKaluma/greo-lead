@@ -195,8 +195,19 @@ def validate_five_team_members_entered(db: Session, user_number: str) -> dict[st
             missing_fields.append("name")
         if not _has_text(person.relation):
             missing_fields.append("relationship")
-        if not _has_text(person.context, min_chars=80):
-            missing_fields.append("strengths_weaknesses_aspirations_context")
+        has_explicit_profile = (
+            _has_text(getattr(person, "strengths", None))
+            and _has_text(getattr(person, "growth_areas", None))
+            and _has_text(getattr(person, "aspirations", None))
+        )
+        has_legacy_context = _has_text(person.context, min_chars=80)
+        if not has_explicit_profile and not has_legacy_context:
+            if not _has_text(getattr(person, "strengths", None)):
+                missing_fields.append("strengths")
+            if not _has_text(getattr(person, "growth_areas", None)):
+                missing_fields.append("growth_areas")
+            if not _has_text(getattr(person, "aspirations", None)):
+                missing_fields.append("aspirations")
         if missing_fields:
             missing.append({"id": person.id, "name": person.name, "missing": missing_fields})
         else:
@@ -212,7 +223,7 @@ def validate_five_team_members_entered(db: Session, user_number: str) -> dict[st
             if len(complete) >= 5
             else f"Complete {max(5 - len(complete), 0)} more team member profiles with strengths, growth areas, and aspirations."
         ),
-        [_evidence_item(item, ["name", "relation", "context", "updated_at"]) for item in complete[:10]],
+        [_evidence_item(item, ["name", "relation", "strengths", "growth_areas", "aspirations", "context", "updated_at"]) for item in complete[:10]],
         missing[:10],
     )
 

@@ -354,6 +354,13 @@ export default function MyTeam({ apiUrl, userNumber }) {
                                 {person.relation && (
                                   <p className="text-sm text-slate-600">{person.relation}</p>
                                 )}
+                                {(person.strengths || person.growth_areas || person.aspirations) && (
+                                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+                                    {person.strengths && <span className="rounded bg-green-50 px-2 py-1 text-green-700">Strengths captured</span>}
+                                    {person.growth_areas && <span className="rounded bg-amber-50 px-2 py-1 text-amber-700">Growth areas captured</span>}
+                                    {person.aspirations && <span className="rounded bg-blue-50 px-2 py-1 text-blue-700">Aspirations captured</span>}
+                                  </div>
+                                )}
                               </div>
 
                               {/* Action Icons */}
@@ -523,6 +530,28 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose }) {
               )}
               {person.context && (
                 <p className="text-slate-600 mb-4">{person.context}</p>
+              )}
+              {(person.strengths || person.growth_areas || person.aspirations) && (
+                <div className="mb-4 grid gap-3 md:grid-cols-3">
+                  {person.strengths && (
+                    <div className="rounded-lg border border-green-100 bg-green-50 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-green-700">Strengths</p>
+                      <p className="mt-1 text-sm text-slate-700">{person.strengths}</p>
+                    </div>
+                  )}
+                  {person.growth_areas && (
+                    <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Growth Areas</p>
+                      <p className="mt-1 text-sm text-slate-700">{person.growth_areas}</p>
+                    </div>
+                  )}
+                  {person.aspirations && (
+                    <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Aspirations</p>
+                      <p className="mt-1 text-sm text-slate-700">{person.aspirations}</p>
+                    </div>
+                  )}
+                </div>
               )}
               <div className="flex gap-4 text-sm text-slate-500">
                 {person.email && (
@@ -702,7 +731,10 @@ function PersonForm({ person, onSubmit, onCancel, onDelete }) {
     email: person?.email || '',
     phone: person?.phone || '',
     relation: person?.relation || '',
-    context: person?.context || ''
+    context: person?.context || '',
+    strengths: person?.strengths || '',
+    growth_areas: person?.growth_areas || '',
+    aspirations: person?.aspirations || ''
   });
 
   const handleSubmit = (e) => {
@@ -759,6 +791,30 @@ function PersonForm({ person, onSubmit, onCancel, onDelete }) {
         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
 
+      <textarea
+        value={formData.strengths}
+        onChange={(e) => setFormData({ ...formData, strengths: e.target.value })}
+        placeholder="Strengths"
+        rows={2}
+        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+
+      <textarea
+        value={formData.growth_areas}
+        onChange={(e) => setFormData({ ...formData, growth_areas: e.target.value })}
+        placeholder="Weaknesses / growth areas"
+        rows={2}
+        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+
+      <textarea
+        value={formData.aspirations}
+        onChange={(e) => setFormData({ ...formData, aspirations: e.target.value })}
+        placeholder="Aspirations"
+        rows={2}
+        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+
       <div className="flex gap-2">
         <button
           type="submit"
@@ -786,4 +842,3 @@ function PersonForm({ person, onSubmit, onCancel, onDelete }) {
     </form>
   );
 }
-

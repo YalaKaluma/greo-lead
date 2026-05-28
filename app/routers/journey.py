@@ -177,6 +177,9 @@ class PersonCreate(BaseModel):
     phone: Optional[str] = None
     relation: Optional[str] = None
     context: Optional[str] = None
+    strengths: Optional[str] = None
+    growth_areas: Optional[str] = None
+    aspirations: Optional[str] = None
 
 
 class PersonUpdate(BaseModel):
@@ -185,6 +188,9 @@ class PersonUpdate(BaseModel):
     phone: Optional[str] = None
     relation: Optional[str] = None
     context: Optional[str] = None
+    strengths: Optional[str] = None
+    growth_areas: Optional[str] = None
+    aspirations: Optional[str] = None
 
 
 router = APIRouter()
@@ -1328,6 +1334,9 @@ class PersonResponse(BaseModel):
     phone: Optional[str]
     relation: Optional[str]
     context: Optional[str]
+    strengths: Optional[str]
+    growth_areas: Optional[str]
+    aspirations: Optional[str]
     first_seen_at: datetime
     updated_at: datetime
 
@@ -1628,6 +1637,9 @@ def create_person(
         phone=person_data.phone,
         relation=person_data.relation,
         context=person_data.context,
+        strengths=person_data.strengths,
+        growth_areas=person_data.growth_areas,
+        aspirations=person_data.aspirations,
         first_seen_at=datetime.now(),
         updated_at=datetime.now()
     )
@@ -1663,6 +1675,12 @@ def update_person(
         person.relation = person_data.relation
     if person_data.context is not None:
         person.context = person_data.context
+    if person_data.strengths is not None:
+        person.strengths = person_data.strengths
+    if person_data.growth_areas is not None:
+        person.growth_areas = person_data.growth_areas
+    if person_data.aspirations is not None:
+        person.aspirations = person_data.aspirations
 
     person.updated_at = datetime.now()
     db.commit()
