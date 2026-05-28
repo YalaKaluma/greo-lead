@@ -109,7 +109,7 @@ def _signal_flag_result(
     signal_types: list[str],
     required: int,
     message_template: str,
-    require_distinct_dates: bool = True,
+    require_distinct_dates: bool = False,
 ) -> dict[str, Any]:
     flags = (
         db.query(MessageSignalFlag)
