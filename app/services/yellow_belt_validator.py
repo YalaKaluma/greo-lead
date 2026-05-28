@@ -123,8 +123,11 @@ def _signal_flag_result(
         .order_by(MessageSignalFlag.confidence_score.desc(), MessageSignalFlag.updated_at.desc())
         .all()
     )
-    distinct_dates = {_flag_date(flag) for flag in flags if _flag_date(flag)}
-    actual = len(distinct_dates) if require_distinct_dates and distinct_dates else len(flags)
+    if require_distinct_dates:
+        distinct_dates = {_flag_date(flag) for flag in flags if _flag_date(flag)}
+        actual = len(distinct_dates) if distinct_dates else len(flags)
+    else:
+        actual = len(flags)
     passed = actual >= required
     confidence_scores = [flag.confidence_score for flag in flags if flag.confidence_score is not None]
     evidence = [_flag_evidence(flag) for flag in flags[:10]]
@@ -169,7 +172,7 @@ def validate_values_strengths_energy_journals(db: Session, user_number: str) -> 
         "values_strengths_energy_journals",
         ["values_strengths_energy_reflection", "vision_depth", "fulfillment_reflection", "energy_awareness"],
         3,
-        "You have completed {actual} values, strengths, vision, energy, or fulfillment journal reflections. Add {remaining} more on separate days.",
+        "You have completed {actual} values, strengths, vision, energy, or fulfillment journal reflections. Add {remaining} more.",
     )
 
 
@@ -304,7 +307,7 @@ def validate_three_energy_level_journals(db: Session, user_number: str) -> dict[
         "three_energy_level_journals",
         ["energy_awareness"],
         3,
-        "You have completed {actual} energy-level journal reflections. Add {remaining} more on separate days.",
+        "You have completed {actual} energy-level journal reflections. Add {remaining} more.",
     )
 
 
@@ -315,7 +318,7 @@ def validate_three_behavior_change_journals(db: Session, user_number: str) -> di
         "three_behavior_change_journals",
         ["behavior_change_reflection"],
         3,
-        "You have completed {actual} behavior-change journal reflections. Add {remaining} more on separate days.",
+        "You have completed {actual} behavior-change journal reflections. Add {remaining} more.",
     )
 
 
@@ -338,7 +341,7 @@ def validate_scars_failures_behavior_reflections(db: Session, user_number: str) 
         "scars_failures_behavior_reflections",
         ["scars_failures_behavior_reflection"],
         3,
-        "You have completed {actual} scars, failures, and behavior reflections. Add {remaining} more on separate days.",
+        "You have completed {actual} scars, failures, and behavior reflections. Add {remaining} more.",
     )
 
 
