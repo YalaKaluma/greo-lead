@@ -24,11 +24,7 @@ YELLOW_BELT_DIMENSION_SIGNALS = {
     "people": ["five_team_members_entered"],
     "execute": ["tasks_consistently_entered", "tasks_maintained"],
     "energy": ["high_energy_habits_identified", "three_energy_level_journals"],
-    "learning": [
-        "three_behavior_change_journals",
-        "self_awareness_reflections",
-        "scars_failures_behavior_reflections",
-    ],
+    "learning": ["scars_failures_behavior_reflections"],
 }
 
 YELLOW_BELT_TRIAL_SIGNALS = {

@@ -559,7 +559,25 @@ function getSignalUnit(signal) {
   if (signal?.signal === "three_energy_level_journals") return "journals";
   if (signal?.signal === "five_team_members_entered") return "team members";
   if (signal?.signal === "tasks_consistently_entered" || signal?.signal === "tasks_maintained") return "tasks";
+  if (
+    signal?.signal === "values_strengths_energy_journals" ||
+    signal?.signal === "three_behavior_change_journals" ||
+    signal?.signal === "scars_failures_behavior_reflections"
+  ) return "reflections";
   return null;
+}
+
+function getPrimaryProgressSignal(signals) {
+  const priority = [
+    "scars_failures_behavior_reflections",
+    "three_behavior_change_journals",
+    "values_strengths_energy_journals",
+    "three_energy_level_journals",
+    "five_team_members_entered",
+    "high_energy_habits_identified",
+    "tasks_consistently_entered",
+  ];
+  return priority.map((signalName) => signals.find((signal) => signal.signal === signalName)).find(Boolean);
 }
 
 function formatSignalProgressDetail(signals) {
@@ -569,6 +587,12 @@ function formatSignalProgressDetail(signals) {
     const signal = signals[0];
     const unit = getSignalUnit(signal);
     return `${signal.actual || 0}/${signal.required || 0}${unit ? ` ${unit}` : ""}`;
+  }
+
+  const primarySignal = getPrimaryProgressSignal(signals);
+  if (primarySignal) {
+    const unit = getSignalUnit(primarySignal);
+    return `${primarySignal.actual || 0}/${primarySignal.required || 0}${unit ? ` ${unit}` : ""}`;
   }
 
   const completed = signals.filter((signal) => signal.passed).length;
