@@ -46,6 +46,7 @@ from app.models import GoalReviewSession
 from app.services.yellow_belt_validator import (
     validate_yellow_belt,
     validate_yellow_belt_dimension,
+    validate_yellow_belt_trial_type,
 )
 
 STRUCTURAL_LEVEL_ALIASES = {
@@ -344,7 +345,7 @@ def get_behavioral_trial_status(db: Session, user_number: str, dimension_id: str
             return "in_progress"
 
     if belt_id == "yellow":
-        result = validate_yellow_belt_dimension(db, user_number, dimension_id)
+        result = validate_yellow_belt_trial_type(db, user_number, dimension_id, "behavioral")
         if result["passed"]:
             return "submitted"
         if any(signal["actual"] > 0 for signal in result["signals"]):
@@ -353,6 +354,20 @@ def get_behavioral_trial_status(db: Session, user_number: str, dimension_id: str
             return normalize_trial_status(stored.status)
 
     return "not_started"
+
+
+def get_observable_real_world_trial_status(db: Session, user_number: str, dimension_id: str, belt_id: str) -> Optional[str]:
+    if belt_id != "yellow":
+        return None
+
+    result = validate_yellow_belt_trial_type(db, user_number, dimension_id, "real_world")
+    if not result["signals"]:
+        return None
+    if result["passed"]:
+        return "submitted"
+    if any(signal["actual"] > 0 for signal in result["signals"]):
+        return "in_progress"
+    return None
 
 
 def get_belt_completion_for_dimension(db: Session, user_number: str, config: dict, dimension_id: str, belt_id: str) -> dict:
@@ -364,7 +379,10 @@ def get_belt_completion_for_dimension(db: Session, user_number: str, config: dic
         requirement = config.get("dimensions", {}).get(dimension_id, {}).get("belts", {}).get(belt_id, {}).get(trial_type, {})
         status = get_behavioral_trial_status(db, user_number, dimension_id, belt_id) if trial_type == "behavioral" else None
         trial = None
-        if trial_type != "behavioral":
+        if trial_type == "real_world":
+            status = get_observable_real_world_trial_status(db, user_number, dimension_id, belt_id)
+
+        if trial_type != "behavioral" and status is None:
             trial = db.query(JourneyBeltTrial).filter(
                 JourneyBeltTrial.user_number == user_number,
                 JourneyBeltTrial.dimension_id == dimension_id,

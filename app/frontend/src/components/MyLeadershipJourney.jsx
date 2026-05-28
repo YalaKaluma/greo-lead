@@ -549,8 +549,32 @@ function getDimensionValidation(dimensionId, targetBeltId, beltValidations) {
   return validation?.dimensions?.find((item) => item.dimension === dimensionId) || null;
 }
 
-function getBehavioralProgressDetail(dimensionId, targetBeltId, beltValidations, topicData) {
-  if (targetBeltId === "white") {
+function getTrialTypeValidation(dimensionId, targetBeltId, trialType, beltValidations) {
+  const dimensionValidation = getDimensionValidation(dimensionId, targetBeltId, beltValidations);
+  return dimensionValidation?.trial_types?.[trialType] || null;
+}
+
+function getSignalUnit(signal) {
+  if (signal?.signal === "high_energy_habits_identified") return "habits";
+  if (signal?.signal === "three_energy_level_journals") return "journals";
+  return null;
+}
+
+function formatSignalProgressDetail(signals) {
+  if (!signals?.length) return null;
+
+  if (signals.length === 1) {
+    const signal = signals[0];
+    const unit = getSignalUnit(signal);
+    return `${signal.actual || 0}/${signal.required || 0}${unit ? ` ${unit}` : ""}`;
+  }
+
+  const completed = signals.filter((signal) => signal.passed).length;
+  return `${completed}/${signals.length}`;
+}
+
+function getTrialProgressDetail(dimensionId, targetBeltId, trialType, beltValidations, topicData) {
+  if (targetBeltId === "white" && trialType === "behavioral") {
     const dimension = DIMENSIONS.find((item) => item.id === dimensionId);
     const topics = dimension?.topics || [];
     if (!topics.length) return null;
@@ -559,17 +583,20 @@ function getBehavioralProgressDetail(dimensionId, targetBeltId, beltValidations,
     return `${completed}/${topics.length}`;
   }
 
+  const trialValidation = getTrialTypeValidation(dimensionId, targetBeltId, trialType, beltValidations);
+  if (trialValidation?.signals?.length) return formatSignalProgressDetail(trialValidation.signals);
+
   const dimensionValidation = getDimensionValidation(dimensionId, targetBeltId, beltValidations);
   const signals = dimensionValidation?.signals || [];
-  if (!signals.length) return null;
-
-  const completed = signals.filter((signal) => signal.passed).length;
-  return `${completed}/${signals.length}`;
+  return trialType === "behavioral" ? formatSignalProgressDetail(signals) : null;
 }
 
 function getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryAverage, topicData, beltValidations) {
   if (targetBeltId === "yellow") {
-    const validationStatus = getYellowValidationBehavioralStatus(dimensionId, beltValidations?.yellow);
+    const trialValidation = getTrialTypeValidation(dimensionId, targetBeltId, "behavioral", beltValidations);
+    const validationStatus = trialValidation
+      ? (trialValidation.passed ? "submitted" : trialValidation.signals.some((signal) => Number(signal.actual || 0) > 0) ? "in_progress" : "not_started")
+      : getYellowValidationBehavioralStatus(dimensionId, beltValidations?.yellow);
     if (validationStatus && validationStatus !== "not_started") return validationStatus;
   }
 
@@ -587,15 +614,25 @@ function getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryA
   return "not_started";
 }
 
+function getRealWorldStatus(dimensionId, targetBeltId, storedTrial, beltValidations) {
+  const trialValidation = getTrialTypeValidation(dimensionId, targetBeltId, "real_world", beltValidations);
+  if (trialValidation?.signals?.length) {
+    if (trialValidation.passed) return "submitted";
+    if (trialValidation.signals.some((signal) => Number(signal.actual || 0) > 0)) return "in_progress";
+  }
+  return normalizeStatus(storedTrial?.status);
+}
+
 function getTargetBeltProgress(dimensionId, targetBeltId, trialRecords, telemetryAverage, trialConfig, topicData, beltValidations) {
   const requirements = getBeltRequirementsFromConfig(trialConfig, dimensionId, targetBeltId);
   const activeTrialTypes = getActiveTrialTypes(normalizeRequirements(requirements, dimensionId));
   const reflection = getStoredTrial(trialRecords, dimensionId, targetBeltId, "reflection");
   const realWorld = getStoredTrial(trialRecords, dimensionId, targetBeltId, "real_world");
+  const realWorldStatus = getRealWorldStatus(dimensionId, targetBeltId, realWorld, beltValidations);
   const behavioralStatus = getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryAverage, topicData, beltValidations);
   const statuses = {
     reflection: reflection?.status,
-    real_world: realWorld?.status,
+    real_world: realWorldStatus,
     behavioral: behavioralStatus,
   };
 
@@ -1079,9 +1116,24 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
     topicData,
     beltValidations
   );
-  const viewedBehavioralProgressDetail = getBehavioralProgressDetail(
+  const viewedRealWorldTrial = getStoredTrial(trialRecords, selectedDimension.id, viewedBelt.id, "real_world");
+  const viewedRealWorldStatus = getRealWorldStatus(
     selectedDimension.id,
     viewedBelt.id,
+    viewedRealWorldTrial,
+    beltValidations
+  );
+  const viewedRealWorldProgressDetail = getTrialProgressDetail(
+    selectedDimension.id,
+    viewedBelt.id,
+    "real_world",
+    beltValidations,
+    topicData
+  );
+  const viewedBehavioralProgressDetail = getTrialProgressDetail(
+    selectedDimension.id,
+    viewedBelt.id,
+    "behavioral",
     beltValidations,
     topicData
   );
@@ -1340,6 +1392,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
               requirements={viewedBeltRequirements}
               trialRecords={trialRecords}
               topicData={topicData}
+              realWorldStatus={viewedRealWorldStatus}
+              realWorldProgressDetail={viewedRealWorldProgressDetail}
               behavioralStatus={viewedBehavioralStatus}
               behavioralProgressDetail={viewedBehavioralProgressDetail}
               savingTrial={savingTrial}
@@ -2530,7 +2584,7 @@ function normalizeRequirements(requirements, dimensionId) {
   };
 }
 
-function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, requirements, trialRecords, behavioralStatus, behavioralProgressDetail, savingTrial, onStartTrial }) {
+function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, requirements, trialRecords, realWorldStatus, realWorldProgressDetail, behavioralStatus, behavioralProgressDetail, savingTrial, onStartTrial }) {
   const safeTargetBelt = targetBelt || getBeltById("yellow");
   const safeNextBelt = nextBelt || getBeltById(getNextBeltId(safeTargetBelt.id));
   const safeRequirements = normalizeRequirements(requirements, dimension.id);
@@ -2550,7 +2604,8 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
       title: safeRequirements.real_world.title || "Real-World Trial",
       body: safeRequirements.real_world.prompt,
       footer: safeRequirements.real_world.completion_hint,
-      status: formatTrialStatus(realWorldTrial?.status),
+      status: formatTrialStatus(realWorldStatus),
+      statusDetail: normalizeStatus(realWorldStatus) !== "not_started" ? realWorldProgressDetail : null,
       buttonLabel: isViewingCurrentBelt ? (realWorldTrial ? "Log Trial" : "Start Trial") : null,
       onClick: () => onStartTrial("real_world", safeRequirements.real_world.prompt),
     },

@@ -31,6 +31,13 @@ YELLOW_BELT_DIMENSION_SIGNALS = {
     ],
 }
 
+YELLOW_BELT_TRIAL_SIGNALS = {
+    "energy": {
+        "real_world": ["three_energy_level_journals"],
+        "behavioral": ["high_energy_habits_identified"],
+    },
+}
+
 SIGNAL_CONFIDENCE_THRESHOLD = 0.75
 
 
@@ -271,9 +278,9 @@ def validate_high_energy_habits_identified(db: Session, user_number: str) -> dic
         3,
         len(habits),
         (
-            f"You have defined {len(habits)} active habits."
+            f"You have tracked {len(habits)} active habits."
             if len(habits) >= 3
-            else f"Add {max(3 - len(habits), 0)} more active habits in MyHabits."
+            else f"Track {max(3 - len(habits), 0)} more active habits in MyHabits."
         ),
         [_evidence_item(item, ["title", "frequency", "created_at", "updated_at"]) for item in habits[:10]],
     )
@@ -350,7 +357,7 @@ def _next_action_for_signal(signal: dict[str, Any]) -> Optional[str]:
         "five_team_members_entered": f"Complete {remaining} more team member profiles with strengths, growth areas, and aspirations.",
         "tasks_consistently_entered": f"Log {remaining} more tasks in Alfred's todo list.",
         "tasks_maintained": "Update, complete, reprioritize, or reschedule tasks across at least 3 days.",
-        "high_energy_habits_identified": f"Add {remaining} more active habits in MyHabits.",
+        "high_energy_habits_identified": f"Track {remaining} more active habits in MyHabits.",
         "three_energy_level_journals": f"Add {remaining} more journal reflections about your energy level and what drove it.",
         "three_behavior_change_journals": f"Add {remaining} more journal reflections about behavior change or limiting patterns.",
         "self_awareness_reflections": "Add one journal reflection that names what you noticed about your own patterns.",
@@ -365,12 +372,40 @@ def validate_yellow_belt_dimension(db: Session, user_number: str, dimension_id: 
         validator = YELLOW_BELT_SIGNAL_VALIDATORS[signal]
         signals.append(validator(db, user_number))
 
+    result = _aggregate_signal_results("yellow", dimension_id, signals)
+    result["trial_types"] = {
+        trial_type: validate_yellow_belt_trial_type(db, user_number, dimension_id, trial_type)
+        for trial_type in YELLOW_BELT_TRIAL_SIGNALS.get(dimension_id, {})
+    }
+    return result
+
+
+def validate_yellow_belt_trial_type(db: Session, user_number: str, dimension_id: str, trial_type: str) -> dict[str, Any]:
+    signal_names = YELLOW_BELT_TRIAL_SIGNALS.get(dimension_id, {}).get(trial_type)
+    if not signal_names:
+        signal_names = YELLOW_BELT_DIMENSION_SIGNALS.get(dimension_id, []) if trial_type == "behavioral" else []
+
+    signals = []
+    for signal in signal_names:
+        validator = YELLOW_BELT_SIGNAL_VALIDATORS[signal]
+        signals.append(validator(db, user_number))
+
+    return _aggregate_signal_results("yellow", dimension_id, signals, trial_type=trial_type)
+
+
+def _aggregate_signal_results(
+    belt: str,
+    dimension_id: str,
+    signals: list[dict[str, Any]],
+    trial_type: Optional[str] = None,
+) -> dict[str, Any]:
     passed_count = sum(1 for signal in signals if signal["passed"])
     total = len(signals)
     next_action = next((_next_action_for_signal(signal) for signal in signals if not signal["passed"]), None)
     return {
-        "belt": "yellow",
+        "belt": belt,
         "dimension": dimension_id,
+        "trial_type": trial_type,
         "passed": total > 0 and passed_count == total,
         "completion_percentage": round((passed_count / total) * 100) if total else 0,
         "signals": signals,
