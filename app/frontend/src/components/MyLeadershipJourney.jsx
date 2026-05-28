@@ -531,17 +531,45 @@ function getWhiteBehavioralEvidenceStatus(dimensionId, topicData) {
   return "not_started";
 }
 
-function getYellowValidationBehavioralStatus(dimensionId, yellowValidation) {
-  const dimensionValidation = yellowValidation?.dimensions?.find((item) => item.dimension === dimensionId);
+function getYellowValidationBehavioralStatus(dimensionId, validation) {
+  const dimensionValidation = validation?.dimensions?.find((item) => item.dimension === dimensionId);
   if (!dimensionValidation?.signals?.length) return null;
   if (dimensionValidation.passed) return "submitted";
   if (dimensionValidation.signals.some((signal) => Number(signal.actual || 0) > 0)) return "in_progress";
   return "not_started";
 }
 
-function getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryAverage, topicData, yellowValidation) {
+function getValidationForBelt(targetBeltId, beltValidations) {
+  if (targetBeltId === "yellow") return beltValidations?.yellow || null;
+  return beltValidations?.[targetBeltId] || null;
+}
+
+function getDimensionValidation(dimensionId, targetBeltId, beltValidations) {
+  const validation = getValidationForBelt(targetBeltId, beltValidations);
+  return validation?.dimensions?.find((item) => item.dimension === dimensionId) || null;
+}
+
+function getBehavioralProgressDetail(dimensionId, targetBeltId, beltValidations, topicData) {
+  if (targetBeltId === "white") {
+    const dimension = DIMENSIONS.find((item) => item.id === dimensionId);
+    const topics = dimension?.topics || [];
+    if (!topics.length) return null;
+
+    const completed = topics.filter((topic) => hasFilledTopicEvidence(topic, topicData)).length;
+    return `${completed}/${topics.length}`;
+  }
+
+  const dimensionValidation = getDimensionValidation(dimensionId, targetBeltId, beltValidations);
+  const signals = dimensionValidation?.signals || [];
+  if (!signals.length) return null;
+
+  const completed = signals.filter((signal) => signal.passed).length;
+  return `${completed}/${signals.length}`;
+}
+
+function getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryAverage, topicData, beltValidations) {
   if (targetBeltId === "yellow") {
-    const validationStatus = getYellowValidationBehavioralStatus(dimensionId, yellowValidation);
+    const validationStatus = getYellowValidationBehavioralStatus(dimensionId, beltValidations?.yellow);
     if (validationStatus && validationStatus !== "not_started") return validationStatus;
   }
 
@@ -559,12 +587,12 @@ function getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryA
   return "not_started";
 }
 
-function getTargetBeltProgress(dimensionId, targetBeltId, trialRecords, telemetryAverage, trialConfig, topicData, yellowValidation) {
+function getTargetBeltProgress(dimensionId, targetBeltId, trialRecords, telemetryAverage, trialConfig, topicData, beltValidations) {
   const requirements = getBeltRequirementsFromConfig(trialConfig, dimensionId, targetBeltId);
   const activeTrialTypes = getActiveTrialTypes(normalizeRequirements(requirements, dimensionId));
   const reflection = getStoredTrial(trialRecords, dimensionId, targetBeltId, "reflection");
   const realWorld = getStoredTrial(trialRecords, dimensionId, targetBeltId, "real_world");
-  const behavioralStatus = getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryAverage, topicData, yellowValidation);
+  const behavioralStatus = getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryAverage, topicData, beltValidations);
   const statuses = {
     reflection: reflection?.status,
     real_world: realWorld?.status,
@@ -590,13 +618,13 @@ function getTargetBeltProgress(dimensionId, targetBeltId, trialRecords, telemetr
   };
 }
 
-function getDimensionProgression(dimensionId, trialRecords, telemetryAverage, trialConfig, topicData, yellowValidation) {
+function getDimensionProgression(dimensionId, trialRecords, telemetryAverage, trialConfig, topicData, beltValidations) {
   let currentBeltId = "white";
   let activeBeltId = "white";
   let nextBeltId = "yellow";
 
   for (const beltId of BELT_IDS) {
-    const progress = getTargetBeltProgress(dimensionId, beltId, trialRecords, telemetryAverage, trialConfig, topicData, yellowValidation);
+    const progress = getTargetBeltProgress(dimensionId, beltId, trialRecords, telemetryAverage, trialConfig, topicData, beltValidations);
     if (!progress.isComplete) {
       activeBeltId = beltId;
       nextBeltId = getNextBeltId(beltId);
@@ -613,7 +641,7 @@ function getDimensionProgression(dimensionId, trialRecords, telemetryAverage, tr
     nextBeltId = "black";
   }
 
-  const activeProgress = getTargetBeltProgress(dimensionId, activeBeltId, trialRecords, telemetryAverage, trialConfig, topicData, yellowValidation);
+  const activeProgress = getTargetBeltProgress(dimensionId, activeBeltId, trialRecords, telemetryAverage, trialConfig, topicData, beltValidations);
 
   return {
     currentBeltId,
@@ -630,11 +658,11 @@ function getDimensionProgression(dimensionId, trialRecords, telemetryAverage, tr
   };
 }
 
-function buildDimensionStates(telemetry, trialRecords, trialConfig, topicData, yellowValidation) {
+function buildDimensionStates(telemetry, trialRecords, trialConfig, topicData, beltValidations) {
   const telemetryAverage = getTelemetryAverage(telemetry);
 
   return DIMENSIONS.reduce((states, dimension) => {
-    const progression = getDimensionProgression(dimension.id, trialRecords, telemetryAverage, trialConfig, topicData, yellowValidation);
+    const progression = getDimensionProgression(dimension.id, trialRecords, telemetryAverage, trialConfig, topicData, beltValidations);
     const hasAnyTrialEvidence = trialRecords.some((trial) => trial.dimension_id === dimension.id);
     const hasTelemetryEvidence = dimension.id === "execute" && telemetry.some((signal) => signal.value > 0);
     const hasEvidence = hasAnyTrialEvidence || hasTelemetryEvidence;
@@ -687,7 +715,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   const [loadingSignals, setLoadingSignals] = useState(false);
   const [activeTopic, setActiveTopic] = useState("Vision");
   const [trialRecords, setTrialRecords] = useState([]);
-  const [yellowValidation, setYellowValidation] = useState(null);
+  const [beltValidations, setBeltValidations] = useState({});
   const [trialConfig, setTrialConfig] = useState(null);
   const [subdomainPromptConfig, setSubdomainPromptConfig] = useState(null);
   const [selectedTrialBeltId, setSelectedTrialBeltId] = useState(null);
@@ -778,7 +806,12 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
         const response = await axios.get(`${apiUrl}/api/journey/validation/yellow`, {
           params: { user_number: userNumber },
         });
-        if (!cancelled) setYellowValidation(response.data || null);
+        if (!cancelled) {
+          setBeltValidations((current) => ({
+            ...current,
+            yellow: response.data || null,
+          }));
+        }
       } catch (error) {
         console.error("Failed to load Yellow Belt validation", error);
       }
@@ -902,8 +935,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   }, [signals]);
 
   const dimensionStates = useMemo(
-    () => buildDimensionStates(telemetry, trialRecords, trialConfig, topicData, yellowValidation),
-    [telemetry, trialRecords, trialConfig, topicData, yellowValidation]
+    () => buildDimensionStates(telemetry, trialRecords, trialConfig, topicData, beltValidations),
+    [telemetry, trialRecords, trialConfig, topicData, beltValidations]
   );
 
   const activeTopicConfig = useMemo(() => {
@@ -1044,7 +1077,13 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
     trialRecords,
     getTelemetryAverage(telemetry),
     topicData,
-    yellowValidation
+    beltValidations
+  );
+  const viewedBehavioralProgressDetail = getBehavioralProgressDetail(
+    selectedDimension.id,
+    viewedBelt.id,
+    beltValidations,
+    topicData
   );
 
   const handleStartTrial = async (trialType, prompt) => {
@@ -1302,6 +1341,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
               trialRecords={trialRecords}
               topicData={topicData}
               behavioralStatus={viewedBehavioralStatus}
+              behavioralProgressDetail={viewedBehavioralProgressDetail}
               savingTrial={savingTrial}
               onStartTrial={handleStartTrial}
             />
@@ -2490,7 +2530,7 @@ function normalizeRequirements(requirements, dimensionId) {
   };
 }
 
-function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, requirements, trialRecords, behavioralStatus, savingTrial, onStartTrial }) {
+function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, requirements, trialRecords, behavioralStatus, behavioralProgressDetail, savingTrial, onStartTrial }) {
   const safeTargetBelt = targetBelt || getBeltById("yellow");
   const safeNextBelt = nextBelt || getBeltById(getNextBeltId(safeTargetBelt.id));
   const safeRequirements = normalizeRequirements(requirements, dimension.id);
@@ -2519,6 +2559,7 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
       body: safeRequirements.behavioral.prompt,
       footer: safeRequirements.behavioral.completion_hint,
       status: formatTrialStatus(behavioralStatus),
+      statusDetail: normalizeStatus(behavioralStatus) !== "not_started" ? behavioralProgressDetail : null,
     },
   ].filter(Boolean).map((card, index) => ({ ...card, number: String(index + 1) }));
 
@@ -2552,6 +2593,7 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
             body={card.body}
             footer={card.footer}
             status={card.status}
+            statusDetail={card.statusDetail}
             buttonLabel={card.buttonLabel}
             disabled={savingTrial}
             onClick={card.onClick}
@@ -2562,7 +2604,7 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
   );
 }
 
-function RequirementCard({ number, title, body, footer, status, buttonLabel, disabled, onClick }) {
+function RequirementCard({ number, title, body, footer, status, statusDetail, buttonLabel, disabled, onClick }) {
   return (
     <article className="rounded-lg border border-slate-200 bg-[#fbfaf7] p-4">
       <div className="flex items-start gap-3">
@@ -2572,7 +2614,7 @@ function RequirementCard({ number, title, body, footer, status, buttonLabel, dis
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h4 className="text-sm font-semibold text-slate-950">{title}</h4>
-            {status && <StatusPill status={status} />}
+            {status && <StatusPill status={status} detail={statusDetail} />}
           </div>
           <p className="mt-2 text-sm leading-6 text-slate-700">{body}</p>
           <p className="mt-4 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500">
@@ -2922,7 +2964,7 @@ function SubdomainItemModal({ topic, item, promptConfig, saving, onClose, onSave
   );
 }
 
-function StatusPill({ status }) {
+function StatusPill({ status, detail }) {
   const styles = {
     Passed: "border-green-200 bg-green-50 text-green-700",
     Submitted: "border-blue-200 bg-blue-50 text-blue-700",
@@ -2933,7 +2975,7 @@ function StatusPill({ status }) {
 
   return (
     <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${styles[status] || styles["Not Started"]}`}>
-      {status}
+      {detail ? `${status} ${detail}` : status}
     </span>
   );
 }
