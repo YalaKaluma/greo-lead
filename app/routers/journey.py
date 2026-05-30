@@ -48,6 +48,7 @@ from app.services.yellow_belt_validator import (
     validate_yellow_belt_dimension,
     validate_yellow_belt_trial_type,
 )
+from app.services.goal_progress_review_service import GoalProgressReviewService
 
 STRUCTURAL_LEVEL_ALIASES = {
     "long": "vision",
@@ -2001,6 +2002,18 @@ def get_vision_roadmap(
         "vision": serialize_goal(vision),
         "waves": [serialize_wave(wave) for wave in waves],
     }
+
+
+@router.get("/visions/{vision_id}/progress-review")
+def get_vision_progress_review(
+        vision_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    try:
+        return GoalProgressReviewService.build(db, user_number, vision_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error))
 
 
 @router.post("/visions/{vision_id}/waves")

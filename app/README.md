@@ -20,8 +20,9 @@ Alfred combines:
 
 - Conversational coaching through WhatsApp, email, and in-app chat.
 - A React executive operating system UI.
-- Journey 2.0, a leadership development system using domains, subdomains, belts, trials, and behavioral evidence.
-- Task, habit, goal, people, journal, priority review, and coaching workflows.
+- Journey 2.0, a leadership development system using domains, subdomains, belts, trials, readiness assessment, and behavioral evidence.
+- Vision/Pillar/Outcome goals, transformation roadmap waves, and AI-assisted opportunity suggestions.
+- Task, habit, people, journal, priority review, message feedback, signal classification, and coaching workflows.
 
 ## Journey 2.0 Notes
 
@@ -29,7 +30,9 @@ The current Journey experience is driven by both static curriculum and live user
 
 - Curriculum: `journey_trials.yaml`
 - Submitted trials: `journey_belt_trials`
+- Readiness assessments: `belt_assessments`
 - Subdomain evidence: existing `journey_*` tables
+- Yellow Belt validation: `services/yellow_belt_validator.py`
 - UI: `frontend/src/components/MyLeadershipJourney.jsx`
 - API: `routers/journey.py`
 

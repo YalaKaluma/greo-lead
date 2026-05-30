@@ -20,6 +20,16 @@ Alfred is an executive operating system that combines AI coaching, task executio
 - Journey curriculum: `app/journey_trials.yaml`
 - Migrations: `db_migrations`
 
+## Current Product Surfaces
+
+The current tool includes:
+
+- Journey 2.0 belt progression, trials, readiness assessment, and behavioral validation.
+- Vision/Pillar/Outcome goal hierarchy with transformation roadmap waves.
+- Task execution with MTN prioritization, goal links, and opportunity suggestions.
+- People review, relationship context, and richer team evidence.
+- Message feedback and message signal flags for response quality and behavioral telemetry.
+
 ## Journey 2.0
 
 Journey 2.0 is the current leadership development engine. It uses:
@@ -28,6 +38,7 @@ Journey 2.0 is the current leadership development engine. It uses:
 - Domain-level belt progression.
 - YAML-defined belt trials and behavioral requirements.
 - `journey_belt_trials` for persisted trial responses.
+- `belt_assessments` for readiness scoring, wheel feedback, and promotion decisions.
 - Existing `journey_*` tables for subdomain evidence.
 
 The primary UI implementation is `app/frontend/src/components/MyLeadershipJourney.jsx`.

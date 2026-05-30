@@ -36,7 +36,7 @@ const SESSION_TYPES = [
   { id: 'leadership_coaching', label: 'Leadership Coaching', icon: '🧭', color: 'green', enabled: true }
 ];
 
-const MyCoachingSessions = ({ apiUrl, userNumber }) => {
+const MyCoachingSessions = ({ apiUrl, userNumber, selectedVisionId = null, selectedVisionTitle = '' }) => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -96,7 +96,9 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
 
     try {
       // Send message to start session
-      const startMessage = sessionType === 'goal_review' 
+      const startMessage = sessionType === 'goal_review' && selectedVisionTitle
+        ? `Start goal review session for Vision: ${selectedVisionTitle}`
+        : sessionType === 'goal_review' 
         ? 'Start goal review session'
         : sessionType === 'people_review'
         ? 'Start people review session'
@@ -314,7 +316,12 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
       {/* Header with Session Type Buttons */}
       <div className="border-b border-gray-200 bg-white px-6 py-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold text-gray-900">Coaching Sessions</h1>
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">Coaching Sessions</h1>
+            {selectedVisionId && selectedVisionTitle && (
+              <p className="mt-1 text-sm text-gray-500">{selectedVisionTitle}</p>
+            )}
+          </div>
           <div className="flex gap-3">
             {SESSION_TYPES.map(session => {
               const colorClasses = {

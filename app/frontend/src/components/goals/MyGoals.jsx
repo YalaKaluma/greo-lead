@@ -3,10 +3,12 @@ import axios from 'axios';
 import GoalsHeader from './GoalsHeader';
 import GoalsList from './GoalsList';
 import GoalReviewRecap from './GoalReviewRecap';
+import GoalProgressReview from './GoalProgressReview';
 import GoalViewPanel from './GoalViewPanel';
 import GoalEditPanel from './GoalEditPanel';
 import GoalCreateModal from './GoalCreateModal';
 import TransformationRoadmap from './TransformationRoadmap';
+import MyCoachingSessions from '../MyCoachingSessions';
 import { normalizeGoalLevel, isVision } from '../../utils/goalTaxonomy';
 
 /* =========================================================
@@ -367,6 +369,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
   /* ---------------- RENDER ---------------- */
 
   const organizedGoals = organizeGoalsByTimeHorizon(goals);
+  const selectedVision = goals.find(goal => goal.id === expandedGoalId);
 
   return (
     <div className="max-w-7xl mx-auto p-4 lg:p-6">
@@ -435,6 +438,19 @@ export default function MyGoals({ apiUrl, userNumber }) {
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
                 )}
               </button>
+              <button
+                onClick={() => setActiveTab('coaching')}
+                className={`pb-3 px-2 font-medium transition-colors relative ${
+                  activeTab === 'coaching'
+                    ? 'text-blue-600'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Coaching Sessions
+                {activeTab === 'coaching' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+                )}
+              </button>
             </div>
           </div>
         </>
@@ -498,6 +514,25 @@ export default function MyGoals({ apiUrl, userNumber }) {
 
             {/* Progress Review Tab */}
             {expandedGoalId && activeTab === 'review' && (
+              <GoalProgressReview
+                apiUrl={apiUrl}
+                userNumber={userNumber}
+                expandedGoalId={expandedGoalId}
+              />
+            )}
+
+            {expandedGoalId && activeTab === 'coaching' && (
+              <div className="min-h-[720px] overflow-hidden rounded-md border border-slate-200 bg-white">
+                <MyCoachingSessions
+                  apiUrl={apiUrl}
+                  userNumber={userNumber}
+                  selectedVisionId={expandedGoalId}
+                  selectedVisionTitle={selectedVision?.title || selectedVision?.goal_text}
+                />
+              </div>
+            )}
+
+            {!expandedGoalId && activeTab === 'review' && (
               <GoalReviewRecap
                 goals={organizedGoals}
                 reviewSessions={reviewSessions}
