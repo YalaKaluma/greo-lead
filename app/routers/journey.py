@@ -1704,6 +1704,11 @@ def delete_person(
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
 
+    db.query(RelationshipReview).filter(
+        RelationshipReview.person_id == person_id,
+        RelationshipReview.user_number == user_number
+    ).delete(synchronize_session=False)
+
     db.delete(person)
     db.commit()
     return {"success": True, "message": "Person deleted"}

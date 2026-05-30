@@ -9,7 +9,6 @@ export default function MyTeam({ apiUrl, userNumber }) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingPersonId, setEditingPersonId] = useState(null);
   const [relationFilter, setRelationFilter] = useState('all');
-  const [reviewSummaries, setReviewSummaries] = useState({});
   const [viewingProfile, setViewingProfile] = useState(null); // Person ID for profile view
   const [customOrder, setCustomOrder] = useState([]); // User's manual sort order
 
@@ -27,7 +26,6 @@ export default function MyTeam({ apiUrl, userNumber }) {
       });
       if (response.data && Array.isArray(response.data)) {
         setPeople(response.data);
-        fetchLatestReviews(response.data);
       }
     } catch (err) {
       console.error('Error fetching people:', err);
@@ -35,24 +33,6 @@ export default function MyTeam({ apiUrl, userNumber }) {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fetchLatestReviews = async (peopleList) => {
-    const summaries = {};
-    for (const person of peopleList) {
-      try {
-        const response = await axios.get(
-          `${apiUrl}/api/journey/people/${person.id}/review-history`,
-          { params: { user_number: userNumber } }
-        );
-        if (response.data && response.data.reviews && response.data.reviews.length > 0) {
-          summaries[person.id] = response.data.reviews[0];
-        }
-      } catch (err) {
-        console.error(`Error fetching reviews for ${person.name}:`, err);
-      }
-    }
-    setReviewSummaries(summaries);
   };
 
   const loadCustomOrder = () => {
@@ -105,52 +85,11 @@ export default function MyTeam({ apiUrl, userNumber }) {
         params: { user_number: userNumber }
       });
       setPeople(people.filter(p => p.id !== personId));
+      setViewingProfile(null);
+      setEditingPersonId(null);
     } catch (err) {
       console.error('Error deleting person:', err);
       alert('Failed to delete team member');
-    }
-  };
-
-  // Calculate health status based on review data
-  const getHealthStatus = (personId) => {
-    const review = reviewSummaries[personId];
-    const person = people.find(p => p.id === personId);
-    
-    if (!review) return 'gray'; // No review yet
-    
-    const strength = review.relationship_strength || 0;
-    const needsAttention = person?.needs_attention || false;
-    
-    // Red: strength ≤ 1 OR (needs_attention + strength ≤ 2)
-    if (strength <= 1 || (needsAttention && strength <= 2)) return 'red';
-    
-    // Dark Orange: strength = 2 OR needs_attention
-    if (strength === 2 || needsAttention) return 'darkorange';
-    
-    // Light Orange: strength = 3
-    if (strength === 3) return 'orange';
-    
-    // Green: strength ≥ 4
-    return 'green';
-  };
-
-  const getHealthColor = (status) => {
-    switch (status) {
-      case 'red': return 'bg-red-500';
-      case 'darkorange': return 'bg-orange-600';
-      case 'orange': return 'bg-orange-400';
-      case 'green': return 'bg-green-500';
-      default: return 'bg-gray-300';
-    }
-  };
-
-  const getHealthTooltip = (status) => {
-    switch (status) {
-      case 'red': return 'Critical - Needs immediate attention';
-      case 'darkorange': return 'Needs intervention';
-      case 'orange': return 'Needs support';
-      case 'green': return 'Healthy relationship';
-      default: return 'Not yet reviewed';
     }
   };
 
@@ -201,7 +140,14 @@ export default function MyTeam({ apiUrl, userNumber }) {
         personId={viewingProfile}
         apiUrl={apiUrl}
         userNumber={userNumber}
-        onClose={() => setViewingProfile(null)}
+        onClose={() => {
+          setViewingProfile(null);
+          fetchPeople();
+        }}
+        onDeleted={(personId) => {
+          setPeople(people.filter(p => p.id !== personId));
+          setViewingProfile(null);
+        }}
       />
     );
   }
@@ -256,30 +202,6 @@ export default function MyTeam({ apiUrl, userNumber }) {
         ))}
       </div>
 
-      {/* Health Legend */}
-      <div className="mb-4 flex gap-4 text-sm text-slate-600">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-green-500"></div>
-          <span>Healthy</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-orange-400"></div>
-          <span>Needs support</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-orange-600"></div>
-          <span>Needs intervention</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-red-500"></div>
-          <span>Critical</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-gray-300"></div>
-          <span>Not reviewed</span>
-        </div>
-      </div>
-
       {/* Add Person Form */}
       {showAddForm && (
         <div className="mb-6">
@@ -328,19 +250,13 @@ export default function MyTeam({ apiUrl, userNumber }) {
                         ) : (
                           <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                             <div className="flex items-start gap-4">
-                              {/* Health Status Dot - LEFT SIDE */}
-                              <div
-                                className={`w-4 h-4 rounded-full mt-1 flex-shrink-0 ${getHealthColor(getHealthStatus(person.id))}`}
-                                title={getHealthTooltip(getHealthStatus(person.id))}
-                              ></div>
-
                               {/* Drag Handle */}
                               <div
                                 {...provided.dragHandleProps}
                                 className="cursor-move text-gray-400 hover:text-gray-600 pt-1 flex-shrink-0"
                                 title="Drag to reorder"
                               >
-                                ⋮⋮
+                                ::
                               </div>
 
                               {/* Person Info - Click to view profile */}
@@ -354,67 +270,26 @@ export default function MyTeam({ apiUrl, userNumber }) {
                                 {person.relation && (
                                   <p className="text-sm text-slate-600">{person.relation}</p>
                                 )}
-                                {(person.strengths || person.growth_areas || person.aspirations) && (
-                                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
-                                    {person.strengths && <span className="rounded bg-green-50 px-2 py-1 text-green-700">Strengths captured</span>}
-                                    {person.growth_areas && <span className="rounded bg-amber-50 px-2 py-1 text-amber-700">Growth areas captured</span>}
-                                    {person.aspirations && <span className="rounded bg-blue-50 px-2 py-1 text-blue-700">Aspirations captured</span>}
-                                  </div>
+                                {person.context && (
+                                  <p className="mt-2 text-sm text-slate-600 line-clamp-2">{person.context}</p>
                                 )}
                               </div>
 
-                              {/* Action Icons */}
-                              <div className="flex items-center gap-4 text-slate-400">
-                                {/* View Tasks */}
-                                <a
-                                  href={`/?page=todo-list&delegate=${encodeURIComponent(person.name)}`}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    window.location.href = `/?page=todo-list&delegate=${encodeURIComponent(person.name)}`;
-                                  }}
-                                  className="hover:text-blue-600 transition-colors text-2xl"
-                                  title="View tasks"
-                                >
-                                  📋
-                                </a>
-
-                                {/* Edit */}
+                              <div className="flex items-center gap-2 text-slate-400">
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setEditingPersonId(person.id);
                                   }}
-                                  className="hover:text-blue-600 transition-colors text-xl"
+                                  className="p-1 rounded hover:bg-slate-200 transition"
                                   title="Edit"
+                                  aria-label={`Edit ${person.name}`}
                                 >
-                                  ✏️
+                                  <EditIcon />
                                 </button>
                               </div>
                             </div>
 
-                            {/* Last Review Summary - Simplified */}
-                            {reviewSummaries[person.id] && (
-                              <div className="mt-3 pt-3 border-t border-gray-200">
-                                <div className="flex items-center gap-2 text-xs text-slate-500">
-                                  <span className="font-semibold text-purple-600">
-                                    📊 Last Review:
-                                  </span>
-                                  <span>
-                                    {new Date(reviewSummaries[person.id].review_date).toLocaleDateString()}
-                                  </span>
-                                  {reviewSummaries[person.id].relationship_strength && (
-                                    <span className="font-medium text-slate-700">
-                                      • {reviewSummaries[person.id].relationship_strength}/5
-                                    </span>
-                                  )}
-                                  {person.context && (
-                                    <span className="text-slate-400">
-                                      • {person.context}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            )}
                           </div>
                         )}
                       </div>
@@ -431,13 +306,33 @@ export default function MyTeam({ apiUrl, userNumber }) {
   );
 }
 
+function EditIcon() {
+  return (
+    <svg
+      className="w-4 h-4 text-slate-500"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+      />
+    </svg>
+  );
+}
+
 // Person Profile Full Page View
-function PersonProfile({ personId, apiUrl, userNumber, onClose }) {
+function PersonProfile({ personId, apiUrl, userNumber, onClose, onDeleted }) {
   const [person, setPerson] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [synthesis, setSynthesis] = useState(null);
   const [loading, setLoading] = useState(true);
   const [expandedReviewId, setExpandedReviewId] = useState(null);
+  const [synthesisExpanded, setSynthesisExpanded] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
     fetchPersonData();
@@ -486,6 +381,35 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose }) {
     }
   };
 
+  const updateProfilePerson = async (updates) => {
+    try {
+      await axios.put(
+        `${apiUrl}/api/journey/people/${personId}`,
+        updates,
+        { params: { user_number: userNumber } }
+      );
+      setIsEditing(false);
+      await fetchPersonData();
+    } catch (err) {
+      console.error('Error updating person:', err);
+      alert('Failed to update team member');
+    }
+  };
+
+  const deleteProfilePerson = async () => {
+    if (!confirm('Delete this person?')) return;
+
+    try {
+      await axios.delete(`${apiUrl}/api/journey/people/${personId}`, {
+        params: { user_number: userNumber }
+      });
+      onDeleted?.(personId);
+    } catch (err) {
+      console.error('Error deleting person:', err);
+      alert('Failed to delete team member');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -514,12 +438,23 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose }) {
             ← Back to My Team
           </button>
           <h1 className="text-2xl font-bold text-slate-800">{person.name}</h1>
-          <div className="w-24"></div> {/* Spacer for centering */}
+          <div className="w-24"></div>
         </div>
       </div>
 
       {/* Content */}
       <div className="max-w-5xl mx-auto px-6 py-8">
+        {isEditing && (
+          <div className="mb-6">
+            <PersonForm
+              person={person}
+              onSubmit={updateProfilePerson}
+              onCancel={() => setIsEditing(false)}
+              onDelete={deleteProfilePerson}
+            />
+          </div>
+        )}
+
         {/* Person Info Card */}
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
           <div className="flex items-start justify-between">
@@ -534,20 +469,20 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose }) {
               {(person.strengths || person.growth_areas || person.aspirations) && (
                 <div className="mb-4 grid gap-3 md:grid-cols-3">
                   {person.strengths && (
-                    <div className="rounded-lg border border-green-100 bg-green-50 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-green-700">Strengths</p>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Strengths</p>
                       <p className="mt-1 text-sm text-slate-700">{person.strengths}</p>
                     </div>
                   )}
                   {person.growth_areas && (
-                    <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Growth Areas</p>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Growth Areas</p>
                       <p className="mt-1 text-sm text-slate-700">{person.growth_areas}</p>
                     </div>
                   )}
                   {person.aspirations && (
-                    <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Aspirations</p>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Aspirations</p>
                       <p className="mt-1 text-sm text-slate-700">{person.aspirations}</p>
                     </div>
                   )}
@@ -556,33 +491,58 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose }) {
               <div className="flex gap-4 text-sm text-slate-500">
                 {person.email && (
                   <a href={`mailto:${person.email}`} className="hover:text-blue-600">
-                    📧 {person.email}
+                    {person.email}
                   </a>
                 )}
                 {person.phone && (
-                  <span>📱 {person.phone}</span>
+                  <span>{person.phone}</span>
                 )}
               </div>
             </div>
-            <button
-              onClick={() => window.location.href = `/?page=coaching-sessions&session=people_review&person=${person.id}`}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              + New Review
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsEditing(true)}
+                className="p-1 rounded hover:bg-slate-200 transition"
+                title="Edit"
+                aria-label={`Edit ${person.name}`}
+              >
+                <EditIcon />
+              </button>
+              <button
+                onClick={deleteProfilePerson}
+                className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded font-medium transition-colors border border-red-200"
+              >
+                Delete
+              </button>
+              <button
+                onClick={() => window.location.href = `/?page=coaching-sessions&session=people_review&person=${person.id}`}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                + New Review
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Alfred's Synthesis */}
         {synthesis && (
-          <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg border border-blue-200 p-6 mb-6">
+          <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
             <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-              🎯 Alfred's Synthesis
+              Alfred's Synthesis
             </h3>
             
+            <button
+              type="button"
+              onClick={() => setSynthesisExpanded(!synthesisExpanded)}
+              className="mb-4 text-sm font-medium text-slate-600 hover:text-slate-800"
+            >
+              {synthesisExpanded ? 'Hide synthesis' : 'Show synthesis'}
+            </button>
+
+            {synthesisExpanded && (
             <div className="space-y-4">
               <div>
-                <h4 className="font-semibold text-slate-700 mb-2">💪 Core Strengths:</h4>
+                <h4 className="font-semibold text-slate-700 mb-2">Core Strengths</h4>
                 <ul className="list-disc list-inside text-slate-600 space-y-1">
                   {synthesis.strengths.map((strength, i) => (
                     <li key={i}>{strength}</li>
@@ -591,7 +551,7 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose }) {
               </div>
 
               <div>
-                <h4 className="font-semibold text-slate-700 mb-2">⚠️ Improvement Opportunities:</h4>
+                <h4 className="font-semibold text-slate-700 mb-2">Improvement Opportunities</h4>
                 <ul className="list-disc list-inside text-slate-600 space-y-1">
                   {synthesis.improvements.map((improvement, i) => (
                     <li key={i}>{improvement}</li>
@@ -600,17 +560,18 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose }) {
               </div>
 
               <div>
-                <h4 className="font-semibold text-slate-700 mb-2">📈 Trajectory:</h4>
+                <h4 className="font-semibold text-slate-700 mb-2">Trajectory</h4>
                 <p className="text-slate-600">{synthesis.trajectory}</p>
               </div>
             </div>
+            )}
           </div>
         )}
 
         {/* Review History */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-            📊 Review History
+            Review History
           </h3>
 
           {reviews.length === 0 ? (
@@ -625,8 +586,8 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose }) {
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <div className="flex items-center gap-3">
-                        <span className="text-sm font-semibold text-purple-600">
-                          📅 {new Date(review.review_date).toLocaleDateString('en-US', {
+                        <span className="text-sm font-semibold text-slate-600">
+                          {new Date(review.review_date).toLocaleDateString('en-US', {
                             year: 'numeric',
                             month: 'long',
                             day: 'numeric'
@@ -644,7 +605,7 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose }) {
                     </div>
                     <button
                       onClick={() => setExpandedReviewId(expandedReviewId === review.id ? null : review.id)}
-                      className="text-sm text-purple-600 hover:text-purple-800 font-medium"
+                      className="text-sm text-slate-600 hover:text-slate-800 font-medium"
                     >
                       {expandedReviewId === review.id ? 'Hide' : 'View Full'}
                     </button>
@@ -747,7 +708,7 @@ function PersonForm({ person, onSubmit, onCancel, onDelete }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 space-y-3">
+    <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-lg p-4 space-y-3">
       <h3 className="font-semibold text-slate-800">{person ? 'Edit Person' : 'Add Team Member'}</h3>
       
       <input
