@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import MyCoachingSessions from "./MyCoachingSessions";
 
 const CENTER = { x: 500, y: 500 };
 const R_CENTER = 116;
@@ -138,6 +139,18 @@ const WHY_IT_MATTERS = {
   "Failures & Scars": "Unexamined experiences tend to repeat. Reflection turns experience into information.",
   "Development Opportunities": "Growth often hides inside discomfort. Naming it creates direction.",
   "Development Plan": "Insight only compounds when it leads to deliberate action.",
+};
+
+const LEADERSHIP_QUADRANT_LABELS = {
+  vision_goals: "Vision",
+  vision: "Vision",
+  people: "People",
+  prioritize_execute: "Prioritize & Execute",
+  execute: "Prioritize & Execute",
+  learning_development: "Learning & Development",
+  learning: "Learning & Development",
+  time_energy: "Time & Energy",
+  energy: "Time & Energy",
 };
 
 const TOPIC_FORM_FIELDS = {
@@ -795,6 +808,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   const [editingSubdomainItem, setEditingSubdomainItem] = useState(null);
   const [editingSubdomainTopic, setEditingSubdomainTopic] = useState(null);
   const [savingSubdomainItem, setSavingSubdomainItem] = useState(false);
+  const [showWheelModal, setShowWheelModal] = useState(false);
 
   const selectedDimension = useMemo(
     () => DIMENSIONS.find((dimension) => dimension.id === selectedDimensionId) || DIMENSIONS[2],
@@ -1288,20 +1302,13 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   };
 
   return (
-    <div className="min-h-full bg-[#f6f5f1] px-4 py-5 text-slate-900 md:px-10 md:py-8">
+    <div className="min-h-full bg-gray-50 px-4 py-5 text-slate-900 md:px-10 md:py-8">
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-              Leadership Journey 2.0
-            </p>
             <h1 className="text-3xl font-semibold text-slate-950 md:text-4xl">
               Leadership Operating System
             </h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 md:text-base">
-              The wheel is now your living map: belt progression, reflection, real-world trials,
-              and behavioral evidence from how you use Alfred.
-            </p>
           </div>
 
           <div className="flex flex-col gap-2 sm:items-end">
@@ -1341,27 +1348,45 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           </div>
         </div>
 
-        <div className="mb-5 flex flex-wrap gap-2 rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+        <div className="mb-6 border-b border-slate-200">
+          <div className="flex flex-wrap gap-6">
           <button
             type="button"
             onClick={() => setActiveJourneyTab("journey")}
-            className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
-              activeJourneyTab === "journey" ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50"
+            className={`relative px-2 pb-3 font-medium transition-colors ${
+              activeJourneyTab === "journey" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
             }`}
           >
             Journey Map
+            {activeJourneyTab === "journey" && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+            )}
           </button>
-          {(latestAssessment || assessmentHistory.length > 0 || activeJourneyTab === "assessment") && (
-            <button
-              type="button"
-              onClick={() => setActiveJourneyTab("assessment")}
-              className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
-                activeJourneyTab === "assessment" ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              Belt Assessment
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setActiveJourneyTab("assessment")}
+            className={`relative px-2 pb-3 font-medium transition-colors ${
+              activeJourneyTab === "assessment" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            Belt Assessment
+            {activeJourneyTab === "assessment" && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveJourneyTab("coaching")}
+            className={`relative px-2 pb-3 font-medium transition-colors ${
+              activeJourneyTab === "coaching" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            Coaching Sessions
+            {activeJourneyTab === "coaching" && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+            )}
+          </button>
+          </div>
         </div>
 
         {activeJourneyTab === "assessment" ? (
@@ -1374,6 +1399,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
             onSubmit={() => setShowAssessmentConfirm(true)}
             onAcceptPromotion={handleAcceptPromotion}
           />
+        ) : activeJourneyTab === "coaching" ? (
+          <LeadershipCoachingSessionsTab apiUrl={apiUrl} userNumber={userNumber} />
         ) : (
         <div className="grid gap-6 xl:grid-cols-[520px_minmax(0,1fr)]">
           <section className="space-y-5">
@@ -1386,6 +1413,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
                 journeyBelt={journeyCurrentBelt}
                 onSelectDimension={handleSelectDimension}
                 onSelectSubdomain={handleSelectSubdomain}
+                onSelectCenter={() => setShowWheelModal(true)}
               />
             </div>
 
@@ -1442,6 +1470,15 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
         />
       )}
 
+      {showWheelModal && (
+        <LeadershipWheelModal
+          dimensionStates={dimensionStates}
+          topicData={topicData}
+          journeyBelt={journeyCurrentBelt}
+          onClose={() => setShowWheelModal(false)}
+        />
+      )}
+
       {activeTrial && (
         <TrialModal
           trial={activeTrial}
@@ -1473,6 +1510,210 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
       )}
     </div>
   );
+}
+
+function LeadershipCoachingSessionsTab({ apiUrl, userNumber }) {
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (apiUrl == null || !userNumber) return;
+
+    let cancelled = false;
+    const fetchSessions = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const response = await axios.get(`${apiUrl}/api/leadership-coaching/history`, {
+          params: { user_number: userNumber },
+        });
+        if (!cancelled) setSessions(response.data?.sessions || []);
+      } catch (fetchError) {
+        console.error("Failed to load leadership coaching sessions", fetchError);
+        if (!cancelled) setError("Leadership coaching sessions could not be loaded yet.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    fetchSessions();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiUrl, userNumber]);
+
+  const latestSessions = sessions.slice(0, 5);
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold text-slate-950">Leadership Coaching Sessions</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+              Review recent leadership coaching work, then launch a new session when you want to work a live leadership challenge.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-3">
+          {loading && <p className="text-sm text-slate-500">Loading coaching sessions...</p>}
+          {error && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
+          {!loading && !error && latestSessions.length === 0 && (
+            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5 text-sm leading-6 text-slate-600">
+              No leadership coaching sessions yet. Launch one below to begin building your leadership operating system through a real situation.
+            </div>
+          )}
+          {latestSessions.map((session, index) => (
+            <details
+              key={session.id}
+              open={index === 0}
+              className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+            >
+              <summary className="cursor-pointer text-sm font-semibold text-slate-950">
+                {index === 0 ? "Latest Session" : `Session ${latestSessions.length - index}`} - {LEADERSHIP_QUADRANT_LABELS[session.quadrant] || session.quadrant || "Leadership Coaching"}
+              </summary>
+              <div className="mt-4 space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {formatDateTime(session.completed_at || session.session_date)}
+                </p>
+                <LeadershipSessionField title="Situation" value={session.situation} />
+                <LeadershipSessionField title="Pattern" value={session.pattern} />
+                <LeadershipSessionField title="Insight" value={session.insights} />
+                <LeadershipSessionField title="Practice" value={session.experiment || session.practice} />
+                {session.development_level && (
+                  <span className="inline-flex rounded-full border border-green-200 bg-green-50 px-3 py-1 text-xs font-semibold text-green-700">
+                    Development level {session.development_level}/5
+                  </span>
+                )}
+              </div>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      <section className="min-h-[720px] overflow-hidden rounded-md border border-slate-200 bg-white">
+        <MyCoachingSessions
+          apiUrl={apiUrl}
+          userNumber={userNumber}
+          visibleSessionTypes={["leadership_coaching"]}
+          launchLabelByType={{ leadership_coaching: "Launch Leadership Coaching Session" }}
+          emptyStateText="Launch a leadership coaching session to work through a live leadership challenge, identify the pattern underneath it, and choose a concrete experiment."
+        />
+      </section>
+    </div>
+  );
+}
+
+function LeadershipSessionField({ title, value }) {
+  if (!value) return null;
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-white p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-slate-700">{value}</p>
+    </div>
+  );
+}
+
+function LeadershipWheelModal({ dimensionStates, topicData, journeyBelt, onClose }) {
+  const firstTopic = DIMENSIONS[0].topics[0];
+  const [selected, setSelected] = useState({
+    dimensionId: DIMENSIONS[0].id,
+    dimensionName: DIMENSIONS[0].name,
+    topic: firstTopic,
+  });
+
+  const selectedDimension = DIMENSIONS.find((dimension) => dimension.id === selected.dimensionId) || DIMENSIONS[0];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 md:p-6">
+      <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+          <div>
+            <h3 className="text-xl font-semibold text-slate-950">Leadership Operating System</h3>
+            <p className="mt-1 text-sm leading-6 text-slate-600">Click a subdomain to see what it means and why it matters.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md px-2 py-1 text-xl leading-none text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+            aria-label="Close leadership wheel"
+          >
+            x
+          </button>
+        </div>
+
+        <div className="grid min-h-0 flex-1 gap-5 overflow-y-auto p-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)] lg:p-6">
+          <div className="mx-auto w-full max-w-[640px]">
+            <LeadershipWheel
+              selectedDimensionId={selected.dimensionId}
+              activeTopic={selected.topic.label}
+              dimensionStates={dimensionStates}
+              topicData={topicData}
+              journeyBelt={journeyBelt}
+              onSelectDimension={(dimensionId) => {
+                const dimension = DIMENSIONS.find((item) => item.id === dimensionId) || DIMENSIONS[0];
+                setSelected({
+                  dimensionId,
+                  dimensionName: dimension.name,
+                  topic: dimension.topics[0],
+                });
+              }}
+              onSelectSubdomain={(dimensionId, topic) => {
+                const dimension = DIMENSIONS.find((item) => item.id === dimensionId) || DIMENSIONS[0];
+                setSelected({
+                  dimensionId,
+                  dimensionName: dimension.name,
+                  topic,
+                });
+              }}
+            />
+          </div>
+
+          <aside className="rounded-lg border border-slate-200 bg-slate-50 p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{selected.dimensionName}</p>
+            <h4 className="mt-2 text-2xl font-semibold text-slate-950">{selected.topic.label}</h4>
+            <div className="mt-5 space-y-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">What it is</p>
+                <p className="mt-2 text-sm leading-6 text-slate-700">{getSubdomainDescription(selectedDimension, selected.topic)}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Why it matters</p>
+                <p className="mt-2 text-sm leading-6 text-slate-700">
+                  {WHY_IT_MATTERS[selected.topic.label] || "It gives Alfred a practical signal for how you think, choose, and act as a leader."}
+                </p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function getSubdomainDescription(dimension, topic) {
+  const descriptions = {
+    Values: "The principles and standards you use to make decisions, especially when trade-offs are uncomfortable.",
+    Strengths: "The recurring capabilities, traits, and patterns that create your strongest leadership impact.",
+    Vision: "The future direction you are building toward and the reason your work deserves sustained effort.",
+    "Team Composition": "The people, roles, relationships, and dynamics that shape how work actually gets done around you.",
+    Inspire: "How you create meaning, energy, confidence, and alignment for the people you lead.",
+    "Coach & Delegate": "How you grow others, transfer ownership, and create leverage without abandoning support.",
+    Prioritization: "How you decide what matters most, protect focus, and make trade-offs across competing demands.",
+    "Execution System": "The routines, tools, and operating rhythms that turn priorities into reliable progress.",
+    Procrastination: "The resistance patterns that delay action and reveal fear, ambiguity, misalignment, or overload.",
+    "Energy Sources": "The work, relationships, and rhythms that renew your clarity, motivation, and leadership capacity.",
+    "Energy Drains": "The activities, frictions, and conditions that quietly consume attention and reduce leadership quality.",
+    Recovery: "The deliberate practices that restore capacity so your leadership stays sustainable.",
+    "Failures & Scars": "The experiences that shaped you, including what hurt, what taught you, and what still influences your behavior.",
+    "Development Opportunities": "The skills, situations, and edges where growth would unlock stronger leadership range.",
+    "Development Plan": "The concrete plan that turns insight into practice, repetition, and visible behavior change.",
+  };
+
+  return descriptions[topic.label] || dimension.brief;
 }
 
 function BeltAssessmentConfirmModal({ readinessStatus, submitting, error, onClose, onSubmit }) {
@@ -2398,7 +2639,7 @@ function AssessmentFeedback({ title, feedback }) {
   );
 }
 
-function LeadershipWheel({ selectedDimensionId, activeTopic, dimensionStates, topicData, journeyBelt, onSelectDimension, onSelectSubdomain }) {
+function LeadershipWheel({ selectedDimensionId, activeTopic, dimensionStates, topicData, journeyBelt, onSelectDimension, onSelectSubdomain, onSelectCenter }) {
   const anglePerDim = 360 / DIMENSIONS.length;
   const haloBelt = journeyBelt || getBeltById("white");
 
@@ -2414,16 +2655,18 @@ function LeadershipWheel({ selectedDimensionId, activeTopic, dimensionStates, to
         </filter>
       </defs>
 
-      <circle cx={CENTER.x} cy={CENTER.y} r={R_CENTER} fill="#101827" />
-      <text x={CENTER.x} y={CENTER.y - 18} textAnchor="middle" fill="white" fontSize="34" fontWeight="700">
-        Alfred
-      </text>
-      <text x={CENTER.x} y={CENTER.y + 18} textAnchor="middle" fill="#d9c8a6" fontSize="20" fontWeight="500">
-        Leadership
-      </text>
-      <text x={CENTER.x} y={CENTER.y + 45} textAnchor="middle" fill="#d9c8a6" fontSize="20" fontWeight="500">
-        Dojo
-      </text>
+      <g onClick={onSelectCenter} style={{ cursor: onSelectCenter ? "pointer" : "default" }}>
+        <circle cx={CENTER.x} cy={CENTER.y} r={R_CENTER} fill="#101827" />
+        <text x={CENTER.x} y={CENTER.y - 24} textAnchor="middle" fill="white" fontSize="27" fontWeight="700" pointerEvents="none">
+          Leadership
+        </text>
+        <text x={CENTER.x} y={CENTER.y + 8} textAnchor="middle" fill="#d9c8a6" fontSize="23" fontWeight="600" pointerEvents="none">
+          Operating
+        </text>
+        <text x={CENTER.x} y={CENTER.y + 39} textAnchor="middle" fill="#d9c8a6" fontSize="23" fontWeight="600" pointerEvents="none">
+          System
+        </text>
+      </g>
 
       {DIMENSIONS.map((dimension, index) => {
         const start = index * anglePerDim;

@@ -36,7 +36,15 @@ const SESSION_TYPES = [
   { id: 'leadership_coaching', label: 'Leadership Coaching', icon: '🧭', color: 'green', enabled: true }
 ];
 
-const MyCoachingSessions = ({ apiUrl, userNumber, selectedVisionId = null, selectedVisionTitle = '' }) => {
+const MyCoachingSessions = ({
+  apiUrl,
+  userNumber,
+  selectedVisionId = null,
+  selectedVisionTitle = '',
+  visibleSessionTypes = null,
+  launchLabelByType = {},
+  emptyStateText = null,
+}) => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -323,7 +331,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber, selectedVisionId = null, selec
             )}
           </div>
           <div className="flex gap-3">
-            {SESSION_TYPES.map(session => {
+            {SESSION_TYPES.filter(session => !visibleSessionTypes || visibleSessionTypes.includes(session.id)).map(session => {
               const colorClasses = {
                 blue: {
                   active: 'bg-blue-600 text-white shadow-md',
@@ -358,7 +366,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber, selectedVisionId = null, selec
                   `}
                 >
                   <span>{session.icon}</span>
-                  <span>{session.label}</span>
+                  <span>{launchLabelByType[session.id] || session.label}</span>
                   {!session.enabled && ' 🔒'}
                 </button>
               );
@@ -510,8 +518,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber, selectedVisionId = null, selec
             </div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">Ready for your coaching session?</h3>
             <p className="text-gray-600 max-w-md">
-              Click "Goal Review Session" above to start a structured review of your progress, 
-              identify blockers, and plan concrete next steps.
+              {emptyStateText || 'Click "Goal Review Session" above to start a structured review of your progress, identify blockers, and plan concrete next steps.'}
             </p>
           </div>
         ) : (
