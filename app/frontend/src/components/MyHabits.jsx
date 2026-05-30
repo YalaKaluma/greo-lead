@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
+import HabitTrendsTab from './Habits/HabitTrendsTab';
 
 /* =========================================================
    GOAL HELPERS — COPIED 1:1 FROM TodoList.jsx
@@ -207,6 +208,10 @@ function HabitCalendar({ history, frequency, onUpdateDay }) {
 export default function MyHabits({ apiUrl, userNumber }) {
   const [habits, setHabits] = useState([]);
   const [goals, setGoals] = useState([]);
+  const [activeTab, setActiveTab] = useState('habits');
+  const [trends, setTrends] = useState(null);
+  const [trendsLoading, setTrendsLoading] = useState(false);
+  const [trendsError, setTrendsError] = useState(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState(null);
@@ -269,10 +274,34 @@ export default function MyHabits({ apiUrl, userNumber }) {
     }
   };
 
+  /* ---------------- FETCH HABIT TRENDS ---------------- */
+
+  const fetchHabitTrends = async () => {
+    setTrendsLoading(true);
+    setTrendsError(null);
+    try {
+      const res = await axios.get(`${apiUrl}/api/habits/trends`, {
+        params: { user_number: userNumber }
+      });
+      setTrends(res.data);
+    } catch (err) {
+      console.error('Error fetching habit trends:', err);
+      setTrendsError('Unable to load habit trends right now.');
+    } finally {
+      setTrendsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchHabits();
     fetchGoals();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'trends' && !trends && !trendsLoading) {
+      fetchHabitTrends();
+    }
+  }, [activeTab]);
 
   /* ---------------- MODAL CONTROL ---------------- */
 
@@ -323,6 +352,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
       }
 
       closeModal();
+      setTrends(null);
       fetchHabits();
     } catch (err) {
       console.error('Error saving habit:', err);
@@ -340,6 +370,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
         {},
         { params: { user_number: userNumber } }
       );
+      setTrends(null);
       fetchHabits();
     } catch (err) {
       console.error('Error toggling habit:', err);
@@ -358,6 +389,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
       
       // Refresh history
       await fetchHabitHistory(habitId);
+      setTrends(null);
       fetchHabits(); // Also refresh main list to update streak
     } catch (err) {
       console.error('Error updating day:', err);
@@ -393,13 +425,49 @@ export default function MyHabits({ apiUrl, userNumber }) {
         <h1 className="text-3xl font-bold text-slate-800">
           My Executive Habits
         </h1>
+        {activeTab === 'habits' && (
+          <button
+            onClick={openNewHabit}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+          >
+            + Add Habit
+          </button>
+        )}
+      </div>
+
+      <div className="mb-6 flex rounded-lg border bg-white p-1">
         <button
-          onClick={openNewHabit}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+          onClick={() => setActiveTab('habits')}
+          className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            activeTab === 'habits'
+              ? 'bg-blue-600 text-white'
+              : 'text-slate-600 hover:bg-slate-50'
+          }`}
         >
-          + Add Habit
+          Habits
+        </button>
+        <button
+          onClick={() => setActiveTab('trends')}
+          className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            activeTab === 'trends'
+              ? 'bg-blue-600 text-white'
+              : 'text-slate-600 hover:bg-slate-50'
+          }`}
+        >
+          Trends & Coaching
         </button>
       </div>
+
+      {activeTab === 'trends' && (
+        <HabitTrendsTab
+          trends={trends}
+          loading={trendsLoading}
+          error={trendsError}
+        />
+      )}
+
+      {activeTab === 'habits' && (
+        <>
 
       {/* HABIT LIST */}
       <div className="space-y-3">
@@ -472,6 +540,9 @@ export default function MyHabits({ apiUrl, userNumber }) {
           );
         })}
       </div>
+
+        </>
+      )}
 
       {/* ================= MODAL ================= */}
 

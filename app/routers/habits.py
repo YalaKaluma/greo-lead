@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.db import get_db
 from app.models import Habit, HabitCompletion, JourneyGoal
+from app.services.habits.habit_trend_service import get_habit_trends
 
 router = APIRouter()
 
@@ -196,6 +197,13 @@ def delete_habit(habit_id: int, user_number: str, db: Session = Depends(get_db))
     habit.is_active = False
     db.commit()
     return {"status": "deleted"}
+
+
+@router.get("/trends")
+def get_trends(user_number: str, db: Session = Depends(get_db)):
+    """Get historical habit trends, scorecards, and coaching context."""
+
+    return get_habit_trends(user_number, db)
 
 
 @router.post("/{habit_id}/toggle_today")
