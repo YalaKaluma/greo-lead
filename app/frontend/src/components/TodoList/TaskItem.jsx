@@ -67,7 +67,7 @@ export default function TaskItem({
   };
 
   return (
-    <Draggable draggableId={String(task.id)} index={index} isDragDisabled={selectionMode || priorityMode}>
+    <Draggable draggableId={String(task.id)} index={index} isDragDisabled={selectionMode}>
       {(provided, snapshot) => (
         <TaskCard
           task={task}
@@ -211,10 +211,9 @@ function TaskCard({
         hover:border-gray-300 transition-all
         ${snapshot.isDragging ? 'opacity-50 scale-98 shadow-lg' : ''}
         ${isCompleting ? 'opacity-60' : ''}
-        ${index >= 10 && !priorityMode ? 'opacity-40' : ''}
+        ${index >= 10 ? 'opacity-40' : ''}
         ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}
         cursor-pointer
-        ${priorityMode && priorityScore?.score >= 0.75 ? 'border-blue-300 bg-blue-50' : ''}
       `}
       onClick={handleClick}
     >
@@ -227,7 +226,7 @@ function TaskCard({
           </div>
         )}
 
-        {!selectionMode && !priorityMode && (
+        {!selectionMode && (
           <div
             {...provided.dragHandleProps}
             className="text-slate-300 cursor-grab active:cursor-grabbing mt-0.5"

@@ -502,21 +502,21 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose, onDeleted }) {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsEditing(true)}
-                className="p-1 rounded hover:bg-slate-200 transition"
+                className="h-10 inline-flex items-center justify-center rounded border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
                 title="Edit"
                 aria-label={`Edit ${person.name}`}
               >
-                <EditIcon />
+                Edit
               </button>
               <button
                 onClick={deleteProfilePerson}
-                className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded font-medium transition-colors border border-red-200"
+                className="h-10 inline-flex items-center justify-center rounded border border-red-200 bg-red-50 px-4 text-sm font-medium text-red-600 transition-colors hover:bg-red-100"
               >
                 Delete
               </button>
               <button
                 onClick={() => window.location.href = `/?page=coaching-sessions&session=people_review&person=${person.id}`}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="h-10 inline-flex items-center justify-center rounded bg-blue-600 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-700"
               >
                 + New Review
               </button>

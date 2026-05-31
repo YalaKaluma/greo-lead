@@ -190,19 +190,6 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const getSortedTasks = () => {
-    // Strategic View is an explicit, temporary lens over the user's tasks.
-    if (priorityMode && priorityRecommendation && priorityRecommendation.all_scored_tasks) {
-      const scoredTasks = priorityRecommendation.all_scored_tasks;
-      
-      // Sort by score (highest first)
-      const sortedByScore = [...scoredTasks].sort((a, b) => b.score - a.score);
-      
-      // Map back to full task objects
-      return sortedByScore
-        .map(st => tasks.find(t => t.id === st.task_id))
-        .filter(Boolean);
-    }
-    
     // Manual drag-and-drop order is the default experience.
     if (sortOrder.length > 0) {
       return [...tasks].sort((a, b) => {
@@ -570,7 +557,15 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const handleApplyPrioritySort = () => {
-    const newOrder = getSortedTasks().map(task => task.id);
+    const scoredTasks = priorityRecommendation?.all_scored_tasks || [];
+    const scoredOrder = [...scoredTasks]
+      .sort((a, b) => b.score - a.score)
+      .map(scoredTask => scoredTask.task_id);
+    const scoredIds = new Set(scoredOrder);
+    const remainingTaskIds = tasks
+      .filter(task => !scoredIds.has(task.id))
+      .map(task => task.id);
+    const newOrder = [...scoredOrder, ...remainingTaskIds];
     saveSortOrder(newOrder);
   };
 
@@ -621,10 +616,6 @@ export default function TodoList({ apiUrl, userNumber }) {
                 <span className="text-blue-600 font-medium">
                   {selectedTasks.length} task(s) selected
                 </span>
-              ) : priorityMode ? (
-                <span className="text-blue-700 font-medium">
-                  MTN sort applied. Click a tag to review the reasoning or leave feedback.
-                </span>
               ) : (
                 <>
                   {filterType === 'due_today' && 'Tasks due today'}
@@ -638,7 +629,7 @@ export default function TodoList({ apiUrl, userNumber }) {
             </p>
           </div>
           <div className="flex flex-wrap justify-end gap-2">
-            {sortOrder.length > 0 && !selectionMode && !priorityMode && (
+            {sortOrder.length > 0 && !selectionMode && (
               <button
                 onClick={resetSortOrder}
                 className="h-10 w-10 inline-flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
@@ -648,7 +639,7 @@ export default function TodoList({ apiUrl, userNumber }) {
                 <ResetIcon />
               </button>
             )}
-            {!selectionMode && !priorityMode && (
+            {!selectionMode && (
               <>
                 <button
                   onClick={setOverdueToToday}
@@ -706,7 +697,7 @@ export default function TodoList({ apiUrl, userNumber }) {
         </div>
 
         {/* Filters Section */}
-        {!selectionMode && !priorityMode && (
+        {!selectionMode && (
           <FilterSection
             filtersCollapsed={filtersCollapsed}
             setFiltersCollapsed={setFiltersCollapsed}
