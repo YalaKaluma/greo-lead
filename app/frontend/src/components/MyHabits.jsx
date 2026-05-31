@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import HabitTrendsTab from './Habits/HabitTrendsTab';
 import { useLanguage } from '../i18n/LanguageContext';
+import { getTodayET } from '../utils/taskHelpers';
 
 /* =========================================================
    GOAL HELPERS — COPIED 1:1 FROM TodoList.jsx
@@ -219,6 +220,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
     message: '',
     error: ''
   });
+  const [mtnTaskState, setMtnTaskState] = useState({});
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState(null);
@@ -324,6 +326,49 @@ export default function MyHabits({ apiUrl, userNumber }) {
         message: '',
         error: 'Unable to refresh coaching right now.'
       });
+    }
+  };
+
+  const addMtnActionToTasks = async (action, index) => {
+    const actionTitle = action.title || 'Habit MTN action';
+    const taskTitle = action.suggested_next_step || actionTitle;
+    const actionKey = `${actionTitle}-${index}`;
+    const notes = [
+      `Habit MTN action: ${actionTitle}`,
+      action.why_it_matters ? `Why it matters: ${action.why_it_matters}` : '',
+      action.suggested_next_step ? `Suggested next step: ${action.suggested_next_step}` : ''
+    ].filter(Boolean).join('\n\n');
+
+    setMtnTaskState(current => ({
+      ...current,
+      [actionKey]: { status: 'saving', message: '' }
+    }));
+
+    try {
+      await axios.post(
+        `${apiUrl}/api/tasks/`,
+        {
+          title: taskTitle,
+          notes,
+          due_date: getTodayET(),
+          priority: 'high'
+        },
+        { params: { user_number: userNumber } }
+      );
+
+      setMtnTaskState(current => ({
+        ...current,
+        [actionKey]: { status: 'added', message: 'Added to today' }
+      }));
+    } catch (err) {
+      console.error('Error adding habit MTN action to tasks:', err);
+      setMtnTaskState(current => ({
+        ...current,
+        [actionKey]: {
+          status: 'error',
+          message: err.response?.data?.detail || 'Could not add task'
+        }
+      }));
     }
   };
 
@@ -510,6 +555,8 @@ export default function MyHabits({ apiUrl, userNumber }) {
           error={trendsError}
           onRefreshCoaching={refreshHabitCoaching}
           coachingRefreshState={coachingRefreshState}
+          onAddMtnActionToTasks={addMtnActionToTasks}
+          mtnTaskState={mtnTaskState}
         />
       )}
 

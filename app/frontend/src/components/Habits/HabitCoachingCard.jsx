@@ -25,6 +25,24 @@ function RefreshIcon({ spinning = false }) {
   );
 }
 
+function PlusIcon() {
+  return (
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
 function ListBlock({ title, items }) {
   if (!items?.length) return null;
 
@@ -42,7 +60,14 @@ function ListBlock({ title, items }) {
   );
 }
 
-export default function HabitCoachingCard({ context, review, onRefresh, refreshState }) {
+export default function HabitCoachingCard({
+  context,
+  review,
+  onRefresh,
+  refreshState,
+  onAddMtnActionToTasks,
+  mtnTaskState = {}
+}) {
   const fallback = context?.coaching || 'Alfred will generate coaching once there is enough habit history.';
   const isRefreshing = Boolean(refreshState?.loading);
   const statusClass = statusStyles[review?.status] || 'bg-slate-100 text-slate-700 border-slate-200';
@@ -120,26 +145,56 @@ export default function HabitCoachingCard({ context, review, onRefresh, refreshS
             <div>
               <h3 className="text-sm font-semibold text-slate-900">Top 3 Habit MTN Actions</h3>
               <div className="mt-3 grid gap-3">
-                {review.mtn_actions.map((action, index) => (
-                  <div key={`${action.title}-${index}`} className="rounded-md border border-slate-200 bg-white p-4">
-                    <div className="flex items-start gap-3">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-950 text-xs font-semibold text-white">
-                        {index + 1}
-                      </span>
-                      <div>
-                        <h4 className="font-semibold text-slate-900">{action.title}</h4>
-                        {action.why_it_matters && (
-                          <p className="mt-1 text-sm leading-6 text-slate-600">{action.why_it_matters}</p>
-                        )}
-                        {action.suggested_next_step && (
-                          <p className="mt-2 text-sm font-medium leading-6 text-slate-800">
-                            {action.suggested_next_step}
-                          </p>
+                {review.mtn_actions.map((action, index) => {
+                  const actionTitle = action.title || 'Habit MTN action';
+                  const actionKey = `${actionTitle}-${index}`;
+                  const taskState = mtnTaskState[actionKey];
+                  const isSaving = taskState?.status === 'saving';
+                  const isAdded = taskState?.status === 'added';
+
+                  return (
+                    <div key={actionKey} className="rounded-md border border-slate-200 bg-white p-4">
+                      <div className="flex items-start gap-3">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-950 text-xs font-semibold text-white">
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-semibold text-slate-900">{actionTitle}</h4>
+                          {action.why_it_matters && (
+                            <p className="mt-1 text-sm leading-6 text-slate-600">{action.why_it_matters}</p>
+                          )}
+                          {action.suggested_next_step && (
+                            <p className="mt-2 text-sm font-medium leading-6 text-slate-800">
+                              {action.suggested_next_step}
+                            </p>
+                          )}
+                          {taskState?.message && (
+                            <p className={`mt-2 text-xs font-medium ${
+                              taskState.status === 'error' ? 'text-rose-700' : 'text-emerald-700'
+                            }`}>
+                              {taskState.message}
+                            </p>
+                          )}
+                        </div>
+                        {onAddMtnActionToTasks && (
+                          <button
+                            type="button"
+                            onClick={() => onAddMtnActionToTasks(action, index)}
+                            disabled={isSaving || isAdded}
+                            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                            title="Add task"
+                            aria-label={`Add ${actionTitle} to tasks`}
+                          >
+                            <PlusIcon />
+                            <span className="hidden sm:inline">
+                              {isSaving ? 'Adding...' : isAdded ? 'Added' : 'Add task'}
+                            </span>
+                          </button>
                         )}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
