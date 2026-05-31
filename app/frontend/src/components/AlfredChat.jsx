@@ -263,9 +263,10 @@ export default function AlfredChat({ apiUrl, userNumber, preferredLanguage, onTo
       </div>
 
       {/* Floating Button */}
+      {false && (
       <button
         onClick={toggleChat}
-        className="fixed bottom-6 right-6 w-16 h-16 bg-black rounded-full shadow-2xl hover:shadow-3xl hover:scale-105 transition-all duration-300 flex items-center justify-center z-50 group"
+        className="hidden"
       >
         {/* Alfred Logo */}
         <img 
@@ -293,6 +294,7 @@ export default function AlfredChat({ apiUrl, userNumber, preferredLanguage, onTo
           </div>
         )}
       </button>
+      )}
     </>
   );
 }
