@@ -458,7 +458,8 @@ def generate_ai_message(
         system_prompt: str,
         conversation_history: List[Dict],
         nudge_type: str,
-        user_number: str
+        user_number: str,
+        max_tokens: int = 300
 ) -> str:
     """
     Generate AI message using OpenAI with retry logic.
@@ -496,10 +497,16 @@ def generate_ai_message(
                 model=OPENAI_MODEL,
                 messages=messages,
                 temperature=0.7,
-                max_tokens=300,
+                max_tokens=max_tokens,
             )
 
             text = response.choices[0].message.content.strip()
+            finish_reason = response.choices[0].finish_reason
+            if finish_reason == "length":
+                logger.warning(
+                    f"OpenAI stopped {nudge_type} generation at max_tokens={max_tokens}; "
+                    f"message may be truncated for {user_number}"
+                )
             logger.info(f"✅ OpenAI generated {nudge_type} message ({len(text)} chars) for {user_number}")
             return text
 
@@ -680,8 +687,18 @@ def send_nudge_for_user(
         logger.info(f"   {system_prompt[:500]}...")
         logger.info(f"🔍 Conversation history: {len(conversation_history)} messages")
 
+        # Give the model enough room to finish the configured nudge while still
+        # keeping runaway responses bounded.
+        max_tokens = max(300, min(700, int(config["max_length"] / 2) + 150))
+
         # Generate AI message
-        message_text = generate_ai_message(system_prompt, conversation_history, nudge_type, user_number)
+        message_text = generate_ai_message(
+            system_prompt,
+            conversation_history,
+            nudge_type,
+            user_number,
+            max_tokens=max_tokens
+        )
 
         # Send via WhatsApp
         #Temporarly disabled

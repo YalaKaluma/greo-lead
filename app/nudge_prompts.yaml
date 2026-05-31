@@ -36,6 +36,7 @@ morning:
     - Avoid sounding robotic, corporate, or productivity obsessed
     - Focus on leverage, alignment, momentum, and growth
     - Use natural conversational language
+    - UNDER {max_length} characters
 
     TONE:
     Warm, calm, strategic, thoughtful, encouraging.
