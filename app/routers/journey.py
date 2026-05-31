@@ -48,7 +48,7 @@ from app.services.yellow_belt_validator import (
     validate_yellow_belt_dimension,
     validate_yellow_belt_trial_type,
 )
-from app.services.goal_progress_review_service import GoalProgressReviewService
+from app.services.vision_progress_review_service import VisionProgressReviewService
 
 STRUCTURAL_LEVEL_ALIASES = {
     "long": "vision",
@@ -2016,9 +2016,23 @@ def get_vision_progress_review(
         db: Session = Depends(get_db)
 ):
     try:
-        return GoalProgressReviewService.build(db, user_number, vision_id)
+        return VisionProgressReviewService.get_latest_or_generated(db, user_number, vision_id)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error))
+
+
+@router.post("/visions/{vision_id}/progress-review/refresh")
+def refresh_vision_progress_review(
+        vision_id: int,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    try:
+        return VisionProgressReviewService.refresh_vision_progress_review(db, user_number, vision_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error))
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=f"Could not refresh the progress review: {error}")
 
 
 @router.post("/visions/{vision_id}/waves")

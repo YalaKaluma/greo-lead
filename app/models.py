@@ -287,6 +287,30 @@ class WaveGoal(Base):
     goal = relationship("JourneyGoal")
 
 
+class VisionProgressReview(Base):
+    __tablename__ = "vision_progress_reviews"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_number = Column(String, index=True, nullable=False)
+    vision_id = Column(Integer, ForeignKey("journey_goals.id", ondelete="CASCADE"), nullable=False, index=True)
+    review_period_start = Column(DateTime, nullable=False)
+    review_period_end = Column(DateTime, nullable=False)
+    status = Column(String, nullable=False)
+    executive_summary = Column(Text, nullable=False)
+    key_wins = Column(JSON, nullable=True)
+    key_risks = Column(JSON, nullable=True)
+    recommended_focus = Column(Text, nullable=True)
+    mtn_actions = Column(JSON, nullable=True)
+    health_scores = Column(JSON, nullable=True)
+    raw_context = Column(JSON, nullable=True)
+    raw_llm_response = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User")
+    vision = relationship("JourneyGoal")
+
+
 class JourneyFailure(Base):
     __tablename__ = "journey_failures"
 

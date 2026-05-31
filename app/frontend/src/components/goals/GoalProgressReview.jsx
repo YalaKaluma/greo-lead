@@ -3,6 +3,8 @@ import axios from 'axios';
 
 const statusLabels = {
   accelerating: 'Accelerating',
+  on_track: 'On Track',
+  stalled: 'Stalled',
   constrained: 'Constrained',
   steady: 'Steady',
   at_risk: 'At Risk'
@@ -31,6 +33,15 @@ const EmptyState = ({ children }) => (
   <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-600">
     {children}
   </div>
+);
+
+const RefreshIcon = ({ className = '' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M21 12a9 9 0 0 1-15.2 6.5" />
+    <path d="M3 12A9 9 0 0 1 18.2 5.5" />
+    <path d="M18 2v4h-4" />
+    <path d="M6 22v-4h4" />
+  </svg>
 );
 
 const HealthPill = ({ value }) => (
@@ -65,6 +76,9 @@ export default function GoalProgressReview({ apiUrl, userNumber, expandedGoalId 
   const [review, setReview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState('');
+  const [refreshError, setRefreshError] = useState('');
   const [recommendationActions, setRecommendationActions] = useState({});
 
   const loadReview = async () => {
@@ -77,11 +91,35 @@ export default function GoalProgressReview({ apiUrl, userNumber, expandedGoalId 
         params: { user_number: userNumber }
       });
       setReview(res.data);
+      setRecommendationActions({});
     } catch (err) {
       console.error('Error loading progress review:', err);
       setError(err.response?.data?.detail || 'Could not load the progress review.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshReview = async () => {
+    if (!expandedGoalId || refreshing) return;
+    setRefreshing(true);
+    setRefreshMessage('');
+    setRefreshError('');
+
+    try {
+      const res = await axios.post(
+        `${apiUrl}/api/journey/visions/${expandedGoalId}/progress-review/refresh`,
+        {},
+        { params: { user_number: userNumber } }
+      );
+      setReview(res.data);
+      setRecommendationActions({});
+      setRefreshMessage('Review refreshed with the latest 7-day context.');
+    } catch (err) {
+      console.error('Error refreshing progress review:', err);
+      setRefreshError(err.response?.data?.detail || 'Could not refresh the progress review.');
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -135,10 +173,26 @@ export default function GoalProgressReview({ apiUrl, userNumber, expandedGoalId 
               Status: {statusLabels[review.status] || review.status}
             </h2>
           </div>
-          <div className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700">
-            Vision Briefing
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700">
+              Vision Briefing
+            </div>
+            <button
+              type="button"
+              onClick={refreshReview}
+              disabled={refreshing}
+              className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+            >
+              <RefreshIcon className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Refreshing...' : 'Refresh data'}
+            </button>
           </div>
         </div>
+        {(refreshMessage || refreshError) && (
+          <div className={`mb-4 rounded-md border px-3 py-2 text-sm ${refreshError ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+            {refreshError || refreshMessage}
+          </div>
+        )}
         <p className="max-w-5xl text-base leading-7 text-slate-700">{review.executive_summary}</p>
 
         <div className="mt-5 grid gap-4 md:grid-cols-3">
