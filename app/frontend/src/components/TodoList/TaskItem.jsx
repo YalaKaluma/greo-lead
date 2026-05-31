@@ -185,7 +185,12 @@ function TaskCard({
     if (!mtnRating || !onMtnFeedback) return;
 
     setMtnSaving(true);
-    const result = await onMtnFeedback(mtnRating, mtnFeedback.trim() || null, mtnLabel);
+    const result = await onMtnFeedback(
+      mtnRating,
+      mtnFeedback.trim() || null,
+      mtnLabel,
+      priorityScore.recommendation_id
+    );
     setMtnSaving(false);
 
     if (result?.success) {

@@ -179,6 +179,33 @@ export default function TodoList({ apiUrl, userNumber }) {
   // TASK SORTING
   // ============================================================================
 
+  const getStoredTaskScore = (task) => {
+    const rawScore = task.mtn_score_today ?? task.move_the_needle_score;
+    if (rawScore === null || rawScore === undefined) return null;
+    const numericScore = Number(rawScore);
+    if (Number.isNaN(numericScore)) return null;
+
+    return {
+      task_id: task.id,
+      title: task.title,
+      score: numericScore > 1 ? numericScore / 10 : numericScore,
+      reason: task.mtn_reason_today || task.strategic_intent || 'Alfred prioritized this from your todo list.',
+      risk_if_ignored: task.mtn_risk_today || null,
+      confidence: 'medium',
+      rank: task.mtn_rank_today ?? task.top10_position ?? null,
+      is_top_mtn: Boolean(task.mtn_recommended_today),
+      recommendation_id: task.mtn_recommendation_id || null
+    };
+  };
+
+  const getVisibleTaskScore = (task) => {
+    return getTaskScore(task.id) || getStoredTaskScore(task);
+  };
+
+  const hasStoredMtnScoring = () => {
+    return tasks.some(task => Boolean(getVisibleTaskScore(task)));
+  };
+
   const saveSortOrder = (order) => {
     localStorage.setItem('taskSortOrder', JSON.stringify(order));
     setSortOrder(order);
@@ -192,6 +219,23 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const getSortedTasks = () => {
+    if (hasStoredMtnScoring()) {
+      return [...tasks].sort((a, b) => {
+        const scoreA = getVisibleTaskScore(a);
+        const scoreB = getVisibleTaskScore(b);
+
+        if (scoreA && scoreB) {
+          const rankA = scoreA.rank ?? 999;
+          const rankB = scoreB.rank ?? 999;
+          if (rankA !== rankB) return rankA - rankB;
+          return (scoreB.score ?? 0) - (scoreA.score ?? 0);
+        }
+        if (scoreA) return -1;
+        if (scoreB) return 1;
+        return 0;
+      });
+    }
+
     // Manual drag-and-drop order is the default experience.
     if (sortOrder.length > 0) {
       return [...tasks].sort((a, b) => {
@@ -577,8 +621,8 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
   }, [priorityMode, priorityRecommendation]);
 
-  const handleMtnFeedback = async (taskId, rating, feedback, tag) => {
-    const result = await submitMtnFeedback(taskId, rating, feedback, tag);
+  const handleMtnFeedback = async (taskId, rating, feedback, tag, recommendationId) => {
+    const result = await submitMtnFeedback(taskId, rating, feedback, tag, recommendationId);
     if (!result.success) {
       alert(result.error);
     }
@@ -743,7 +787,7 @@ export default function TodoList({ apiUrl, userNumber }) {
                   className="space-y-1"
                 >
                   {sortedTasks.map((task, index) => {
-                    const scoreData = getTaskScore(task.id);
+                    const scoreData = getVisibleTaskScore(task);
 
                     return (
                       <TaskItem
@@ -761,9 +805,9 @@ export default function TodoList({ apiUrl, userNumber }) {
                         onLongPress={() => enterSelectionMode(task.id)}
                         onSelectToggle={() => toggleTaskSelection(task.id)}
                         goals={goals}
-                        priorityMode={priorityMode}
+                        priorityMode={priorityMode || Boolean(scoreData)}
                         priorityScore={scoreData}
-                        onMtnFeedback={(rating, feedback, tag) => handleMtnFeedback(task.id, rating, feedback, tag)}
+                        onMtnFeedback={(rating, feedback, tag, recommendationId) => handleMtnFeedback(task.id, rating, feedback, tag, recommendationId)}
                       />
                     );
                   })}
