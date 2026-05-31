@@ -45,6 +45,7 @@ const MyCoachingSessions = ({
   visibleSessionTypes = null,
   launchLabelByType = {},
   emptyStateText = null,
+  loadInitialHistory = true,
 }) => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -65,10 +66,14 @@ const MyCoachingSessions = ({
     scrollToBottom();
   }, [messages]);
 
-  // Load chat history on mount
+  // Load chat history on mount when this is used as the full coaching page.
   useEffect(() => {
-    loadChatHistory();
-  }, [userNumber]);
+    if (loadInitialHistory) {
+      loadChatHistory();
+    } else {
+      setMessages([]);
+    }
+  }, [userNumber, loadInitialHistory]);
 
   const loadChatHistory = async () => {
     try {

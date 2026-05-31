@@ -370,6 +370,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
 
   const organizedGoals = organizeGoalsByTimeHorizon(goals);
   const selectedVision = goals.find(goal => goal.id === expandedGoalId);
+  const selectedGoalReviews = reviewSessions.filter(session => session.goal_id === expandedGoalId);
 
   return (
     <div className="max-w-7xl mx-auto p-4 lg:p-6">
@@ -522,13 +523,17 @@ export default function MyGoals({ apiUrl, userNumber }) {
             )}
 
             {expandedGoalId && activeTab === 'coaching' && (
-              <div className="min-h-[720px] overflow-hidden rounded-md border border-slate-200 bg-white">
-                <MyCoachingSessions
-                  apiUrl={apiUrl}
-                  userNumber={userNumber}
-                  selectedVisionId={expandedGoalId}
-                  selectedVisionTitle={selectedVision?.title || selectedVision?.goal_text}
-                />
+              <div className="space-y-4">
+                <PreviousGoalCoachingSessions sessions={selectedGoalReviews} />
+                <div className="min-h-[720px] overflow-hidden rounded-md border border-slate-200 bg-white">
+                  <MyCoachingSessions
+                    apiUrl={apiUrl}
+                    userNumber={userNumber}
+                    selectedVisionId={expandedGoalId}
+                    selectedVisionTitle={selectedVision?.title || selectedVision?.goal_text}
+                    loadInitialHistory={false}
+                  />
+                </div>
               </div>
             )}
 
@@ -581,6 +586,73 @@ export default function MyGoals({ apiUrl, userNumber }) {
           onCreate={handleCreateGoal}
         />
       )}
+    </div>
+  );
+}
+
+function PreviousGoalCoachingSessions({ sessions }) {
+  if (!sessions.length) return null;
+
+  const getStatusDisplay = (status) => {
+    const statusMap = {
+      green: { label: 'On Track', color: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200' },
+      orange: { label: 'Needs Attention', color: 'text-orange-700', bg: 'bg-orange-50', border: 'border-orange-200' },
+      red: { label: 'At Risk', color: 'text-red-700', bg: 'bg-red-50', border: 'border-red-200' }
+    };
+    return statusMap[status] || null;
+  };
+
+  return (
+    <section className="rounded-md border border-slate-200 bg-white">
+      <details className="group">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 text-sm font-semibold text-slate-900">
+          <span>Previous Coaching Sessions ({sessions.length})</span>
+          <span className="text-slate-500 group-open:rotate-180 transition-transform">v</span>
+        </summary>
+        <div className="space-y-3 border-t border-slate-200 px-5 py-4">
+          {sessions.map((session, index) => {
+            const statusDisplay = session.progress_status ? getStatusDisplay(session.progress_status) : null;
+
+            return (
+              <details key={session.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-900">
+                  {index === 0 ? 'Latest Session' : `Session ${sessions.length - index}`} - {new Date(session.session_ended_at).toLocaleDateString('en-US', {
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric'
+                  })}
+                </summary>
+                <div className="mt-4 space-y-3">
+                  {statusDisplay && (
+                    <span className={`inline-flex rounded border px-3 py-1 text-xs font-semibold ${statusDisplay.bg} ${statusDisplay.border} ${statusDisplay.color}`}>
+                      {statusDisplay.label}
+                    </span>
+                  )}
+                  {session.summary && (
+                    <p className="text-sm leading-6 text-slate-700">{session.summary}</p>
+                  )}
+                  {(session.key_progress || session.key_blockers || session.chosen_adjustment) && (
+                    <div className="grid gap-3 md:grid-cols-3">
+                      {session.key_progress && <GoalReviewSummaryField title="Progress" value={session.key_progress} />}
+                      {session.key_blockers && <GoalReviewSummaryField title="Blockers" value={session.key_blockers} />}
+                      {session.chosen_adjustment && <GoalReviewSummaryField title="Actions Agreed" value={session.chosen_adjustment} />}
+                    </div>
+                  )}
+                </div>
+              </details>
+            );
+          })}
+        </div>
+      </details>
+    </section>
+  );
+}
+
+function GoalReviewSummaryField({ title, value }) {
+  return (
+    <div className="rounded border border-slate-200 bg-white p-3">
+      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-600">{title}</div>
+      <p className="text-sm text-slate-700">{value}</p>
     </div>
   );
 }

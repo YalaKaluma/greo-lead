@@ -1602,6 +1602,7 @@ function LeadershipCoachingSessionsTab({ apiUrl, userNumber }) {
           visibleSessionTypes={["leadership_coaching"]}
           launchLabelByType={{ leadership_coaching: "Launch Leadership Coaching Session" }}
           emptyStateText="Launch a leadership coaching session to work through a live leadership challenge, identify the pattern underneath it, and choose a concrete experiment."
+          loadInitialHistory={false}
         />
       </section>
     </div>
