@@ -1,5 +1,5 @@
 // frontend/src/hooks/usePriority.js
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 
 /**
@@ -14,6 +14,31 @@ export function usePriority(apiUrl, userNumber) {
   const [priorityMode, setPriorityMode] = useState(false);
   const [priorityLoading, setPriorityLoading] = useState(false);
   const [priorityRecommendation, setPriorityRecommendation] = useState(null);
+  const [latestPriorityLoading, setLatestPriorityLoading] = useState(false);
+
+  const loadLatestPrioritization = async () => {
+    if (!apiUrl || !userNumber) return;
+
+    setLatestPriorityLoading(true);
+    try {
+      const res = await axios.get(`${apiUrl}/api/priority/latest`, {
+        params: { user_number: userNumber }
+      });
+
+      if (res.data?.has_prioritization) {
+        setPriorityRecommendation({ ...res.data, source: 'stored_morning' });
+        setPriorityMode(true);
+      }
+    } catch (err) {
+      console.error('Failed to load stored MTN prioritization:', err);
+    } finally {
+      setLatestPriorityLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadLatestPrioritization();
+  }, [apiUrl, userNumber]);
 
   // Run prioritization only when requested by the user.
   const runPrioritization = async () => {
@@ -24,7 +49,7 @@ export function usePriority(apiUrl, userNumber) {
         user_number: userNumber
       });
       
-      setPriorityRecommendation(res.data);
+      setPriorityRecommendation({ ...res.data, source: 'manual_run' });
       setPriorityMode(true);
       
       return { success: true };
@@ -81,13 +106,14 @@ export function usePriority(apiUrl, userNumber) {
   return {
     // State
     priorityMode,
-    priorityLoading,
+    priorityLoading: priorityLoading || latestPriorityLoading,
     priorityRecommendation,
     
     // Actions
     runPrioritization,
     exitPriorityMode,
     submitMtnFeedback,
-    getTaskScore
+    getTaskScore,
+    loadLatestPrioritization
   };
 }

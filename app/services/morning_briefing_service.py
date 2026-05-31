@@ -1,5 +1,6 @@
 from app.services.priority_service import PriorityService
 from app.services.priority_llm_service import PriorityLLMService
+from app.models import Task
 
 
 class MorningBriefingService:
@@ -11,51 +12,40 @@ class MorningBriefingService:
 
     def generate_move_the_needle_context(self, user_number: str) -> str:
         try:
-            # Create prioritization snapshot
-            context = self.priority_service.create_context_snapshot(user_number)
+            context, recommendation, scores, _tokens_used = self.priority_service.run_prioritization(
+                user_number=user_number,
+                llm_service=self.llm_service,
+                max_tasks=15,
+                reuse_today=True
+            )
 
-            # Get candidate tasks
-            tasks = self.priority_service.get_tasks_for_scoring(user_number)
-
-            # Safety limit
-            tasks = tasks[:15]
-
-            if not tasks:
+            if not recommendation or not scores:
                 return "No major move-the-needle opportunities identified today."
 
-            # Score tasks
-            scoring_result = self.llm_service.score_tasks(tasks, context)
-
-            scores = scoring_result["scores"]
-
-            # Sort descending
             scores = sorted(
                 scores,
-                key=lambda x: x["top10_likelihood"],
+                key=lambda x: x.top10_likelihood,
                 reverse=True
             )
 
-            # Take top 3
             top_scores = scores[:3]
 
-            # Build output
             lines = []
+            lines.append(
+                "I prioritized your todo list with the move-the-needle logic so today's top actions are already waiting in the Todo List. If any of these feel off, your feedback will help me tune the ranking."
+            )
             lines.append("TOP MOVE-THE-NEEDLE OPPORTUNITIES:")
 
             for idx, score in enumerate(top_scores, 1):
-
-                task = next(
-                    (t for t in tasks if t.id == score["task_id"]),
-                    None
-                )
+                task = self.db.query(Task).get(score.task_id)
 
                 if not task:
                     continue
 
                 lines.append(f"""
 {idx}. {task.title}
-Why it matters: {score["primary_reason"]}
-Risk of delay: {score["risk_if_ignored"]}
+Why it matters: {score.primary_reason}
+Risk of delay: {score.risk_if_ignored}
 """)
 
             return "\n".join(lines)

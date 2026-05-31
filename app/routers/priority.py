@@ -43,6 +43,8 @@ class PriorityRunResponse(BaseModel):
     all_scored_tasks: List[dict]  # NEW: All tasks scored, sorted by score
     tokens_used: int
     message: str
+    prioritized_at: Optional[str] = None
+    top_mtn_tasks: List[dict] = Field(default_factory=list)
 
 
 class UserDecisionRequest(BaseModel):
@@ -105,52 +107,18 @@ def run_prioritization(
     llm_service = PriorityLLMService()
 
     try:
-        # Step 1: Create context snapshot
-        context = priority_service.create_context_snapshot(request.user_number)
+        context, recommendation, scores, tokens_used = priority_service.run_prioritization(
+            user_number=request.user_number,
+            llm_service=llm_service
+        )
 
-        # Step 2: Get tasks to score
-        tasks = priority_service.get_tasks_for_scoring(request.user_number)
-
-        if not tasks:
+        if not recommendation or not scores:
             raise HTTPException(
                 status_code=404,
                 detail="No open tasks found. Create some tasks first!"
             )
 
-        # Step 3: Score tasks with LLM
-        llm_result = llm_service.score_tasks(tasks, context)
-
-        # Step 4: Save scores to database
-        scores = priority_service.save_priority_scores(
-            context_id=context.id,
-            scores=llm_result["scores"],
-            llm_model="gpt-4o",
-            tokens_used=llm_result["tokens_used"]
-        )
-
-        # Step 5: Generate recommendations
-        recommendation = priority_service.generate_recommendations(
-            context_id=context.id,
-            scores=scores
-        )
-
-        # Step 6: Format ALL scored tasks (not just top 10)
-        all_scored = []
-        for s in sorted(scores, key=lambda x: x.top10_likelihood, reverse=True):
-            task = db.query(Task).get(s.task_id)
-            all_scored.append({
-                "task_id": s.task_id,
-                "title": task.title if task else f"Task #{s.task_id}",
-                "notes": task.notes if task else None,
-                "priority": task.priority if task else None,
-                "project": task.project if task else None,
-                "score": float(s.top10_likelihood),
-                "reason": s.primary_reason,
-                "risk_if_ignored": s.risk_if_ignored,
-                "confidence": s.confidence,
-                "in_current_top10": s.task_id in (context.tasks_in_top10 or [])
-            })
-
+        serialized = priority_service.serialize_recommendation(recommendation, context, scores)
         changes = recommendation.changes_from_current
         num_changes = len(changes["add"]) + len(changes["remove"])
 
@@ -160,15 +128,48 @@ def run_prioritization(
             current_top10=context.tasks_in_top10 or [],
             recommended_changes=changes,
             recommended_top10=recommendation.recommended_top10,
-            all_scored_tasks=all_scored,
-            tokens_used=llm_result["tokens_used"],
-            message=f"Analyzed {len(tasks)} tasks. Suggesting {num_changes} changes to your Top 10."
+            all_scored_tasks=serialized["all_scored_tasks"],
+            tokens_used=tokens_used,
+            message=f"Analyzed {len(scores)} tasks. Suggesting {num_changes} changes to your Top 10.",
+            prioritized_at=serialized["prioritized_at"],
+            top_mtn_tasks=serialized["top_mtn_tasks"]
         )
 
     except Exception as e:
         raise HTTPException(
             status_code=500,
             detail=f"Prioritization failed: {str(e)}"
+        )
+
+
+@router.get("/latest")
+def get_latest_prioritization(
+        user_number: str = Query(..., description="User identifier"),
+        db: Session = Depends(get_db)
+):
+    """
+    Return today's stored MTN prioritization without running the LLM.
+    """
+    priority_service = PriorityService(db)
+
+    try:
+        recommendation = priority_service.get_latest_recommendation_for_today(user_number)
+        if not recommendation:
+            return {
+                "has_prioritization": False,
+                "message": "No MTN prioritization has been stored for today."
+            }
+
+        serialized = priority_service.serialize_recommendation(recommendation)
+        return {
+            "has_prioritization": True,
+            **serialized
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch latest prioritization: {str(e)}"
         )
 
 

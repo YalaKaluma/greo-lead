@@ -572,7 +572,11 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   useEffect(() => {
-    if (priorityMode && priorityRecommendation?.all_scored_tasks) {
+    if (
+      priorityMode &&
+      priorityRecommendation?.source === 'manual_run' &&
+      priorityRecommendation?.all_scored_tasks
+    ) {
       handleApplyPrioritySort();
     }
   }, [priorityMode, priorityRecommendation]);
@@ -591,6 +595,7 @@ export default function TodoList({ apiUrl, userNumber }) {
 
   const hasActiveFilters = selectedProject || selectedDelegate || selectedGoal || filterType !== 'due_today';
   const sortedTasks = getSortedTasks();
+  const topMtnTasks = priorityRecommendation?.top_mtn_tasks || [];
 
   // ============================================================================
   // RENDER
@@ -722,6 +727,35 @@ export default function TodoList({ apiUrl, userNumber }) {
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4">
             {error}
+          </div>
+        )}
+
+        {topMtnTasks.length > 0 && !selectionMode && (
+          <div className="mb-4 border border-blue-200 bg-blue-50 rounded-lg px-4 py-3">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-blue-950">Alfred's top MTN actions today</p>
+                <p className="text-xs text-blue-800 mt-0.5">
+                  Prioritized from the morning review. Feedback on any tag helps tune the next pass.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 lg:min-w-[640px]">
+                {topMtnTasks.map(item => (
+                  <button
+                    key={item.task_id}
+                    onClick={() => {
+                      const element = document.getElementById(`task-${item.task_id}`);
+                      element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }}
+                    className="text-left bg-white border border-blue-200 rounded-md px-3 py-2 hover:border-blue-400 transition-colors"
+                    title={item.reason}
+                  >
+                    <span className="text-xs font-semibold text-blue-700">#{item.rank} MTN</span>
+                    <span className="block text-sm font-medium text-slate-900 truncate">{item.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 

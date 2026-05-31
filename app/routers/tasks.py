@@ -77,6 +77,16 @@ class TaskResponse(BaseModel):
     enhanced_title: Optional[str] = None
     ai_enriched: Optional[bool] = False
     sort_order: Optional[int] = None
+    in_top10: Optional[bool] = False
+    top10_position: Optional[int] = None
+    last_prioritized_at: Optional[datetime] = None
+    mtn_score_today: Optional[float] = None
+    mtn_rank_today: Optional[int] = None
+    mtn_recommended_today: Optional[bool] = False
+    mtn_reason_today: Optional[str] = None
+    mtn_risk_today: Optional[str] = None
+    mtn_recommendation_id: Optional[int] = None
+    mtn_prioritized_at: Optional[str] = None
 
 
 
@@ -97,6 +107,35 @@ class BulkDeferNonTop10Request(BaseModel):
 
 # Priority order for sorting
 PRIORITY_ORDER = {"High": 1, "Medium": 2, "Low": 3}
+
+
+def attach_today_mtn_metadata(db: Session, user_number: str, tasks: List[Task]) -> None:
+    """Add today's stored MTN rank/score to task response objects."""
+    try:
+        from app.services.priority_service import PriorityService
+
+        priority_service = PriorityService(db)
+        latest = priority_service.serialize_recommendation(
+            priority_service.get_latest_recommendation_for_today(user_number)
+        )
+        if not latest:
+            return
+
+        by_task_id = {item["task_id"]: item for item in latest.get("all_scored_tasks", [])}
+        for task in tasks:
+            score = by_task_id.get(task.id)
+            if not score:
+                continue
+
+            task.mtn_score_today = score.get("score")
+            task.mtn_rank_today = score.get("rank")
+            task.mtn_recommended_today = bool(score.get("is_top_mtn"))
+            task.mtn_reason_today = score.get("reason")
+            task.mtn_risk_today = score.get("risk_if_ignored")
+            task.mtn_recommendation_id = latest.get("recommendation_id")
+            task.mtn_prioritized_at = latest.get("prioritized_at")
+    except Exception as exc:
+        print(f"[TASKS API] Failed to attach MTN metadata: {exc}")
 
 
 @router.get("", response_model=list[TaskResponse])
@@ -177,6 +216,7 @@ def get_tasks(
             return (manual_order_missing, manual_order_value, status_order, priority_value, due_value)
 
         sorted_tasks = sorted(tasks, key=sort_key)
+        attach_today_mtn_metadata(db, user_number, sorted_tasks)
         print(f"[TASKS API] Successfully returning {len(sorted_tasks)} sorted tasks")
         return sorted_tasks
 

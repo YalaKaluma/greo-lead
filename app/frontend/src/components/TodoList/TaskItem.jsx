@@ -181,6 +181,7 @@ function TaskCard({
   };
 
   const mtnLabel = priorityScore ? getMtnLabel(priorityScore.score) : '';
+  const isTopMtn = priorityScore?.is_top_mtn || priorityScore?.rank <= 3;
 
   const submitMtnFeedback = async () => {
     if (!mtnRating || !onMtnFeedback) return;
@@ -197,6 +198,7 @@ function TaskCard({
 
   return (
     <div
+      id={`task-${task.id}`}
       ref={provided.innerRef}
       {...provided.draggableProps}
       onTouchStart={onTouchStart}
@@ -212,7 +214,8 @@ function TaskCard({
         ${snapshot.isDragging ? 'opacity-50 scale-98 shadow-lg' : ''}
         ${isCompleting ? 'opacity-60' : ''}
         ${index >= 10 ? 'opacity-40' : ''}
-        ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}
+        ${isTopMtn ? 'border-blue-400 bg-blue-50' : ''}
+        ${isSelected ? 'border-blue-500 bg-blue-50' : !isTopMtn ? 'border-gray-200' : ''}
         cursor-pointer
       `}
       onClick={handleClick}
@@ -302,9 +305,9 @@ function TaskCard({
               className={`whitespace-nowrap text-xs px-2 py-0.5 rounded border font-medium ${getMtnStyle(priorityScore.score)}`}
               title="Review MTN reasoning"
             >
-              MTN: {mtnLabel}
+              {isTopMtn ? `#${priorityScore.rank} MTN` : `MTN: ${mtnLabel}`}
             </button>
-            {priorityScore.score >= 0.85 && (
+            {isTopMtn && (
               <div className="h-2 w-2 rounded-full bg-blue-500" title="Highest leverage" />
             )}
             {mtnSaved && (

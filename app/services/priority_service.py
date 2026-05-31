@@ -9,7 +9,7 @@ Handles:
 - Top 10 management and updates
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, time
 from typing import List, Dict, Optional, Tuple
 import pytz
 from sqlalchemy.orm import Session
@@ -189,7 +189,153 @@ class PriorityService:
 
         return filtered_tasks
 
-        return filtered_tasks
+    def get_latest_recommendation_for_today(
+            self,
+            user_number: str
+    ) -> Optional[TaskPriorityRecommendation]:
+        """Return the latest MTN recommendation generated today in Eastern Time."""
+        now = datetime.now(ET)
+        start = ET.localize(datetime.combine(now.date(), time.min))
+        end = ET.localize(datetime.combine(now.date(), time.max))
+
+        return (
+            self.db.query(TaskPriorityRecommendation)
+            .join(
+                TaskPrioritizationContext,
+                TaskPriorityRecommendation.context_id == TaskPrioritizationContext.id
+            )
+            .filter(
+                TaskPriorityRecommendation.user_number == user_number,
+                TaskPrioritizationContext.snapshot_at >= start,
+                TaskPrioritizationContext.snapshot_at <= end
+            )
+            .order_by(desc(TaskPriorityRecommendation.generated_at))
+            .first()
+        )
+
+    def run_prioritization(
+            self,
+            user_number: str,
+            llm_service,
+            max_tasks: Optional[int] = None,
+            reuse_today: bool = False
+    ) -> Tuple[TaskPrioritizationContext, Optional[TaskPriorityRecommendation], List[TaskPriorityScore], int]:
+        """
+        Run and persist one MTN prioritization pass.
+
+        If reuse_today is true, the latest recommendation from today is returned
+        instead of calling the LLM again.
+        """
+        if reuse_today:
+            existing = self.get_latest_recommendation_for_today(user_number)
+            if existing:
+                context = self.db.query(TaskPrioritizationContext).get(existing.context_id)
+                scores = self.get_scores_for_recommendation(existing.id)
+                return context, existing, scores, 0
+
+        context = self.create_context_snapshot(user_number)
+        tasks = self.get_tasks_for_scoring(user_number)
+        if max_tasks:
+            tasks = tasks[:max_tasks]
+
+        if not tasks:
+            return context, None, [], 0
+
+        llm_result = llm_service.score_tasks(tasks, context)
+        scores = self.save_priority_scores(
+            context_id=context.id,
+            scores=llm_result["scores"],
+            llm_model=getattr(llm_service, "model", "gpt-4o"),
+            tokens_used=llm_result["tokens_used"]
+        )
+        recommendation = self.generate_recommendations(context_id=context.id, scores=scores)
+        self.persist_mtn_results_to_tasks(scores, recommendation)
+
+        return context, recommendation, scores, llm_result["tokens_used"]
+
+    def get_scores_for_recommendation(self, recommendation_id: int) -> List[TaskPriorityScore]:
+        recommendation = self.db.query(TaskPriorityRecommendation).get(recommendation_id)
+        if not recommendation:
+            return []
+
+        return (
+            self.db.query(TaskPriorityScore)
+            .filter(TaskPriorityScore.context_id == recommendation.context_id)
+            .order_by(desc(TaskPriorityScore.top10_likelihood))
+            .all()
+        )
+
+    def persist_mtn_results_to_tasks(
+            self,
+            scores: List[TaskPriorityScore],
+            recommendation: Optional[TaskPriorityRecommendation]
+    ) -> None:
+        """Store the latest MTN score/rank on tasks for list-level visibility."""
+        if not scores:
+            return
+
+        now = datetime.now(ET)
+        sorted_scores = sorted(scores, key=lambda s: s.top10_likelihood, reverse=True)
+        top_ids_by_position = {score.task_id: idx + 1 for idx, score in enumerate(sorted_scores[:10])}
+
+        for score in sorted_scores:
+            task = self.db.query(Task).get(score.task_id)
+            if not task:
+                continue
+
+            task.move_the_needle_score = float(score.top10_likelihood)
+            task.last_prioritized_at = now
+            if score.task_id in top_ids_by_position:
+                task.in_top10 = True
+                task.top10_position = top_ids_by_position[score.task_id]
+            else:
+                task.in_top10 = False
+                task.top10_position = None
+
+        self.db.commit()
+
+    def serialize_recommendation(
+            self,
+            recommendation: Optional[TaskPriorityRecommendation],
+            context: Optional[TaskPrioritizationContext] = None,
+            scores: Optional[List[TaskPriorityScore]] = None
+    ) -> Optional[Dict]:
+        """Format a stored MTN recommendation for API/UI use."""
+        if not recommendation:
+            return None
+
+        context = context or self.db.query(TaskPrioritizationContext).get(recommendation.context_id)
+        scores = scores if scores is not None else self.get_scores_for_recommendation(recommendation.id)
+
+        all_scored = []
+        for idx, s in enumerate(sorted(scores, key=lambda item: item.top10_likelihood, reverse=True), 1):
+            task = self.db.query(Task).get(s.task_id)
+            all_scored.append({
+                "task_id": s.task_id,
+                "title": task.title if task else f"Task #{s.task_id}",
+                "notes": task.notes if task else None,
+                "priority": task.priority if task else None,
+                "project": task.project if task else None,
+                "score": float(s.top10_likelihood),
+                "reason": s.primary_reason,
+                "risk_if_ignored": s.risk_if_ignored,
+                "confidence": s.confidence,
+                "rank": idx,
+                "is_top_mtn": idx <= 3,
+                "in_current_top10": s.task_id in (context.tasks_in_top10 or []) if context else False
+            })
+
+        return {
+            "context_id": recommendation.context_id,
+            "recommendation_id": recommendation.id,
+            "current_top10": context.tasks_in_top10 or [] if context else [],
+            "recommended_changes": recommendation.changes_from_current,
+            "recommended_top10": recommendation.recommended_top10,
+            "all_scored_tasks": all_scored,
+            "prioritized_at": context.snapshot_at.isoformat() if context and context.snapshot_at else None,
+            "top_mtn_tasks": all_scored[:3],
+            "message": f"Loaded Alfred's stored MTN prioritization for today."
+        }
 
     def save_priority_scores(
             self,
