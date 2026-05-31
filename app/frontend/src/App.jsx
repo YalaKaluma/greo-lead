@@ -22,6 +22,18 @@ const API_URL = import.meta.env.PROD
   ? ''
   : (import.meta.env.VITE_API_URL || 'http://localhost:8000');
 
+const DEFAULT_PAGE = 'my-goals';
+const VALID_PAGE_IDS = new Set([
+  'todo-list',
+  DEFAULT_PAGE,
+  'my-team',
+  'my-journey',
+  'my-habits',
+  'coaching-sessions',
+  'my-journal',
+  'settings'
+]);
+
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userNumber, setUserNumber] = useState(null);
@@ -29,7 +41,7 @@ function App() {
   const [tourComplete, setTourComplete] = useState(false);
   const [onboardingCompleted, setOnboardingCompleted] = useState(true); // Default true, check DB
 
-  const [currentPage, setCurrentPage] = useState('my-goals'); // Start on goals page for tour
+  const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE); // Start on Vision and goals
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -85,9 +97,15 @@ function App() {
       return;
     }
     
-    // If there's a page param and we're logged in, navigate to it
-    if (page && isLoggedIn) {
+    // Deep links can open a specific page once, but refreshes should return to the default page.
+    if (page && isLoggedIn && VALID_PAGE_IDS.has(page)) {
       setCurrentPage(page);
+      const nextParams = new URLSearchParams(window.location.search);
+      nextParams.delete('page');
+      nextParams.delete('session');
+      nextParams.delete('person');
+      const nextUrl = `${window.location.pathname}${nextParams.toString() ? `?${nextParams}` : ''}${window.location.hash}`;
+      window.history.replaceState({}, '', nextUrl);
     }
   }, [isLoggedIn]);
 
@@ -128,7 +146,7 @@ function App() {
     
     // If tour is needed, start on goals page
     if (requiresTour) {
-      setCurrentPage('my-goals');
+      setCurrentPage(DEFAULT_PAGE);
     }
   };
 
