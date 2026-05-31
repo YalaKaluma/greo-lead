@@ -7,6 +7,10 @@ from pydantic import BaseModel
 
 from app.db import get_db
 from app.models import Habit, HabitCompletion, JourneyGoal
+from app.services.habit_coaching_service import (
+    get_latest_habit_coaching_review,
+    refresh_habit_coaching_review,
+)
 from app.services.habits.habit_trend_service import get_habit_trends
 
 router = APIRouter()
@@ -203,7 +207,28 @@ def delete_habit(habit_id: int, user_number: str, db: Session = Depends(get_db))
 def get_trends(user_number: str, db: Session = Depends(get_db)):
     """Get historical habit trends, scorecards, and coaching context."""
 
-    return get_habit_trends(user_number, db)
+    trends = get_habit_trends(user_number, db)
+    trends["latest_coaching_review"] = get_latest_habit_coaching_review(db, user_number)
+    return trends
+
+
+@router.get("/coaching/latest")
+def get_latest_coaching_review(user_number: str, db: Session = Depends(get_db)):
+    """Get the latest saved AI habit coaching review."""
+
+    return {"review": get_latest_habit_coaching_review(db, user_number)}
+
+
+@router.post("/coaching/refresh")
+def refresh_coaching_review(user_number: str, db: Session = Depends(get_db)):
+    """Generate and persist a fresh AI habit coaching review."""
+
+    try:
+        return {"review": refresh_habit_coaching_review(db, user_number)}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to refresh habit coaching: {exc}")
 
 
 @router.post("/{habit_id}/toggle_today")

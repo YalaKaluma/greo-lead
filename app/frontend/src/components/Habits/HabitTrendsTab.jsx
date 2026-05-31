@@ -6,7 +6,7 @@ import HabitLeaderboard from './HabitLeaderboard';
 import HabitScores from './HabitScores';
 import HabitTrendSummary from './HabitTrendSummary';
 
-export default function HabitTrendsTab({ trends, loading, error }) {
+export default function HabitTrendsTab({ trends, loading, error, onRefreshCoaching, coachingRefreshState }) {
   if (loading) {
     return (
       <div className="rounded-lg border bg-white p-6 text-sm text-slate-500">
@@ -25,12 +25,17 @@ export default function HabitTrendsTab({ trends, loading, error }) {
 
   return (
     <div className="space-y-5">
+      <HabitCoachingCard
+        context={trends?.coaching_context}
+        review={trends?.latest_coaching_review}
+        onRefresh={onRefreshCoaching}
+        refreshState={coachingRefreshState}
+      />
       <HabitTrendSummary summary={trends?.summary} />
       <HabitComplianceChart data={trends?.trend_chart} />
       <HabitHeatmap data={trends?.heatmap} />
       <HabitLeaderboard data={trends?.leaderboard} />
       <HabitScores scores={trends?.scores} />
-      <HabitCoachingCard context={trends?.coaching_context} />
       <HabitInsightsCard insights={trends?.coaching_context?.insights} />
     </div>
   );

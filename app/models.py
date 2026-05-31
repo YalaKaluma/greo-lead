@@ -661,6 +661,30 @@ class HabitCompletion(Base):
     habit = relationship("Habit", backref="completions")
 
 
+class HabitCoachingReview(Base):
+    __tablename__ = "habit_coaching_reviews"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_number = Column(String, index=True, nullable=False)
+    review_period_start = Column(DateTime, nullable=False)
+    review_period_end = Column(DateTime, nullable=False)
+    status = Column(String, nullable=False)
+    executive_summary = Column(Text, nullable=False)
+    what_changed = Column(Text, nullable=True)
+    key_wins = Column(JSON, nullable=True)
+    watchouts = Column(JSON, nullable=True)
+    top_habits = Column(JSON, nullable=True)
+    habits_needing_attention = Column(JSON, nullable=True)
+    recommended_focus = Column(Text, nullable=True)
+    mtn_actions = Column(JSON, nullable=True)
+    raw_context = Column(JSON, nullable=True)
+    raw_llm_response = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User")
+
+
 class OnboardingStep(str, enum.Enum):
     """Onboarding flow steps"""
     INITIAL = "INITIAL"

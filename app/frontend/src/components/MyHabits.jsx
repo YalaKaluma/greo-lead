@@ -214,6 +214,11 @@ export default function MyHabits({ apiUrl, userNumber }) {
   const [trends, setTrends] = useState(null);
   const [trendsLoading, setTrendsLoading] = useState(false);
   const [trendsError, setTrendsError] = useState(null);
+  const [coachingRefreshState, setCoachingRefreshState] = useState({
+    loading: false,
+    message: '',
+    error: ''
+  });
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState(null);
@@ -291,6 +296,34 @@ export default function MyHabits({ apiUrl, userNumber }) {
       setTrendsError('Unable to load habit trends right now.');
     } finally {
       setTrendsLoading(false);
+    }
+  };
+
+  const refreshHabitCoaching = async () => {
+    setCoachingRefreshState({ loading: true, message: '', error: '' });
+    try {
+      const res = await axios.post(`${apiUrl}/api/habits/coaching/refresh`, null, {
+        params: { user_number: userNumber }
+      });
+      const review = res.data?.review;
+      if (review) {
+        setTrends((current) => ({
+          ...(current || {}),
+          latest_coaching_review: review
+        }));
+      }
+      setCoachingRefreshState({
+        loading: false,
+        message: 'Habit coaching refreshed.',
+        error: ''
+      });
+    } catch (err) {
+      console.error('Error refreshing habit coaching:', err);
+      setCoachingRefreshState({
+        loading: false,
+        message: '',
+        error: 'Unable to refresh coaching right now.'
+      });
     }
   };
 
@@ -465,6 +498,8 @@ export default function MyHabits({ apiUrl, userNumber }) {
           trends={trends}
           loading={trendsLoading}
           error={trendsError}
+          onRefreshCoaching={refreshHabitCoaching}
+          coachingRefreshState={coachingRefreshState}
         />
       )}
 
