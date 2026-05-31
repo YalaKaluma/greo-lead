@@ -21,6 +21,16 @@ This folder contains Alfred's Vite/React frontend.
 - My Coaching Sessions
 - My Journal
 - Alfred in-app chat
+- Settings, including English/French interface language selection
+
+## Internationalization
+
+The frontend language layer lives in `src/i18n/`.
+
+- `src/i18n/en.json` and `src/i18n/fr.json` hold stable translation keys.
+- `src/i18n/LanguageContext.jsx` loads the current user's backend language setting, falls back to `localStorage`, and updates visible labels immediately.
+- `src/components/Settings.jsx` lets users choose English or Français.
+- API calls that generate Alfred responses include the selected language so new chat and coaching content follows the user's preference. Existing chat history and user-generated content are not translated retroactively.
 
 ## Journey 2.0 Frontend Notes
 

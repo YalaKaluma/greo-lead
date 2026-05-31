@@ -9,6 +9,8 @@ from app.db import get_db
 from app.services.leadership_coaching_service import LeadershipCoachingService
 from app.services.leadership_coaching_orchestrator import orchestrate_leadership_coaching
 from app.services.message_service import save_message
+from app.models import User
+from app.services.language import normalize_language
 from typing import Optional
 from pydantic import BaseModel
 
@@ -27,6 +29,7 @@ class StartSessionRequest(BaseModel):
 class SessionMessageRequest(BaseModel):
     user_number: str
     message: str
+    preferred_language: Optional[str] = None
 
 
 # ============================================================
@@ -83,7 +86,11 @@ def process_message(
         result = orchestrate_leadership_coaching(
             db=db,
             user_number=request.user_number,
-            user_message=request.message
+            user_message=request.message,
+            preferred_language=normalize_language(
+                request.preferred_language
+                or getattr(db.query(User).filter(User.phone_number == request.user_number).first(), "language_preference", None)
+            )
         )
         assistant_message = save_message(
             db=db,

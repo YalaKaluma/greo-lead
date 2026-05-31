@@ -29,6 +29,7 @@ The current tool includes:
 - Task execution with MTN prioritization, goal links, and opportunity suggestions.
 - People review, relationship context, and richer team evidence.
 - Message feedback and message signal flags for response quality and behavioral telemetry.
+- Bilingual interface settings for English/French, with `users.language_preference` persisted through `/api/settings` and used by new Alfred chat/coaching responses.
 
 ## Journey 2.0
 

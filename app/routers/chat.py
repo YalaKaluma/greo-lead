@@ -9,6 +9,7 @@ from app.db import get_db
 from app.models import User, OnboardingStep
 from app.services.orchestrator import orchestrate
 from app.services.message_service import load_conversation_history, save_message
+from app.services.language import normalize_language
 
 router = APIRouter()
 
@@ -16,6 +17,7 @@ router = APIRouter()
 class ChatMessage(BaseModel):
     user_number: str
     message: str
+    preferred_language: Optional[str] = None
 
 
 class ChatHistoryResponse(BaseModel):
@@ -45,6 +47,9 @@ async def send_chat_message(
 
     # Get user to check onboarding status
     user = db.query(User).filter(User.phone_number == chat_msg.user_number).first()
+    preferred_language = normalize_language(
+        chat_msg.preferred_language or getattr(user, "language_preference", None)
+    )
 
     # Save user message to history
     user_message = save_message(
@@ -59,7 +64,8 @@ async def send_chat_message(
         db=db,
         user_number=chat_msg.user_number,
         user_message=chat_msg.message,
-        channel="chat"
+        channel="chat",
+        preferred_language=preferred_language
     )
 
     reply = result.response

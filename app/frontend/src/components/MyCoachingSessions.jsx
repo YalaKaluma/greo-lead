@@ -3,6 +3,7 @@ import axios from 'axios';
 import ReadAloudButton from './ReadAloudButton';
 import MessageFeedbackButton from './MessageFeedbackButton';
 import VoiceRecorder from './VoiceRecorder';
+import { useLanguage } from '../i18n/LanguageContext';
 
 // Session stage configurations
 const GOAL_REVIEW_STAGES = [
@@ -53,6 +54,7 @@ const MyCoachingSessions = ({
   const [stageIndex, setStageIndex] = useState(0);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const { t, language } = useLanguage();
 
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = () => {
@@ -115,7 +117,8 @@ const MyCoachingSessions = ({
       console.log('Sending POST to:', `${apiUrl}/api/chat`);
       const response = await axios.post(`${apiUrl}/api/chat`, {
         user_number: userNumber,
-        message: startMessage
+        message: startMessage,
+        preferred_language: language
       });
 
       console.log('Response received:', response.data);
@@ -216,7 +219,8 @@ const MyCoachingSessions = ({
     try {
       const response = await axios.post(`${apiUrl}/api/chat`, {
         user_number: userNumber,
-        message: userMsg
+        message: userMsg,
+        preferred_language: language
       });
 
       const assistantMessage = {
@@ -282,7 +286,7 @@ const MyCoachingSessions = ({
       console.error('Error sending message:', error);
       const errorMessage = {
         role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: t('chat.error'),
         timestamp: new Date().toISOString()
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -325,7 +329,7 @@ const MyCoachingSessions = ({
       <div className="border-b border-gray-200 bg-white px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Coaching Sessions</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">{t('page.coaching')}</h1>
             {selectedVisionId && selectedVisionTitle && (
               <p className="mt-1 text-sm text-gray-500">{selectedVisionTitle}</p>
             )}
@@ -366,7 +370,7 @@ const MyCoachingSessions = ({
                   `}
                 >
                   <span>{session.icon}</span>
-                  <span>{launchLabelByType[session.id] || session.label}</span>
+                  <span>{launchLabelByType[session.id] || t(`coaching.${session.id === 'goal_review' ? 'goalReview' : session.id === 'people_review' ? 'peopleReview' : 'leadership'}`)}</span>
                   {!session.enabled && ' 🔒'}
                 </button>
               );
@@ -501,7 +505,7 @@ const MyCoachingSessions = ({
               onClick={endSession}
               className="px-4 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
             >
-              End Session
+              {t('coaching.endSession')}
             </button>
           </div>
         )}
@@ -516,9 +520,9 @@ const MyCoachingSessions = ({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
               </svg>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Ready for your coaching session?</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">{t('coaching.readyTitle')}</h3>
             <p className="text-gray-600 max-w-md">
-              {emptyStateText || 'Click "Goal Review Session" above to start a structured review of your progress, identify blockers, and plan concrete next steps.'}
+              {emptyStateText || t('coaching.readyBody')}
             </p>
           </div>
         ) : (
@@ -593,7 +597,7 @@ const MyCoachingSessions = ({
             type="text"
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
-            placeholder={activeSession ? "Share your thoughts..." : "Type a message to Alfred..."}
+            placeholder={activeSession ? t('coaching.sharePlaceholder') : t('coaching.typePlaceholder')}
             disabled={isLoading}
             className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
@@ -607,7 +611,7 @@ const MyCoachingSessions = ({
             disabled={!inputMessage.trim() || isLoading}
             className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
           >
-            Send
+            {t('chat.send')}
           </button>
         </form>
       </div>

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import MyCoachingSessions from "./MyCoachingSessions";
+import { useLanguage } from "../i18n/LanguageContext";
 
 const CENTER = { x: 500, y: 500 };
 const R_CENTER = 116;
@@ -779,6 +780,7 @@ function getBeltRequirementsFromConfig(config, dimensionId, beltId) {
 }
 
 export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) {
+  const { t } = useLanguage();
   const [activeJourneyTab, setActiveJourneyTab] = useState("journey");
   const [selectedDimensionId, setSelectedDimensionId] = useState("vision");
   const [signals, setSignals] = useState({
@@ -1307,7 +1309,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
         <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="text-3xl font-semibold text-slate-950 md:text-4xl">
-              Leadership Operating System
+              {t('journey.title')}
             </h1>
           </div>
 
@@ -1357,7 +1359,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
               activeJourneyTab === "journey" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            Journey Map
+            {t('journey.map')}
             {activeJourneyTab === "journey" && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
             )}
@@ -1369,7 +1371,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
               activeJourneyTab === "assessment" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            Belt Assessment
+            {t('journey.assessment')}
             {activeJourneyTab === "assessment" && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
             )}
@@ -1381,7 +1383,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
               activeJourneyTab === "coaching" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            Coaching Sessions
+            {t('journey.coaching')}
             {activeJourneyTab === "coaching" && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
             )}

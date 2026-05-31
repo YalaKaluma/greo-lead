@@ -14,6 +14,7 @@ from app.services.journey_context import build_journey_context
 from app.services.message_service import load_conversation_history
 from app.models import RelationshipReview, JourneyPerson
 from app.config import OPENAI_API_KEY, OPENAI_MODEL
+from app.services.language import normalize_language, response_language_instruction
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -22,7 +23,8 @@ def handle_people_review_session(
     db: Session,
     user_number: str,
     user_message: str,
-    state_context: Dict[str, Any]
+    state_context: Dict[str, Any],
+    preferred_language: str = "en"
 ) -> Dict[str, Any]:
     """
     Main entry point for people review sessions.
@@ -36,6 +38,8 @@ def handle_people_review_session(
     - closure: Summary and task creation
     """
     
+    preferred_language = normalize_language(preferred_language or state_context.get("preferred_language"))
+    state_context["preferred_language"] = preferred_language
     phase = state_context.get('phase', 'select_person')
     
     print(f"\n{'='*60}")
@@ -238,7 +242,8 @@ def _handle_reflection(
             relation=person.get('relation', 'colleague'),
             user_input=user_message,
             journey_context=journey_context,
-            recent_history=history
+            recent_history=history,
+            preferred_language=state_context.get("preferred_language", "en")
         )
     except Exception as e:
         print(f"❌ Error generating reflection question: {e}")
@@ -292,7 +297,8 @@ def _handle_diagnostics(
             reflection_summary=reflection_summary,
             user_input=user_message,
             journey_context=journey_context,
-            recent_history=history
+            recent_history=history,
+            preferred_language=state_context.get("preferred_language", "en")
         )
     except Exception as e:
         print(f"❌ Error generating diagnostics question: {e}")
@@ -348,7 +354,8 @@ def _handle_planning(
             diagnosis_summary=diagnosis_summary,
             user_input=user_message,
             journey_context=journey_context,
-            recent_history=history
+            recent_history=history,
+            preferred_language=state_context.get("preferred_language", "en")
         )
     except Exception as e:
         print(f"❌ Error generating planning question: {e}")
@@ -410,7 +417,8 @@ def _handle_closure(
             reflection=state_context.get('user_reflection', ''),
             diagnostics=state_context.get('diagnosis_input', ''),
             planning=combined_plan,
-            relationship_strength=review.relationship_strength
+            relationship_strength=review.relationship_strength,
+            preferred_language=state_context.get("preferred_language", "en")
         )
     except Exception as e:
         print(f"❌ Error generating closure summary: {e}")
@@ -444,11 +452,14 @@ def _generate_reflection_question(
     relation: str,
     user_input: str,
     journey_context: str,
-    recent_history: List[Dict]
+    recent_history: List[Dict],
+    preferred_language: str = "en"
 ) -> str:
     """Generate ONE adaptive reflection question based on what user said"""
     
     system_prompt = f"""You are Alfred, an executive coach helping reflect on a relationship with {person_name} ({relation}).
+
+{response_language_instruction(preferred_language)}
 
 The user just said: "{user_input}"
 
@@ -503,11 +514,14 @@ def _generate_diagnostics_question(
     reflection_summary: str,
     user_input: str,
     journey_context: str,
-    recent_history: List[Dict]
+    recent_history: List[Dict],
+    preferred_language: str = "en"
 ) -> str:
     """Generate ONE diagnostic question about patterns/dynamics"""
     
     system_prompt = f"""You are Alfred, helping diagnose relationship dynamics with {person_name} ({relation}).
+
+{response_language_instruction(preferred_language)}
 
 Earlier they said: "{reflection_summary[:200]}"
 Just now they said: "{user_input[:200]}"
@@ -566,11 +580,14 @@ def _generate_planning_question(
     diagnosis_summary: str,
     user_input: str,
     journey_context: str,
-    recent_history: List[Dict]
+    recent_history: List[Dict],
+    preferred_language: str = "en"
 ) -> str:
     """Generate ONE action-oriented planning question"""
     
     system_prompt = f"""You are Alfred, helping plan improvements for the relationship with {person_name} ({relation}).
+
+{response_language_instruction(preferred_language)}
 
 What we've learned:
 Reflection: {reflection_summary[:200]}
@@ -630,11 +647,14 @@ def _generate_closure_summary(
     reflection: str,
     diagnostics: str,
     planning: str,
-    relationship_strength: Optional[int]
+    relationship_strength: Optional[int],
+    preferred_language: str = "en"
 ) -> str:
     """Generate a concise, insightful closure summary"""
     
     system_prompt = f"""You are Alfred, summarizing a relationship review with {person_name} ({relation}).
+
+{response_language_instruction(preferred_language)}
 
 CONVERSATION SUMMARY:
 - Reflection: {reflection[:300]}

@@ -7,6 +7,7 @@ import TaskModal from './TodoList/TaskModal';
 import BulkActionModal from './TodoList/BulkActionModal';
 import FilterSection from './TodoList/FilterSection';
 import { getTodayET, getETDate, isOverdueET, getSortedGoals } from '../utils/taskHelpers';
+import { useLanguage } from '../i18n/LanguageContext';
 import { usePriority } from '../hooks/usePriority';
 
 /**
@@ -22,6 +23,7 @@ import { usePriority } from '../hooks/usePriority';
  * - 1500ms completion animation
  */
 export default function TodoList({ apiUrl, userNumber }) {
+  const { t } = useLanguage();
   // Task data
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -609,7 +611,7 @@ export default function TodoList({ apiUrl, userNumber }) {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-bold text-slate-800 hidden lg:block">
-              Your To-Do List
+              {t('tasks.title')}
             </h1>
             <p className="text-slate-600 mt-1">
               {selectionMode ? (
@@ -726,9 +728,9 @@ export default function TodoList({ apiUrl, userNumber }) {
         {/* Tasks List */}
         {sortedTasks.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-slate-600 text-lg">No tasks found</p>
+            <p className="text-slate-600 text-lg">{t('tasks.empty')}</p>
             <p className="text-slate-500 text-sm mt-2">
-              {hasActiveFilters ? 'Try adjusting your filters' : 'Add a new task to get started!'}
+              {hasActiveFilters ? t('tasks.emptyFiltered') : t('tasks.emptyNew')}
             </p>
           </div>
         ) : (

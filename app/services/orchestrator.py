@@ -22,9 +22,10 @@ from app.services.journey_context import build_journey_context
 from app.services.message_service import load_conversation_history
 from app.utils.task_context import get_today_tasks, format_tasks_for_context
 from app.config import OPENAI_API_KEY, OPENAI_MODEL
-from app.models import Task, JourneyGoal, GoalReviewSession
+from app.models import Task, JourneyGoal, GoalReviewSession, User
 from app.services.task_service import create_task
 from app.services.people_review_orchestrator import handle_people_review_session
+from app.services.language import normalize_language, response_language_instruction
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -49,7 +50,8 @@ def orchestrate(
         db: Session,
         user_number: str,
         user_message: str,
-        channel: str = "whatsapp"
+        channel: str = "whatsapp",
+        preferred_language: str | None = None
 ) -> OrchestrationResult:
     """
     Main orchestration entry point.
@@ -75,7 +77,12 @@ def orchestrate(
     print(f"\n{'=' * 60}")
     print(f"🧠 BRAIN ORCHESTRATION")
     print(f"User: {user_number}")
+    if preferred_language is None:
+        user = db.query(User).filter(User.phone_number == user_number).first()
+        preferred_language = getattr(user, "language_preference", None)
+    preferred_language = normalize_language(preferred_language)
     print(f"Message: {user_message[:100]}...")
+    print(f"Preferred language: {preferred_language}")
     print(f"{'=' * 60}")
 
     # Step 1: Load conversation state
@@ -189,7 +196,8 @@ def orchestrate(
         intents=intents,
         explicit_execution=explicit_execution,
         current_state=state,
-        reason=reason
+        reason=reason,
+        preferred_language=preferred_language
     )
 
     # Step 5: Save state transition
@@ -221,7 +229,8 @@ def handle_idle(
         intents: List[Dict],
         explicit_execution: bool,
         current_state: Any,
-        reason: str
+        reason: str,
+        preferred_language: str = "en"
 ) -> OrchestrationResult:
     """
     Handle IDLE state - default listening mode.
@@ -231,7 +240,7 @@ def handle_idle(
 
     if not top_intent or top_intent['confidence'] < 0.3:
         return OrchestrationResult(
-            response="I'm not sure I understand. Could you clarify?",
+            response="Je ne suis pas certain de comprendre. Pouvez-vous préciser ?" if preferred_language == "fr" else "I'm not sure I understand. Could you clarify?",
             state=States.IDLE
         )
 
@@ -241,7 +250,8 @@ def handle_idle(
         user_number=user_number,
         user_message=user_message,
         state=States.IDLE,
-        system_context="You are in listening mode. Respond naturally and helpfully."
+        system_context="You are in listening mode. Respond naturally and helpfully.",
+        preferred_language=preferred_language
     )
 
     return OrchestrationResult(
@@ -257,7 +267,8 @@ def handle_coaching(
         intents: List[Dict],
         explicit_execution: bool,
         current_state: Any,
-        reason: str
+        reason: str,
+        preferred_language: str = "en"
 ) -> OrchestrationResult:
     """
     Handle COACHING state - reflective, developmental mode.
@@ -297,6 +308,8 @@ def handle_coaching(
     system_prompt = f"""{system_rules}
 
 {style_guidelines}
+
+{response_language_instruction(preferred_language)}
 
 HARD REQUIREMENTS:
 - You MUST explicitly reference at least ONE item from the CONTEXT below.
@@ -344,7 +357,8 @@ def handle_clarifying(
         intents: List[Dict],
         explicit_execution: bool,
         current_state: Any,
-        reason: str
+        reason: str,
+        preferred_language: str = "en"
 ) -> OrchestrationResult:
     """
     Handle CLARIFYING state - create task with what we have.
@@ -386,7 +400,8 @@ def handle_executing(
         intents: List[Dict],
         explicit_execution: bool,
         current_state: Any,
-        reason: str
+        reason: str,
+        preferred_language: str = "en"
 ) -> OrchestrationResult:
     """
     Handle EXECUTING state - action completed, return to IDLE.
@@ -405,7 +420,8 @@ def handle_drafting(
         intents: List[Dict],
         explicit_execution: bool,
         current_state: Any,
-        reason: str
+        reason: str,
+        preferred_language: str = "en"
 ) -> OrchestrationResult:
     """
     Handle DRAFTING state - proposing action before executing.
@@ -431,7 +447,8 @@ def handle_awaiting_approval(
         intents: List[Dict],
         explicit_execution: bool,
         current_state: Any,
-        reason: str
+        reason: str,
+        preferred_language: str = "en"
 ) -> OrchestrationResult:
     """
     Handle AWAITING_APPROVAL state - user is confirming/rejecting proposal.
@@ -472,7 +489,8 @@ def handle_reviewing(
         intents: List[Dict],
         explicit_execution: bool,
         current_state: Any,
-        reason: str
+        reason: str,
+        preferred_language: str = "en"
 ) -> OrchestrationResult:
     """
     Handle REVIEWING state - end-of-day/week reflection.
@@ -481,7 +499,7 @@ def handle_reviewing(
     # For now, treat like coaching
     return handle_coaching(
         db, user_number, user_message, intents,
-        explicit_execution, current_state, reason
+        explicit_execution, current_state, reason, preferred_language
     )
 
 
@@ -492,7 +510,8 @@ def handle_learning(
         intents: List[Dict],
         explicit_execution: bool,
         current_state: Any,
-        reason: str
+        reason: str,
+        preferred_language: str = "en"
 ) -> OrchestrationResult:
     """
     Handle LEARNING state - user is correcting Alfred.
@@ -515,7 +534,8 @@ def handle_proactive(
         intents: List[Dict],
         explicit_execution: bool,
         current_state: Any,
-        reason: str
+        reason: str,
+        preferred_language: str = "en"
 ) -> OrchestrationResult:
     """
     Handle PROACTIVE state - system-initiated nudge.
@@ -525,7 +545,7 @@ def handle_proactive(
     # This handles the user's response to the nudge
     return handle_coaching(
         db, user_number, user_message, intents,
-        explicit_execution, current_state, reason
+        explicit_execution, current_state, reason, preferred_language
     )
 
 
@@ -538,7 +558,8 @@ def _generate_gpt_response(
         user_number: str,
         user_message: str,
         state: str,
-        system_context: str
+        system_context: str,
+        preferred_language: str = "en"
 ) -> str:
     """Generate GPT response with full context."""
 
@@ -551,6 +572,8 @@ def _generate_gpt_response(
 
 Current mode: {state}
 {system_context}
+
+{response_language_instruction(preferred_language)}
 
 Journey Memory:
 {journey_context}
@@ -846,7 +869,8 @@ def _run_goal_review_prompt(
         journey_context: str,
         goal_tree: str,
         recent_history: List[Dict[str, str]],
-        user_input: str = ""
+        user_input: str = "",
+        preferred_language: str = "en"
 ) -> str:
     """
     Run a goal review prompt phase.
@@ -855,6 +879,8 @@ def _run_goal_review_prompt(
     prompt = load_prompt(prompt_path)
 
     system_prompt = f"""{prompt['system_prompt']}
+
+{response_language_instruction(preferred_language)}
 
 GOAL TREE:
 {goal_tree}
@@ -965,7 +991,8 @@ def handle_goal_review(
         intents: List[Dict],
         explicit_execution: bool,
         current_state: Any,
-        reason: str
+        reason: str,
+        preferred_language: str = "en"
 ) -> OrchestrationResult:
     """
     Multi-phase goal review conversation.
@@ -1116,7 +1143,8 @@ def handle_goal_review(
             f"{prompt_base}/framing.yaml",
             journey_context=journey_context,
             goal_tree=goal_tree,
-            recent_history=history
+            recent_history=history,
+            preferred_language=preferred_language
         )
         state_ctx["phase"] = "reflection"
         print(f"✅ Phase transition: framing → reflection")
@@ -1140,7 +1168,8 @@ def handle_goal_review(
             journey_context=journey_context,
             goal_tree=goal_tree,
             recent_history=history,
-            user_input=user_message
+            user_input=user_message,
+            preferred_language=preferred_language
         )
         state_ctx["phase"] = "diagnosis"
         print(f"✅ Phase transition: reflection → diagnosis")
@@ -1164,7 +1193,8 @@ def handle_goal_review(
             journey_context=journey_context,
             goal_tree=goal_tree,
             recent_history=history,
-            user_input=user_message
+            user_input=user_message,
+            preferred_language=preferred_language
         )
         state_ctx["phase"] = "adjustment"
         print(f"✅ Phase transition: diagnosis → adjustment")
@@ -1188,7 +1218,8 @@ def handle_goal_review(
             journey_context=journey_context,
             goal_tree=goal_tree,
             recent_history=history,
-            user_input=user_message
+            user_input=user_message,
+            preferred_language=preferred_language
         )
         state_ctx["phase"] = "closure"
         print(f"✅ Phase transition: adjustment → closure")
@@ -1212,7 +1243,8 @@ def handle_goal_review(
             journey_context=journey_context,
             goal_tree=goal_tree,
             recent_history=history,
-            user_input=user_message
+            user_input=user_message,
+            preferred_language=preferred_language
         )
         
         # Store closure summary for later
@@ -1298,7 +1330,8 @@ def handle_people_review(
         intents: List[Dict],
         explicit_execution: bool,
         current_state: Any,
-        reason: str
+        reason: str,
+        preferred_language: str = "en"
 ) -> OrchestrationResult:
     """
     Handle PEOPLE_REVIEW state - structured relationship review sessions.
@@ -1317,7 +1350,8 @@ def handle_people_review(
         db=db,
         user_number=user_number,
         user_message=user_message,
-        state_context=state_ctx
+        state_context=state_ctx,
+        preferred_language=preferred_language
     )
     
     # Extract response and next state
@@ -1354,7 +1388,8 @@ def handle_leadership_coaching(
         intents: List[Dict],
         explicit_execution: bool,
         current_state: Any,
-        reason: str
+        reason: str,
+        preferred_language: str = "en"
 ) -> OrchestrationResult:
     """
     Handle LEADERSHIP_COACHING state - structured leadership development sessions.
@@ -1374,7 +1409,8 @@ def handle_leadership_coaching(
     result = orchestrate_leadership_coaching(
         db=db,
         user_number=user_number,
-        user_message=user_message
+        user_message=user_message,
+        preferred_language=preferred_language
     )
     
     # Extract response and metadata

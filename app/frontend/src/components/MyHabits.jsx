@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import HabitTrendsTab from './Habits/HabitTrendsTab';
+import { useLanguage } from '../i18n/LanguageContext';
 
 /* =========================================================
    GOAL HELPERS — COPIED 1:1 FROM TodoList.jsx
@@ -206,6 +207,7 @@ function HabitCalendar({ history, frequency, onUpdateDay }) {
    ========================================================= */
 
 export default function MyHabits({ apiUrl, userNumber }) {
+  const { t } = useLanguage();
   const [habits, setHabits] = useState([]);
   const [goals, setGoals] = useState([]);
   const [activeTab, setActiveTab] = useState('habits');
@@ -423,14 +425,14 @@ export default function MyHabits({ apiUrl, userNumber }) {
       {/* HEADER */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-slate-800">
-          My Executive Habits
+          {t('habits.title')}
         </h1>
         {activeTab === 'habits' && (
           <button
             onClick={openNewHabit}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
           >
-            + Add Habit
+            {t('habits.add')}
           </button>
         )}
       </div>

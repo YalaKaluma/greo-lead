@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+import { useLanguage } from '../i18n/LanguageContext';
 
 export default function MyTeam({ apiUrl, userNumber }) {
+  const { t } = useLanguage();
   const [people, setPeople] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -174,14 +176,14 @@ export default function MyTeam({ apiUrl, userNumber }) {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800">My Team</h1>
+          <h1 className="text-3xl font-bold text-slate-800">{t('team.title')}</h1>
           <p className="text-slate-600 mt-1">Manage your professional network</p>
         </div>
         <button
           onClick={() => setShowAddForm(true)}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
-          + Add Person
+          {t('team.addPerson')}
         </button>
       </div>
 

@@ -9,11 +9,13 @@ import MyHabits from './components/MyHabits';
 import MyJournal from './components/MyJournal';
 import TourOverlay from './components/TourOverlay';
 import AlfredChat from './components/AlfredChat';
+import Settings from './components/Settings';
 import { useEffect, useState } from "react";
 import Login from "./Login";
 import Welcome from "./Welcome";
 import Waitlist from "./Waitlist";
 import AutoTour from './components/AutoTour';
+import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 
 // API URL handling
 const API_URL = import.meta.env.PROD
@@ -167,6 +169,52 @@ function App() {
 
   // Main App - Only show tour if onboarding NOT completed in database
   return (
+    <LanguageProvider apiUrl={API_URL} userNumber={userNumber}>
+      <MainAppShell
+        userNumber={userNumber}
+        needsTour={needsTour}
+        tourComplete={tourComplete}
+        onboardingCompleted={onboardingCompleted}
+        currentPage={currentPage}
+        setCurrentPage={setCurrentPage}
+        isSidebarOpen={isSidebarOpen}
+        setIsSidebarOpen={setIsSidebarOpen}
+        isMobile={isMobile}
+        handleNavigate={handleNavigate}
+        toggleSidebar={toggleSidebar}
+        handleTourComplete={handleTourComplete}
+      />
+    </LanguageProvider>
+  );
+}
+
+function MainAppShell({
+  userNumber,
+  needsTour,
+  tourComplete,
+  onboardingCompleted,
+  currentPage,
+  setCurrentPage,
+  isSidebarOpen,
+  setIsSidebarOpen,
+  isMobile,
+  handleNavigate,
+  toggleSidebar,
+  handleTourComplete
+}) {
+  const { t, language } = useLanguage();
+  const pageTitles = {
+    'todo-list': t('page.tasks'),
+    'my-goals': t('page.goals'),
+    'my-team': t('page.team'),
+    'my-journey': t('page.journey'),
+    'my-habits': t('page.habits'),
+    'coaching-sessions': t('page.coaching'),
+    'my-journal': t('page.journal'),
+    settings: t('settings.title')
+  };
+
+  return (
     <div className="flex h-screen bg-gray-50">
       {/* Tour Overlay - Only shows if onboarding NOT completed */}
       {!onboardingCompleted && needsTour && !tourComplete && (
@@ -187,14 +235,7 @@ function App() {
             ☰
           </button>
           <h1 className="ml-4 text-lg font-semibold">
-            {currentPage === 'todo-list' && 'Your To-Do List'}
-            {currentPage === 'my-goals' && 'My Goals'}
-            {currentPage === 'my-team' && 'My Team'}
-            {currentPage === 'my-journey' && 'My Leadership Journey'}
-            {currentPage === 'my-habits' && 'My Habits'}
-            {/* CHANGED: my-journal -> coaching-sessions */}
-            {currentPage === 'coaching-sessions' && 'Coaching Sessions'}
-            {currentPage === 'my-journal' && 'My Journal'}
+            {pageTitles[currentPage] || t('app.title')}
           </h1>
         </div>
       )}
@@ -208,6 +249,9 @@ function App() {
       />
 
       <main className={`flex-1 overflow-auto ${isMobile ? 'mt-14' : ''}`}>
+        {currentPage === 'settings' && (
+          <Settings onBack={() => handleNavigate('my-goals')} />
+        )}
         {currentPage === 'todo-list' && (
           <TodoList apiUrl={API_URL} userNumber={userNumber} />
         )}
@@ -237,6 +281,7 @@ function App() {
       <AlfredChat 
         apiUrl={API_URL} 
         userNumber={userNumber}
+        preferredLanguage={language}
         onTourStep={(action) => {
           // Handle tour navigation from chat
           if (action === 'navigate_goals') setCurrentPage('my-goals');

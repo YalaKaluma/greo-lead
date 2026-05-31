@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { useLanguage } from '../i18n/LanguageContext';
 
 export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onClose }) {
 
   const [unreadNudges, setUnreadNudges] = useState(0);
+  const { t } = useLanguage();
 
 useEffect(() => {
   const fetchUnreadNudges = async () => {
@@ -34,15 +36,15 @@ useEffect(() => {
 }, []);
 
   const menuItems = [
-    { id: 'my-goals', label: 'My Vision & Goals', disabled: false },
-    { id: 'my-journey', label: 'My Journey', disabled: false },
-    { id: 'todo-list', label: 'My Tasks', disabled: false },
-    { id: 'my-habits', label: 'My Habits', disabled: false },
-    { id: 'my-team', label: 'My Team', disabled: false },
-    { id: 'coaching-sessions', label: 'My Coaching Sessions', disabled: false },
-    { id: 'my-journal', label: 'My Journal', disabled: false },
-    { id: 'my-feedback', label: 'My Feedback', disabled: true },
-    { id: 'my-calendar', label: 'My Calendar', disabled: true },  
+    { id: 'my-goals', label: t('nav.goals'), disabled: false },
+    { id: 'my-journey', label: t('nav.journey'), disabled: false },
+    { id: 'todo-list', label: t('nav.tasks'), disabled: false },
+    { id: 'my-habits', label: t('nav.habits'), disabled: false },
+    { id: 'my-team', label: t('nav.team'), disabled: false },
+    { id: 'coaching-sessions', label: t('nav.coaching'), disabled: false },
+    { id: 'my-journal', label: t('nav.journal'), disabled: false },
+    { id: 'my-feedback', label: t('nav.feedback'), disabled: true },
+    { id: 'my-calendar', label: t('nav.calendar'), disabled: true },
   ];
 
   return (
@@ -64,10 +66,10 @@ useEffect(() => {
           <div className="flex items-start justify-between">
             <div>
               <h1 className="text-lg font-bold leading-tight text-white">
-                My Executive Operating System
+                {t('app.title')}
               </h1>
               <p className="text-sm text-slate-400 mt-1 ml-2">
-                Powered by Alfred
+                {t('app.poweredBy')}
               </p>
             </div>
             {isMobile && (
@@ -131,16 +133,26 @@ useEffect(() => {
           </div>
         </nav>
 
-        {/* Logout Button */}
-        <div className="p-4 border-t border-slate-800">
+        {/* Settings and Logout Buttons */}
+        <div className="grid grid-cols-2 gap-2 p-4 border-t border-slate-800">
+          <button
+            onClick={() => onNavigate('settings')}
+            className={`px-3 py-3 text-center rounded-lg transition-all duration-200 ${
+              currentPage === 'settings'
+                ? 'bg-slate-800 text-white shadow-md'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            {t('nav.settings')}
+          </button>
           <button
             onClick={() => {
               localStorage.removeItem('user_number');
               window.location.reload();
             }}
-            className="w-full px-4 py-3 text-left text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all duration-200"
+            className="px-3 py-3 text-center text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all duration-200"
           >
-            🚪 Logout
+            {t('nav.logout')}
           </button>
         </div>
       </div>

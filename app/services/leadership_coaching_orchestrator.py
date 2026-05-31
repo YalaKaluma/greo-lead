@@ -14,6 +14,7 @@ from app.services.journey_context import build_journey_context
 from app.services.message_service import load_conversation_history
 from app.models import LeadershipCoachingSession, JourneyDevelopmentArea
 from app.config import OPENAI_API_KEY, OPENAI_MODEL
+from app.services.language import normalize_language, response_language_instruction
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -31,7 +32,8 @@ PHASES = {
 def orchestrate_leadership_coaching(
     db: Session,
     user_number: str,
-    user_message: str
+    user_message: str,
+    preferred_language: str = "en"
 ) -> Dict[str, Any]:
     """
     Main orchestration for leadership coaching sessions.
@@ -44,37 +46,39 @@ def orchestrate_leadership_coaching(
     }
     """
     
+    preferred_language = normalize_language(preferred_language)
     # Check for active session
     active_session = LeadershipCoachingService.get_active_session(db, user_number)
     
     # If no active session, start with quadrant selection
     if not active_session:
-        return _handle_selection(db, user_number, user_message)
+        return _handle_selection(db, user_number, user_message, preferred_language)
     
     # Determine current phase from session data
     session_id = active_session.id
     
     if not active_session.situation:
         # Phase: SITUATION
-        return _handle_situation(db, session_id, user_number, user_message, active_session.quadrant)
+        return _handle_situation(db, session_id, user_number, user_message, active_session.quadrant, preferred_language)
     elif not active_session.reflection:
         # Phase: REFLECTION
-        return _handle_reflection(db, session_id, user_number, user_message, active_session)
+        return _handle_reflection(db, session_id, user_number, user_message, active_session, preferred_language)
     elif not active_session.pattern:
         # Phase: DIAGNOSTICS
-        return _handle_diagnostics(db, session_id, user_number, user_message, active_session)
+        return _handle_diagnostics(db, session_id, user_number, user_message, active_session, preferred_language)
     elif not active_session.experiment:
         # Phase: PLANNING
-        return _handle_planning(db, session_id, user_number, user_message, active_session)
+        return _handle_planning(db, session_id, user_number, user_message, active_session, preferred_language)
     else:
         # Phase: CLOSURE
-        return _handle_closure(db, session_id, user_number, user_message, active_session)
+        return _handle_closure(db, session_id, user_number, user_message, active_session, preferred_language)
 
 
 def _handle_selection(
     db: Session,
     user_number: str,
-    user_message: str
+    user_message: str,
+    preferred_language: str = "en"
 ) -> Dict[str, Any]:
     """Handle quadrant selection"""
     
@@ -104,7 +108,20 @@ def _handle_selection(
     
     if not quadrant_selected:
         # Show selection options
-        response = """Let's work on your leadership using the Alfred Leadership Model.
+        if preferred_language == "fr":
+            response = """Travaillons votre leadership avec le modèle de leadership Alfred.
+
+Sur quelle zone de la roue voulez-vous vous concentrer aujourd'hui ?
+
+1. Vision et objectifs - Votre direction et votre intention
+2. Personnes - Diriger, inspirer et développer les autres
+3. Prioriser et exécuter - Avancer efficacement
+4. Apprentissage et développement - Grandir par l'expérience
+5. Temps et énergie - Gérer votre capacité
+
+Répondez avec le numéro ou le nom."""
+        else:
+            response = """Let's work on your leadership using the Alfred Leadership Model.
 
 Which area of the wheel do you want to focus on today?
 
@@ -131,7 +148,8 @@ Reply with the number or name."""
     journey_context = build_journey_context(db, user_number)
     thought_starters = _generate_thought_starters(
         quadrant=quadrant_selected,
-        journey_context=journey_context
+        journey_context=journey_context,
+        preferred_language=preferred_language
     )
     
     response = f"""Great - let's focus on {quadrant_info['name']}.
@@ -155,7 +173,8 @@ def _handle_situation(
     session_id: int,
     user_number: str,
     user_message: str,
-    quadrant: str
+    quadrant: str,
+    preferred_language: str = "en"
 ) -> Dict[str, Any]:
     """Handle getting the specific situation"""
     
@@ -174,7 +193,8 @@ def _handle_situation(
         quadrant=quadrant,
         situation=user_message,
         journey_context=journey_context,
-        recent_history=recent_history
+        recent_history=recent_history,
+        preferred_language=preferred_language
     )
     
     return {
@@ -190,7 +210,8 @@ def _handle_reflection(
     session_id: int,
     user_number: str,
     user_message: str,
-    session: LeadershipCoachingSession
+    session: LeadershipCoachingSession,
+    preferred_language: str = "en"
 ) -> Dict[str, Any]:
     """Handle reflection phase - exploring the story"""
     
@@ -211,7 +232,8 @@ def _handle_reflection(
         quadrant=session.quadrant,
         situation=session.situation,
         reflection=combined_reflection,
-        journey_context=journey_context
+        journey_context=journey_context,
+        preferred_language=preferred_language
     )
     
     return {
@@ -227,7 +249,8 @@ def _handle_diagnostics(
     session_id: int,
     user_number: str,
     user_message: str,
-    session: LeadershipCoachingSession
+    session: LeadershipCoachingSession,
+    preferred_language: str = "en"
 ) -> Dict[str, Any]:
     """Handle diagnostics phase - identifying the pattern"""
     
@@ -241,7 +264,8 @@ def _handle_diagnostics(
         situation=session.situation,
         reflection=session.reflection,
         user_response=user_message,
-        journey_context=journey_context
+        journey_context=journey_context,
+        preferred_language=preferred_language
     )
     
     # Save pattern and underlying belief
@@ -256,7 +280,8 @@ def _handle_diagnostics(
         pattern=pattern_analysis['pattern'],
         belief=pattern_analysis['belief'],
         situation=session.situation,
-        user_depth=user_message  # Pass the user's response for acknowledgment
+        user_depth=user_message,
+        preferred_language=preferred_language  # Pass the user's response for acknowledgment
     )
     
     return {
@@ -272,7 +297,8 @@ def _handle_planning(
     session_id: int,
     user_number: str,
     user_message: str,
-    session: LeadershipCoachingSession
+    session: LeadershipCoachingSession,
+    preferred_language: str = "en"
 ) -> Dict[str, Any]:
     """Handle planning phase - designing the experiment"""
     
@@ -297,7 +323,8 @@ def _handle_planning(
         pattern=session.pattern,
         belief=session.underlying_belief,
         experiment=user_message,
-        journey_context=journey_context
+        journey_context=journey_context,
+        preferred_language=preferred_language
     )
     
     # Extract development level from closure
@@ -375,11 +402,12 @@ def _handle_closure(
     session_id: int,
     user_number: str,
     user_message: str,
-    session: LeadershipCoachingSession
+    session: LeadershipCoachingSession,
+    preferred_language: str = "en"
 ) -> Dict[str, Any]:
     """Fallback closure handler"""
     return {
-        "response": "Leadership coaching session completed. Start a new session anytime!",
+        "response": "Séance de coaching leadership terminée. Vous pouvez lancer une nouvelle séance à tout moment !" if preferred_language == "fr" else "Leadership coaching session completed. Start a new session anytime!",
         "next_phase": "COMPLETED",
         "session_id": session_id,
         "completed": True
@@ -392,7 +420,8 @@ def _handle_closure(
 
 def _generate_thought_starters(
     quadrant: str,
-    journey_context: str
+    journey_context: str,
+    preferred_language: str = "en"
 ) -> str:
     """Generate 2-3 context-based thought starters for the selected quadrant"""
     
@@ -400,6 +429,8 @@ def _generate_thought_starters(
     quadrant_name = quadrant_info['name']
     
     system_prompt = f"""You are Alfred, helping a leader reflect on {quadrant_name}.
+
+{response_language_instruction(preferred_language)}
 
 THEIR FULL CONTEXT (goals, projects, strengths, challenges):
 {journey_context[:1200]}
@@ -450,13 +481,16 @@ def _generate_reflection_question(
     quadrant: str,
     situation: str,
     journey_context: str,
-    recent_history: List[Dict]
+    recent_history: List[Dict],
+    preferred_language: str = "en"
 ) -> str:
     """Generate ONE thoughtful reflection question based on the situation"""
     
     quadrant_name = LEADERSHIP_QUADRANTS[quadrant]['name']
     
     system_prompt = f"""You are Alfred, a senior executive coach. The user is working on {quadrant_name} as a leadership development area.
+
+{response_language_instruction(preferred_language)}
 
 They just described this situation: "{situation[:300]}"
 
@@ -504,13 +538,16 @@ def _generate_diagnostics_question(
     quadrant: str,
     situation: str,
     reflection: str,
-    journey_context: str
+    journey_context: str,
+    preferred_language: str = "en"
 ) -> str:
     """Generate diagnostic question that identifies the PATTERN, not just the problem"""
     
     quadrant_name = LEADERSHIP_QUADRANTS[quadrant]['name']
     
     system_prompt = f"""You are Alfred, a senior executive coach identifying patterns in leadership behavior.
+
+{response_language_instruction(preferred_language)}
 
 CONTEXT:
 - Quadrant focus: {quadrant_name}
@@ -564,13 +601,16 @@ def _identify_pattern(
     situation: str,
     reflection: str,
     user_response: str,
-    journey_context: str
+    journey_context: str,
+    preferred_language: str = "en"
 ) -> Dict[str, str]:
     """Identify the leadership pattern and underlying belief from the conversation"""
     
     quadrant_name = LEADERSHIP_QUADRANTS[quadrant]['name']
     
     system_prompt = f"""You are Alfred, analyzing a leadership coaching conversation.
+
+{response_language_instruction(preferred_language)}
 
 CONTEXT:
 - Focus area: {quadrant_name}
@@ -653,7 +693,8 @@ def _generate_planning_question(
     pattern: str,
     belief: str,
     situation: str,
-    user_depth: str = ""  # NEW: User's deep reflection if they shared one
+    user_depth: str = "",
+    preferred_language: str = "en"
 ) -> str:
     """Generate question that designs a behavioral EXPERIMENT"""
     
@@ -665,6 +706,8 @@ def _generate_planning_question(
         depth_context = f"\n\nUSER'S DEEP REFLECTION (acknowledge this first):\n{user_depth[:400]}"
     
     system_prompt = f"""You are Alfred, helping design a leadership experiment.
+
+{response_language_instruction(preferred_language)}
 
 CONTEXT:
 - Development area: {quadrant_name}
@@ -736,13 +779,16 @@ def _generate_closure_summary(
     pattern: str,
     belief: str,
     experiment: str,
-    journey_context: str
+    journey_context: str,
+    preferred_language: str = "en"
 ) -> str:
     """Generate the final coaching summary"""
     
     quadrant_info = LEADERSHIP_QUADRANTS[quadrant]
     
     system_prompt = f"""You are Alfred, completing a leadership coaching session.
+
+{response_language_instruction(preferred_language)}
 
 SESSION SUMMARY:
 - Quadrant: {quadrant_info['name']}

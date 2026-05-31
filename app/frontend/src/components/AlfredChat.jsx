@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import GoalReviewBanner from './GoalReviewBanner';
+import { useLanguage } from '../i18n/LanguageContext';
 
-export default function AlfredChat({ apiUrl, userNumber, onTourStep }) {
+export default function AlfredChat({ apiUrl, userNumber, preferredLanguage, onTourStep }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
@@ -11,6 +12,8 @@ export default function AlfredChat({ apiUrl, userNumber, onTourStep }) {
   const [goalReviewStatus, setGoalReviewStatus] = useState(null); // Track goal review status
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const { t, language } = useLanguage();
+  const requestLanguage = preferredLanguage || language;
 
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = () => {
@@ -62,7 +65,8 @@ export default function AlfredChat({ apiUrl, userNumber, onTourStep }) {
     try {
       const response = await axios.post(`${apiUrl}/api/chat`, {
         user_number: userNumber,
-        message: inputValue
+        message: inputValue,
+        preferred_language: requestLanguage
       });
 
       const assistantMessage = {
@@ -85,7 +89,7 @@ export default function AlfredChat({ apiUrl, userNumber, onTourStep }) {
       console.error('Failed to send message:', error);
       const errorMessage = {
         role: 'assistant',
-        content: 'Sorry, I had trouble processing that. Please try again.',
+        content: t('chat.error'),
         timestamp: new Date().toISOString()
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -114,7 +118,7 @@ export default function AlfredChat({ apiUrl, userNumber, onTourStep }) {
     // Add a system message
     const systemMessage = {
       role: 'assistant',
-      content: 'Goal review session ended. What would you like to do next?',
+      content: t('chat.goalReviewEnded'),
       timestamp: new Date().toISOString()
     };
     setMessages(prev => [...prev, systemMessage]);
@@ -170,7 +174,7 @@ export default function AlfredChat({ apiUrl, userNumber, onTourStep }) {
             </div>
             <div>
               <h3 className="font-semibold text-lg">Alfred</h3>
-              <p className="text-xs text-gray-300">Your AI Chief of Staff</p>
+              <p className="text-xs text-gray-300">{t('chat.subtitle')}</p>
             </div>
           </div>
           <button
@@ -195,8 +199,8 @@ export default function AlfredChat({ apiUrl, userNumber, onTourStep }) {
           {messages.length === 0 && (
             <div className="text-center text-gray-500 mt-8">
               <div className="text-4xl mb-2">👋</div>
-              <p className="text-sm">Hello! I'm Alfred, your AI Chief of Staff.</p>
-              <p className="text-xs mt-1">How can I help you today?</p>
+              <p className="text-sm">{t('chat.emptyHello')}</p>
+              <p className="text-xs mt-1">{t('chat.emptyPrompt')}</p>
             </div>
           )}
           
@@ -244,7 +248,7 @@ export default function AlfredChat({ apiUrl, userNumber, onTourStep }) {
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Type a message..."
+              placeholder={t('chat.placeholder')}
               className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
             <button
@@ -252,7 +256,7 @@ export default function AlfredChat({ apiUrl, userNumber, onTourStep }) {
               disabled={!inputValue.trim()}
               className="px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
             >
-              Send
+              {t('chat.send')}
             </button>
           </div>
         </div>

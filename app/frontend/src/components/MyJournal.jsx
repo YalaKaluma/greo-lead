@@ -3,6 +3,7 @@ import axios from 'axios';
 import ReadAloudButton from './ReadAloudButton';
 import MessageFeedbackButton from './MessageFeedbackButton';
 import VoiceRecorder from './VoiceRecorder';
+import { useLanguage } from '../i18n/LanguageContext';
 
 // Session stage configurations
 const GOAL_REVIEW_STAGES = [
@@ -37,6 +38,7 @@ const LEADERSHIP_COACHING_STAGES = [
 //];
 
 const MyCoachingSessions = ({ apiUrl, userNumber }) => {
+  const { t, language } = useLanguage();
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -127,7 +129,8 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
       console.log('Sending POST to:', `${apiUrl}/api/chat`);
       const response = await axios.post(`${apiUrl}/api/chat`, {
         user_number: userNumber,
-        message: startMessage
+        message: startMessage,
+        preferred_language: language
       });
 
       console.log('Response received:', response.data);
@@ -228,7 +231,8 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
     try {
       const response = await axios.post(`${apiUrl}/api/chat`, {
         user_number: userNumber,
-        message: userMsg
+        message: userMsg,
+        preferred_language: language
       });
 
       const assistantMessage = {
@@ -338,7 +342,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
 
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">
-            My Journal
+            {t('journal.title')}
           </h1>
         </div>
 
@@ -562,7 +566,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
             type="text"
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
-            placeholder={activeSession ? "Share your thoughts..." : "Type a message to Alfred..."}
+            placeholder={activeSession ? t('coaching.sharePlaceholder') : t('coaching.typePlaceholder')}
             disabled={isLoading}
             className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
@@ -578,7 +582,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
             disabled={!inputMessage.trim() || isLoading}
             className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
           >
-            Send
+            {t('chat.send')}
           </button>
         </form>
       </div>
