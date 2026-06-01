@@ -7,22 +7,18 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models import Habit, HabitCompletion
-
-EASTERN_TZ = "America/New_York"
-
-
-def get_today_eastern() -> date:
-    from zoneinfo import ZoneInfo
-
-    return datetime.now(ZoneInfo(EASTERN_TZ)).date()
+from app.services.timezone_service import DEFAULT_TIMEZONE, today_for_timezone
 
 
-def calculate_streak(completions: list[HabitCompletion], frequency: str) -> int:
+def get_today(timezone_name: str = DEFAULT_TIMEZONE) -> date:
+    return today_for_timezone(timezone_name)
+
+
+def calculate_streak(completions: list[HabitCompletion], frequency: str, today: date) -> int:
     done_dates = {completion.date for completion in completions if completion.status == "done"}
     if not done_dates:
         return 0
 
-    today = get_today_eastern()
     current_date = today if today in done_dates else today - timedelta(days=1)
     if current_date not in done_dates:
         return 0
@@ -155,7 +151,7 @@ def _build_leaderboard(habits: list[Habit], completion_lookup: dict[tuple[int, d
             "completed": completed,
             "expected": expected,
             "compliance_rate": _rate(completed, expected),
-            "current_streak": calculate_streak(habit.completions, habit.frequency),
+            "current_streak": calculate_streak(habit.completions, habit.frequency, end_date),
         })
 
     return sorted(leaderboard, key=lambda item: item["compliance_rate"], reverse=True)
@@ -265,8 +261,8 @@ def _build_coaching(summary: dict[str, Any], leaderboard: list[dict[str, Any]], 
     )
 
 
-def get_habit_trends(user_number: str, db: Session) -> dict[str, Any]:
-    end_date = get_today_eastern()
+def get_habit_trends(user_number: str, db: Session, timezone_name: str = DEFAULT_TIMEZONE) -> dict[str, Any]:
+    end_date = get_today(timezone_name)
     start_date = end_date - timedelta(days=89)
     query_start_date = end_date - timedelta(days=179)
 

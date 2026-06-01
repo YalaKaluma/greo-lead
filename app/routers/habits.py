@@ -1,12 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import date, timedelta, datetime
-from typing import List
-from zoneinfo import ZoneInfo
+from datetime import date, timedelta
 from pydantic import BaseModel
 
 from app.db import get_db
 from app.models import Habit, HabitCompletion, JourneyGoal
+from app.services.timezone_service import get_user_timezone, today_for_timezone
 from app.services.habit_coaching_service import (
     get_latest_habit_coaching_review,
     refresh_habit_coaching_review,
@@ -14,14 +13,6 @@ from app.services.habit_coaching_service import (
 from app.services.habits.habit_trend_service import get_habit_trends
 
 router = APIRouter()
-
-# Eastern Time timezone
-EASTERN_TZ = ZoneInfo("America/New_York")
-
-
-def get_today_eastern() -> date:
-    """Get current date in Eastern Time"""
-    return datetime.now(EASTERN_TZ).date()
 
 
 # ---------------------------------------------------------
@@ -49,7 +40,7 @@ class DayUpdate(BaseModel):
 # Helpers
 # ---------------------------------------------------------
 
-def calculate_streak(completions: list, frequency: str) -> int:
+def calculate_streak(completions: list, frequency: str, today: date) -> int:
     """
     Calculate consecutive 'done' days, skipping weekends for weekday habits.
     Only counts days with status='done'.
@@ -65,7 +56,6 @@ def calculate_streak(completions: list, frequency: str) -> int:
     # Sort by date descending
     dates = sorted([c.date for c in done_completions], reverse=True)
 
-    today = get_today_eastern()
     streak = 0
 
     # Start from today or yesterday
@@ -102,7 +92,8 @@ def get_habits(user_number: str, db: Session = Depends(get_db)):
         .all()
     )
 
-    today = get_today_eastern()
+    user_timezone = get_user_timezone(db, user_number)
+    today = today_for_timezone(user_timezone)
     response = []
 
     for h in habits:
@@ -121,7 +112,7 @@ def get_habits(user_number: str, db: Session = Depends(get_db)):
             goal_text = h.goal.title or h.goal.goal_text
 
         # Calculate streak
-        streak = calculate_streak(h.completions, h.frequency)
+        streak = calculate_streak(h.completions, h.frequency, today)
 
         response.append({
             "id": h.id,
@@ -207,7 +198,7 @@ def delete_habit(habit_id: int, user_number: str, db: Session = Depends(get_db))
 def get_trends(user_number: str, db: Session = Depends(get_db)):
     """Get historical habit trends, scorecards, and coaching context."""
 
-    trends = get_habit_trends(user_number, db)
+    trends = get_habit_trends(user_number, db, get_user_timezone(db, user_number))
     trends["latest_coaching_review"] = get_latest_habit_coaching_review(db, user_number)
     return trends
 
@@ -246,7 +237,7 @@ def toggle_today(habit_id: int, user_number: str, db: Session = Depends(get_db))
     if not habit:
         raise HTTPException(status_code=404, detail="Habit not found")
 
-    today = get_today_eastern()
+    today = today_for_timezone(get_user_timezone(db, user_number))
 
     # Get or create today's completion
     existing = (
@@ -303,7 +294,7 @@ def get_habit_history(
         raise HTTPException(status_code=404, detail="Habit not found")
 
     # Calculate date range
-    end_date = get_today_eastern()
+    end_date = today_for_timezone(get_user_timezone(db, user_number))
     start_date = end_date - timedelta(days=days - 1)
 
     # Get completions in range

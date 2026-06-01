@@ -30,11 +30,11 @@ import pandas as pd
 from pathlib import Path
 from typing import Optional, List, Dict
 from datetime import datetime, date, timedelta
-from zoneinfo import ZoneInfo
 
 from app.db import get_db
 from app.services.journey_context import build_journey_context
 from app.services.message_service import load_conversation_history, save_message
+from app.services.timezone_service import get_user_timezone, today_for_timezone
 from app.models import Task, Habit, HabitCompletion, Message
 from app.config import (
     TWILIO_SID,
@@ -56,8 +56,6 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - [%(funcName)s] %(message)s'
 )
-
-EASTERN_TZ = ZoneInfo("America/New_York")
 
 # Initialize clients with validation
 try:
@@ -212,19 +210,14 @@ def build_context_summary_for_log(task_context: str, habit_context: str) -> str:
 # Context Building Functions
 # -------------------------------------------------
 
-def get_today_eastern() -> date:
-    """Get current date in Eastern Time"""
-    return datetime.now(EASTERN_TZ).date()
-
-
-def compute_streak(habit: Habit) -> int:
+def compute_streak(habit: Habit, today: date) -> int:
     """Computes consecutive daily streak up to yesterday or today."""
     dates = sorted([c.date for c in habit.completions], reverse=True)
     if not dates:
         return 0
 
     streak = 0
-    current_day = get_today_eastern()
+    current_day = today
 
     for d in dates:
         if d == current_day or d == current_day - timedelta(days=1):
@@ -248,7 +241,7 @@ def build_task_context(db: Session, user_number: str) -> str:
         Formatted task context string
     """
     try:
-        today = datetime.now(EASTERN_TZ).date()
+        today = today_for_timezone(get_user_timezone(db, user_number))
 
         # Get all open tasks
         tasks = db.query(Task).filter(
@@ -337,12 +330,12 @@ def build_habit_context(db: Session, user_number: str) -> str:
         if not habits:
             return "No active habits."
 
-        today = get_today_eastern()
+        today = today_for_timezone(get_user_timezone(db, user_number))
         lines = []
 
         for habit in habits:
             completed_today = any(c.date == today for c in habit.completions)
-            streak = compute_streak(habit)
+            streak = compute_streak(habit, today)
 
             status = "✓" if completed_today else "○"
             streak_text = f"({streak} day streak)" if streak > 0 else ""

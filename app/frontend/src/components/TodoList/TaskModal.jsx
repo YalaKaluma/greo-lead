@@ -14,13 +14,13 @@ import VoiceRecorder from '../VoiceRecorder';
  * - Goal selection with hierarchical display
  * - Delegate autocomplete
  */
-export default function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals }) {
+export default function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals, timezone }) {
   const isEditing = !!task;
   
   const [editData, setEditData] = useState({
     title: task?.title || '',
     delegated_to: task?.delegated_to || '',
-    due_date: task?.due_date ? normalizeDateString(task.due_date) : getTodayET(),
+    due_date: task?.due_date ? normalizeDateString(task.due_date) : getTodayET(timezone),
     priority: task?.priority?.toLowerCase() || 'medium',
     notes: task?.notes || '',
     goal_id: task?.goal_id || null
@@ -56,19 +56,19 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
   }, [task]);
 
   const setTomorrow = () => {
-    const tomorrow = getETDate();  // Use ET instead of new Date()
+    const tomorrow = getETDate(timezone);
     tomorrow.setDate(tomorrow.getDate() + 1);
     setEditData({ ...editData, due_date: formatDateForInput(tomorrow) });
     setShowDatePicker(false);
   };
 
   const setNextWeek = () => {
-    setEditData({ ...editData, due_date: getNextMonday() });
+    setEditData({ ...editData, due_date: getNextMonday(timezone) });
     setShowDatePicker(false);
   };
 
   const setNextMonth = () => {
-    const nextMonth = getETDate();  // Use ET instead of new Date()
+    const nextMonth = getETDate(timezone);
     nextMonth.setMonth(nextMonth.getMonth() + 1);
     setEditData({ ...editData, due_date: formatDateForInput(nextMonth) });
     setShowDatePicker(false);

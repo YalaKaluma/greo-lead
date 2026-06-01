@@ -20,7 +20,8 @@ from app.models import (
     Task,
     User,
 )
-from app.services.habits.habit_trend_service import get_habit_trends, get_today_eastern
+from app.services.habits.habit_trend_service import get_habit_trends
+from app.services.timezone_service import get_user_timezone, today_for_timezone
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -39,13 +40,14 @@ def build_habit_coaching_context(db: Session, user_number: str) -> dict[str, Any
     if not user:
         raise ValueError("User not found")
 
-    period_end_date = get_today_eastern()
+    user_timezone = get_user_timezone(db, user_number)
+    period_end_date = today_for_timezone(user_timezone)
     period_start_date = period_end_date - timedelta(days=89)
     period_end = datetime.combine(period_end_date, datetime.max.time())
     period_start = datetime.combine(period_start_date, datetime.min.time())
     journal_start = datetime.combine(period_end_date - timedelta(days=6), datetime.min.time())
 
-    trends = get_habit_trends(user_number, db)
+    trends = get_habit_trends(user_number, db, user_timezone)
     habits = db.query(Habit).filter(
         Habit.user_number == user_number,
         Habit.is_active == True,

@@ -12,7 +12,7 @@ import { getTodayET, getETDate, formatDateForInput, formatDateForDisplay, getNex
  * - Quick date picker with presets
  * - Shows count of selected tasks
  */
-export default function BulkActionModal({ selectedCount, onApply, onCancel, delegates, goals }) {
+export default function BulkActionModal({ selectedCount, onApply, onCancel, delegates, goals, timezone }) {
   const [bulkData, setBulkData] = useState({
     due_date: '',
     priority: '',
@@ -23,24 +23,24 @@ export default function BulkActionModal({ selectedCount, onApply, onCancel, dele
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   const setToday = () => {
-    setBulkData({ ...bulkData, due_date: getTodayET() });
+    setBulkData({ ...bulkData, due_date: getTodayET(timezone) });
     setShowDatePicker(false);
   };
 
   const setTomorrow = () => {
-    const tomorrow = getETDate();  // Use ET instead of new Date()
+    const tomorrow = getETDate(timezone);
     tomorrow.setDate(tomorrow.getDate() + 1);
     setBulkData({ ...bulkData, due_date: formatDateForInput(tomorrow) });
     setShowDatePicker(false);
   };
 
   const setNextMonday = () => {
-    setBulkData({ ...bulkData, due_date: getNextMonday() });
+    setBulkData({ ...bulkData, due_date: getNextMonday(timezone) });
     setShowDatePicker(false);
   };
 
   const setNextMonth = () => {
-    const nextMonth = getETDate();  // Use ET instead of new Date()
+    const nextMonth = getETDate(timezone);
     nextMonth.setMonth(nextMonth.getMonth() + 1);
     setBulkData({ ...bulkData, due_date: formatDateForInput(nextMonth) });
     setShowDatePicker(false);

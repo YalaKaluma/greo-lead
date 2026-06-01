@@ -745,6 +745,7 @@ class User(Base):
     tour_completed = Column(Boolean, default=False)
     tour_current_step = Column(String, nullable=True)  # Current tour step
     language_preference = Column(String(10), default="en", nullable=False)
+    timezone_preference = Column(String(64), default="America/New_York", nullable=False)
 
     # ✅ FIXED: Use MutableList to track JSONB list mutations properly
     tour_completed_steps = Column(MutableList.as_mutable(JSONB), nullable=True)  # List of completed steps

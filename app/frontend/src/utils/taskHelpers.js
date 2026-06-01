@@ -13,12 +13,26 @@
 // EASTERN TIME HELPERS
 // ============================================================================
 
-export const getETDate = () => {
-  const now = new Date();
-  // Convert to ET (UTC-5)
-  const etDate = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  return etDate;
+export const DEFAULT_TIMEZONE = 'America/New_York';
+
+export const normalizeTimezone = (timezone) => {
+  if (!timezone) return DEFAULT_TIMEZONE;
+
+  try {
+    Intl.DateTimeFormat('en-US', { timeZone: timezone });
+  } catch {
+    return DEFAULT_TIMEZONE;
+  }
+
+  return timezone;
 };
+
+export const getDateInTimezone = (timezone = DEFAULT_TIMEZONE) => {
+  const now = new Date();
+  return new Date(now.toLocaleString('en-US', { timeZone: normalizeTimezone(timezone) }));
+};
+
+export const getETDate = (timezone = DEFAULT_TIMEZONE) => getDateInTimezone(timezone);
 
 export const formatDateForInput = (date) => {
   const year = date.getFullYear();
@@ -42,30 +56,30 @@ export const formatDateForDisplay = (dateString, options) => {
   return dateStringToLocalDate(dateString).toLocaleDateString('en-US', options);
 };
 
-export const getTodayET = () => {
-  const etDate = getETDate();
-  return formatDateForInput(etDate);
+export const getTodayET = (timezone = DEFAULT_TIMEZONE) => {
+  const date = getDateInTimezone(timezone);
+  return formatDateForInput(date);
 };
 
-export const isOverdueET = (dateString) => {
+export const isOverdueET = (dateString, timezone = DEFAULT_TIMEZONE) => {
   if (!dateString) return false;
   // Parse date string as YYYY-MM-DD and compare directly (no timezone conversion)
   const taskDateStr = normalizeDateString(dateString); // Get just the date part
-  const todayStr = getTodayET();
+  const todayStr = getTodayET(timezone);
   return taskDateStr < todayStr;
 };
 
-export const isTodayET = (dateString) => {
+export const isTodayET = (dateString, timezone = DEFAULT_TIMEZONE) => {
   if (!dateString) return false;
   // Compare date strings directly (no timezone conversion)
   const taskDateStr = normalizeDateString(dateString); // Get just the date part
-  const todayStr = getTodayET();
+  const todayStr = getTodayET(timezone);
   return taskDateStr === todayStr;
 };
 
 // Helper function to get next Monday
-export const getNextMonday = () => {
-  const date = getETDate();  // Use ET instead of new Date()
+export const getNextMonday = (timezone = DEFAULT_TIMEZONE) => {
+  const date = getDateInTimezone(timezone);
   const day = date.getDay();
   const daysUntilMonday = day === 0 ? 1 : 8 - day; // If Sunday, 1 day. Otherwise, days until next Monday
   date.setDate(date.getDate() + daysUntilMonday);
@@ -145,12 +159,12 @@ export function getPriorityIcon(priority) {
 // DATE FORMATTING
 // ============================================================================
 
-export function formatDueDate(dateString) {
+export function formatDueDate(dateString, timezone = DEFAULT_TIMEZONE) {
   if (!dateString) return '';
   
   // Parse date parts directly from string to avoid timezone issues
   const taskDateStr = normalizeDateString(dateString); // YYYY-MM-DD
-  const todayStr = getTodayET(); // YYYY-MM-DD
+  const todayStr = getTodayET(timezone); // YYYY-MM-DD
   
   // Calculate difference in days using string parsing
   const todayParts = todayStr.split('-').map(Number);
@@ -169,19 +183,19 @@ export function formatDueDate(dateString) {
   return taskDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export function getDueDateColor(dateString) {
+export function getDueDateColor(dateString, timezone = DEFAULT_TIMEZONE) {
   if (!dateString) return 'bg-gray-100 text-gray-700';
   
-  if (isOverdueET(dateString)) {
+  if (isOverdueET(dateString, timezone)) {
     return 'bg-red-100 text-red-700 font-semibold';
   }
-  if (isTodayET(dateString)) {
+  if (isTodayET(dateString, timezone)) {
     return 'bg-orange-100 text-orange-700 font-semibold';
   }
   
   // Parse date parts directly from string to avoid timezone issues
   const taskDateStr = normalizeDateString(dateString);
-  const todayStr = getTodayET();
+  const todayStr = getTodayET(timezone);
   
   const todayParts = todayStr.split('-').map(Number);
   

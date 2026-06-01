@@ -23,8 +23,9 @@ from app.models import (
     TaskPriorityRecommendation,
     TaskPriorityDecision
 )
+from app.services.timezone_service import DEFAULT_TIMEZONE, get_user_timezone
 
-ET = pytz.timezone("America/New_York")
+ET = pytz.timezone(DEFAULT_TIMEZONE)
 
 GOAL_LEVEL_ALIASES = {
     "long": ["long", "long_term", "vision"],
@@ -42,6 +43,9 @@ class PriorityService:
     def __init__(self, db: Session):
         self.db = db
 
+    def _timezone_for_user(self, user_number: str):
+        return pytz.timezone(get_user_timezone(self.db, user_number))
+
     def create_context_snapshot(self, user_number: str) -> TaskPrioritizationContext:
         """
         Create immutable context snapshot for this prioritization run.
@@ -57,7 +61,8 @@ class PriorityService:
         - Future ML training
         - Understanding what context led to which decisions
         """
-        now = datetime.now(ET)
+        user_tz = self._timezone_for_user(user_number)
+        now = datetime.now(user_tz)
 
         # Fetch active goals by time horizon
         long_term_goals = self._get_goals_by_horizon(user_number, "long")
@@ -81,7 +86,7 @@ class PriorityService:
         overdue = len([
             t for t in open_tasks
             if t.due_date and (
-                t.due_date.replace(tzinfo=ET) if t.due_date.tzinfo is None else t.due_date
+                t.due_date.replace(tzinfo=user_tz) if t.due_date.tzinfo is None else t.due_date
             ) < now
         ])
 
@@ -146,9 +151,9 @@ class PriorityService:
         """
         from datetime import datetime, time
 
-        # Get today's date as string (YYYY-MM-DD) in Eastern Time
+        # Get today's date as string (YYYY-MM-DD) in the user's timezone.
         # This matches how the frontend TodoList filters
-        now = datetime.now(ET)
+        now = datetime.now(self._timezone_for_user(user_number))
         today_str = now.strftime('%Y-%m-%d')  # e.g., "2026-01-18"
 
         # Query all open tasks
@@ -193,10 +198,11 @@ class PriorityService:
             self,
             user_number: str
     ) -> Optional[TaskPriorityRecommendation]:
-        """Return the latest MTN recommendation generated today in Eastern Time."""
-        now = datetime.now(ET)
-        start = ET.localize(datetime.combine(now.date(), time.min))
-        end = ET.localize(datetime.combine(now.date(), time.max))
+        """Return the latest MTN recommendation generated today in the user's timezone."""
+        user_tz = self._timezone_for_user(user_number)
+        now = datetime.now(user_tz)
+        start = user_tz.localize(datetime.combine(now.date(), time.min))
+        end = user_tz.localize(datetime.combine(now.date(), time.max))
 
         return (
             self.db.query(TaskPriorityRecommendation)

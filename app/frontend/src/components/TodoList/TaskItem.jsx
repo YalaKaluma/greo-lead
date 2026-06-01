@@ -27,7 +27,8 @@ export default function TaskItem({
   goals,
   priorityMode = false,
   priorityScore = null,
-  onMtnFeedback = null
+  onMtnFeedback = null,
+  timezone
 }) {
   const [swipeDistance, setSwipeDistance] = useState(0);
   const [touchStartX, setTouchStartX] = useState(0);
@@ -89,6 +90,7 @@ export default function TaskItem({
           priorityMode={priorityMode}
           priorityScore={priorityScore}
           onMtnFeedback={onMtnFeedback}
+          timezone={timezone}
         />
       )}
     </Draggable>
@@ -114,7 +116,8 @@ function TaskCard({
   goals,
   priorityMode,
   priorityScore,
-  onMtnFeedback
+  onMtnFeedback,
+  timezone
 }) {
   const [showMtnFeedback, setShowMtnFeedback] = useState(false);
   const [mtnRating, setMtnRating] = useState(0);
@@ -274,8 +277,8 @@ function TaskCard({
           <div className="flex items-center justify-between mt-1">
             <div>
               {task.due_date && (
-                <span className={`px-2 py-0.5 rounded text-xs font-medium ${getDueDateColor(task.due_date)}`}>
-                  {formatDueDate(task.due_date)}
+                <span className={`px-2 py-0.5 rounded text-xs font-medium ${getDueDateColor(task.due_date, timezone)}`}>
+                  {formatDueDate(task.due_date, timezone)}
                 </span>
               )}
             </div>

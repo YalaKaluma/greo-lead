@@ -1,3 +1,6 @@
+import { useLanguage } from '../../i18n/LanguageContext';
+import { formatDueDate as formatTaskDueDate, isOverdueET } from '../../utils/taskHelpers';
+
 /* =========================================================
    PRIORITY HELPERS
    ========================================================= */
@@ -20,46 +23,9 @@ const getPriorityIcon = (priority) => {
   return icons[priority] || '⚪';
 };
 
-/* =========================================================
-   DATE HELPERS
-   ========================================================= */
-
-const formatDueDate = (dateString) => {
-  if (!dateString) return null;
-  
-  const date = new Date(dateString);
-  const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  
-  // Reset time parts for comparison
-  today.setHours(0, 0, 0, 0);
-  tomorrow.setHours(0, 0, 0, 0);
-  date.setHours(0, 0, 0, 0);
-  
-  if (date.getTime() === today.getTime()) return 'Today';
-  if (date.getTime() === tomorrow.getTime()) return 'Tomorrow';
-  
-  // Format as "Jan 15"
-  const month = date.toLocaleDateString('en-US', { month: 'short' });
-  const day = date.getDate();
-  return `${month} ${day}`;
-};
-
-const isOverdue = (dateString) => {
-  if (!dateString) return false;
-  const date = new Date(dateString);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  date.setHours(0, 0, 0, 0);
-  return date < today;
-};
-
-/* =========================================================
-   MAIN COMPONENT
-   ========================================================= */
-
 export default function LinkedTasksSection({ tasks }) {
+  const { timezone } = useLanguage();
+
   if (!tasks || tasks.length === 0) {
     return (
       <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-center">
@@ -109,11 +75,11 @@ export default function LinkedTasksSection({ tasks }) {
                 {/* Due date */}
                 {task.due_date && (
                   <span className={`text-xs px-2 py-0.5 rounded border ${
-                    isOverdue(task.due_date)
+                    isOverdueET(task.due_date, timezone)
                       ? 'text-red-600 bg-red-50 border-red-200'
                       : 'text-blue-600 bg-blue-50 border-blue-200'
                   }`}>
-                    📅 {formatDueDate(task.due_date)}
+                    📅 {formatTaskDueDate(task.due_date, timezone)}
                   </span>
                 )}
 

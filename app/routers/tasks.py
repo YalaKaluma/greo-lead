@@ -6,18 +6,10 @@ from app.models import Task
 from pydantic import BaseModel
 from datetime import datetime, date, timedelta
 from typing import Optional, List
-from pytz import timezone
 from app.services.task_enrichment_service import enrich_task
+from app.services.timezone_service import get_user_timezone, today_for_timezone
 
 router = APIRouter()
-
-# Eastern Time timezone
-EASTERN_TZ = timezone('America/New_York')
-
-
-def get_today_et():
-    """Get today's date in Eastern Time"""
-    return datetime.now(EASTERN_TZ).date()
 
 
 # Pydantic schemas for validation
@@ -162,7 +154,8 @@ def get_tasks(
             f"[TASKS API] Filters - type: {filter_type}, project: {project}, delegate: {delegated_to}, goal_id: {goal_id}")
 
         query = db.query(Task).filter(Task.user_number == user_number)
-        today = get_today_et()
+        user_timezone = get_user_timezone(db, user_number)
+        today = today_for_timezone(user_timezone)
 
         due_date_day = func.date(Task.due_date)
 
@@ -170,14 +163,14 @@ def get_tasks(
         # dates as calendar days. Compare the date portion so tasks due later
         # today are not excluded by a midnight timestamp boundary.
         if filter_type == "due_today":
-            print(f"[TASKS API] Applying due_today filter (today: {today})")
+            print(f"[TASKS API] Applying due_today filter (today: {today}, timezone: {user_timezone})")
             query = query.filter(
                 Task.due_date.isnot(None),
                 due_date_day <= today
             )
         elif filter_type == "next_7_days":
             next_week = today + timedelta(days=7)
-            print(f"[TASKS API] Applying next_7_days filter (today: {today}, next_week: {next_week})")
+            print(f"[TASKS API] Applying next_7_days filter (today: {today}, next_week: {next_week}, timezone: {user_timezone})")
             query = query.filter(
                 Task.due_date.isnot(None),
                 due_date_day <= next_week

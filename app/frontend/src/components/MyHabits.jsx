@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import HabitTrendsTab from './Habits/HabitTrendsTab';
 import { useLanguage } from '../i18n/LanguageContext';
-import { getTodayET } from '../utils/taskHelpers';
+import { getTodayET, getETDate, formatDateForInput } from '../utils/taskHelpers';
 
 /* =========================================================
    GOAL HELPERS — COPIED 1:1 FROM TodoList.jsx
@@ -67,9 +67,9 @@ const isWeekend = (date) => {
   return day === 0 || day === 6; // Sunday = 0, Saturday = 6
 };
 
-const shouldShowHabit = (habit) => {
+const shouldShowHabit = (habit, timezone) => {
   if (habit.frequency === 'weekdays') {
-    const today = new Date();
+    const today = getETDate(timezone);
     return !isWeekend(today);
   }
   return true;
@@ -91,10 +91,10 @@ const getStatusColor = (status) => {
    CALENDAR COMPONENT - LAST 2 WEEKS
    ========================================================= */
 
-function HabitCalendar({ history, frequency, onUpdateDay }) {
+function HabitCalendar({ history, frequency, onUpdateDay, timezone }) {
   // Generate last 14 days (2 weeks)
   const days = [];
-  const today = new Date();
+  const today = getETDate(timezone);
   
   for (let i = 13; i >= 0; i--) {
     const date = new Date(today);
@@ -110,15 +110,8 @@ function HabitCalendar({ history, frequency, onUpdateDay }) {
     });
   }
 
-  const formatDate = (date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
   const handleDayClick = (date, currentStatus) => {
-    const dateStr = formatDate(date);
+    const dateStr = formatDateForInput(date);
     
     // Cycle: pending → done → not_done → pending
     let newStatus = 'done';
@@ -155,10 +148,10 @@ function HabitCalendar({ history, frequency, onUpdateDay }) {
         {weeks.map((week, weekIndex) => (
           <div key={weekIndex} className="flex gap-1">
             {week.map(date => {
-              const dateStr = formatDate(date);
+              const dateStr = formatDateForInput(date);
               const status = historyMap[dateStr] || 'pending';
               const isWeekendDay = isWeekend(date);
-              const isToday = formatDate(new Date()) === dateStr;
+              const isToday = formatDateForInput(today) === dateStr;
               
               // Gray out weekends for weekday-only habits
               const isDisabled = frequency === 'weekdays' && isWeekendDay;
@@ -208,7 +201,7 @@ function HabitCalendar({ history, frequency, onUpdateDay }) {
    ========================================================= */
 
 export default function MyHabits({ apiUrl, userNumber }) {
-  const { t } = useLanguage();
+  const { t, timezone } = useLanguage();
   const [habits, setHabits] = useState([]);
   const [goals, setGoals] = useState([]);
   const [activeTab, setActiveTab] = useState('habits');
@@ -241,7 +234,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
       });
       if (Array.isArray(res.data)) {
         // Filter based on weekday/weekend
-        const filtered = res.data.filter(shouldShowHabit);
+        const filtered = res.data.filter(habit => shouldShowHabit(habit, timezone));
         setHabits(filtered);
       }
     } catch (err) {
@@ -350,7 +343,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
         {
           title: taskTitle,
           notes,
-          due_date: getTodayET(),
+          due_date: getTodayET(timezone),
           priority: 'high'
         },
         { params: { user_number: userNumber } }
@@ -375,7 +368,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
   useEffect(() => {
     fetchHabits();
     fetchGoals();
-  }, []);
+  }, [timezone]);
 
   useEffect(() => {
     if (activeTab === 'trends' && !trends && !trendsLoading) {
@@ -731,6 +724,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
                 history={habitHistory}
                 frequency={form.frequency}
                 onUpdateDay={(date, status) => updateDay(editingHabit.id, date, status)}
+                timezone={timezone}
               />
             )}
 

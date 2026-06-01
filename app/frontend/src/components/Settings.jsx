@@ -1,8 +1,33 @@
 import React from 'react';
 import { useLanguage } from '../i18n/LanguageContext';
 
+const TIMEZONE_OPTIONS = [
+  { value: 'America/New_York', label: 'Eastern Time - New York' },
+  { value: 'America/Chicago', label: 'Central Time - Chicago' },
+  { value: 'America/Denver', label: 'Mountain Time - Denver' },
+  { value: 'America/Los_Angeles', label: 'Pacific Time - Los Angeles' },
+  { value: 'America/Toronto', label: 'Toronto' },
+  { value: 'Europe/London', label: 'London' },
+  { value: 'Europe/Paris', label: 'Paris' },
+  { value: 'Europe/Brussels', label: 'Brussels' },
+  { value: 'Europe/Zurich', label: 'Zurich' },
+  { value: 'Asia/Dubai', label: 'Dubai' },
+  { value: 'Asia/Singapore', label: 'Singapore' },
+  { value: 'Asia/Tokyo', label: 'Tokyo' },
+  { value: 'Australia/Sydney', label: 'Sydney' }
+];
+
 export default function Settings({ onBack }) {
-  const { language, setLanguage, t, isSavingLanguage, saveError } = useLanguage();
+  const {
+    language,
+    setLanguage,
+    timezone,
+    setTimezone,
+    t,
+    isSavingLanguage,
+    isSavingTimezone,
+    saveError
+  } = useLanguage();
 
   return (
     <div className="min-h-full bg-white">
@@ -55,6 +80,35 @@ export default function Settings({ onBack }) {
             )}
             {saveError && (
               <p className="mt-4 text-sm text-amber-700">{t(saveError)}</p>
+            )}
+          </div>
+        </section>
+
+        <section className="border-t border-slate-200 py-8">
+          <div className="max-w-xl">
+            <label className="block text-sm font-semibold text-slate-900" htmlFor="timezone-preference">
+              {t('settings.timezoneLabel')}
+            </label>
+            <p className="mt-1 text-sm text-slate-500">{t('settings.timezoneHelp')}</p>
+
+            <select
+              id="timezone-preference"
+              value={timezone}
+              onChange={(event) => setTimezone(event.target.value)}
+              className="mt-4 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            >
+              {TIMEZONE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            <p className="mt-3 text-sm text-slate-500">
+              {t('settings.currentTimezone')}: {timezone}
+            </p>
+            {isSavingTimezone && (
+              <p className="mt-4 text-sm text-slate-500">{t('settings.timezoneSaved')}</p>
             )}
           </div>
         </section>

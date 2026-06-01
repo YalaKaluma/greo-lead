@@ -23,7 +23,7 @@ import { usePriority } from '../hooks/usePriority';
  * - 1500ms completion animation
  */
 export default function TodoList({ apiUrl, userNumber }) {
-  const { t } = useLanguage();
+  const { t, timezone } = useLanguage();
   // Task data
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -115,7 +115,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   // Refetch tasks when filters change
   useEffect(() => {
     fetchTasks();
-  }, [filterType, selectedProject, selectedDelegate, selectedGoal]);
+  }, [filterType, selectedProject, selectedDelegate, selectedGoal, timezone]);
 
   // ============================================================================
   // DATA FETCHING
@@ -472,7 +472,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const setOverdueToToday = async () => {
-    const overdueTasks = tasks.filter(t => isOverdueET(t.due_date));
+    const overdueTasks = tasks.filter(t => isOverdueET(t.due_date, timezone));
     if (overdueTasks.length === 0) {
       alert('No overdue tasks found');
       return;
@@ -480,7 +480,7 @@ export default function TodoList({ apiUrl, userNumber }) {
 
     if (!confirm(`Set ${overdueTasks.length} overdue task(s) to today?`)) return;
 
-    const today = getTodayET();
+    const today = getTodayET(timezone);
     try {
       await Promise.all(
         overdueTasks.map(task =>
@@ -499,7 +499,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const getTomorrowET = () => {
-    const tomorrow = getETDate();
+    const tomorrow = getETDate(timezone);
     tomorrow.setDate(tomorrow.getDate() + 1);
     return formatDateForInput(tomorrow);
   };
@@ -808,6 +808,7 @@ export default function TodoList({ apiUrl, userNumber }) {
                         priorityMode={priorityMode || Boolean(scoreData)}
                         priorityScore={scoreData}
                         onMtnFeedback={(rating, feedback, tag, recommendationId) => handleMtnFeedback(task.id, rating, feedback, tag, recommendationId)}
+                        timezone={timezone}
                       />
                     );
                   })}
@@ -860,6 +861,7 @@ export default function TodoList({ apiUrl, userNumber }) {
           } : null}
           delegates={delegates}
           goals={getSortedGoals(goals)}
+          timezone={timezone}
         />
       )}
 
@@ -871,6 +873,7 @@ export default function TodoList({ apiUrl, userNumber }) {
           onCancel={() => setShowBulkActionModal(false)}
           delegates={delegates}
           goals={getSortedGoals(goals)}
+          timezone={timezone}
         />
       )}
 
