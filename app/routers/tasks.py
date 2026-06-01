@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import Task
@@ -163,19 +164,23 @@ def get_tasks(
         query = db.query(Task).filter(Task.user_number == user_number)
         today = get_today_et()
 
-        # Date filters
+        due_date_day = func.date(Task.due_date)
+
+        # Date filters. due_date is a DateTime column, but the UI treats due
+        # dates as calendar days. Compare the date portion so tasks due later
+        # today are not excluded by a midnight timestamp boundary.
         if filter_type == "due_today":
             print(f"[TASKS API] Applying due_today filter (today: {today})")
             query = query.filter(
                 Task.due_date.isnot(None),
-                Task.due_date <= today
+                due_date_day <= today
             )
         elif filter_type == "next_7_days":
             next_week = today + timedelta(days=7)
             print(f"[TASKS API] Applying next_7_days filter (today: {today}, next_week: {next_week})")
             query = query.filter(
                 Task.due_date.isnot(None),
-                Task.due_date <= next_week
+                due_date_day <= next_week
             )
         else:
             print(f"[TASKS API] No date filter (showing all tasks)")
