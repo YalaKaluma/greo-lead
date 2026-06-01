@@ -219,6 +219,35 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const getSortedTasks = () => {
+    // Manual drag-and-drop order should always win once it exists. MTN scores
+    // still render as labels, but they should not lock the list order.
+    if (sortOrder.length > 0) {
+      return [...tasks].sort((a, b) => {
+        const indexA = sortOrder.indexOf(a.id);
+        const indexB = sortOrder.indexOf(b.id);
+        
+        if (indexA !== -1 && indexB !== -1) {
+          return indexA - indexB;
+        }
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+        return 0;
+      });
+    }
+
+    const persistedOrderValues = tasks
+      .map(task => task.sort_order)
+      .filter(order => order !== null && order !== undefined);
+    const hasPersistedTaskOrder = new Set(persistedOrderValues).size > 1;
+    if (hasPersistedTaskOrder) {
+      return [...tasks].sort((a, b) => {
+        const orderA = a.sort_order ?? 999999;
+        const orderB = b.sort_order ?? 999999;
+        if (orderA !== orderB) return orderA - orderB;
+        return 0;
+      });
+    }
+
     if (hasStoredMtnScoring()) {
       return [...tasks].sort((a, b) => {
         const scoreA = getVisibleTaskScore(a);
@@ -232,21 +261,6 @@ export default function TodoList({ apiUrl, userNumber }) {
         }
         if (scoreA) return -1;
         if (scoreB) return 1;
-        return 0;
-      });
-    }
-
-    // Manual drag-and-drop order is the default experience.
-    if (sortOrder.length > 0) {
-      return [...tasks].sort((a, b) => {
-        const indexA = sortOrder.indexOf(a.id);
-        const indexB = sortOrder.indexOf(b.id);
-        
-        if (indexA !== -1 && indexB !== -1) {
-          return indexA - indexB;
-        }
-        if (indexA !== -1) return -1;
-        if (indexB !== -1) return 1;
         return 0;
       });
     }
