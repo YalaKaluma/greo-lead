@@ -1,5 +1,5 @@
 // frontend/src/components/TodoList/TaskModal.jsx
-import { getTodayET, getETDate, getNextMonday, getSortedGoals, getGoalIndentation } from '../../utils/taskHelpers';
+import { getTodayET, getETDate, formatDateForInput, formatDateForDisplay, normalizeDateString, getNextMonday, getSortedGoals, getGoalIndentation } from '../../utils/taskHelpers';
 import { useState, useEffect } from 'react';
 import VoiceRecorder from '../VoiceRecorder';
 
@@ -20,7 +20,7 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
   const [editData, setEditData] = useState({
     title: task?.title || '',
     delegated_to: task?.delegated_to || '',
-    due_date: task?.due_date || getTodayET(),
+    due_date: task?.due_date ? normalizeDateString(task.due_date) : getTodayET(),
     priority: task?.priority?.toLowerCase() || 'medium',
     notes: task?.notes || '',
     goal_id: task?.goal_id || null
@@ -58,7 +58,7 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
   const setTomorrow = () => {
     const tomorrow = getETDate();  // Use ET instead of new Date()
     tomorrow.setDate(tomorrow.getDate() + 1);
-    setEditData({ ...editData, due_date: tomorrow.toISOString().split('T')[0] });
+    setEditData({ ...editData, due_date: formatDateForInput(tomorrow) });
     setShowDatePicker(false);
   };
 
@@ -70,7 +70,7 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
   const setNextMonth = () => {
     const nextMonth = getETDate();  // Use ET instead of new Date()
     nextMonth.setMonth(nextMonth.getMonth() + 1);
-    setEditData({ ...editData, due_date: nextMonth.toISOString().split('T')[0] });
+    setEditData({ ...editData, due_date: formatDateForInput(nextMonth) });
     setShowDatePicker(false);
   };
 
@@ -215,7 +215,7 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white cursor-pointer hover:border-blue-400 transition-colors flex items-center justify-between"
                 >
                   <span className={editData.due_date ? 'text-slate-800' : 'text-slate-400'}>
-                    {editData.due_date ? new Date(editData.due_date).toLocaleDateString('en-US', { 
+                    {editData.due_date ? formatDateForDisplay(editData.due_date, { 
                       weekday: 'short', 
                       month: 'short', 
                       day: 'numeric',

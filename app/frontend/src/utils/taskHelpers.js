@@ -20,15 +20,37 @@ export const getETDate = () => {
   return etDate;
 };
 
+export const formatDateForInput = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+export const normalizeDateString = (dateString) => {
+  if (!dateString) return '';
+  return dateString.split('T')[0];
+};
+
+export const dateStringToLocalDate = (dateString) => {
+  const [year, month, day] = normalizeDateString(dateString).split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+export const formatDateForDisplay = (dateString, options) => {
+  if (!dateString) return '';
+  return dateStringToLocalDate(dateString).toLocaleDateString('en-US', options);
+};
+
 export const getTodayET = () => {
   const etDate = getETDate();
-  return etDate.toISOString().split('T')[0];
+  return formatDateForInput(etDate);
 };
 
 export const isOverdueET = (dateString) => {
   if (!dateString) return false;
   // Parse date string as YYYY-MM-DD and compare directly (no timezone conversion)
-  const taskDateStr = dateString.split('T')[0]; // Get just the date part
+  const taskDateStr = normalizeDateString(dateString); // Get just the date part
   const todayStr = getTodayET();
   return taskDateStr < todayStr;
 };
@@ -36,7 +58,7 @@ export const isOverdueET = (dateString) => {
 export const isTodayET = (dateString) => {
   if (!dateString) return false;
   // Compare date strings directly (no timezone conversion)
-  const taskDateStr = dateString.split('T')[0]; // Get just the date part
+  const taskDateStr = normalizeDateString(dateString); // Get just the date part
   const todayStr = getTodayET();
   return taskDateStr === todayStr;
 };
@@ -47,7 +69,7 @@ export const getNextMonday = () => {
   const day = date.getDay();
   const daysUntilMonday = day === 0 ? 1 : 8 - day; // If Sunday, 1 day. Otherwise, days until next Monday
   date.setDate(date.getDate() + daysUntilMonday);
-  return date.toISOString().split('T')[0];
+  return formatDateForInput(date);
 };
 
 // ============================================================================
@@ -127,14 +149,13 @@ export function formatDueDate(dateString) {
   if (!dateString) return '';
   
   // Parse date parts directly from string to avoid timezone issues
-  const taskDateStr = dateString.split('T')[0]; // YYYY-MM-DD
+  const taskDateStr = normalizeDateString(dateString); // YYYY-MM-DD
   const todayStr = getTodayET(); // YYYY-MM-DD
   
   // Calculate difference in days using string parsing
-  const taskParts = taskDateStr.split('-').map(Number);
   const todayParts = todayStr.split('-').map(Number);
   
-  const taskDate = new Date(taskParts[0], taskParts[1] - 1, taskParts[2]);
+  const taskDate = dateStringToLocalDate(taskDateStr);
   const todayDate = new Date(todayParts[0], todayParts[1] - 1, todayParts[2]);
   
   const diffTime = taskDate - todayDate;
@@ -159,13 +180,12 @@ export function getDueDateColor(dateString) {
   }
   
   // Parse date parts directly from string to avoid timezone issues
-  const taskDateStr = dateString.split('T')[0];
+  const taskDateStr = normalizeDateString(dateString);
   const todayStr = getTodayET();
   
-  const taskParts = taskDateStr.split('-').map(Number);
   const todayParts = todayStr.split('-').map(Number);
   
-  const taskDate = new Date(taskParts[0], taskParts[1] - 1, taskParts[2]);
+  const taskDate = dateStringToLocalDate(taskDateStr);
   const todayDate = new Date(todayParts[0], todayParts[1] - 1, todayParts[2]);
   
   const diffTime = taskDate - todayDate;

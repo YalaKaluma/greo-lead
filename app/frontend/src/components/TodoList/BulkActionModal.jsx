@@ -1,6 +1,6 @@
 // frontend/src/components/TodoList/BulkActionModal.jsx
 import { useState } from 'react';
-import { getTodayET, getETDate, getNextMonday, getSortedGoals, getGoalIndentation } from '../../utils/taskHelpers';
+import { getTodayET, getETDate, formatDateForInput, formatDateForDisplay, getNextMonday, getSortedGoals, getGoalIndentation } from '../../utils/taskHelpers';
 
 /**
  * BulkActionModal Component
@@ -30,7 +30,7 @@ export default function BulkActionModal({ selectedCount, onApply, onCancel, dele
   const setTomorrow = () => {
     const tomorrow = getETDate();  // Use ET instead of new Date()
     tomorrow.setDate(tomorrow.getDate() + 1);
-    setBulkData({ ...bulkData, due_date: tomorrow.toISOString().split('T')[0] });
+    setBulkData({ ...bulkData, due_date: formatDateForInput(tomorrow) });
     setShowDatePicker(false);
   };
 
@@ -42,7 +42,7 @@ export default function BulkActionModal({ selectedCount, onApply, onCancel, dele
   const setNextMonth = () => {
     const nextMonth = getETDate();  // Use ET instead of new Date()
     nextMonth.setMonth(nextMonth.getMonth() + 1);
-    setBulkData({ ...bulkData, due_date: nextMonth.toISOString().split('T')[0] });
+    setBulkData({ ...bulkData, due_date: formatDateForInput(nextMonth) });
     setShowDatePicker(false);
   };
 
@@ -95,7 +95,7 @@ export default function BulkActionModal({ selectedCount, onApply, onCancel, dele
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white cursor-pointer hover:border-blue-400 transition-colors flex items-center justify-between"
                 >
                   <span className={bulkData.due_date ? 'text-slate-800' : 'text-slate-400'}>
-                    {bulkData.due_date ? new Date(bulkData.due_date).toLocaleDateString('en-US', { 
+                    {bulkData.due_date ? formatDateForDisplay(bulkData.due_date, { 
                       weekday: 'short', 
                       month: 'short', 
                       day: 'numeric',
