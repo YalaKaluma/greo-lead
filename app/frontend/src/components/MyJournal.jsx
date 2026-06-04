@@ -3,6 +3,8 @@ import axios from 'axios';
 import ReadAloudButton from './ReadAloudButton';
 import MessageFeedbackButton from './MessageFeedbackButton';
 import VoiceRecorder from './VoiceRecorder';
+import JournalDepthModal from './JournalDepthModal';
+import JournalTrendsTab from './JournalTrendsTab';
 import { useLanguage } from '../i18n/LanguageContext';
 
 // Session stage configurations
@@ -31,6 +33,14 @@ const LEADERSHIP_COACHING_STAGES = [
   { id: 'closure', label: 'Closure', description: 'Synthesize insights' }
 ];
 
+const DEPTH_BADGES = {
+  1: 'Emerging Reflection',
+  2: 'Self-Awareness',
+  3: 'Self-Awareness',
+  4: 'Pattern Recognition',
+  5: 'Growth Mindset'
+};
+
 //const SESSION_TYPES = [
 //  { id: 'goal_review', label: 'Goal Review Session', icon: '🎯', color: 'blue', enabled: true },
 //  { id: 'people_review', label: 'People Review Session', icon: '👥', color: 'purple', enabled: true },
@@ -45,6 +55,11 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   const [activeSession, setActiveSession] = useState(null);
   const [currentStage, setCurrentStage] = useState(null);
   const [stageIndex, setStageIndex] = useState(0);
+  const [activeTab, setActiveTab] = useState('journal');
+  const [selectedDepth, setSelectedDepth] = useState(null);
+  const [trends, setTrends] = useState(null);
+  const [trendsLoading, setTrendsLoading] = useState(false);
+  const [trendsError, setTrendsError] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -95,6 +110,44 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
     }
   };
 
+  const fetchReflectionTrends = async () => {
+    if (!userNumber) return;
+    setTrendsLoading(true);
+    setTrendsError(null);
+    try {
+      const response = await axios.get(`${apiUrl}/api/journal/trends`, {
+        params: { user_number: userNumber }
+      });
+      setTrends(response.data);
+    } catch (error) {
+      console.error('Error loading reflection trends:', error);
+      setTrendsError('Unable to load reflection trends right now.');
+    } finally {
+      setTrendsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'trends' && !trends && !trendsLoading) {
+      fetchReflectionTrends();
+    }
+  }, [activeTab, trends, trendsLoading, userNumber]);
+
+  const getDepthDetails = (message) => {
+    const score = message.reflection_depth_score;
+    const level = message.reflection_depth_level;
+    if (score === null || score === undefined) return null;
+
+    return {
+      score,
+      level,
+      level_label: message.reflection_depth_label || (level ? `Level ${level}` : 'Reflection Depth'),
+      explanation: message.reflection_depth_explanation,
+      recommendations: message.reflection_depth_recommendations,
+      badge: DEPTH_BADGES[level]
+    };
+  };
+
   const startSession = async (sessionType) => {
     if (!['goal_review', 'people_review', 'leadership_coaching'].includes(sessionType)) return;
 
@@ -143,9 +196,20 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
       };
 
       setMessages(prev => [...prev, 
-        { role: 'user', message_id: response.data.user_message_id, content: startMessage, timestamp: new Date().toISOString() },
+        {
+          role: 'user',
+          message_id: response.data.user_message_id,
+          content: startMessage,
+          timestamp: new Date().toISOString(),
+          reflection_depth_score: response.data.user_reflection_depth_score,
+          reflection_depth_level: response.data.user_reflection_depth_level,
+          reflection_depth_label: response.data.user_reflection_depth_label,
+          reflection_depth_explanation: response.data.user_reflection_depth_explanation,
+          reflection_depth_recommendations: response.data.user_reflection_depth_recommendations
+        },
         newMessage
       ]);
+      setTrends(null);
 
       // Update stage from response if available
       if (sessionType === 'goal_review' && response.data.goal_review_status) {
@@ -244,11 +308,20 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
       setMessages(prev => [
         ...prev.map((message) => (
           message.clientMessageId === clientMessageId
-            ? { ...message, message_id: response.data.user_message_id }
+            ? {
+                ...message,
+                message_id: response.data.user_message_id,
+                reflection_depth_score: response.data.user_reflection_depth_score,
+                reflection_depth_level: response.data.user_reflection_depth_level,
+                reflection_depth_label: response.data.user_reflection_depth_label,
+                reflection_depth_explanation: response.data.user_reflection_depth_explanation,
+                reflection_depth_recommendations: response.data.user_reflection_depth_recommendations
+              }
             : message
         )),
         assistantMessage
       ]);
+      setTrends(null);
 
       // Update session state if in goal review
       if (response.data.goal_review_status) {
@@ -346,8 +419,33 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
           </h1>
         </div>
 
+        <div className="mt-4 inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab('journal')}
+            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'journal'
+                ? 'bg-white text-blue-700 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Journal
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('trends')}
+            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'trends'
+                ? 'bg-white text-blue-700 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Trends
+          </button>
+        </div>
+
         {/* Progress Dots - Only show when goal review session is active */}
-        {activeSession === 'goal_review' && (
+        {activeTab === 'journal' && activeSession === 'goal_review' && (
           <div className="mt-6 flex items-center justify-center gap-2">
             {GOAL_REVIEW_STAGES.map((stage, index) => (
               <React.Fragment key={stage.id}>
@@ -389,7 +487,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
         )}
 
         {/* Progress Dots - People Review */}
-        {activeSession === 'people_review' && (
+        {activeTab === 'journal' && activeSession === 'people_review' && (
           <div className="mt-6 flex items-center justify-center gap-2">
             {PEOPLE_REVIEW_STAGES.map((stage, index) => (
               <React.Fragment key={stage.id}>
@@ -428,7 +526,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
         )}
 
         {/* Progress Dots - Leadership Coaching */}
-        {activeSession === 'leadership_coaching' && (
+        {activeTab === 'journal' && activeSession === 'leadership_coaching' && (
           <div className="mt-6 flex items-center justify-center gap-2">
             {LEADERSHIP_COACHING_STAGES.map((stage, index) => (
               <React.Fragment key={stage.id}>
@@ -467,7 +565,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
         )}
 
         {/* End Session Button */}
-        {activeSession && (
+        {activeTab === 'journal' && activeSession && (
           <div className="mt-4 flex justify-center">
             <button
               onClick={endSession}
@@ -479,7 +577,15 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
         )}
       </div>
 
-      {/* Chat Messages Area */}
+      {activeTab === 'trends' ? (
+        <div className="flex-1 overflow-y-auto bg-slate-50 px-6 py-6">
+          <JournalTrendsTab
+            trends={trends}
+            loading={trendsLoading}
+            error={trendsError}
+          />
+        </div>
+      ) : (
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center">
@@ -495,7 +601,10 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
             </p>
           </div>
         ) : (
-          messages.map((msg, idx) => (
+          messages.map((msg, idx) => {
+            const depth = getDepthDetails(msg);
+
+            return (
             <div
               key={idx}
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -521,6 +630,16 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
                     })}
                   </div>
                   <div className="ml-auto flex items-center gap-1">
+                    {msg.role === 'user' && depth && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDepth(depth)}
+                        className="rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                        title="Show reflection depth details"
+                      >
+                        Depth: {Number(depth.score).toFixed(1)}/10
+                      </button>
+                    )}
                     <ReadAloudButton
                       text={msg.content}
                       apiUrl={apiUrl}
@@ -542,7 +661,8 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
                 </div>
               </div>
             </div>
-          ))
+            );
+          })
         )}
         {isLoading && (
           <div className="flex justify-start">
@@ -557,8 +677,10 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
         )}
         <div ref={messagesEndRef} />
       </div>
+      )}
 
       {/* Input Area */}
+      {activeTab === 'journal' && (
       <div className="border-t border-gray-200 bg-white px-6 py-4">
         <form onSubmit={sendMessage} className="flex gap-3">
           <input
@@ -586,6 +708,8 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
           </button>
         </form>
       </div>
+      )}
+      <JournalDepthModal depth={selectedDepth} onClose={() => setSelectedDepth(null)} />
     </div>
   );
 };

@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 #from app.models.message import Message
 from app.models import Message
+from app.services.journal_reflection_depth_service import apply_reflection_depth
 from app.services.message_signal_classifier import classify_message_signals
 
 def save_message(
@@ -24,6 +25,14 @@ def save_message(
     db.refresh(msg)
 
     if sender == "user":
+        try:
+            apply_reflection_depth(msg, content)
+            db.commit()
+            db.refresh(msg)
+        except Exception as error:
+            db.rollback()
+            print(f"Reflection depth scoring failed for message {msg.id}: {error}")
+
         try:
             classify_message_signals(db, msg.id)
         except Exception as error:

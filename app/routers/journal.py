@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import JournalEntry, User
+from app.services.journal_reflection_depth_service import apply_reflection_depth, get_reflection_depth_trends
 from app.services.message_service import save_message
 
 router = APIRouter(prefix="/journal", tags=["journal"])
@@ -15,6 +16,14 @@ def create_entry(user_id: int, text: str, db: Session = Depends(get_db)):
     db.add(entry)
     db.commit()
     db.refresh(entry)
+    try:
+        apply_reflection_depth(entry, text)
+        db.commit()
+        db.refresh(entry)
+    except Exception as error:
+        db.rollback()
+        print(f"Reflection depth scoring failed for journal entry {entry.id}: {error}")
+
     user = db.query(User).filter(User.id == user_id).first()
     if user and user.phone_number:
         try:
@@ -43,6 +52,11 @@ def list_entries(user_id: int, db: Session = Depends(get_db)):
         .all()
     )
     return {"entries": entries}
+
+
+@router.get("/trends")
+def get_trends(user_number: str, db: Session = Depends(get_db)):
+    return get_reflection_depth_trends(user_number, db)
 
 # ----------------------------
 # GET ONE ENTRY
@@ -85,6 +99,10 @@ def update_entry(entry_id: int, user_id: int, text: str, db: Session = Depends(g
         raise HTTPException(status_code=404, detail="Entry not found")
 
     entry.text = text
+    try:
+        apply_reflection_depth(entry, text)
+    except Exception as error:
+        print(f"Reflection depth scoring failed for journal entry {entry.id}: {error}")
     db.commit()
     db.refresh(entry)
     return {"status": "updated", "entry": entry}

@@ -21,6 +21,12 @@ class JournalEntry(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     text = Column(Text)
     ai_summary = Column(Text)
+    reflection_depth_score = Column(Float, nullable=True)
+    reflection_depth_level = Column(Integer, nullable=True)
+    reflection_depth_label = Column(String, nullable=True)
+    reflection_depth_explanation = Column(Text, nullable=True)
+    reflection_depth_recommendations = Column(JSON, nullable=True)
+    reflection_depth_scored_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="entries")
@@ -38,6 +44,12 @@ class Message(Base):
     message_type = Column(String, default="chat")
     is_read = Column(Boolean, default=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    reflection_depth_score = Column(Float, nullable=True)
+    reflection_depth_level = Column(Integer, nullable=True)
+    reflection_depth_label = Column(String, nullable=True)
+    reflection_depth_explanation = Column(Text, nullable=True)
+    reflection_depth_recommendations = Column(JSON, nullable=True)
+    reflection_depth_scored_at = Column(DateTime, nullable=True)
 
 
 class MessageFeedback(Base):

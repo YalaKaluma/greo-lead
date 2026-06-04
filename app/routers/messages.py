@@ -15,6 +15,11 @@ class MessageResponse(BaseModel):
     user_number: str
     content: str
     timestamp: datetime
+    reflection_depth_score: Optional[float] = None
+    reflection_depth_level: Optional[int] = None
+    reflection_depth_label: Optional[str] = None
+    reflection_depth_explanation: Optional[str] = None
+    reflection_depth_recommendations: Optional[list[str]] = None
 
     class Config:
         from_attributes = True

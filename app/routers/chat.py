@@ -93,6 +93,11 @@ async def send_chat_message(
         "reply": reply,
         "message_id": assistant_message.id,
         "user_message_id": user_message.id,
+        "user_reflection_depth_score": getattr(user_message, "reflection_depth_score", None),
+        "user_reflection_depth_level": getattr(user_message, "reflection_depth_level", None),
+        "user_reflection_depth_label": getattr(user_message, "reflection_depth_label", None),
+        "user_reflection_depth_explanation": getattr(user_message, "reflection_depth_explanation", None),
+        "user_reflection_depth_recommendations": getattr(user_message, "reflection_depth_recommendations", None),
         "tour_action": tour_action,
         "timestamp": datetime.utcnow().isoformat(),
         "state": result.state,
@@ -265,7 +270,12 @@ async def get_chat_history(
                 "content": msg.content,
                 "timestamp": msg.timestamp.isoformat(),
                 "message_type": getattr(msg, "message_type", "chat"),
-                "is_read": getattr(msg, "is_read", True)
+                "is_read": getattr(msg, "is_read", True),
+                "reflection_depth_score": getattr(msg, "reflection_depth_score", None),
+                "reflection_depth_level": getattr(msg, "reflection_depth_level", None),
+                "reflection_depth_label": getattr(msg, "reflection_depth_label", None),
+                "reflection_depth_explanation": getattr(msg, "reflection_depth_explanation", None),
+                "reflection_depth_recommendations": getattr(msg, "reflection_depth_recommendations", None),
             }
             for msg in messages
         ]
