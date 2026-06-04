@@ -274,8 +274,8 @@ function TaskCard({
             {task.title}
           </div>
 
-          <div className="flex items-center justify-between mt-1">
-            <div>
+          <div className="mt-1 flex items-start gap-2">
+            <div className="flex-shrink-0">
               {task.due_date && (
                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${getDueDateColor(task.due_date, timezone)}`}>
                   {formatDueDate(task.due_date, timezone)}
@@ -283,11 +283,29 @@ function TaskCard({
               )}
             </div>
 
-            {task.goal_id && (
-              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-medium">
-                Goal: {goalLabel}
-              </span>
-            )}
+            <div className="min-w-0 flex-1 flex flex-col items-end gap-1 sm:flex-row sm:justify-end">
+              {priorityMode && priorityScore && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowMtnFeedback(true);
+                  }}
+                  className={`max-w-full truncate whitespace-nowrap text-xs px-2 py-0.5 rounded border font-medium sm:hidden ${getMtnStyle(priorityScore.score)}`}
+                  title="Review MTN reasoning"
+                >
+                  MTN: {mtnLabel}
+                </button>
+              )}
+
+              {task.goal_id && (
+                <span
+                  className="max-w-full truncate whitespace-nowrap px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-medium"
+                  title={`Goal: ${goalLabel}`}
+                >
+                  Goal: {goalLabel}
+                </span>
+              )}
+            </div>
           </div>
 
           {task.delegated_to && (
@@ -301,7 +319,7 @@ function TaskCard({
         </div>
 
         {priorityMode && priorityScore && (
-          <div className="flex-shrink-0 ml-3 flex items-center gap-2">
+          <div className="hidden flex-shrink-0 ml-3 sm:flex items-center gap-2">
             <button
               onClick={(e) => {
                 e.stopPropagation();
