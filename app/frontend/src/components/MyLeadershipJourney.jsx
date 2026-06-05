@@ -11,13 +11,79 @@ const R_BELT = 412;
 
 const BELTS = [
   { id: "white", name: "White Belt", shortName: "White", meaning: "Awareness", color: "#F8FAFC", text: "#111827" },
-  { id: "yellow", name: "Yellow Belt", shortName: "Yellow", meaning: "Understanding", color: "#FACC15", text: "#111827" },
-  { id: "green", name: "Green Belt", shortName: "Green", meaning: "Application", color: "#22C55E", text: "#ffffff" },
-  { id: "brown", name: "Brown Belt", shortName: "Brown", meaning: "Integration", color: "#92400E", text: "#ffffff" },
-  { id: "black", name: "Black Belt", shortName: "Black", meaning: "Transmission", color: "#111827", text: "#ffffff" },
+  { id: "yellow", name: "Yellow Belt", shortName: "Yellow", meaning: "Self-understanding", color: "#FACC15", text: "#111827" },
+  { id: "green", name: "Green Belt", shortName: "Green", meaning: "Integration", color: "#22C55E", text: "#ffffff" },
+  { id: "brown", name: "Brown Belt", shortName: "Brown", meaning: "Multiplication", color: "#92400E", text: "#ffffff" },
+  { id: "black", name: "Black Belt", shortName: "Black", meaning: "Transformation", color: "#111827", text: "#ffffff" },
 ];
 
 const BELT_IDS = BELTS.map((belt) => belt.id);
+
+const BELT_GUIDE = [
+  {
+    id: "white",
+    statement: "I see the pieces.",
+    description: "At White Belt, you begin to observe leadership intentionally.",
+    focus: ["Goals", "Habits", "Relationships", "Energy", "Learning", "Execution"],
+    objective: "Awareness",
+    keyQuestion: "What are the elements that shape my life and leadership?",
+  },
+  {
+    id: "yellow",
+    statement: "I understand the pieces.",
+    description: "At Yellow Belt, you move beyond awareness into understanding.",
+    focus: [
+      "Why you behave the way you do",
+      "What drives your decisions",
+      "Your strengths and blind spots",
+      "The patterns that help or hurt your progress",
+    ],
+    objective: "Self-understanding",
+    keyQuestion: "Why do these pieces matter, and how do they affect me?",
+  },
+  {
+    id: "green",
+    statement: "I connect the pieces.",
+    description: "At Green Belt, leadership becomes a system rather than a collection of tools.",
+    focus: [
+      "Goals to daily actions",
+      "Values to decisions",
+      "Energy to performance",
+      "Relationships to outcomes",
+      "Learning to growth",
+    ],
+    objective: "Integration",
+    keyQuestion: "How do all these pieces work together?",
+  },
+  {
+    id: "brown",
+    statement: "I can teach the pieces.",
+    description: "At Brown Belt, leadership becomes transferable.",
+    focus: [
+      "Explain principles clearly",
+      "Coach others",
+      "Share lessons from experience",
+      "Help others avoid mistakes",
+      "Create clarity where others see confusion",
+    ],
+    objective: "Multiplication",
+    keyQuestion: "Can I help someone else grow?",
+  },
+  {
+    id: "black",
+    statement: "I create growth in others through the pieces.",
+    description: "At Black Belt, leadership becomes legacy.",
+    focus: [
+      "Develop people",
+      "Build teams",
+      "Create cultures",
+      "Inspire action",
+      "Leave others stronger than you found them",
+    ],
+    objective: "Transformation",
+    keyQuestion: "How many people are growing because I showed up?",
+  },
+];
 
 const DIMENSIONS = [
   {
@@ -811,6 +877,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   const [editingSubdomainTopic, setEditingSubdomainTopic] = useState(null);
   const [savingSubdomainItem, setSavingSubdomainItem] = useState(false);
   const [showWheelModal, setShowWheelModal] = useState(false);
+  const [showBeltGuide, setShowBeltGuide] = useState(false);
 
   const selectedDimension = useMemo(
     () => DIMENSIONS.find((dimension) => dimension.id === selectedDimensionId) || DIMENSIONS[2],
@@ -1327,25 +1394,36 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
                 {Math.max((readinessStatus.required_trials || 0) - (readinessStatus.completed_trials || 0), 0)} trials remaining before {journeyNextBelt.name} assessment
               </p>
             ) : null}
-            <div className="flex flex-wrap justify-end gap-2">
-              {BELTS.map((belt) => (
-                <button
-                  key={belt.name}
-                  type="button"
-                  onClick={() => setSelectedTrialBeltId(belt.id)}
-                  className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs shadow-sm transition ${
-                    viewedBelt.id === belt.id
-                      ? "border-slate-950 bg-slate-950 text-white"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
-                  }`}
-                >
-                  <span
-                    className="h-3 w-3 rounded-full border border-slate-300"
-                    style={{ backgroundColor: belt.color }}
-                  />
-                  <span>{belt.shortName}</span>
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
+                {BELTS.map((belt) => (
+                  <button
+                    key={belt.name}
+                    type="button"
+                    onClick={() => setSelectedTrialBeltId(belt.id)}
+                    className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs shadow-sm transition ${
+                      viewedBelt.id === belt.id
+                        ? "border-slate-950 bg-slate-950 text-white"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
+                    }`}
+                  >
+                    <span
+                      className="h-3 w-3 rounded-full border border-slate-300"
+                      style={{ backgroundColor: belt.color }}
+                    />
+                    <span>{belt.shortName}</span>
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBeltGuide(true)}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-lg font-semibold leading-none text-slate-700 shadow-sm transition hover:border-slate-500 hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
+                aria-label="Show belt progression guide"
+                title="Show belt progression guide"
+              >
+                +
+              </button>
             </div>
           </div>
         </div>
@@ -1479,6 +1557,10 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           journeyBelt={journeyCurrentBelt}
           onClose={() => setShowWheelModal(false)}
         />
+      )}
+
+      {showBeltGuide && (
+        <BeltGuideModal onClose={() => setShowBeltGuide(false)} />
       )}
 
       {activeTrial && (
@@ -1691,6 +1773,80 @@ function LeadershipWheelModal({ dimensionStates, topicData, journeyBelt, onClose
               </div>
             </div>
           </aside>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BeltGuideModal({ onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 md:p-6">
+      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 md:px-6">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Belt Progression</p>
+            <h3 className="mt-1 text-2xl font-semibold text-slate-950">Leadership is not a destination.</h3>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              It is a progression. Each belt represents a different relationship with leadership. As you advance, the
+              goal is not simply to gain knowledge, but to transform how you think, act, and influence others.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md px-2 py-1 text-xl leading-none text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+            aria-label="Close belt progression guide"
+          >
+            x
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 px-4 py-5 md:px-6">
+          <div className="grid gap-4 lg:grid-cols-2">
+            {BELT_GUIDE.map((guide) => {
+              const belt = getBeltById(guide.id);
+              const isBlackBelt = belt.id === "black";
+
+              return (
+                <article key={guide.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <span
+                      className={`mt-1 h-4 w-4 flex-none rounded-full border ${
+                        isBlackBelt ? "border-slate-950" : "border-slate-300"
+                      }`}
+                      style={{ backgroundColor: belt.color }}
+                    />
+                    <div className="min-w-0">
+                      <h4 className="text-lg font-semibold text-slate-950">{belt.name}</h4>
+                      <p className="mt-1 text-sm font-semibold text-slate-700">{guide.statement}</p>
+                    </div>
+                  </div>
+
+                  <p className="mt-4 text-sm leading-6 text-slate-700">{guide.description}</p>
+
+                  <div className="mt-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">You begin to</p>
+                    <ul className="mt-2 grid gap-1.5 text-sm leading-6 text-slate-700 sm:grid-cols-2">
+                      {guide.focus.map((item) => (
+                        <li key={item} className="flex gap-2">
+                          <span className="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-slate-400" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Objective</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{guide.objective}</p>
+                    <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Key Question</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-700">"{guide.keyQuestion}"</p>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
