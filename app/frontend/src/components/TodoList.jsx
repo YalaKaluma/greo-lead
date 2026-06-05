@@ -55,6 +55,8 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [mtnTrends, setMtnTrends] = useState(null);
   const [mtnTrendsLoading, setMtnTrendsLoading] = useState(false);
   const [mtnTrendsError, setMtnTrendsError] = useState(null);
+  const [showMtnBreakdown, setShowMtnBreakdown] = useState(false);
+  const [todayKey, setTodayKey] = useState(getTodayET(timezone));
 
   // Multi-select state
   const [selectedTasks, setSelectedTasks] = useState([]);
@@ -121,6 +123,23 @@ export default function TodoList({ apiUrl, userNumber }) {
   useEffect(() => {
     fetchTasks();
   }, [filterType, selectedProject, selectedDelegate, selectedGoal, timezone]);
+
+  useEffect(() => {
+    setTodayKey(getTodayET(timezone));
+    const timer = setInterval(() => {
+      const currentToday = getTodayET(timezone);
+      setTodayKey(previousToday => {
+        if (previousToday !== currentToday) {
+          fetchTasks();
+          fetchMtnTrends();
+          return currentToday;
+        }
+        return previousToday;
+      });
+    }, 60000);
+
+    return () => clearInterval(timer);
+  }, [timezone]);
 
   // ============================================================================
   // DATA FETCHING
@@ -673,6 +692,9 @@ export default function TodoList({ apiUrl, userNumber }) {
   const sortedTasks = getSortedTasks();
   const todayMtnScore = Number(mtnTrends?.summary?.today?.mtn_score || 0);
   const todayCompletedTasks = Number(mtnTrends?.summary?.today?.completed_tasks || 0);
+  const todayMtnTasks = Array.isArray(mtnTrends?.summary?.today?.tasks)
+    ? mtnTrends.summary.today.tasks
+    : [];
 
   // ============================================================================
   // RENDER
@@ -707,7 +729,11 @@ export default function TodoList({ apiUrl, userNumber }) {
           </div>
           {!selectionMode && (
             <div className="flex justify-center pt-9">
-              <DailyMtnNeedle score={todayMtnScore} completedTasks={todayCompletedTasks} />
+              <DailyMtnNeedle
+                score={todayMtnScore}
+                completedTasks={todayCompletedTasks}
+                onClick={() => setShowMtnBreakdown(true)}
+              />
             </div>
           )}
           <div className="flex justify-end">
@@ -1100,11 +1126,21 @@ export default function TodoList({ apiUrl, userNumber }) {
           </div>
         </div>
       )}
+
+      {showMtnBreakdown && (
+        <MtnBreakdownModal
+          score={todayMtnScore}
+          tasks={todayMtnTasks}
+          date={todayKey}
+          timezone={timezone}
+          onClose={() => setShowMtnBreakdown(false)}
+        />
+      )}
     </div>
   );
 }
 
-function DailyMtnNeedle({ score, completedTasks }) {
+function DailyMtnNeedle({ score, completedTasks, onClick }) {
   const cappedScore = Math.max(0, Math.min(Number(score || 0), 20));
   const needleLeft = 7 + (cappedScore / 20) * 86;
   const label = completedTasks > 0
@@ -1112,8 +1148,10 @@ function DailyMtnNeedle({ score, completedTasks }) {
     : `${formatMtnNumber(score)} MTN today`;
 
   return (
-    <div
-      className="w-64 max-w-[68vw]"
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-64 max-w-[68vw] rounded-md px-1 py-0.5 text-left transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
       title={label}
       aria-label={label}
     >
@@ -1138,6 +1176,65 @@ function DailyMtnNeedle({ score, completedTasks }) {
         <span>10</span>
         <span>15</span>
         <span>20+</span>
+      </div>
+    </button>
+  );
+}
+
+function formatDateTimeForDisplay(value, timezone) {
+  if (!value) return '';
+  return new Date(value).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: timezone
+  });
+}
+
+function MtnBreakdownModal({ score, tasks, date, timezone, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/40 flex items-center justify-center px-4 py-6">
+      <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[88vh] overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Today's MTN breakdown</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              {formatMtnNumber(score)} MTN on {date} from {tasks.length} completed task(s)
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-500 hover:text-slate-800 p-2 rounded-lg hover:bg-slate-100"
+            aria-label="Close MTN breakdown"
+          >
+            <CloseIcon />
+          </button>
+        </div>
+
+        <div className="p-5 overflow-y-auto max-h-[calc(88vh-92px)]">
+          {tasks.length === 0 ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
+              No completed tasks have contributed to today's MTN score yet.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {tasks.map(task => (
+                <div key={task.id} className="flex items-start justify-between gap-4 rounded-lg border border-slate-200 bg-white px-4 py-3">
+                  <div className="min-w-0">
+                    <div className="font-medium text-slate-900">{task.title}</div>
+                    {task.completed_at && (
+                      <div className="mt-1 text-xs text-slate-400">
+                        Completed {formatDateTimeForDisplay(task.completed_at, timezone)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="shrink-0 rounded-md bg-blue-50 px-2.5 py-1 text-sm font-semibold text-blue-700">
+                    {formatMtnNumber(task.mtn_score)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1487,6 +1584,15 @@ function PlusIcon() {
     <IconSvg>
       <path d="M12 5v14" />
       <path d="M5 12h14" />
+    </IconSvg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <IconSvg>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
     </IconSvg>
   );
 }

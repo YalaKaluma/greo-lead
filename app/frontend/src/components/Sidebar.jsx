@@ -41,7 +41,7 @@ useEffect(() => {
     { id: 'todo-list', label: t('nav.tasks'), disabled: false },
     { id: 'my-habits', label: t('nav.habits'), disabled: false },
     { id: 'my-team', label: t('nav.team'), disabled: false },
-    { id: 'coaching-sessions', label: t('nav.coaching'), disabled: false },
+//    { id: 'coaching-sessions', label: t('nav.coaching'), disabled: false },
     { id: 'my-journal', label: t('nav.journal'), disabled: false },
     { id: 'my-feedback', label: t('nav.feedback'), disabled: true },
     { id: 'my-calendar', label: t('nav.calendar'), disabled: true },

@@ -28,10 +28,23 @@ def _task_completed_day(task: Task, timezone_name: str) -> date | None:
     if not completed_at:
         return None
 
+    timezone = ZoneInfo(normalize_timezone(timezone_name))
     if completed_at.tzinfo is not None:
-        return completed_at.astimezone(ZoneInfo(normalize_timezone(timezone_name))).date()
+        return completed_at.astimezone(timezone).date()
 
-    return completed_at.date()
+    return completed_at.replace(tzinfo=ZoneInfo("UTC")).astimezone(timezone).date()
+
+
+def _local_completed_at_iso(task: Task, timezone_name: str) -> str | None:
+    completed_at = task.updated_at
+    if not completed_at:
+        return None
+
+    timezone = ZoneInfo(normalize_timezone(timezone_name))
+    if completed_at.tzinfo is None:
+        completed_at = completed_at.replace(tzinfo=ZoneInfo("UTC"))
+
+    return completed_at.astimezone(timezone).isoformat()
 
 
 def _as_naive_utc(value: datetime | None) -> datetime | None:
@@ -98,7 +111,7 @@ def get_task_mtn_trends(
     end_date = today_for_timezone(timezone_name)
     start_date = end_date - timedelta(days=89)
 
-    query_start = datetime.combine(start_date, datetime.min.time())
+    query_start = datetime.combine(start_date - timedelta(days=1), datetime.min.time())
     tasks = (
         db.query(Task)
         .filter(
@@ -126,7 +139,7 @@ def get_task_mtn_trends(
         score_lookup.setdefault(score.task_id, []).append(score)
 
     by_day: dict[date, dict[str, Any]] = {
-        day: {"mtn_score": 0.0, "completed_tasks": 0}
+        day: {"mtn_score": 0.0, "completed_tasks": 0, "tasks": []}
         for day in _date_range(start_date, end_date)
     }
 
@@ -135,8 +148,17 @@ def get_task_mtn_trends(
         if completed_day not in by_day:
             continue
 
-        by_day[completed_day]["mtn_score"] += _task_mtn_score(task, task.updated_at, score_lookup)
+        mtn_score = _task_mtn_score(task, task.updated_at, score_lookup)
+        by_day[completed_day]["mtn_score"] += mtn_score
         by_day[completed_day]["completed_tasks"] += 1
+        by_day[completed_day]["tasks"].append({
+            "id": task.id,
+            "title": task.title,
+            "mtn_score": round(mtn_score, 1),
+            "completed_at": _local_completed_at_iso(task, timezone_name),
+            "project": task.project,
+            "goal_id": task.goal_id,
+        })
 
     trend_chart = []
     scores = []
@@ -153,7 +175,10 @@ def get_task_mtn_trends(
         })
 
     summary = {
-        "today": trend_chart[-1] if trend_chart else {"mtn_score": 0, "completed_tasks": 0},
+        "today": {
+            **(trend_chart[-1] if trend_chart else {"mtn_score": 0, "completed_tasks": 0}),
+            "tasks": sorted(by_day.get(end_date, {}).get("tasks", []), key=lambda item: item["mtn_score"], reverse=True),
+        },
         "last_7_days": _period_stats(trend_chart, 7),
         "last_30_days": _period_stats(trend_chart, 30),
         "last_90_days": _period_stats(trend_chart, 90),
