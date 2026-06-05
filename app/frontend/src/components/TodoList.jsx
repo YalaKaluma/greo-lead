@@ -1152,9 +1152,13 @@ function StatTile({ label, value, detail }) {
 
 function TaskMtnTrendChart({ data }) {
   const points = Array.isArray(data) ? data : [];
+  const values = points.flatMap(point => [
+    Number(point.mtn_score || 0),
+    Number(point.rolling_average || 0)
+  ]);
   const maxScore = Math.max(
     1,
-    Math.ceil(Math.max(...points.map(point => Number(point.mtn_score || 0), Number(point.rolling_average || 0))) * 1.15)
+    Math.ceil(Math.max(...values, 0) * 1.15)
   );
   const dailyPath = buildMtnPath(points, 'mtn_score', maxScore);
   const rollingPath = buildMtnPath(points, 'rolling_average', maxScore);

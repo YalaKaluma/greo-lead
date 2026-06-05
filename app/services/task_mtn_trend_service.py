@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
-from app.models import Task
+from app.models import Task, TaskPriorityScore
 from app.services.timezone_service import DEFAULT_TIMEZONE, normalize_timezone, today_for_timezone
 
 
@@ -34,13 +34,35 @@ def _task_completed_day(task: Task, timezone_name: str) -> date | None:
     return completed_at.date()
 
 
-def _task_mtn_score(task: Task) -> float:
-    raw_score = task.move_the_needle_score
+def _as_naive_utc(value: datetime | None) -> datetime | None:
+    if not value:
+        return None
+    if value.tzinfo is not None:
+        return value.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+    return value
+
+
+def _normalize_mtn_score(raw_score: Any) -> float:
     if raw_score is None:
         return 0.0
 
     score = float(raw_score)
     return score / 10 if score > 1 else score
+
+
+def _task_mtn_score(
+    task: Task,
+    completed_at: datetime | None,
+    score_lookup: dict[int, list[TaskPriorityScore]],
+) -> float:
+    completed_at = _as_naive_utc(completed_at)
+    for score in score_lookup.get(task.id, []):
+        scored_at = _as_naive_utc(score.scored_at)
+        if not completed_at or not scored_at or scored_at <= completed_at:
+            return _normalize_mtn_score(score.top10_likelihood)
+
+    raw_score = task.move_the_needle_score
+    return _normalize_mtn_score(raw_score)
 
 
 def _period_stats(trend_chart: list[dict[str, Any]], days: int) -> dict[str, Any]:
@@ -84,6 +106,22 @@ def get_task_mtn_trends(
         )
         .all()
     )
+    task_ids = [task.id for task in tasks]
+    scores = []
+    if task_ids:
+        scores = (
+            db.query(TaskPriorityScore)
+            .filter(
+                TaskPriorityScore.user_number == user_number,
+                TaskPriorityScore.task_id.in_(task_ids),
+            )
+            .order_by(TaskPriorityScore.task_id, TaskPriorityScore.scored_at.desc())
+            .all()
+        )
+
+    score_lookup: dict[int, list[TaskPriorityScore]] = {}
+    for score in scores:
+        score_lookup.setdefault(score.task_id, []).append(score)
 
     by_day: dict[date, dict[str, Any]] = {
         day: {"mtn_score": 0.0, "completed_tasks": 0}
@@ -95,7 +133,7 @@ def get_task_mtn_trends(
         if completed_day not in by_day:
             continue
 
-        by_day[completed_day]["mtn_score"] += _task_mtn_score(task)
+        by_day[completed_day]["mtn_score"] += _task_mtn_score(task, task.updated_at, score_lookup)
         by_day[completed_day]["completed_tasks"] += 1
 
     trend_chart = []
