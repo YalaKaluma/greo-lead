@@ -303,6 +303,7 @@ function MainAppShell({
       <AlfredChat 
         apiUrl={API_URL} 
         userNumber={userNumber}
+        currentPage={currentPage}
         preferredLanguage={language}
         onTourStep={(action) => {
           // Handle tour navigation from chat

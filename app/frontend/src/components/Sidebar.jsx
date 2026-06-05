@@ -98,27 +98,30 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onC
           </div>
         </nav>
 
-        {/* Settings and Logout Buttons */}
-        <div className="grid grid-cols-2 gap-2 p-4 border-t border-slate-800">
-          <button
-            onClick={() => onNavigate('settings')}
-            className={`px-3 py-3 text-center rounded-lg transition-all duration-200 ${
-              currentPage === 'settings'
-                ? 'bg-slate-800 text-white shadow-md'
-                : 'text-slate-300 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            {t('nav.settings')}
-          </button>
-          <button
-            onClick={() => {
-              localStorage.removeItem('user_number');
-              window.location.reload();
-            }}
-            className="px-3 py-3 text-center text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all duration-200"
-          >
-            {t('nav.logout')}
-          </button>
+        {/* Footer controls */}
+        <div className="flex items-end justify-between gap-4 p-4 border-t border-slate-800">
+          <div className="flex w-36 flex-col gap-2">
+            <button
+              onClick={() => onNavigate('settings')}
+              className={`px-3 py-3 text-left rounded-lg transition-all duration-200 ${
+                currentPage === 'settings'
+                  ? 'bg-slate-800 text-white shadow-md'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              {t('nav.settings')}
+            </button>
+            <button
+              onClick={() => {
+                localStorage.removeItem('user_number');
+                window.location.reload();
+              }}
+              className="px-3 py-3 text-left text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all duration-200"
+            >
+              {t('nav.logout')}
+            </button>
+          </div>
+          <div className="h-16 w-16 shrink-0" aria-hidden="true" />
         </div>
       </div>
     </aside>

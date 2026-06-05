@@ -3,7 +3,7 @@ import axios from 'axios';
 import ReadAloudButton from './ReadAloudButton';
 import MessageFeedbackButton from './MessageFeedbackButton';
 
-export default function AlfredChat({ apiUrl, userNumber }) {
+export default function AlfredChat({ apiUrl, userNumber, currentPage }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -69,6 +69,12 @@ export default function AlfredChat({ apiUrl, userNumber }) {
       markMessagesRead();
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsOpen(false);
+    }
+  }, [currentPage]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -266,7 +272,7 @@ export default function AlfredChat({ apiUrl, userNumber }) {
 
       <button
         onClick={() => setIsOpen((open) => !open)}
-        className="fixed bottom-24 left-6 z-50 flex h-16 w-16 items-center justify-center rounded-full border-2 border-amber-300 bg-slate-950 p-1 shadow-xl transition-transform hover:scale-105"
+        className="fixed bottom-8 left-6 z-50 flex h-16 w-16 items-center justify-center rounded-full border-2 border-amber-300 bg-slate-950 p-1 shadow-xl transition-transform hover:scale-105 lg:left-[232px]"
         aria-label="Open Alfred messages"
       >
         <img
