@@ -102,7 +102,7 @@ export default function AlfredChat({ apiUrl, userNumber }) {
   return (
     <>
       <div
-        className={`fixed bottom-24 left-6 w-96 max-w-[calc(100vw-2rem)] bg-white rounded-lg shadow-2xl border border-gray-200 flex flex-col transition-all duration-200 ease-out z-50 ${
+        className={`fixed bottom-40 left-6 w-96 max-w-[calc(100vw-2rem)] bg-white rounded-lg shadow-2xl border border-gray-200 flex flex-col transition-all duration-200 ease-out z-50 ${
           isOpen ? 'scale-100 opacity-100' : 'scale-95 opacity-0 pointer-events-none'
         }`}
         style={{ transformOrigin: 'bottom left', height: '560px' }}
@@ -160,7 +160,7 @@ export default function AlfredChat({ apiUrl, userNumber }) {
 
       <button
         onClick={() => setIsOpen((open) => !open)}
-        className="fixed bottom-6 left-6 z-50 flex h-16 w-16 items-center justify-center rounded-full border-2 border-amber-300 bg-slate-950 p-1 shadow-xl transition-transform hover:scale-105"
+        className="fixed bottom-24 left-6 z-50 flex h-16 w-16 items-center justify-center rounded-full border-2 border-amber-300 bg-slate-950 p-1 shadow-xl transition-transform hover:scale-105"
         aria-label="Open Alfred messages"
       >
         <img
