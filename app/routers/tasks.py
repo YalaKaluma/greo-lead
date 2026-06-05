@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+import calendar
 from app.db import get_db
 from app.models import Task
 from pydantic import BaseModel
@@ -29,6 +30,13 @@ class TaskCreate(BaseModel):
     alfred_help: Optional[list] = None
     enhanced_title: Optional[str] = None
     ai_enriched: Optional[bool] = False
+    is_recurring: bool = False
+    recurrence_type: Optional[str] = None
+    recurrence_interval: Optional[int] = 1
+    recurrence_day_of_week: Optional[str] = None
+    recurrence_day_of_month: Optional[int] = None
+    recurrence_end_date: Optional[date] = None
+    recurrence_update_scope: Optional[str] = None
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -48,6 +56,12 @@ class TaskUpdate(BaseModel):
 
     enhanced_title: Optional[str] = None
     ai_enriched: Optional[bool] = False
+    is_recurring: Optional[bool] = None
+    recurrence_type: Optional[str] = None
+    recurrence_interval: Optional[int] = None
+    recurrence_day_of_week: Optional[str] = None
+    recurrence_day_of_month: Optional[int] = None
+    recurrence_end_date: Optional[date] = None
 
 
 class TaskResponse(BaseModel):
@@ -81,6 +95,14 @@ class TaskResponse(BaseModel):
     mtn_risk_today: Optional[str] = None
     mtn_recommendation_id: Optional[int] = None
     mtn_prioritized_at: Optional[str] = None
+    is_recurring: Optional[bool] = False
+    recurrence_type: Optional[str] = None
+    recurrence_interval: Optional[int] = None
+    recurrence_day_of_week: Optional[str] = None
+    recurrence_day_of_month: Optional[int] = None
+    recurrence_end_date: Optional[date] = None
+    recurrence_parent_id: Optional[int] = None
+    recurrence_created_from_id: Optional[int] = None
 
 
 
@@ -101,6 +123,114 @@ class BulkDeferNonTop10Request(BaseModel):
 
 # Priority order for sorting
 PRIORITY_ORDER = {"High": 1, "Medium": 2, "Low": 3}
+WEEKDAY_BY_NAME = {
+    "monday": 0,
+    "tuesday": 1,
+    "wednesday": 2,
+    "thursday": 3,
+    "friday": 4,
+    "saturday": 5,
+    "sunday": 6,
+}
+
+
+def _as_date(value) -> Optional[date]:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    return value
+
+
+def _add_months_clamped(start: date, months: int, day_of_month: int) -> date:
+    month_index = start.month - 1 + months
+    year = start.year + month_index // 12
+    month = month_index % 12 + 1
+    last_day = calendar.monthrange(year, month)[1]
+    return date(year, month, min(day_of_month, last_day))
+
+
+def calculate_next_due_date(task: Task, completed_at: datetime) -> Optional[date]:
+    completed_day = completed_at.date()
+    recurrence_type = (task.recurrence_type or "").strip().lower()
+    interval = max(int(task.recurrence_interval or 1), 1)
+    due_day = _as_date(task.due_date)
+
+    if recurrence_type in {"daily", "interval_days", "custom"}:
+        step_days = interval if recurrence_type != "daily" else 1
+        candidate = due_day or completed_day
+        while candidate <= completed_day:
+            candidate = candidate + timedelta(days=step_days)
+        return candidate
+
+    if recurrence_type == "weekly":
+        weekday_name = (task.recurrence_day_of_week or "").strip().lower()
+        target_weekday = WEEKDAY_BY_NAME.get(weekday_name)
+        if target_weekday is None:
+            target_weekday = due_day.weekday() if due_day else completed_day.weekday()
+
+        if due_day:
+            days_to_target = (target_weekday - due_day.weekday()) % 7
+            candidate = due_day + timedelta(days=days_to_target)
+            while candidate <= completed_day:
+                candidate = candidate + timedelta(weeks=interval)
+            return candidate
+
+        days_ahead = (target_weekday - completed_day.weekday()) % 7
+        if days_ahead == 0:
+            days_ahead = 7 * interval
+        return completed_day + timedelta(days=days_ahead)
+
+    if recurrence_type == "monthly":
+        day_of_month = task.recurrence_day_of_month or (due_day.day if due_day else completed_day.day)
+        day_of_month = max(1, min(int(day_of_month), 31))
+        anchor = due_day or completed_day.replace(day=1)
+        candidate = _add_months_clamped(anchor.replace(day=1), 0, day_of_month)
+        while candidate <= completed_day:
+            candidate = _add_months_clamped(candidate.replace(day=1), interval, day_of_month)
+        return candidate
+
+    return None
+
+
+def create_new_task_from_recurring_template(task: Task, next_due_date: date, db: Session) -> Optional[Task]:
+    existing = db.query(Task).filter(Task.recurrence_created_from_id == task.id).first()
+    if existing:
+        return existing
+
+    parent_id = task.recurrence_parent_id or task.id
+    template = db.query(Task).filter(Task.id == parent_id).first() or task
+    new_task = Task(
+        user_number=task.user_number,
+        title=template.title,
+        notes=template.notes,
+        project=template.project,
+        delegated_to=template.delegated_to,
+        due_date=next_due_date,
+        status="open",
+        priority=template.priority,
+        goal_id=template.goal_id,
+        strategic_intent=template.strategic_intent,
+        move_the_needle_score=template.move_the_needle_score,
+        estimated_effort=template.estimated_effort,
+        suggested_subtasks=template.suggested_subtasks,
+        alfred_help=template.alfred_help,
+        enhanced_title=template.enhanced_title,
+        ai_enriched=template.ai_enriched,
+        originating_opportunity_id=template.originating_opportunity_id,
+        is_recurring=True,
+        recurrence_type=template.recurrence_type,
+        recurrence_interval=template.recurrence_interval,
+        recurrence_day_of_week=template.recurrence_day_of_week,
+        recurrence_day_of_month=template.recurrence_day_of_month,
+        recurrence_end_date=template.recurrence_end_date,
+        recurrence_parent_id=parent_id,
+        recurrence_created_from_id=task.id,
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    db.add(new_task)
+    return new_task
 
 
 def attach_today_mtn_metadata(db: Session, user_number: str, tasks: List[Task]) -> None:
@@ -279,6 +409,19 @@ def create_task(
         project=task.project,
         delegated_to=task.delegated_to,
         goal_id=task.goal_id,
+        strategic_intent=task.strategic_intent,
+        move_the_needle_score=task.move_the_needle_score,
+        estimated_effort=task.estimated_effort,
+        suggested_subtasks=task.suggested_subtasks,
+        alfred_help=task.alfred_help,
+        enhanced_title=task.enhanced_title,
+        ai_enriched=task.ai_enriched,
+        is_recurring=task.is_recurring,
+        recurrence_type=task.recurrence_type if task.is_recurring else None,
+        recurrence_interval=task.recurrence_interval if task.is_recurring else None,
+        recurrence_day_of_week=task.recurrence_day_of_week if task.is_recurring else None,
+        recurrence_day_of_month=task.recurrence_day_of_month if task.is_recurring else None,
+        recurrence_end_date=task.recurrence_end_date if task.is_recurring else None,
         created_at=datetime.now(),
         updated_at=datetime.now()
     )
@@ -311,6 +454,7 @@ def update_task(
 
     # Update only provided fields
     update_data = updates.model_dump(exclude_unset=True)
+    recurrence_update_scope = update_data.pop("recurrence_update_scope", None)
 
     # Capitalize priority if provided
     if 'priority' in update_data:
@@ -318,6 +462,23 @@ def update_task(
 
     for field, value in update_data.items():
         setattr(task, field, value)
+
+    if "is_recurring" in update_data and not update_data["is_recurring"]:
+        task.recurrence_type = None
+        task.recurrence_interval = None
+        task.recurrence_day_of_week = None
+        task.recurrence_day_of_month = None
+        task.recurrence_end_date = None
+
+    if recurrence_update_scope == "future" and task.recurrence_parent_id:
+        parent_task = db.query(Task).filter(
+            Task.id == task.recurrence_parent_id,
+            Task.user_number == user_number,
+        ).first()
+        if parent_task:
+            for field, value in update_data.items():
+                setattr(parent_task, field, value)
+            parent_task.updated_at = datetime.now()
 
     task.updated_at = datetime.now()
 
@@ -444,9 +605,19 @@ def toggle_task(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    # Toggle status
-    task.status = 'completed' if task.status == 'open' else 'open'
+    if task.is_recurring and task.status == "completed":
+        return task
+
+    was_open = task.status == "open"
+    task.status = 'completed' if was_open else 'open'
     task.updated_at = datetime.now()
+
+    if was_open and task.is_recurring:
+        next_due_date = calculate_next_due_date(task, task.updated_at)
+        if next_due_date and (
+            not task.recurrence_end_date or next_due_date <= task.recurrence_end_date
+        ):
+            create_new_task_from_recurring_template(task, next_due_date, db)
 
     db.commit()
     db.refresh(task)

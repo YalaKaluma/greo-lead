@@ -16,6 +16,7 @@ import VoiceRecorder from '../VoiceRecorder';
  */
 export default function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals, timezone }) {
   const isEditing = !!task;
+  const weekdayOptions = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   
   const [editData, setEditData] = useState({
     title: task?.title || '',
@@ -23,7 +24,13 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
     due_date: task?.due_date ? normalizeDateString(task.due_date) : getTodayET(timezone),
     priority: task?.priority?.toLowerCase() || 'medium',
     notes: task?.notes || '',
-    goal_id: task?.goal_id || null
+    goal_id: task?.goal_id || null,
+    is_recurring: Boolean(task?.is_recurring),
+    recurrence_type: task?.recurrence_type || 'weekly',
+    recurrence_interval: task?.recurrence_interval || 1,
+    recurrence_day_of_week: task?.recurrence_day_of_week || 'Monday',
+    recurrence_day_of_month: task?.recurrence_day_of_month || 1,
+    recurrence_end_date: task?.recurrence_end_date || ''
   });
 
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -79,9 +86,25 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
       alert('Please enter a task title');
       return;
     }
+    const recurrenceUpdateScope = isEditing && task?.is_recurring
+      ? (confirm('Apply these changes to future recurring tasks too? Choose OK for future tasks, or Cancel for only this task.')
+        ? 'future'
+        : 'this')
+      : null;
 //    onSave(editData);
     onSave({
       ...editData,
+      recurrence_update_scope: recurrenceUpdateScope,
+      recurrence_interval: editData.is_recurring ? Number(editData.recurrence_interval || 1) : null,
+      recurrence_day_of_month: editData.is_recurring && editData.recurrence_type === 'monthly'
+        ? Number(editData.recurrence_day_of_month || 1)
+        : null,
+      recurrence_day_of_week: editData.is_recurring && editData.recurrence_type === 'weekly'
+        ? editData.recurrence_day_of_week
+        : null,
+      recurrence_end_date: editData.is_recurring && editData.recurrence_end_date
+        ? editData.recurrence_end_date
+        : null,
 
       strategic_intent: alfredInsights?.strategic_intent,
       move_the_needle_score: alfredInsights?.move_the_needle_score,
@@ -278,6 +301,97 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
                 <option value="medium">🟠 Medium Priority</option>
                 <option value="low">🟢 Low Priority</option>
               </select>
+            </div>
+
+            <div className="rounded-lg border border-gray-200 bg-slate-50 p-3">
+              <label className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-slate-700">Recurring task</span>
+                <input
+                  type="checkbox"
+                  checked={editData.is_recurring}
+                  onChange={(e) => setEditData({ ...editData, is_recurring: e.target.checked })}
+                  className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+              </label>
+
+              {editData.is_recurring && (
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Frequency</label>
+                    <select
+                      value={editData.recurrence_type}
+                      onChange={(e) => setEditData({ ...editData, recurrence_type: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="interval_days">Custom days</option>
+                      <option value="custom">Custom interval</option>
+                    </select>
+                  </div>
+
+                  {editData.recurrence_type !== 'daily' && (
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        {editData.recurrence_type === 'weekly' ? 'Every X weeks' : 'Interval'}
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={editData.recurrence_interval}
+                        onChange={(e) => setEditData({ ...editData, recurrence_interval: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  )}
+
+                  {editData.recurrence_type === 'weekly' && (
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Day</label>
+                      <select
+                        value={editData.recurrence_day_of_week}
+                        onChange={(e) => setEditData({ ...editData, recurrence_day_of_week: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        {weekdayOptions.map(day => (
+                          <option key={day} value={day}>{day}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {editData.recurrence_type === 'monthly' && (
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Day of month</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="31"
+                        value={editData.recurrence_day_of_month}
+                        onChange={(e) => setEditData({ ...editData, recurrence_day_of_month: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  )}
+
+                  {['interval_days', 'custom'].includes(editData.recurrence_type) && (
+                    <div className="text-xs text-slate-500 flex items-end pb-2">
+                      Creates the next task every {editData.recurrence_interval || 1} day(s).
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">End date</label>
+                    <input
+                      type="date"
+                      value={editData.recurrence_end_date || ''}
+                      onChange={(e) => setEditData({ ...editData, recurrence_end_date: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>

@@ -262,16 +262,27 @@ function TaskCard({
         )}
 
         <div className="flex-1 min-w-0">
-          <div
-            className="font-medium text-slate-800 text-base break-words leading-tight cursor-pointer hover:text-blue-600 transition-colors"
-            onClick={(e) => {
-              if (handleSelectionShortcut(e)) return;
-              e.stopPropagation();
-              onStartEdit();
-            }}
-            title="Click to edit/reschedule"
-          >
-            {task.title}
+          <div className="flex items-start gap-1.5">
+            {task.is_recurring && (
+              <span
+                className="mt-0.5 inline-flex h-4 w-4 flex-shrink-0 items-center justify-center text-blue-600"
+                title="This task will automatically recreate itself after completion."
+                aria-label="Recurring task"
+              >
+                <RepeatIcon />
+              </span>
+            )}
+            <div
+              className="font-medium text-slate-800 text-base break-words leading-tight cursor-pointer hover:text-blue-600 transition-colors"
+              onClick={(e) => {
+                if (handleSelectionShortcut(e)) return;
+                e.stopPropagation();
+                onStartEdit();
+              }}
+              title="Click to edit/reschedule"
+            >
+              {task.title}
+            </div>
           </div>
 
           <div className="mt-1 flex items-start gap-2">
@@ -351,6 +362,17 @@ function TaskCard({
         />
       )}
     </div>
+  );
+}
+
+function RepeatIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m17 2 4 4-4 4" />
+      <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+      <path d="m7 22-4-4 4-4" />
+      <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+    </svg>
   );
 }
 

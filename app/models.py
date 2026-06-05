@@ -129,6 +129,17 @@ class Task(Base):
     in_top10 = Column(Boolean, default=False)
     top10_position = Column(Integer, nullable=True)  # 1-10 or null
     last_prioritized_at = Column(DateTime(timezone=True), nullable=True)
+    sort_order = Column(Integer, nullable=True)
+
+    # Recurring task fields
+    is_recurring = Column(Boolean, default=False, nullable=False)
+    recurrence_type = Column(String, nullable=True)
+    recurrence_interval = Column(Integer, nullable=True)
+    recurrence_day_of_week = Column(String, nullable=True)
+    recurrence_day_of_month = Column(Integer, nullable=True)
+    recurrence_end_date = Column(Date, nullable=True)
+    recurrence_parent_id = Column(Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    recurrence_created_from_id = Column(Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
 
     # Fields for AI based enhancement to task description
     strategic_intent = Column(Text, nullable=True)
