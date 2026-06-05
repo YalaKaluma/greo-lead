@@ -692,17 +692,9 @@ export default function TodoList({ apiUrl, userNumber }) {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <div className="hidden lg:flex items-baseline gap-3">
-              <h1 className="text-3xl font-bold text-slate-800">
-                {t('tasks.title')}
-              </h1>
-              <span className="text-sm font-medium text-slate-400">
-                MTN today {todayMtnScore.toFixed(1)}
-                {todayCompletedTasks > 0 && (
-                  <span className="ml-1">from {todayCompletedTasks} done</span>
-                )}
-              </span>
-            </div>
+            <h1 className="text-3xl font-bold text-slate-800 hidden lg:block">
+              {t('tasks.title')}
+            </h1>
             <p className="text-slate-600 mt-1">
               {selectionMode ? (
                 <span className="text-blue-600 font-medium">
@@ -720,79 +712,76 @@ export default function TodoList({ apiUrl, userNumber }) {
                 </>
               )}
             </p>
-            {!selectionMode && (
-              <p className="mt-1 text-sm font-medium text-slate-400 lg:hidden">
-                MTN today {todayMtnScore.toFixed(1)}
-                {todayCompletedTasks > 0 && (
-                  <span className="ml-1">from {todayCompletedTasks} done</span>
-                )}
-              </p>
-            )}
           </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            {sortOrder.length > 0 && !selectionMode && activeTab === 'tasks' && (
-              <button
-                onClick={resetSortOrder}
-                className="h-10 w-10 inline-flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
-                title="Reset manual sort"
-                aria-label="Reset manual sort"
-              >
-                <ResetIcon />
-              </button>
-            )}
-            {!selectionMode && activeTab === 'tasks' && (
-              <>
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
+              {sortOrder.length > 0 && !selectionMode && activeTab === 'tasks' && (
                 <button
-                  onClick={setOverdueToToday}
-                  className="h-10 w-10 inline-flex items-center justify-center bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors"
-                  title="Move overdue tasks to today"
-                  aria-label="Move overdue tasks to today"
+                  onClick={resetSortOrder}
+                  className="h-10 w-10 inline-flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
+                  title="Reset manual sort"
+                  aria-label="Reset manual sort"
                 >
-                  <CalendarIcon />
+                  <ResetIcon />
                 </button>
-                <button
-                  onClick={handleRunPrioritization}
-                  disabled={priorityLoading || tasks.length === 0}
-                  className="h-10 w-10 inline-flex items-center justify-center bg-slate-800 hover:bg-slate-900 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Prioritize tasks"
-                  aria-label="Prioritize tasks"
-                >
-                  {priorityLoading ? (
-                    <SpinnerIcon />
-                  ) : (
-                    <SparkIcon />
-                  )}
-                </button>
-                <button
-                  onClick={openOpportunityModal}
-                  disabled={opportunityLoading}
-                  className="h-10 w-10 inline-flex items-center justify-center bg-amber-400 hover:bg-amber-500 text-slate-900 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Suggest move-the-needle actions"
-                  aria-label="Suggest move-the-needle actions"
-                >
-                  <LightbulbIcon />
-                </button>
-                <button
-                  onClick={openDeferNonTop10Modal}
-                  disabled={sortedTasks.length <= 10}
-                  className="h-10 w-10 inline-flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Move non-Top-10 tasks to tomorrow"
-                  aria-label="Move non-Top-10 tasks to tomorrow"
-                >
-                  <CalendarArrowIcon />
-                </button>
-                <button
-                  onClick={() => {
-                    setEditingTask(null);
-                    setShowTaskModal(true);
-                  }}
-                  className="h-10 w-10 inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                  title="Add task"
-                  aria-label="Add task"
-                >
-                  <PlusIcon />
-                </button>
-              </>
+              )}
+              {!selectionMode && activeTab === 'tasks' && (
+                <>
+                  <button
+                    onClick={setOverdueToToday}
+                    className="h-10 w-10 inline-flex items-center justify-center bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors"
+                    title="Move overdue tasks to today"
+                    aria-label="Move overdue tasks to today"
+                  >
+                    <CalendarIcon />
+                  </button>
+                  <button
+                    onClick={handleRunPrioritization}
+                    disabled={priorityLoading || tasks.length === 0}
+                    className="h-10 w-10 inline-flex items-center justify-center bg-slate-800 hover:bg-slate-900 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Prioritize tasks"
+                    aria-label="Prioritize tasks"
+                  >
+                    {priorityLoading ? (
+                      <SpinnerIcon />
+                    ) : (
+                      <SparkIcon />
+                    )}
+                  </button>
+                  <button
+                    onClick={openOpportunityModal}
+                    disabled={opportunityLoading}
+                    className="h-10 w-10 inline-flex items-center justify-center bg-amber-400 hover:bg-amber-500 text-slate-900 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Suggest move-the-needle actions"
+                    aria-label="Suggest move-the-needle actions"
+                  >
+                    <LightbulbIcon />
+                  </button>
+                  <button
+                    onClick={openDeferNonTop10Modal}
+                    disabled={sortedTasks.length <= 10}
+                    className="h-10 w-10 inline-flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Move non-Top-10 tasks to tomorrow"
+                    aria-label="Move non-Top-10 tasks to tomorrow"
+                  >
+                    <CalendarArrowIcon />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingTask(null);
+                      setShowTaskModal(true);
+                    }}
+                    className="h-10 w-10 inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                    title="Add task"
+                    aria-label="Add task"
+                  >
+                    <PlusIcon />
+                  </button>
+                </>
+              )}
+            </div>
+            {!selectionMode && (
+              <DailyMtnNeedle score={todayMtnScore} completedTasks={todayCompletedTasks} />
             )}
           </div>
         </div>
@@ -1117,6 +1106,49 @@ export default function TodoList({ apiUrl, userNumber }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function DailyMtnNeedle({ score, completedTasks }) {
+  const cappedScore = Math.max(0, Math.min(Number(score || 0), 20));
+  const needleLeft = 7 + (cappedScore / 20) * 86;
+  const label = completedTasks > 0
+    ? `${formatMtnNumber(score)} MTN from ${completedTasks} done`
+    : `${formatMtnNumber(score)} MTN today`;
+
+  return (
+    <div
+      className="w-56 max-w-[56vw]"
+      title={label}
+      aria-label={label}
+    >
+      <div className="flex items-center justify-between text-[11px] font-medium text-slate-400">
+        <span>Move the needle</span>
+        <span>{formatMtnNumber(score)}</span>
+      </div>
+      <div className="relative mt-1 h-5">
+        <div className="absolute inset-x-0 top-2 grid h-2 grid-cols-5 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
+          <span className="bg-blue-100" />
+          <span className="bg-blue-200" />
+          <span className="bg-blue-300" />
+          <span className="bg-blue-500" />
+          <span className="bg-blue-700" />
+        </div>
+        <div
+          className="absolute top-0 h-5 w-0.5 rounded-full bg-slate-900 shadow-sm transition-all"
+          style={{ left: `${needleLeft}%` }}
+        >
+          <span className="absolute -left-[5px] -top-1 h-0 w-0 border-l-[5px] border-r-[5px] border-t-[6px] border-l-transparent border-r-transparent border-t-slate-900" />
+        </div>
+      </div>
+      <div className="flex justify-between text-[10px] text-slate-400">
+        <span>0</span>
+        <span>5</span>
+        <span>10</span>
+        <span>15</span>
+        <span>20+</span>
+      </div>
     </div>
   );
 }
