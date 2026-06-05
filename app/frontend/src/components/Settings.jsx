@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import axios from 'axios';
 import { useLanguage } from '../i18n/LanguageContext';
 
 const TIMEZONE_OPTIONS = [
@@ -17,7 +18,7 @@ const TIMEZONE_OPTIONS = [
   { value: 'Australia/Sydney', label: 'Sydney' }
 ];
 
-export default function Settings({ onBack }) {
+export default function Settings({ apiUrl, userNumber, onBack }) {
   const {
     language,
     setLanguage,
@@ -28,6 +29,35 @@ export default function Settings({ onBack }) {
     isSavingTimezone,
     saveError
   } = useLanguage();
+  const [isBackfillingDepth, setIsBackfillingDepth] = useState(false);
+  const [backfillResult, setBackfillResult] = useState(null);
+  const [backfillError, setBackfillError] = useState(null);
+
+  const runReflectionDepthBackfill = async () => {
+    if (!userNumber || isBackfillingDepth) return;
+
+    const confirmed = window.confirm(
+      'Alfred will send your last 50 user messages to OpenAI to score Reflection Depth. Continue?'
+    );
+    if (!confirmed) return;
+
+    setIsBackfillingDepth(true);
+    setBackfillResult(null);
+    setBackfillError(null);
+
+    try {
+      const response = await axios.post(`${apiUrl}/api/settings/journal/reflection-depth-backfill`, {
+        user_number: userNumber,
+        limit: 50
+      });
+      setBackfillResult(response.data);
+    } catch (error) {
+      console.error('Reflection depth backfill failed:', error);
+      setBackfillError(error.response?.data?.detail || 'Alfred could not score the recent journal messages yet.');
+    } finally {
+      setIsBackfillingDepth(false);
+    }
+  };
 
   return (
     <div className="min-h-full bg-white">
@@ -109,6 +139,40 @@ export default function Settings({ onBack }) {
             </p>
             {isSavingTimezone && (
               <p className="mt-4 text-sm text-slate-500">{t('settings.timezoneSaved')}</p>
+            )}
+          </div>
+        </section>
+
+        <section className="border-t border-slate-200 py-8">
+          <div className="max-w-xl">
+            <h2 className="text-sm font-semibold text-slate-900">
+              Journal Reflection Depth
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              Score your last 50 journal/user messages so the Trends tab has more history to work with.
+            </p>
+
+            <button
+              type="button"
+              onClick={runReflectionDepthBackfill}
+              disabled={isBackfillingDepth || !userNumber}
+              className="mt-4 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {isBackfillingDepth ? 'Scoring recent messages...' : 'Score last 50 messages'}
+            </button>
+
+            {backfillResult && (
+              <p className="mt-4 text-sm text-emerald-700">
+                Scored {backfillResult.scored} message{backfillResult.scored === 1 ? '' : 's'}.
+                {backfillResult.skipped_already_scored > 0
+                  ? ` ${backfillResult.skipped_already_scored} already had scores.`
+                  : ''}
+              </p>
+            )}
+            {backfillError && (
+              <p className="mt-4 text-sm text-rose-700">
+                {backfillError}
+              </p>
             )}
           </div>
         </section>

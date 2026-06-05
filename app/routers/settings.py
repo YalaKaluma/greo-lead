@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import User
+from app.services.journal_reflection_depth_service import backfill_recent_reflection_depth
 from app.services.language import DEFAULT_LANGUAGE, normalize_language
 from app.services.timezone_service import DEFAULT_TIMEZONE, normalize_timezone
 
@@ -18,6 +19,11 @@ class LanguageSettingsRequest(BaseModel):
 class TimezoneSettingsRequest(BaseModel):
     user_number: str
     timezone_preference: str
+
+
+class ReflectionDepthBackfillRequest(BaseModel):
+    user_number: str
+    limit: int = 50
 
 
 @router.get("/settings")
@@ -62,4 +68,29 @@ def update_timezone(request: TimezoneSettingsRequest, db: Session = Depends(get_
     return {
         "user_number": request.user_number,
         "timezone_preference": user.timezone_preference,
+    }
+
+
+@router.post("/settings/journal/reflection-depth-backfill")
+def backfill_reflection_depth(request: ReflectionDepthBackfillRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.phone_number == request.user_number).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    try:
+        result = backfill_recent_reflection_depth(
+            db=db,
+            user_number=request.user_number,
+            limit=request.limit,
+        )
+    except Exception as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=502,
+            detail=f"Alfred could not score the recent journal messages yet: {error}",
+        ) from error
+
+    return {
+        "user_number": request.user_number,
+        **result,
     }

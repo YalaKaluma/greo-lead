@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from statistics import mean
@@ -119,6 +120,58 @@ recommendations must be 2-3 short personalized strings.
         return _fallback_score(text)
 
 
+def score_reflection_depth_batch(messages: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    if not messages:
+        return {}
+
+    system_prompt = """
+You score leadership journal/user messages for reflection depth. Do not reward length.
+Use this framework:
+Level 1 Description, score 1-2: event reporting, no emotional exploration.
+Level 2 Emotion, score 3-4: names feelings, limited introspection.
+Level 3 Root Cause, score 5-6: explores why feelings happened.
+Level 4 Pattern Recognition, score 7-8: identifies recurring themes or behaviors.
+Level 5 Growth & Transformation, score 9-10: extracts lessons and future behavior changes.
+Return only valid JSON with key scores. scores must be an array of objects with keys:
+id, score, level, level_label, explanation, recommendations.
+recommendations must be 2-3 short personalized strings.
+"""
+
+    response = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": system_prompt.strip()},
+            {"role": "user", "content": json.dumps({"messages": messages}, ensure_ascii=False)},
+        ],
+        temperature=0.2,
+        response_format={"type": "json_object"},
+    )
+    payload = json.loads(response.choices[0].message.content)
+    results = {}
+
+    for item in payload.get("scores", []):
+        score = max(1.0, min(10.0, round(float(item.get("score", 1)), 1)))
+        level = int(item.get("level") or depth_level_for_score(score) or 1)
+        level = max(1, min(5, level))
+        recommendations = item.get("recommendations") or []
+        if not isinstance(recommendations, list):
+            recommendations = []
+
+        results[int(item["id"])] = {
+            "score": score,
+            "level": level,
+            "level_label": DEPTH_LEVELS.get(level, item.get("level_label") or "Description"),
+            "explanation": str(item.get("explanation") or "").strip(),
+            "recommendations": [
+                str(recommendation).strip()
+                for recommendation in recommendations
+                if str(recommendation).strip()
+            ][:3],
+        }
+
+    return results
+
+
 def apply_reflection_depth(target: Any, text: str) -> dict[str, Any]:
     result = score_reflection_depth(text)
     target.reflection_depth_score = result["score"]
@@ -128,6 +181,69 @@ def apply_reflection_depth(target: Any, text: str) -> dict[str, Any]:
     target.reflection_depth_recommendations = result["recommendations"]
     target.reflection_depth_scored_at = datetime.utcnow()
     return result
+
+
+def apply_reflection_depth_result(target: Any, result: dict[str, Any], scored_at: datetime | None = None) -> None:
+    target.reflection_depth_score = result["score"]
+    target.reflection_depth_level = result["level"]
+    target.reflection_depth_label = result["level_label"]
+    target.reflection_depth_explanation = result["explanation"]
+    target.reflection_depth_recommendations = result["recommendations"]
+    target.reflection_depth_scored_at = scored_at or datetime.utcnow()
+
+
+def backfill_recent_reflection_depth(
+    db: Session,
+    user_number: str,
+    limit: int = 50,
+    batch_size: int = 10,
+    max_text_chars: int = 3000,
+) -> dict[str, Any]:
+    safe_limit = max(1, min(int(limit or 50), 250))
+    safe_batch_size = max(1, min(int(batch_size or 10), 25))
+    started = time.time()
+
+    latest_messages = (
+        db.query(Message)
+        .filter(Message.user_number == user_number, Message.sender == "user")
+        .order_by(Message.timestamp.desc(), Message.id.desc())
+        .limit(safe_limit)
+        .all()
+    )
+    latest_messages = list(reversed(latest_messages))
+    to_score = [message for message in latest_messages if message.reflection_depth_score is None]
+    skipped_already_scored = len(latest_messages) - len(to_score)
+    processed = 0
+
+    for start in range(0, len(to_score), safe_batch_size):
+        batch = to_score[start:start + safe_batch_size]
+        payload = [
+            {
+                "id": message.id,
+                "text": (message.content or "")[:max_text_chars],
+            }
+            for message in batch
+        ]
+        results_by_id = score_reflection_depth_batch(payload)
+        now = datetime.utcnow()
+
+        for message in batch:
+            result = results_by_id.get(message.id)
+            if not result:
+                raise ValueError(f"Missing reflection depth score for message {message.id}")
+            apply_reflection_depth_result(message, result, now)
+
+        db.commit()
+        processed += len(batch)
+
+    return {
+        "messages_considered": len(latest_messages),
+        "scored": processed,
+        "skipped_already_scored": skipped_already_scored,
+        "remaining_unscored_in_limit": max(len(to_score) - processed, 0),
+        "limit": safe_limit,
+        "elapsed_seconds": round(time.time() - started, 1),
+    }
 
 
 def _date_range(start_date: date, end_date: date) -> list[date]:

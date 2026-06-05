@@ -268,7 +268,11 @@ function MainAppShell({
 
       <main className={`flex-1 overflow-auto ${isMobile ? 'mt-14' : ''}`}>
         {currentPage === 'settings' && (
-          <Settings onBack={() => handleNavigate('my-goals')} />
+          <Settings
+            apiUrl={API_URL}
+            userNumber={userNumber}
+            onBack={() => handleNavigate('my-goals')}
+          />
         )}
         {currentPage === 'todo-list' && (
           <TodoList apiUrl={API_URL} userNumber={userNumber} />
