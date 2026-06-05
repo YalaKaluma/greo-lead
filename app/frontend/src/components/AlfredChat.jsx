@@ -102,32 +102,32 @@ export default function AlfredChat({ apiUrl, userNumber }) {
   return (
     <>
       <div
-        className={`fixed bottom-40 left-6 w-96 max-w-[calc(100vw-2rem)] bg-white rounded-lg shadow-2xl border border-gray-200 flex flex-col transition-all duration-200 ease-out z-50 ${
-          isOpen ? 'scale-100 opacity-100' : 'scale-95 opacity-0 pointer-events-none'
+        className={`fixed inset-0 z-50 flex flex-col bg-slate-50 transition-opacity duration-200 ${
+          isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
-        style={{ transformOrigin: 'bottom left', height: '560px' }}
       >
-        <div className="bg-slate-900 text-white px-5 py-4 rounded-t-lg flex items-center justify-between">
+        <div className="bg-slate-900 text-white px-6 py-5 flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-lg">Messages</h3>
-            <p className="text-xs text-slate-300">Nudges, reminders, and Alfred updates</p>
+            <h3 className="font-semibold text-2xl">Messages</h3>
+            <p className="text-sm text-slate-300">Nudges, reminders, and Alfred updates</p>
           </div>
           <button
             onClick={() => setIsOpen(false)}
-            className="h-9 w-9 rounded-md text-slate-300 hover:bg-slate-800 hover:text-white"
+            className="h-10 w-10 rounded-md text-slate-300 hover:bg-slate-800 hover:text-white"
             aria-label="Close messages"
           >
             X
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto bg-slate-50 px-4 py-4 space-y-3">
+        <div className="flex-1 overflow-y-auto px-6 py-8">
+          <div className="mx-auto w-full max-w-4xl space-y-4">
           {isLoading && (
             <div className="text-sm text-slate-500">Loading messages...</div>
           )}
 
           {!isLoading && messages.length === 0 && (
-            <div className="h-full flex items-center justify-center text-center text-sm text-slate-500 px-8">
+            <div className="flex min-h-[50vh] items-center justify-center text-center text-sm text-slate-500 px-8">
               Alfred messages, nudges, and system updates will appear here.
             </div>
           )}
@@ -155,6 +155,7 @@ export default function AlfredChat({ apiUrl, userNumber }) {
           ))}
 
           <div ref={messagesEndRef} />
+          </div>
         </div>
       </div>
 
