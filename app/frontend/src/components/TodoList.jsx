@@ -690,8 +690,8 @@ export default function TodoList({ apiUrl, userNumber }) {
     <div className="h-full overflow-auto">
       <div className="max-w-7xl mx-auto p-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
+        <div className="mb-6 grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_auto_1fr]">
+          <div className="min-w-0">
             <h1 className="text-3xl font-bold text-slate-800 hidden lg:block">
               {t('tasks.title')}
             </h1>
@@ -713,7 +713,12 @@ export default function TodoList({ apiUrl, userNumber }) {
               )}
             </p>
           </div>
-          <div className="flex flex-col items-end gap-2">
+          {!selectionMode && (
+            <div className="flex justify-center">
+              <DailyMtnNeedle score={todayMtnScore} completedTasks={todayCompletedTasks} />
+            </div>
+          )}
+          <div className="flex justify-end">
             <div className="flex flex-wrap justify-end gap-2">
               {sortOrder.length > 0 && !selectionMode && activeTab === 'tasks' && (
                 <button
@@ -780,9 +785,6 @@ export default function TodoList({ apiUrl, userNumber }) {
                 </>
               )}
             </div>
-            {!selectionMode && (
-              <DailyMtnNeedle score={todayMtnScore} completedTasks={todayCompletedTasks} />
-            )}
           </div>
         </div>
 
@@ -1119,13 +1121,12 @@ function DailyMtnNeedle({ score, completedTasks }) {
 
   return (
     <div
-      className="w-56 max-w-[56vw]"
+      className="w-64 max-w-[68vw]"
       title={label}
       aria-label={label}
     >
-      <div className="flex items-center justify-between text-[11px] font-medium text-slate-400">
-        <span>Move the needle</span>
-        <span>{formatMtnNumber(score)}</span>
+      <div className="text-center text-[11px] font-medium text-slate-400">
+        Move the needle
       </div>
       <div className="relative mt-1 h-5">
         <div className="absolute inset-x-0 top-2 grid h-2 grid-cols-5 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
