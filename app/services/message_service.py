@@ -78,7 +78,7 @@ def normalize_conversation_type(conversation_type: str | None) -> str | None:
 def message_types_for_conversation(conversation_type: str | None) -> list[str] | None:
     normalized = normalize_conversation_type(conversation_type)
     if normalized == "journal":
-        return ["journal"]
+        return ["journal", "chat"]
     if normalized == "goal_coaching":
         return ["goal_coaching", "goal_review"]
     if normalized == "leadership_coaching":

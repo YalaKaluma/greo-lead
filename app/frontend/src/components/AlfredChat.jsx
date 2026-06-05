@@ -102,10 +102,10 @@ export default function AlfredChat({ apiUrl, userNumber }) {
   return (
     <>
       <div
-        className={`fixed bottom-24 right-6 w-96 max-w-[calc(100vw-2rem)] bg-white rounded-lg shadow-2xl border border-gray-200 flex flex-col transition-all duration-200 ease-out z-50 ${
+        className={`fixed bottom-24 left-6 w-96 max-w-[calc(100vw-2rem)] bg-white rounded-lg shadow-2xl border border-gray-200 flex flex-col transition-all duration-200 ease-out z-50 ${
           isOpen ? 'scale-100 opacity-100' : 'scale-95 opacity-0 pointer-events-none'
         }`}
-        style={{ transformOrigin: 'bottom right', height: '560px' }}
+        style={{ transformOrigin: 'bottom left', height: '560px' }}
       >
         <div className="bg-slate-900 text-white px-5 py-4 rounded-t-lg flex items-center justify-between">
           <div>
@@ -160,15 +160,17 @@ export default function AlfredChat({ apiUrl, userNumber }) {
 
       <button
         onClick={() => setIsOpen((open) => !open)}
-        className="fixed bottom-6 right-6 z-50 flex min-w-[116px] items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-xl transition-colors hover:bg-slate-800"
+        className="fixed bottom-6 left-6 z-50 flex h-16 w-16 items-center justify-center rounded-full border-2 border-amber-300 bg-slate-950 p-1 shadow-xl transition-transform hover:scale-105"
         aria-label="Open Alfred messages"
       >
+        <img
+          src="/alfred-logo.png"
+          alt=""
+          className="h-full w-full rounded-full object-cover"
+          aria-hidden="true"
+        />
         {unreadCount > 0 && (
-          <span className="h-2.5 w-2.5 rounded-full bg-amber-400" aria-hidden="true" />
-        )}
-        <span>Alfred</span>
-        {unreadCount > 0 && (
-          <span className="rounded-full bg-amber-400 px-2 py-0.5 text-xs font-bold text-slate-950">
+          <span className="absolute -right-1 -top-1 flex h-6 min-w-6 items-center justify-center rounded-full bg-amber-400 px-1.5 text-xs font-bold text-slate-950 ring-2 ring-white">
             {unreadCount}
           </span>
         )}
