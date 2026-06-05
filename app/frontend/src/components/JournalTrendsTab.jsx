@@ -2,6 +2,12 @@ const WIDTH = 720;
 const HEIGHT = 240;
 const PADDING = 32;
 
+const formatShortDate = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(`${dateString}T00:00:00`);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
 const formatNumber = (value, fallback = '-') => {
   if (value === null || value === undefined) return fallback;
   return Number(value).toFixed(1);
@@ -23,6 +29,39 @@ const buildPath = (points, key) => {
     .join(' ');
 };
 
+const buildDateTicks = (points) => {
+  if (!points.length) return [];
+  const tickCount = Math.min(6, points.length);
+  const used = new Set();
+
+  return Array.from({ length: tickCount })
+    .map((_, index) => Math.round((index / Math.max(tickCount - 1, 1)) * (points.length - 1)))
+    .filter((pointIndex) => {
+      if (used.has(pointIndex)) return false;
+      used.add(pointIndex);
+      return true;
+    })
+    .map((pointIndex) => ({
+      index: pointIndex,
+      date: points[pointIndex]?.date,
+      x: PADDING + (pointIndex / Math.max(points.length - 1, 1)) * (WIDTH - PADDING * 2),
+    }));
+};
+
+const weekdayIndexFromDate = (dateString) => {
+  const date = new Date(`${dateString}T00:00:00`);
+  return (date.getDay() + 6) % 7;
+};
+
+const colorForDepth = (score, entryCount) => {
+  if (!entryCount || score === null || score === undefined) return 'bg-slate-100';
+  if (score >= 8) return 'bg-emerald-700';
+  if (score >= 6.5) return 'bg-emerald-500';
+  if (score >= 5) return 'bg-emerald-300';
+  if (score >= 3) return 'bg-emerald-100';
+  return 'bg-slate-200';
+};
+
 function KpiCard({ label, value, detail, tone = 'slate' }) {
   const toneClass = tone === 'green' ? 'text-emerald-700' : tone === 'blue' ? 'text-blue-700' : 'text-slate-900';
 
@@ -40,6 +79,7 @@ function DepthTrendChart({ data }) {
   const dailyPath = buildPath(points, 'daily_average');
   const weeklyPath = buildPath(points, 'weekly_average');
   const rollingPath = buildPath(points, 'rolling_30_day_average');
+  const dateTicks = buildDateTicks(points);
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
@@ -63,10 +103,94 @@ function DepthTrendChart({ data }) {
               </g>
             );
           })}
+          <line x1={PADDING} x2={WIDTH - PADDING} y1={HEIGHT - PADDING} y2={HEIGHT - PADDING} stroke="#cbd5e1" />
+          {dateTicks.map((tick) => (
+            <g key={`${tick.index}-${tick.date}`}>
+              <line x1={tick.x} x2={tick.x} y1={HEIGHT - PADDING} y2={HEIGHT - PADDING + 4} stroke="#94a3b8" />
+              <text
+                x={tick.x}
+                y={HEIGHT - 10}
+                textAnchor="middle"
+                className="fill-slate-400 text-[10px]"
+              >
+                {formatShortDate(tick.date)}
+              </text>
+            </g>
+          ))}
           <path d={dailyPath} fill="none" stroke="#cbd5e1" strokeWidth="2" />
           <path d={weeklyPath} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" />
           <path d={rollingPath} fill="none" stroke="#059669" strokeWidth="3" strokeLinecap="round" />
         </svg>
+      </div>
+    </div>
+  );
+}
+
+function ReflectionDepthHeatmap({ data }) {
+  const days = (Array.isArray(data) ? data : []).map((day) => ({
+    ...day,
+    weekday: weekdayIndexFromDate(day.date),
+  }));
+  const weeks = [];
+
+  days.forEach((day, index) => {
+    if (index === 0 || day.weekday === 0) {
+      weeks.push([]);
+    }
+    weeks[weeks.length - 1].push(day);
+  });
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-slate-800">Reflection Depth Heatmap</h2>
+        <span className="text-xs text-slate-500">Last 90 days</span>
+      </div>
+
+      <div className="mt-4 overflow-x-auto pb-1">
+        <div className="min-w-[420px] space-y-1">
+          <div className="grid grid-cols-7 gap-1 pl-14 text-center text-[11px] text-slate-400">
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((label) => (
+              <div key={label}>{label}</div>
+            ))}
+          </div>
+          {weeks.map((week, weekIndex) => (
+            <div key={weekIndex} className="grid grid-cols-[48px_repeat(7,1fr)] items-center gap-1">
+              <div className="text-right text-[11px] text-slate-400">Week {weekIndex + 1}</div>
+              {Array.from({ length: 7 }).map((_, weekday) => {
+                const day = week.find((item) => item.weekday === weekday);
+                if (!day) {
+                  return <div key={`${weekIndex}-${weekday}`} className="h-4 min-w-4" />;
+                }
+
+                const score = day.daily_average;
+                const label = score === null || score === undefined
+                  ? 'No scored entries'
+                  : `${formatNumber(score)} depth score from ${day.entry_count} entr${day.entry_count === 1 ? 'y' : 'ies'}`;
+
+                return (
+                  <div
+                    key={day.date}
+                    title={`${formatShortDate(day.date)}: ${label}`}
+                    className={`h-4 min-w-4 rounded-sm ${colorForDepth(score, day.entry_count)}`}
+                  />
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-end gap-2 text-xs text-slate-500">
+        <span>No entry</span>
+        <span className="h-3 w-3 rounded-sm bg-slate-100" />
+        <span>Low</span>
+        <span className="h-3 w-3 rounded-sm bg-slate-200" />
+        <span className="h-3 w-3 rounded-sm bg-emerald-100" />
+        <span className="h-3 w-3 rounded-sm bg-emerald-300" />
+        <span className="h-3 w-3 rounded-sm bg-emerald-500" />
+        <span className="h-3 w-3 rounded-sm bg-emerald-700" />
+        <span>High</span>
       </div>
     </div>
   );
@@ -119,6 +243,7 @@ export default function JournalTrendsTab({ trends, loading, error }) {
       </div>
 
       <DepthTrendChart data={trends?.trend_chart} />
+      <ReflectionDepthHeatmap data={trends?.trend_chart} />
 
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         <h2 className="text-lg font-semibold text-slate-800">Alfred Reflection Coach</h2>
