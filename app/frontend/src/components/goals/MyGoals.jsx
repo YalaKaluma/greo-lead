@@ -45,6 +45,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const [goals, setGoals] = useState([]);
   const [linkedTasks, setLinkedTasks] = useState({});
   const [taskCounts, setTaskCounts] = useState({});
+  const [values, setValues] = useState([]);
   const [reviewSessions, setReviewSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -121,6 +122,18 @@ export default function MyGoals({ apiUrl, userNumber }) {
     }
   };
 
+  const fetchValues = async () => {
+    try {
+      const res = await axios.get(`${apiUrl}/api/journey/values`, {
+        params: { user_number: userNumber }
+      });
+      setValues(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error('Error fetching values:', err);
+      setValues([]);
+    }
+  };
+
   const fetchGoalRoadmapStatuses = async (visionGoalId = expandedGoalId) => {
     if (!visionGoalId) {
       setOutcomeStatusByGoalId({});
@@ -149,6 +162,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
   useEffect(() => {
     const loadData = async () => {
       await fetchGoals();
+      await fetchValues();
       await fetchAllLinkedTasks();
       await fetchGoalReviews();
     };
@@ -565,6 +579,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
           <GoalEditPanel
             goal={editingGoal}
             goals={goals}
+            values={values}
             linkedTasks={linkedTasks[editingGoal.id] || []}
             onClose={handleClosePanel}
             onSave={handleUpdateGoal}
@@ -577,6 +592,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
       {showCreateModal && (
         <GoalCreateModal
           goals={goals}
+          values={values}
           initialGoalLevel={createGoalLevel}
           parentGoalId={parentGoalForChild}
           onClose={() => {

@@ -81,8 +81,8 @@ dimensions:
         behavioral:
           title: Behavioral Evidence
           prompt: Explicitly link your vision to values and strengths.
-          signals: [vision_linked_to_values, vision_linked_to_strengths]
-          completion_hint: Alfred looks for explicit links between vision, values, and strengths over time.
+          signals: [vision_linked_to_values]
+          completion_hint: Alfred checks that each completed vision has at least one associated value.
       brown:
         criteria: Develop the wisdom and clarity necessary to help others find alignment, purpose, and intentional direction in their own lives.
         reflection:
@@ -166,9 +166,9 @@ dimensions:
           completion_hint: Practice trust, delegation, and follow-up conversation.
         behavioral:
           title: Behavioral Evidence
-          prompt: Complete 2 journal reflections on how other leaders impact you and complete at least 2 team reviews/check-ins in Alfred.
-          signals: [two_leadership_impact_journals, two_team_reviews]
-          completion_hint: Alfred looks for reflection on leadership models and repeated team check-ins.
+          prompt: Complete at least 2 team reviews/check-ins in Alfred.
+          signals: [two_team_reviews]
+          completion_hint: Alfred counts completed team reviews/check-ins in the background.
       brown:
         criteria: Integrate emotional intelligence, trust, delegation, communication, and leadership presence into a stable and authentic relational operating system.
         reflection:
@@ -252,9 +252,9 @@ dimensions:
           completion_hint: Make one structural change that reduces recurring distraction.
         behavioral:
           title: Behavioral Evidence
-          prompt: Learn to flag move-the-needle actions and identify actions you most procrastinate on, including what they have in common.
-          signals: [move_the_needle_actions_flagged, procrastinated_actions_identified, procrastination_patterns_compared]
-          completion_hint: Alfred looks for clearer distinction between leverage work and avoidance patterns.
+          prompt: Review at least 5 MTN classifications to teach the system how you prioritize.
+          signals: [mtn_classifications_reviewed]
+          completion_hint: Alfred counts MTN classification reviews in the background.
       brown:
         criteria: Develop the ability to help others improve their execution, prioritization, discipline, and operational effectiveness through systems, coaching, and example.
         reflection:

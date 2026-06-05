@@ -5,13 +5,14 @@ import { getGoalLevelLabel, normalizeGoalLevel } from '../../utils/goalTaxonomy'
    MAIN COMPONENT
    ========================================================= */
 
-export default function GoalCreateModal({ goals, initialGoalLevel = 'vision', parentGoalId = null, onClose, onCreate }) {
+export default function GoalCreateModal({ goals, values = [], initialGoalLevel = 'vision', parentGoalId = null, onClose, onCreate }) {
   const [formData, setFormData] = useState({
     title: '',
     goal_text: '',
     why: '',
     time_horizon: initialGoalLevel,
-    parent_goal_id: parentGoalId
+    parent_goal_id: parentGoalId,
+    value_ids: []
   });
 
   useEffect(() => {
@@ -50,6 +51,16 @@ export default function GoalCreateModal({ goals, initialGoalLevel = 'vision', pa
     }));
   };
 
+  const toggleValue = (valueId) => {
+    setFormData(prev => {
+      const currentIds = prev.value_ids || [];
+      const nextIds = currentIds.includes(valueId)
+        ? currentIds.filter(id => id !== valueId)
+        : [...currentIds, valueId];
+      return { ...prev, value_ids: nextIds };
+    });
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.title.trim()) {
@@ -60,7 +71,10 @@ export default function GoalCreateModal({ goals, initialGoalLevel = 'vision', pa
       alert(`Please select a parent ${selectedLevel === 'pillar' ? 'vision' : 'pillar'}`);
       return;
     }
-    onCreate(formData);
+    onCreate({
+      ...formData,
+      value_ids: selectedLevel === 'vision' ? formData.value_ids : []
+    });
   };
 
   const handleBackdropClick = (e) => {
@@ -204,6 +218,37 @@ export default function GoalCreateModal({ goals, initialGoalLevel = 'vision', pa
               </button>
             </div>
           </div>
+
+          {selectedLevel === 'vision' && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Associated Values
+              </label>
+              {values.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {values.map(value => {
+                    const selected = (formData.value_ids || []).includes(value.id);
+                    return (
+                      <button
+                        key={value.id}
+                        type="button"
+                        onClick={() => toggleValue(value.id)}
+                        className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                          selected
+                            ? 'border-blue-500 bg-blue-50 text-blue-700'
+                            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                        }`}
+                      >
+                        {value.title || value.value_text}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">Add values in My Leadership Journey before linking them to a vision.</p>
+              )}
+            </div>
+          )}
 
           {/* Parent selector */}
           {selectedLevel !== 'vision' && (

@@ -6,13 +6,14 @@ import { getGoalLevelLabel, normalizeGoalLevel } from '../../utils/goalTaxonomy'
    MAIN COMPONENT
    ========================================================= */
 
-export default function GoalEditPanel({ goal, goals, linkedTasks, onClose, onSave, onDelete }) {
+export default function GoalEditPanel({ goal, goals, values = [], linkedTasks, onClose, onSave, onDelete }) {
   const [formData, setFormData] = useState({
     title: '',
     goal_text: '',
     why: '',
     time_horizon: 'outcome',
-    parent_goal_id: null
+    parent_goal_id: null,
+    value_ids: []
   });
 
   // Initialize form data when goal prop changes
@@ -23,7 +24,8 @@ export default function GoalEditPanel({ goal, goals, linkedTasks, onClose, onSav
         goal_text: goal.goal_text || '',
         why: goal.why || '',
         time_horizon: normalizeGoalLevel(goal.time_horizon),
-        parent_goal_id: goal.parent_goal_id || null
+        parent_goal_id: goal.parent_goal_id || null,
+        value_ids: Array.isArray(goal.value_ids) ? goal.value_ids : []
       });
     }
   }, [goal]);
@@ -42,7 +44,21 @@ export default function GoalEditPanel({ goal, goals, linkedTasks, onClose, onSav
       alert(`Please enter a ${getGoalLevelLabel(formData.time_horizon).toLowerCase()} title`);
       return;
     }
-    onSave(goal.id, formData);
+    const selectedLevel = normalizeGoalLevel(formData.time_horizon);
+    onSave(goal.id, {
+      ...formData,
+      value_ids: selectedLevel === 'vision' ? formData.value_ids : []
+    });
+  };
+
+  const toggleValue = (valueId) => {
+    setFormData(prev => {
+      const currentIds = prev.value_ids || [];
+      const nextIds = currentIds.includes(valueId)
+        ? currentIds.filter(id => id !== valueId)
+        : [...currentIds, valueId];
+      return { ...prev, value_ids: nextIds };
+    });
   };
 
   const handleDelete = () => {
@@ -161,6 +177,37 @@ export default function GoalEditPanel({ goal, goals, linkedTasks, onClose, onSav
             </button>
           </div>
         </div>
+
+        {normalizeGoalLevel(formData.time_horizon) === 'vision' && (
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Associated Values
+            </label>
+            {values.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {values.map(value => {
+                  const selected = (formData.value_ids || []).includes(value.id);
+                  return (
+                    <button
+                      key={value.id}
+                      type="button"
+                      onClick={() => toggleValue(value.id)}
+                      className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                        selected
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      {value.title || value.value_text}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">Add values in My Leadership Journey before linking them to a vision.</p>
+            )}
+          </div>
+        )}
 
         {/* Parent item */}
         <div>

@@ -275,6 +275,7 @@ class JourneyGoal(Base):
 
     # Relationship for parent/child goals
     children = relationship("JourneyGoal", backref="parent", remote_side=[id])
+    value_links = relationship("JourneyGoalValue", back_populates="goal", cascade="all, delete-orphan")
 
 
 class VisionRoadmapWave(Base):
@@ -619,6 +620,26 @@ class JourneyValue(Base):
     why = Column(Text, nullable=True)
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    goal_links = relationship("JourneyGoalValue", back_populates="value", cascade="all, delete-orphan")
+
+
+class JourneyGoalValue(Base):
+    __tablename__ = "journey_goal_values"
+    __table_args__ = (
+        UniqueConstraint("goal_id", "value_id", name="uq_journey_goal_values_goal_value"),
+        Index("ix_journey_goal_values_goal", "goal_id"),
+        Index("ix_journey_goal_values_value", "value_id"),
+        Index("ix_journey_goal_values_user", "user_number"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True, nullable=False)
+    goal_id = Column(Integer, ForeignKey("journey_goals.id", ondelete="CASCADE"), nullable=False)
+    value_id = Column(Integer, ForeignKey("journey_values.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    goal = relationship("JourneyGoal", back_populates="value_links")
+    value = relationship("JourneyValue", back_populates="goal_links")
 
 
 class WaitlistEntry(Base):

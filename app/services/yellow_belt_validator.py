@@ -8,11 +8,16 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     Habit,
+    HabitCompletion,
     JourneyGoal,
+    JourneyGoalValue,
     JourneyPerson,
     MessageSignalFlag,
+    RelationshipReview,
     Task,
+    TaskPriorityDecision,
 )
+from app.services.habits.habit_trend_service import calculate_streak
 
 
 YELLOW_BELT_DIMENSION_SIGNALS = {
@@ -32,6 +37,33 @@ YELLOW_BELT_TRIAL_SIGNALS = {
         "real_world": ["three_energy_level_journals"],
         "behavioral": ["high_energy_habits_identified"],
     },
+}
+
+GREEN_BELT_DIMENSION_SIGNALS = {
+    "vision": ["vision_linked_to_values"],
+    "people": ["two_team_reviews"],
+    "execute": ["mtn_classifications_reviewed"],
+    "energy": ["seven_day_habit_streak", "three_energy_level_and_source_journals"],
+    "learning": [
+        "seven_behavior_change_journals",
+        "self_awareness_reflections",
+        "scars_failures_behavior_reflections",
+    ],
+}
+
+GREEN_BELT_TRIAL_SIGNALS = {
+    dimension_id: {"behavioral": signals}
+    for dimension_id, signals in GREEN_BELT_DIMENSION_SIGNALS.items()
+}
+
+BELT_DIMENSION_SIGNALS = {
+    "yellow": YELLOW_BELT_DIMENSION_SIGNALS,
+    "green": GREEN_BELT_DIMENSION_SIGNALS,
+}
+
+BELT_TRIAL_SIGNALS = {
+    "yellow": YELLOW_BELT_TRIAL_SIGNALS,
+    "green": GREEN_BELT_TRIAL_SIGNALS,
 }
 
 SIGNAL_CONFIDENCE_THRESHOLD = 0.75
@@ -341,6 +373,161 @@ def validate_scars_failures_behavior_reflections(db: Session, user_number: str) 
     )
 
 
+def validate_vision_linked_to_values(db: Session, user_number: str) -> dict[str, Any]:
+    visions = [
+        goal
+        for goal in db.query(JourneyGoal).filter(JourneyGoal.user_number == user_number).all()
+        if (goal.time_horizon or "").strip().lower() in {"vision", "long", "long_term"}
+        and _has_text(goal.goal_text, min_chars=20)
+    ]
+    linked_goal_ids = {
+        link.goal_id
+        for link in db.query(JourneyGoalValue).filter(JourneyGoalValue.user_number == user_number).all()
+    }
+    complete = [vision for vision in visions if vision.id in linked_goal_ids]
+    missing = [
+        {"id": vision.id, "title": vision.title, "missing": ["associated values"]}
+        for vision in visions
+        if vision.id not in linked_goal_ids
+    ]
+    passed = bool(visions) and len(complete) == len(visions)
+    return _signal_result(
+        "vision_linked_to_values",
+        passed,
+        len(visions) or 1,
+        len(complete),
+        (
+            "Every completed vision has at least one associated value."
+            if passed
+            else "Add at least one existing value to each completed vision."
+        ),
+        [_evidence_item(item, ["title", "goal_text", "time_horizon", "updated_at"]) for item in complete[:10]],
+        missing[:10],
+    )
+
+
+def validate_two_team_reviews(db: Session, user_number: str) -> dict[str, Any]:
+    all_reviews = db.query(RelationshipReview).filter(
+        RelationshipReview.user_number == user_number,
+    ).order_by(RelationshipReview.review_date.desc()).all()
+    reviews = [
+        review
+        for review in all_reviews
+        if any(
+            _has_text(getattr(review, field, None))
+            for field in [
+                "last_meaningful_interaction",
+                "mutual_value",
+                "recent_interactions",
+                "current_dynamics",
+                "next_steps",
+                "how_to_strengthen",
+                "what_to_appreciate",
+                "what_to_address",
+                "insights",
+                "patterns_noticed",
+                "personal_growth_needed",
+            ]
+        )
+        or review.relationship_strength is not None
+    ]
+    return _signal_result(
+        "two_team_reviews",
+        len(reviews) >= 2,
+        2,
+        len(reviews),
+        (
+            f"You have completed {len(reviews)} team reviews/check-ins."
+            if len(reviews) >= 2
+            else f"Complete {max(2 - len(reviews), 0)} more team reviews/check-ins in Alfred."
+        ),
+        [_evidence_item(item, ["person_id", "review_date", "review_type", "insights", "updated_at"]) for item in reviews[:10]],
+    )
+
+
+def validate_mtn_classifications_reviewed(db: Session, user_number: str) -> dict[str, Any]:
+    decisions = db.query(TaskPriorityDecision).filter(
+        TaskPriorityDecision.user_number == user_number,
+        TaskPriorityDecision.user_action.in_(["accept", "reject", "replace"]),
+    ).order_by(TaskPriorityDecision.decided_at.desc()).all()
+    return _signal_result(
+        "mtn_classifications_reviewed",
+        len(decisions) >= 5,
+        5,
+        len(decisions),
+        (
+            f"You have reviewed {len(decisions)} MTN classifications."
+            if len(decisions) >= 5
+            else f"Review {max(5 - len(decisions), 0)} more MTN classifications to teach Alfred how you prioritize."
+        ),
+        [_evidence_item(item, ["task_id", "action_recommended", "user_action", "decided_at"]) for item in decisions[:10]],
+    )
+
+
+def _habit_streak_result(db: Session, user_number: str, signal: str, required: int) -> dict[str, Any]:
+    habits = db.query(Habit).filter(Habit.user_number == user_number, Habit.is_active == True).all()
+    habit_ids = [habit.id for habit in habits]
+    completions_by_habit: dict[int, list[HabitCompletion]] = {habit.id: [] for habit in habits}
+    if habit_ids:
+        completions = db.query(HabitCompletion).filter(HabitCompletion.habit_id.in_(habit_ids)).all()
+        for completion in completions:
+            completions_by_habit.setdefault(completion.habit_id, []).append(completion)
+
+    today = date.today()
+    streak_rows = [
+        {
+            "id": habit.id,
+            "title": habit.title,
+            "frequency": habit.frequency,
+            "streak": calculate_streak(completions_by_habit.get(habit.id, []), habit.frequency, today),
+        }
+        for habit in habits
+    ]
+    best_streak = max((row["streak"] for row in streak_rows), default=0)
+    return _signal_result(
+        signal,
+        best_streak >= required,
+        required,
+        best_streak,
+        (
+            f"Your longest active habit streak is {best_streak} days."
+            if best_streak >= required
+            else f"Build one active habit streak to at least {required} days."
+        ),
+        sorted(streak_rows, key=lambda row: row["streak"], reverse=True)[:10],
+    )
+
+
+def validate_seven_day_habit_streak(db: Session, user_number: str) -> dict[str, Any]:
+    return _habit_streak_result(db, user_number, "seven_day_habit_streak", 7)
+
+
+def validate_twenty_one_day_habit_streak(db: Session, user_number: str) -> dict[str, Any]:
+    return _habit_streak_result(db, user_number, "twenty_one_day_habit_streak", 21)
+
+
+def validate_three_energy_level_and_source_journals(db: Session, user_number: str) -> dict[str, Any]:
+    return _signal_flag_result(
+        db,
+        user_number,
+        "three_energy_level_and_source_journals",
+        ["energy_awareness"],
+        3,
+        "You have completed {actual} energy-level and energy-source journal reflections. Add {remaining} more.",
+    )
+
+
+def validate_seven_behavior_change_journals(db: Session, user_number: str) -> dict[str, Any]:
+    return _signal_flag_result(
+        db,
+        user_number,
+        "seven_behavior_change_journals",
+        ["behavior_change_reflection"],
+        7,
+        "You have completed {actual} behavior-change journal reflections. Add {remaining} more.",
+    )
+
+
 YELLOW_BELT_SIGNAL_VALIDATORS: dict[str, Callable[[Session, str], dict[str, Any]]] = {
     "vision_completed": validate_vision_completed,
     "values_strengths_energy_journals": validate_values_strengths_energy_journals,
@@ -353,6 +540,15 @@ YELLOW_BELT_SIGNAL_VALIDATORS: dict[str, Callable[[Session, str], dict[str, Any]
     "three_behavior_change_journals": validate_three_behavior_change_journals,
     "self_awareness_reflections": validate_self_awareness_reflections,
     "scars_failures_behavior_reflections": validate_scars_failures_behavior_reflections,
+    "vision_linked_to_values": validate_vision_linked_to_values,
+    "two_team_reviews": validate_two_team_reviews,
+    "two_team_reviews_needs_style": validate_two_team_reviews,
+    "mtn_classifications_reviewed": validate_mtn_classifications_reviewed,
+    "move_the_needle_actions_flagged": validate_mtn_classifications_reviewed,
+    "seven_day_habit_streak": validate_seven_day_habit_streak,
+    "twenty_one_day_habit_streak": validate_twenty_one_day_habit_streak,
+    "three_energy_level_and_source_journals": validate_three_energy_level_and_source_journals,
+    "seven_behavior_change_journals": validate_seven_behavior_change_journals,
 }
 
 
@@ -372,8 +568,66 @@ def _next_action_for_signal(signal: dict[str, Any]) -> Optional[str]:
         "three_behavior_change_journals": f"Add {remaining} more journal reflections about behavior change or limiting patterns.",
         "self_awareness_reflections": "Add one journal reflection that names what you noticed about your own patterns.",
         "scars_failures_behavior_reflections": f"Add {remaining} more journal reflections connecting scars or failures to current behavior.",
+        "vision_linked_to_values": "Add at least one existing value to each completed vision.",
+        "two_team_reviews": f"Complete {remaining} more team reviews/check-ins in Alfred.",
+        "two_team_reviews_needs_style": f"Complete {remaining} more team reviews/check-ins in Alfred.",
+        "mtn_classifications_reviewed": f"Review {remaining} more MTN classifications.",
+        "move_the_needle_actions_flagged": f"Review {remaining} more MTN classifications.",
+        "seven_day_habit_streak": "Build one active habit streak to at least 7 days.",
+        "twenty_one_day_habit_streak": "Build one active habit streak to at least 21 days.",
+        "three_energy_level_and_source_journals": f"Add {remaining} more journal reflections about your energy level and what drove it.",
+        "seven_behavior_change_journals": f"Add {remaining} more journal reflections about behavior change or limiting patterns.",
     }
     return actions.get(signal.get("signal"))
+
+
+def validate_belt_dimension(db: Session, user_number: str, belt: str, dimension_id: str) -> dict[str, Any]:
+    belt_id = (belt or "").strip().lower()
+    signal_names = BELT_DIMENSION_SIGNALS.get(belt_id, {}).get(dimension_id, [])
+    signals = []
+    for signal in signal_names:
+        validator = YELLOW_BELT_SIGNAL_VALIDATORS.get(signal)
+        if validator:
+            signals.append(validator(db, user_number))
+
+    result = _aggregate_signal_results(belt_id, dimension_id, signals)
+    result["trial_types"] = {
+        trial_type: validate_belt_trial_type(db, user_number, belt_id, dimension_id, trial_type)
+        for trial_type in BELT_TRIAL_SIGNALS.get(belt_id, {}).get(dimension_id, {})
+    }
+    return result
+
+
+def validate_belt_trial_type(db: Session, user_number: str, belt: str, dimension_id: str, trial_type: str) -> dict[str, Any]:
+    belt_id = (belt or "").strip().lower()
+    signal_names = BELT_TRIAL_SIGNALS.get(belt_id, {}).get(dimension_id, {}).get(trial_type)
+    if not signal_names:
+        signal_names = BELT_DIMENSION_SIGNALS.get(belt_id, {}).get(dimension_id, []) if trial_type == "behavioral" else []
+
+    signals = []
+    for signal in signal_names:
+        validator = YELLOW_BELT_SIGNAL_VALIDATORS.get(signal)
+        if validator:
+            signals.append(validator(db, user_number))
+
+    return _aggregate_signal_results(belt_id, dimension_id, signals, trial_type=trial_type)
+
+
+def validate_belt(db: Session, user_number: str, belt: str) -> dict[str, Any]:
+    belt_id = (belt or "").strip().lower()
+    dimensions = [
+        validate_belt_dimension(db, user_number, belt_id, dimension_id)
+        for dimension_id in BELT_DIMENSION_SIGNALS.get(belt_id, {})
+    ]
+    passed_count = sum(1 for dimension in dimensions if dimension["passed"])
+    total = len(dimensions)
+    return {
+        "belt": belt_id,
+        "passed": total > 0 and passed_count == total,
+        "completion_percentage": round((passed_count / total) * 100) if total else 0,
+        "dimensions": dimensions,
+        "next_action": next((dimension["next_action"] for dimension in dimensions if dimension["next_action"]), None),
+    }
 
 
 def validate_yellow_belt_dimension(db: Session, user_number: str, dimension_id: str) -> dict[str, Any]:

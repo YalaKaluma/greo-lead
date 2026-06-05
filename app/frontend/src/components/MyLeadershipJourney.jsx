@@ -636,12 +636,18 @@ function getTrialTypeValidation(dimensionId, targetBeltId, trialType, beltValida
 
 function getSignalUnit(signal) {
   if (signal?.signal === "high_energy_habits_identified") return "habits";
+  if (signal?.signal === "seven_day_habit_streak" || signal?.signal === "twenty_one_day_habit_streak") return "days";
   if (signal?.signal === "three_energy_level_journals") return "journals";
+  if (signal?.signal === "three_energy_level_and_source_journals") return "journals";
+  if (signal?.signal === "two_team_reviews" || signal?.signal === "two_team_reviews_needs_style") return "check-ins";
+  if (signal?.signal === "mtn_classifications_reviewed" || signal?.signal === "move_the_needle_actions_flagged") return "reviews";
+  if (signal?.signal === "vision_linked_to_values") return "visions";
   if (signal?.signal === "five_team_members_entered") return "team members";
   if (signal?.signal === "tasks_consistently_entered" || signal?.signal === "tasks_maintained") return "tasks";
   if (
     signal?.signal === "values_strengths_energy_journals" ||
     signal?.signal === "three_behavior_change_journals" ||
+    signal?.signal === "seven_behavior_change_journals" ||
     signal?.signal === "scars_failures_behavior_reflections"
   ) return "reflections";
   return null;
@@ -650,7 +656,13 @@ function getSignalUnit(signal) {
 function getPrimaryProgressSignal(signals) {
   const priority = [
     "scars_failures_behavior_reflections",
+    "seven_behavior_change_journals",
     "three_behavior_change_journals",
+    "three_energy_level_and_source_journals",
+    "seven_day_habit_streak",
+    "mtn_classifications_reviewed",
+    "two_team_reviews",
+    "vision_linked_to_values",
     "values_strengths_energy_journals",
     "three_energy_level_journals",
     "five_team_members_entered",
@@ -947,23 +959,28 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
     if (apiUrl == null || !userNumber) return;
 
     let cancelled = false;
-    const fetchYellowValidation = async () => {
+    const fetchBeltValidations = async () => {
       try {
-        const response = await axios.get(`${apiUrl}/api/journey/validation/yellow`, {
-          params: { user_number: userNumber },
-        });
+        const [yellowResponse, greenResponse] = await Promise.allSettled(
+          ["yellow", "green"].map((belt) =>
+            axios.get(`${apiUrl}/api/journey/validation/${belt}`, {
+              params: { user_number: userNumber },
+            })
+          )
+        );
         if (!cancelled) {
           setBeltValidations((current) => ({
             ...current,
-            yellow: response.data || null,
+            yellow: yellowResponse.status === "fulfilled" ? yellowResponse.value.data || null : current.yellow,
+            green: greenResponse.status === "fulfilled" ? greenResponse.value.data || null : current.green,
           }));
         }
       } catch (error) {
-        console.error("Failed to load Yellow Belt validation", error);
+        console.error("Failed to load belt validation", error);
       }
     };
 
-    fetchYellowValidation();
+    fetchBeltValidations();
     return () => {
       cancelled = true;
     };
@@ -1583,6 +1600,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           topic={editingSubdomainTopic}
           item={editingSubdomainItem}
           promptConfig={subdomainPromptConfig}
+          values={topicData.values || []}
           saving={savingSubdomainItem}
           onClose={() => {
             setEditingSubdomainItem(null);
@@ -3327,9 +3345,15 @@ function EvidenceItem({ item, collapsible, onClick }) {
   );
 }
 
-function SubdomainItemModal({ topic, item, promptConfig, saving, onClose, onSave, onDelete }) {
-  const [formData, setFormData] = useState(item || {});
+function SubdomainItemModal({ topic, item, promptConfig, values = [], saving, onClose, onSave, onDelete }) {
   const fields = TOPIC_FORM_FIELDS[topic.label] || [];
+  const [formData, setFormData] = useState(() => fields.reduce((data, field) => {
+    if (data[field.name] === undefined && field.defaultValue !== undefined) {
+      data[field.name] = field.defaultValue;
+    }
+    return data;
+  }, { ...(item || {}), value_ids: Array.isArray(item?.value_ids) ? item.value_ids : [] }));
+  const isVisionTopic = topic?.id === "vision";
   const titleField = TOPICS_REQUIRING_TITLES.has(topic.id)
     ? fields.find((field) => field.name === "title")
     : null;
@@ -3340,6 +3364,16 @@ function SubdomainItemModal({ topic, item, promptConfig, saving, onClose, onSave
 
   const handleChange = (fieldName, value) => {
     setFormData((current) => ({ ...current, [fieldName]: value }));
+  };
+
+  const toggleValue = (valueId) => {
+    setFormData((current) => {
+      const currentIds = current.value_ids || [];
+      const nextIds = currentIds.includes(valueId)
+        ? currentIds.filter((id) => id !== valueId)
+        : [...currentIds, valueId];
+      return { ...current, value_ids: nextIds };
+    });
   };
 
   const handleSubmit = () => {
@@ -3358,6 +3392,10 @@ function SubdomainItemModal({ topic, item, promptConfig, saving, onClose, onSave
       if (value !== undefined) data[field.name] = value;
       return data;
     }, {});
+
+    if (isVisionTopic) {
+      payload.value_ids = formData.value_ids || [];
+    }
 
     onSave(payload);
   };
@@ -3411,6 +3449,34 @@ function SubdomainItemModal({ topic, item, promptConfig, saving, onClose, onSave
                 className="mt-2 w-full resize-y rounded-lg border border-slate-300 px-4 py-3 text-sm leading-6 outline-none focus:border-slate-700 focus:ring-2 focus:ring-slate-200"
               />
             </label>
+          )}
+          {isVisionTopic && (
+            <div className="mt-5">
+              <span className="text-sm font-semibold text-slate-800">Associated Values</span>
+              {values.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {values.map((value) => {
+                    const selected = (formData.value_ids || []).includes(value.id);
+                    return (
+                      <button
+                        key={value.id}
+                        type="button"
+                        onClick={() => toggleValue(value.id)}
+                        className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                          selected
+                            ? "border-blue-500 bg-blue-50 text-blue-700"
+                            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                        }`}
+                      >
+                        {value.title || value.value_text}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-slate-500">Add values first, then link them to this vision.</p>
+              )}
+            </div>
           )}
         </div>
 

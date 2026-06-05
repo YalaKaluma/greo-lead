@@ -12,6 +12,7 @@ from app.models import (
     JourneyFailure,
     JourneyOpportunity,
     JourneyValue,
+    JourneyGoalValue,
     JourneyAchievement,
     JourneyEnergySource,
     JourneyEnergyDrain,
@@ -34,7 +35,7 @@ from app.models import (
     LeadershipCoachingSession,
     User,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime, date
 from typing import Optional, Any
 from pathlib import Path
@@ -44,6 +45,10 @@ import json
 from app.services.people_review_service import PeopleReviewService
 from app.models import GoalReviewSession
 from app.services.yellow_belt_validator import (
+    BELT_DIMENSION_SIGNALS,
+    validate_belt,
+    validate_belt_dimension,
+    validate_belt_trial_type,
     validate_yellow_belt,
     validate_yellow_belt_dimension,
     validate_yellow_belt_trial_type,
@@ -131,6 +136,10 @@ def goal_level_variants(value: Optional[str]) -> list[str]:
 
 
 def serialize_goal(goal: JourneyGoal) -> dict[str, Any]:
+    value_links = sorted(
+        getattr(goal, "value_links", []) or [],
+        key=lambda link: ((link.value.title if link.value else "") or "").lower(),
+    )
     return {
         "id": goal.id,
         "user_number": goal.user_number,
@@ -141,6 +150,17 @@ def serialize_goal(goal: JourneyGoal) -> dict[str, Any]:
         "legacy_time_horizon": LEGACY_LEVEL_ALIASES[normalize_goal_level(goal.time_horizon)],
         "parent_goal_id": goal.parent_goal_id,
         "sort_order": goal.sort_order,
+        "value_ids": [link.value_id for link in value_links],
+        "linked_values": [
+            {
+                "id": link.value.id,
+                "title": link.value.title,
+                "value_text": link.value.value_text,
+                "why": link.value.why,
+            }
+            for link in value_links
+            if link.value
+        ],
         "first_seen_at": goal.first_seen_at,
         "updated_at": goal.updated_at,
     }
@@ -153,6 +173,7 @@ class GoalCreate(BaseModel):
     time_horizon: Optional[str] = "pillar"
     parent_goal_id: Optional[int] = None
     sort_order: Optional[int] = None
+    value_ids: Optional[list[int]] = None
 
 
 class GoalUpdate(BaseModel):
@@ -162,6 +183,7 @@ class GoalUpdate(BaseModel):
     time_horizon: Optional[str] = None
     parent_goal_id: Optional[int] = None
     sort_order: Optional[int] = None
+    value_ids: Optional[list[int]] = None
 
 
 class GoalReorderRequest(BaseModel):
@@ -337,7 +359,7 @@ def get_behavioral_trial_status(db: Session, user_number: str, dimension_id: str
         JourneyBeltTrial.target_belt == belt_id,
         JourneyBeltTrial.trial_type == "behavioral",
     ).first()
-    if stored and stored.status and belt_id != "yellow":
+    if stored and stored.status and belt_id not in BELT_DIMENSION_SIGNALS:
         return normalize_trial_status(stored.status)
 
     if belt_id == "white":
@@ -351,8 +373,8 @@ def get_behavioral_trial_status(db: Session, user_number: str, dimension_id: str
         if completed > 0:
             return "in_progress"
 
-    if belt_id == "yellow":
-        result = validate_yellow_belt_trial_type(db, user_number, dimension_id, "behavioral")
+    if belt_id in BELT_DIMENSION_SIGNALS:
+        result = validate_belt_trial_type(db, user_number, belt_id, dimension_id, "behavioral")
         if result["passed"]:
             return "submitted"
         if any(signal["actual"] > 0 for signal in result["signals"]):
@@ -957,9 +979,9 @@ def get_belt_validation(
         db: Session = Depends(get_db)
 ):
     belt_id = (belt or "").strip().lower()
-    if belt_id != "yellow":
-        raise HTTPException(status_code=404, detail="Only Yellow Belt validation is available through this endpoint right now.")
-    return validate_yellow_belt(db, user_number)
+    if belt_id not in BELT_DIMENSION_SIGNALS:
+        raise HTTPException(status_code=404, detail="Automatic validation is not available for this belt yet.")
+    return validate_belt(db, user_number, belt_id)
 
 
 @router.get("/validation/{belt}/{dimension_id}")
@@ -967,14 +989,14 @@ def get_belt_dimension_validation(
         belt: str,
         dimension_id: str,
         user_number: str,
-        db: Session = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     belt_id = (belt or "").strip().lower()
-    if belt_id != "yellow":
-        raise HTTPException(status_code=404, detail="Only Yellow Belt validation is available through this endpoint right now.")
+    if belt_id not in BELT_DIMENSION_SIGNALS:
+        raise HTTPException(status_code=404, detail="Automatic validation is not available for this belt yet.")
     if dimension_id not in JOURNEY_DIMENSIONS:
         raise HTTPException(status_code=404, detail="Journey dimension not found.")
-    return validate_yellow_belt_dimension(db, user_number, dimension_id)
+    return validate_belt_dimension(db, user_number, belt_id, dimension_id)
 
 
 class BeltTrialCreate(BaseModel):
@@ -1380,6 +1402,8 @@ class GoalResponse(BaseModel):
     time_horizon: Optional[str]
     parent_goal_id: Optional[int]
     sort_order: Optional[int]
+    value_ids: list[int] = Field(default_factory=list)
+    linked_values: list[dict[str, Any]] = Field(default_factory=list)
     first_seen_at: datetime
     updated_at: datetime
 
@@ -1477,6 +1501,44 @@ def get_user_goal_or_404(db: Session, goal_id: int, user_number: str) -> Journey
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")
     return goal
+
+
+def sync_goal_values(db: Session, goal: JourneyGoal, user_number: str, value_ids: Optional[list[int]]) -> None:
+    if value_ids is None:
+        return
+
+    normalized_ids = []
+    for value_id in value_ids:
+        try:
+            normalized_id = int(value_id)
+        except (TypeError, ValueError):
+            continue
+        if normalized_id not in normalized_ids:
+            normalized_ids.append(normalized_id)
+
+    allowed_ids = set()
+    if normalized_ids:
+        allowed_ids = {
+            value.id
+            for value in db.query(JourneyValue).filter(
+                JourneyValue.user_number == user_number,
+                JourneyValue.id.in_(normalized_ids),
+            ).all()
+        }
+
+    existing_links = db.query(JourneyGoalValue).filter(
+        JourneyGoalValue.goal_id == goal.id,
+        JourneyGoalValue.user_number == user_number,
+    ).all()
+    existing_by_value_id = {link.value_id: link for link in existing_links}
+
+    for link in existing_links:
+        if link.value_id not in allowed_ids:
+            db.delete(link)
+
+    for value_id in normalized_ids:
+        if value_id in allowed_ids and value_id not in existing_by_value_id:
+            db.add(JourneyGoalValue(user_number=user_number, goal_id=goal.id, value_id=value_id))
 
 
 # ========================================
@@ -1847,6 +1909,9 @@ def create_goal(
     db.add(new_goal)
     db.commit()
     db.refresh(new_goal)
+    sync_goal_values(db, new_goal, user_number, goal_data.value_ids if time_horizon == "vision" else [])
+    db.commit()
+    db.refresh(new_goal)
     return serialize_goal(new_goal)
 
 
@@ -1947,6 +2012,15 @@ def update_goal(
     goal.updated_at = datetime.now()
     db.commit()
     db.refresh(goal)
+    if goal_data.value_ids is not None or normalize_goal_level(goal.time_horizon) != "vision":
+        sync_goal_values(
+            db,
+            goal,
+            user_number,
+            goal_data.value_ids if normalize_goal_level(goal.time_horizon) == "vision" else [],
+        )
+        db.commit()
+        db.refresh(goal)
     return serialize_goal(goal)
 
 
