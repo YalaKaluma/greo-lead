@@ -8,6 +8,7 @@ from datetime import datetime, date, timedelta
 from typing import Optional, List
 from app.services.task_enrichment_service import enrich_task
 from app.services.timezone_service import get_user_timezone, today_for_timezone
+from app.services.task_mtn_trend_service import get_task_mtn_trends
 
 router = APIRouter()
 
@@ -243,6 +244,13 @@ def get_filters(user_number: str, db: Session = Depends(get_db)):
         "projects": projects,
         "delegates": delegates
     }
+
+
+@router.get("/mtn-trends")
+def get_mtn_trends(user_number: str, db: Session = Depends(get_db)):
+    """Get completed-task MTN score totals for the last 90 days."""
+
+    return get_task_mtn_trends(user_number, db, get_user_timezone(db, user_number))
 
 
 @router.post("/", response_model=TaskResponse)

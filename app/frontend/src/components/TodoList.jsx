@@ -51,6 +51,10 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [opportunityActions, setOpportunityActions] = useState({});
   const [showDeferModal, setShowDeferModal] = useState(false);
   const [deferLoading, setDeferLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('tasks');
+  const [mtnTrends, setMtnTrends] = useState(null);
+  const [mtnTrendsLoading, setMtnTrendsLoading] = useState(false);
+  const [mtnTrendsError, setMtnTrendsError] = useState(null);
 
   // Multi-select state
   const [selectedTasks, setSelectedTasks] = useState([]);
@@ -110,6 +114,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   useEffect(() => {
     fetchFilters();
     fetchGoals();
+    fetchMtnTrends();
   }, []);
 
   // Refetch tasks when filters change
@@ -172,6 +177,22 @@ export default function TodoList({ apiUrl, userNumber }) {
       setError(err.response?.data?.detail || 'Failed to load tasks');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchMtnTrends = async () => {
+    setMtnTrendsLoading(true);
+    setMtnTrendsError(null);
+    try {
+      const response = await axios.get(`${apiUrl}/api/tasks/mtn-trends`, {
+        params: { user_number: userNumber }
+      });
+      setMtnTrends(response.data);
+    } catch (err) {
+      console.error('Error fetching MTN trends:', err);
+      setMtnTrendsError('Unable to load MTN trends right now.');
+    } finally {
+      setMtnTrendsLoading(false);
     }
   };
 
@@ -327,6 +348,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       setTimeout(() => {
         setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
         setCompletingTasks(prev => prev.filter(id => id !== taskId));
+        fetchMtnTrends();
       }, 1500);
     } catch (err) {
       console.error('Error toggling task:', err);
@@ -649,6 +671,8 @@ export default function TodoList({ apiUrl, userNumber }) {
 
   const hasActiveFilters = selectedProject || selectedDelegate || selectedGoal || filterType !== 'due_today';
   const sortedTasks = getSortedTasks();
+  const todayMtnScore = Number(mtnTrends?.summary?.today?.mtn_score || 0);
+  const todayCompletedTasks = Number(mtnTrends?.summary?.today?.completed_tasks || 0);
 
   // ============================================================================
   // RENDER
@@ -668,9 +692,17 @@ export default function TodoList({ apiUrl, userNumber }) {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-slate-800 hidden lg:block">
-              {t('tasks.title')}
-            </h1>
+            <div className="hidden lg:flex items-baseline gap-3">
+              <h1 className="text-3xl font-bold text-slate-800">
+                {t('tasks.title')}
+              </h1>
+              <span className="text-sm font-medium text-slate-400">
+                MTN today {todayMtnScore.toFixed(1)}
+                {todayCompletedTasks > 0 && (
+                  <span className="ml-1">from {todayCompletedTasks} done</span>
+                )}
+              </span>
+            </div>
             <p className="text-slate-600 mt-1">
               {selectionMode ? (
                 <span className="text-blue-600 font-medium">
@@ -687,9 +719,17 @@ export default function TodoList({ apiUrl, userNumber }) {
                 </>
               )}
             </p>
+            {!selectionMode && (
+              <p className="mt-1 text-sm font-medium text-slate-400 lg:hidden">
+                MTN today {todayMtnScore.toFixed(1)}
+                {todayCompletedTasks > 0 && (
+                  <span className="ml-1">from {todayCompletedTasks} done</span>
+                )}
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap justify-end gap-2">
-            {sortOrder.length > 0 && !selectionMode && (
+            {sortOrder.length > 0 && !selectionMode && activeTab === 'tasks' && (
               <button
                 onClick={resetSortOrder}
                 className="h-10 w-10 inline-flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
@@ -699,7 +739,7 @@ export default function TodoList({ apiUrl, userNumber }) {
                 <ResetIcon />
               </button>
             )}
-            {!selectionMode && (
+            {!selectionMode && activeTab === 'tasks' && (
               <>
                 <button
                   onClick={setOverdueToToday}
@@ -756,8 +796,43 @@ export default function TodoList({ apiUrl, userNumber }) {
           </div>
         </div>
 
-        {/* Filters Section */}
         {!selectionMode && (
+          <div className="mb-6 border-b border-slate-200">
+            <div className="flex flex-wrap gap-6">
+              <button
+                type="button"
+                onClick={() => setActiveTab('tasks')}
+                className={`relative px-2 pb-3 font-medium transition-colors ${
+                  activeTab === 'tasks'
+                    ? 'text-blue-600'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Tasks
+                {activeTab === 'tasks' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('trends')}
+                className={`relative px-2 pb-3 font-medium transition-colors ${
+                  activeTab === 'trends'
+                    ? 'text-blue-600'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Trends
+                {activeTab === 'trends' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Filters Section */}
+        {!selectionMode && activeTab === 'tasks' && (
           <FilterSection
             filtersCollapsed={filtersCollapsed}
             setFiltersCollapsed={setFiltersCollapsed}
@@ -783,15 +858,23 @@ export default function TodoList({ apiUrl, userNumber }) {
           </div>
         )}
 
+        {activeTab === 'trends' && (
+          <TaskMtnTrendsTab
+            trends={mtnTrends}
+            loading={mtnTrendsLoading}
+            error={mtnTrendsError}
+          />
+        )}
+
         {/* Tasks List */}
-        {sortedTasks.length === 0 ? (
+        {activeTab === 'tasks' && sortedTasks.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-slate-600 text-lg">{t('tasks.empty')}</p>
             <p className="text-slate-500 text-sm mt-2">
               {hasActiveFilters ? t('tasks.emptyFiltered') : t('tasks.emptyNew')}
             </p>
           </div>
-        ) : (
+        ) : activeTab === 'tasks' ? (
           <DragDropContext onDragEnd={handleDragEnd}>
             <Droppable droppableId="tasks">
               {(provided) => (
@@ -831,7 +914,7 @@ export default function TodoList({ apiUrl, userNumber }) {
               )}
             </Droppable>
           </DragDropContext>
-        )}
+        ) : null}
       </div>
 
       {/* Floating Action Bar */}
@@ -1033,6 +1116,140 @@ export default function TodoList({ apiUrl, userNumber }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+const MTN_CHART_WIDTH = 720;
+const MTN_CHART_HEIGHT = 240;
+const MTN_CHART_PADDING = 34;
+
+const buildMtnPath = (points, key, maxValue) => {
+  if (!points.length) return '';
+  return points
+    .map((point, index) => {
+      const x = MTN_CHART_PADDING + (index / Math.max(points.length - 1, 1)) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2);
+      const y = MTN_CHART_HEIGHT - MTN_CHART_PADDING - ((Number(point[key]) || 0) / maxValue) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING * 2);
+      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(' ');
+};
+
+function formatMtnNumber(value) {
+  const numeric = Number(value || 0);
+  return numeric.toFixed(1);
+}
+
+function StatTile({ label, value, detail }) {
+  return (
+    <div className="rounded-lg border bg-white p-4">
+      <div className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="mt-2 text-2xl font-semibold text-slate-900">{value}</div>
+      {detail && <div className="mt-1 text-sm text-slate-500">{detail}</div>}
+    </div>
+  );
+}
+
+function TaskMtnTrendChart({ data }) {
+  const points = Array.isArray(data) ? data : [];
+  const maxScore = Math.max(
+    1,
+    Math.ceil(Math.max(...points.map(point => Number(point.mtn_score || 0), Number(point.rolling_average || 0))) * 1.15)
+  );
+  const dailyPath = buildMtnPath(points, 'mtn_score', maxScore);
+  const rollingPath = buildMtnPath(points, 'rolling_average', maxScore);
+  const gridValues = [0, maxScore / 4, maxScore / 2, (maxScore * 3) / 4, maxScore];
+
+  return (
+    <div className="rounded-lg border bg-white p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-lg font-semibold text-slate-800">MTN Score Trend</h2>
+        <div className="flex gap-4 text-xs text-slate-500">
+          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> Daily</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> 7-day average</span>
+        </div>
+      </div>
+
+      <div className="mt-4 overflow-hidden rounded-md bg-slate-50">
+        <svg viewBox={`0 0 ${MTN_CHART_WIDTH} ${MTN_CHART_HEIGHT}`} className="h-64 w-full">
+          {gridValues.map(value => {
+            const y = MTN_CHART_HEIGHT - MTN_CHART_PADDING - (value / maxScore) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING * 2);
+            return (
+              <g key={value}>
+                <line x1={MTN_CHART_PADDING} x2={MTN_CHART_WIDTH - MTN_CHART_PADDING} y1={y} y2={y} stroke="#e2e8f0" />
+                <text x={6} y={y + 4} className="fill-slate-400 text-[10px]">{formatMtnNumber(value)}</text>
+              </g>
+            );
+          })}
+          <path d={dailyPath} fill="none" stroke="#cbd5e1" strokeWidth="2" />
+          <path d={rollingPath} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function TaskMtnTrendsTab({ trends, loading, error }) {
+  if (loading) {
+    return (
+      <div className="rounded-lg border bg-white p-6 text-sm text-slate-500">
+        Loading MTN trends...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
+        {error}
+      </div>
+    );
+  }
+
+  const summary = trends?.summary || {};
+  const today = summary.today || {};
+  const last7 = summary.last_7_days || {};
+  const last30 = summary.last_30_days || {};
+  const last90 = summary.last_90_days || {};
+  const delta = Number(last7.trend?.delta_vs_30 || 0);
+  const sign = delta > 0 ? '+' : '';
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <StatTile
+          label="Today"
+          value={formatMtnNumber(today.mtn_score)}
+          detail={`${today.completed_tasks || 0} completed task(s)`}
+        />
+        <StatTile
+          label="Last 7 Days"
+          value={formatMtnNumber(last7.total_score)}
+          detail={`Avg ${formatMtnNumber(last7.average_score)} per day`}
+        />
+        <StatTile
+          label="Last 30 Days"
+          value={formatMtnNumber(last30.total_score)}
+          detail={`${last30.active_days || 0} active day(s)`}
+        />
+        <StatTile
+          label="Momentum"
+          value={last7.trend?.label || 'Stable'}
+          detail={`${sign}${formatMtnNumber(delta)} vs 30-day avg`}
+        />
+      </div>
+
+      <TaskMtnTrendChart data={trends?.trend_chart} />
+
+      <div className="rounded-lg border bg-white p-4">
+        <h2 className="text-lg font-semibold text-slate-800">90-Day Total</h2>
+        <div className="mt-2 text-3xl font-semibold text-slate-900">
+          {formatMtnNumber(last90.total_score)}
+        </div>
+        <p className="mt-1 text-sm text-slate-500">
+          {last90.completed_tasks || 0} completed task(s) contributed to this score.
+        </p>
+      </div>
     </div>
   );
 }
