@@ -37,7 +37,7 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
     if (!userNumber || isBackfillingDepth) return;
 
     const confirmed = window.confirm(
-      'Alfred will send your last 50 user messages to OpenAI to score Reflection Depth. Continue?'
+      'Alfred will send your last 200 user messages to OpenAI to score Reflection Depth. Continue?'
     );
     if (!confirmed) return;
 
@@ -48,7 +48,7 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
     try {
       const response = await axios.post(`${apiUrl}/api/settings/journal/reflection-depth-backfill`, {
         user_number: userNumber,
-        limit: 50
+        limit: 200
       });
       setBackfillResult(response.data);
     } catch (error) {
@@ -149,7 +149,7 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
               Journal Reflection Depth
             </h2>
             <p className="mt-1 text-sm leading-6 text-slate-500">
-              Score your last 50 journal/user messages so the Trends tab has more history to work with.
+              Score your last 200 journal/user messages so the Trends tab has more history to work with.
             </p>
 
             <button
@@ -158,7 +158,7 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
               disabled={isBackfillingDepth || !userNumber}
               className="mt-4 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
-              {isBackfillingDepth ? 'Scoring recent messages...' : 'Score last 50 messages'}
+              {isBackfillingDepth ? 'Scoring recent messages...' : 'Score last 200 messages'}
             </button>
 
             {backfillResult && (
