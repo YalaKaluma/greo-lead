@@ -711,6 +711,7 @@ export default function TodoList({ apiUrl, userNumber }) {
               ) : (
                 <>
                   {filterType === 'due_today' && 'Tasks due today'}
+                  {filterType === 'due_tomorrow' && 'Tasks due tomorrow'}
                   {filterType === 'next_7_days' && 'Tasks due in the next 7 days'}
                   {filterType === 'all' && 'All active tasks'}
                   {selectedProject && ` • Project: ${selectedProject}`}

@@ -5,7 +5,7 @@ import { getSortedGoals, getGoalIndentation } from '../../utils/taskHelpers';
  * FilterSection Component
  * 
  * Collapsible filter panel for tasks:
- * - Due date filter (due today, next 7 days, all)
+ * - Due date filter (due today, tomorrow, next 7 days, all)
  * - Project filter
  * - Delegate filter
  * - Goal filter with hierarchical display
@@ -49,6 +49,7 @@ export default function FilterSection({
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
                 <option value="due_today">Due Today</option>
+                <option value="due_tomorrow">Tomorrow</option>
                 <option value="next_7_days">Next 7 Days</option>
                 <option value="all">All Tasks</option>
               </select>

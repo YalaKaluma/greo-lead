@@ -144,7 +144,7 @@ def get_tasks(
 ):
     """
     Get all tasks with optional filtering
-    filter_type: "all", "due_today", "next_7_days"
+    filter_type: "all", "due_today", "due_tomorrow", "next_7_days"
     project: filter by project name
     delegated_to: filter by delegate name
     goal_id: filter by goal ID
@@ -168,6 +168,13 @@ def get_tasks(
             query = query.filter(
                 Task.due_date.isnot(None),
                 due_date_day <= today
+            )
+        elif filter_type == "due_tomorrow":
+            tomorrow = today + timedelta(days=1)
+            print(f"[TASKS API] Applying due_tomorrow filter (tomorrow: {tomorrow}, timezone: {user_timezone})")
+            query = query.filter(
+                Task.due_date.isnot(None),
+                due_date_day == tomorrow
             )
         elif filter_type == "next_7_days":
             next_week = today + timedelta(days=7)
