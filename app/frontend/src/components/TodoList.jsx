@@ -1123,17 +1123,27 @@ export default function TodoList({ apiUrl, userNumber }) {
 const MTN_CHART_WIDTH = 720;
 const MTN_CHART_HEIGHT = 240;
 const MTN_CHART_PADDING = 34;
+const MTN_CHART_BOTTOM_PADDING = 46;
 
 const buildMtnPath = (points, key, maxValue) => {
   if (!points.length) return '';
   return points
     .map((point, index) => {
       const x = MTN_CHART_PADDING + (index / Math.max(points.length - 1, 1)) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2);
-      const y = MTN_CHART_HEIGHT - MTN_CHART_PADDING - ((Number(point[key]) || 0) / maxValue) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING * 2);
+      const y = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING - ((Number(point[key]) || 0) / maxValue) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING - MTN_CHART_BOTTOM_PADDING);
       return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
     })
     .join(' ');
 };
+
+function formatShortDate(dateString) {
+  if (!dateString) return '';
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric'
+  });
+}
 
 function formatMtnNumber(value) {
   const numeric = Number(value || 0);
@@ -1163,6 +1173,13 @@ function TaskMtnTrendChart({ data }) {
   const dailyPath = buildMtnPath(points, 'mtn_score', maxScore);
   const rollingPath = buildMtnPath(points, 'rolling_average', maxScore);
   const gridValues = [0, maxScore / 4, maxScore / 2, (maxScore * 3) / 4, maxScore];
+  const tickIndexes = Array.from(new Set([
+    0,
+    Math.floor((points.length - 1) * 0.25),
+    Math.floor((points.length - 1) * 0.5),
+    Math.floor((points.length - 1) * 0.75),
+    points.length - 1
+  ])).filter(index => index >= 0 && points[index]);
 
   return (
     <div className="rounded-lg border bg-white p-4">
@@ -1177,7 +1194,7 @@ function TaskMtnTrendChart({ data }) {
       <div className="mt-4 overflow-hidden rounded-md bg-slate-50">
         <svg viewBox={`0 0 ${MTN_CHART_WIDTH} ${MTN_CHART_HEIGHT}`} className="h-64 w-full">
           {gridValues.map(value => {
-            const y = MTN_CHART_HEIGHT - MTN_CHART_PADDING - (value / maxScore) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING * 2);
+            const y = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING - (value / maxScore) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING - MTN_CHART_BOTTOM_PADDING);
             return (
               <g key={value}>
                 <line x1={MTN_CHART_PADDING} x2={MTN_CHART_WIDTH - MTN_CHART_PADDING} y1={y} y2={y} stroke="#e2e8f0" />
@@ -1187,7 +1204,93 @@ function TaskMtnTrendChart({ data }) {
           })}
           <path d={dailyPath} fill="none" stroke="#cbd5e1" strokeWidth="2" />
           <path d={rollingPath} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" />
+          {tickIndexes.map(index => {
+            const x = MTN_CHART_PADDING + (index / Math.max(points.length - 1, 1)) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2);
+            return (
+              <g key={points[index].date}>
+                <line x1={x} x2={x} y1={MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING + 4} y2={MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING + 9} stroke="#94a3b8" />
+                <text x={x} y={MTN_CHART_HEIGHT - 18} textAnchor="middle" className="fill-slate-400 text-[10px]">
+                  {formatShortDate(points[index].date)}
+                </text>
+              </g>
+            );
+          })}
         </svg>
+      </div>
+    </div>
+  );
+}
+
+const weekdayIndexFromDate = (dateString) => {
+  const [year, month, day] = dateString.split('-').map(Number);
+  const jsDay = new Date(year, month - 1, day).getDay();
+  return (jsDay + 6) % 7;
+};
+
+const colorForMtnScore = (score, maxScore) => {
+  if (!score) return 'bg-slate-200';
+  const ratio = maxScore > 0 ? score / maxScore : 0;
+  if (ratio >= 0.85) return 'bg-blue-700';
+  if (ratio >= 0.65) return 'bg-blue-500';
+  if (ratio >= 0.4) return 'bg-blue-300';
+  return 'bg-blue-100';
+};
+
+function TaskMtnHeatmap({ data }) {
+  const days = Array.isArray(data) ? data : [];
+  const maxScore = Math.max(...days.map(day => Number(day.mtn_score || 0)), 0);
+  const weeks = [];
+
+  days.forEach((day, index) => {
+    const weekday = weekdayIndexFromDate(day.date);
+    if (index === 0 || weekday === 0) {
+      weeks.push([]);
+    }
+    weeks[weeks.length - 1].push({ ...day, weekday });
+  });
+
+  return (
+    <div className="rounded-lg border bg-white p-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-slate-800">MTN Heatmap</h2>
+        <span className="text-xs text-slate-500">Last 90 days</span>
+      </div>
+
+      <div className="mt-4 overflow-x-auto pb-1">
+        <div className="min-w-[360px] space-y-1">
+          <div className="grid grid-cols-7 gap-1 pl-14 text-center text-[11px] text-slate-400">
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(label => (
+              <div key={label}>{label}</div>
+            ))}
+          </div>
+          {weeks.map((week, weekIndex) => (
+            <div key={weekIndex} className="grid grid-cols-[48px_repeat(7,1fr)] items-center gap-1">
+              <div className="text-right text-[11px] text-slate-400">Week {weekIndex + 1}</div>
+              {Array.from({ length: 7 }).map((_, weekday) => {
+                const day = week.find(item => item.weekday === weekday);
+                return day ? (
+                  <div
+                    key={day.date}
+                    title={`${formatShortDate(day.date)}: ${formatMtnNumber(day.mtn_score)} MTN from ${day.completed_tasks || 0} completed task(s)`}
+                    className={`h-4 min-w-4 rounded-sm ${colorForMtnScore(Number(day.mtn_score || 0), maxScore)}`}
+                  />
+                ) : (
+                  <div key={`${weekIndex}-${weekday}`} className="h-4 min-w-4" />
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-end gap-2 text-xs text-slate-500">
+        <span>Low</span>
+        <span className="h-3 w-3 rounded-sm bg-slate-200" />
+        <span className="h-3 w-3 rounded-sm bg-blue-100" />
+        <span className="h-3 w-3 rounded-sm bg-blue-300" />
+        <span className="h-3 w-3 rounded-sm bg-blue-500" />
+        <span className="h-3 w-3 rounded-sm bg-blue-700" />
+        <span>High</span>
       </div>
     </div>
   );
@@ -1244,6 +1347,7 @@ function TaskMtnTrendsTab({ trends, loading, error }) {
       </div>
 
       <TaskMtnTrendChart data={trends?.trend_chart} />
+      <TaskMtnHeatmap data={trends?.trend_chart} />
 
       <div className="rounded-lg border bg-white p-4">
         <h2 className="text-lg font-semibold text-slate-800">90-Day Total</h2>
