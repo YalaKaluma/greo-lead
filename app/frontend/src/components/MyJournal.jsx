@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import axios from 'axios';
 import ReadAloudButton from './ReadAloudButton';
 import MessageFeedbackButton from './MessageFeedbackButton';
@@ -41,6 +41,8 @@ const DEPTH_BADGES = {
   5: 'Growth Mindset'
 };
 
+const JOURNAL_EMPTY_PROMPT = 'Every day contains lessons about who you are and how you can grow as a leader. This is where you capture them.';
+
 //const SESSION_TYPES = [
 //  { id: 'goal_review', label: 'Goal Review Session', icon: '🎯', color: 'blue', enabled: true },
 //  { id: 'people_review', label: 'People Review Session', icon: '👥', color: 'purple', enabled: true },
@@ -65,10 +67,10 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
 
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     scrollToBottom();
   }, [messages]);
 
@@ -409,39 +411,44 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-white">
-      {/* Header with Session Type Buttons */}
-      <div className="border-b border-gray-200 bg-white px-6 py-4">
-
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">
+    <div className="h-full flex flex-col bg-gray-50 text-slate-900">
+      <div className="bg-gray-50 px-4 pt-5 md:px-10 md:pt-8">
+        <div className="mb-6">
+          <h1 className="text-3xl font-semibold text-slate-950 md:text-4xl">
             {t('journal.title')}
           </h1>
+          <p className="mt-2 text-sm text-slate-500 md:text-base">
+            Transform experiences into insight. Insight into growth.
+          </p>
         </div>
 
-        <div className="mt-4 inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
-          <button
-            type="button"
-            onClick={() => setActiveTab('journal')}
-            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-              activeTab === 'journal'
-                ? 'bg-white text-blue-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Journal
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('trends')}
-            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-              activeTab === 'trends'
-                ? 'bg-white text-blue-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Trends
-          </button>
+        <div className="mb-6 border-b border-slate-200">
+          <div className="flex flex-wrap gap-6">
+            <button
+              type="button"
+              onClick={() => setActiveTab('journal')}
+              className={`relative px-2 pb-3 font-medium transition-colors ${
+                activeTab === 'journal' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Journal
+              {activeTab === 'journal' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('trends')}
+              className={`relative px-2 pb-3 font-medium transition-colors ${
+                activeTab === 'trends' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Trends
+              {activeTab === 'trends' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Progress Dots - Only show when goal review session is active */}
@@ -578,7 +585,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
       </div>
 
       {activeTab === 'trends' ? (
-        <div className="flex-1 overflow-y-auto bg-slate-50 px-6 py-6">
+        <div className="flex-1 overflow-y-auto bg-slate-50 px-4 pb-6 md:px-10">
           <JournalTrendsTab
             trends={trends}
             loading={trendsLoading}
@@ -586,18 +593,16 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
           />
         </div>
       ) : (
-      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 pb-6 md:px-10 space-y-4">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center">
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+            <div className="w-16 h-16 bg-white border border-slate-200 rounded-full flex items-center justify-center mb-4 shadow-sm">
               <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
               </svg>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Ready for your coaching session?</h3>
-            <p className="text-gray-600 max-w-md">
-              Click "Goal Review Session" above to start a structured review of your progress, 
-              identify blockers, and plan concrete next steps.
+            <p className="text-slate-400 max-w-md leading-6">
+              {JOURNAL_EMPTY_PROMPT}
             </p>
           </div>
         ) : (
@@ -681,14 +686,14 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
 
       {/* Input Area */}
       {activeTab === 'journal' && (
-      <div className="border-t border-gray-200 bg-white px-6 py-4">
+      <div className="border-t border-gray-200 bg-white px-4 py-4 md:px-10">
         <form onSubmit={sendMessage} className="flex gap-3">
           <input
             ref={inputRef}
             type="text"
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
-            placeholder={activeSession ? t('coaching.sharePlaceholder') : t('coaching.typePlaceholder')}
+            placeholder={activeSession ? t('coaching.sharePlaceholder') : JOURNAL_EMPTY_PROMPT}
             disabled={isLoading}
             className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
