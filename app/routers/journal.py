@@ -33,6 +33,7 @@ def create_entry(user_id: int, text: str, db: Session = Depends(get_db)):
                 user_number=user.phone_number,
                 content=text,
                 message_type="journal",
+                conversation_type="journal",
             )
         except Exception as error:
             db.rollback()

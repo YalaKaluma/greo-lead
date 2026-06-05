@@ -612,7 +612,7 @@ def _finalize_goal_review_session(
     from datetime import timedelta
 
     journey_context = build_journey_context(db, user_number)
-    history = load_conversation_history(db, user_number) or []
+    history = load_conversation_history(db, user_number, conversation_type="goal_coaching") or []
     goal_tree = _format_goal_tree_for_prompt(state_ctx)
     prompt_base = "app/prompts/coaching/goal_review"
 
@@ -1130,7 +1130,7 @@ def handle_goal_review(
         phase = "framing"
 
     journey_context = build_journey_context(db, user_number)
-    history = load_conversation_history(db, user_number) or []
+    history = load_conversation_history(db, user_number, conversation_type="goal_coaching") or []
     goal_tree = _format_goal_tree_for_prompt(state_ctx)
     prompt_base = "app/prompts/coaching/goal_review"
 

@@ -584,7 +584,15 @@ def save_message_safe(db: Session, user_number: str, text: str) -> None:
         text: Message content
     """
     try:
-        save_message(db, sender="assistant", user_number=user_number, content=text)
+        save_message(
+            db,
+            sender="assistant",
+            user_number=user_number,
+            content=text,
+            message_type="nudge",
+            conversation_type="messages",
+            is_read=False,
+        )
         logger.debug(f"Message saved to database for {user_number}")
     except Exception as e:
         logger.warning(f"Failed to save message to database (non-critical): {e}")
@@ -708,6 +716,7 @@ def send_nudge_for_user(
             user_number=user_number,
             content=message_text,
             message_type="nudge",
+            conversation_type="messages",
             is_read=False
         )
 

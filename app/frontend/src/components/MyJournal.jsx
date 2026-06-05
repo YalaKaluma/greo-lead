@@ -77,34 +77,19 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   // Load chat history on mount
 
   useEffect(() => {
-  loadChatHistory();
-
-  const markNudgesRead = async () => {
-    try {
-      await axios.post(
-        `${apiUrl}/api/chat/mark-nudges-read`,
-        null,
-        {
-          params: { user_number: userNumber }
-        }
-      );
-    } catch (error) {
-      console.error('Failed to mark nudges read:', error);
-    }
-  };
-
-  if (userNumber) {
-    markNudgesRead();
-  }
-
-}, [userNumber]);
+    loadChatHistory();
+  }, [userNumber]);
 
 
 
   const loadChatHistory = async () => {
     try {
       const response = await axios.get(`${apiUrl}/api/chat/history`, {
-        params: { user_number: userNumber, limit: 50 }
+        params: {
+          user_number: userNumber,
+          limit: 50,
+          conversation_type: 'journal'
+        }
       });
       setMessages(response.data.messages || []);
     } catch (error) {
@@ -185,7 +170,8 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
       const response = await axios.post(`${apiUrl}/api/chat`, {
         user_number: userNumber,
         message: startMessage,
-        preferred_language: language
+        preferred_language: language,
+        conversation_type: 'journal'
       });
 
       console.log('Response received:', response.data);
@@ -298,7 +284,8 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
       const response = await axios.post(`${apiUrl}/api/chat`, {
         user_number: userNumber,
         message: userMsg,
-        preferred_language: language
+        preferred_language: language,
+        conversation_type: 'journal'
       });
 
       const assistantMessage = {
@@ -325,50 +312,9 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
       ]);
       setTrends(null);
 
-      // Update session state if in goal review
-      if (response.data.goal_review_status) {
-        const status = response.data.goal_review_status;
-        setActiveSession('goal_review');
-        setCurrentStage(status.stage);
-        const idx = GOAL_REVIEW_STAGES.findIndex(s => s.id === status.stage);
-        setStageIndex(idx >= 0 ? idx : 0);
-
-        // Check if session ended
-        if (status.stage === 'completed') {
-          setActiveSession(null);
-          setCurrentStage(null);
-          setStageIndex(0);
-        }
-      } else if (response.data.people_review_status) {
-        // Handle people review status
-        const status = response.data.people_review_status;
-        if (status.active) {
-          setActiveSession('people_review');
-          setCurrentStage(status.phase);
-        } else {
-          // Session ended
-          setActiveSession(null);
-          setCurrentStage(null);
-          setStageIndex(0);
-        }
-      } else if (response.data.leadership_coaching_status) {
-        // Handle leadership coaching status
-        const status = response.data.leadership_coaching_status;
-        if (status.active) {
-          setActiveSession('leadership_coaching');
-          setCurrentStage(status.phase);
-        } else {
-          // Session ended
-          setActiveSession(null);
-          setCurrentStage(null);
-          setStageIndex(0);
-        }
-      } else if (response.data.state !== 'GOAL_REVIEW' && response.data.state !== 'PEOPLE_REVIEW' && response.data.state !== 'LEADERSHIP_COACHING') {
-        // Session ended or not active
-        setActiveSession(null);
-        setCurrentStage(null);
-        setStageIndex(0);
-      }
+      setActiveSession(null);
+      setCurrentStage(null);
+      setStageIndex(0);
     } catch (error) {
       console.error('Error sending message:', error);
       const errorMessage = {

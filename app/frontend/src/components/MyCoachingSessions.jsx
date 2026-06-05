@@ -37,6 +37,12 @@ const SESSION_TYPES = [
   { id: 'leadership_coaching', label: 'Leadership Coaching', icon: '🧭', color: 'green', enabled: true }
 ];
 
+const CONVERSATION_TYPE_BY_SESSION = {
+  goal_review: 'goal_coaching',
+  people_review: 'team_coaching',
+  leadership_coaching: 'leadership_coaching'
+};
+
 const MyCoachingSessions = ({
   apiUrl,
   userNumber,
@@ -51,6 +57,9 @@ const MyCoachingSessions = ({
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [activeSession, setActiveSession] = useState(null);
+  const [selectedSessionType, setSelectedSessionType] = useState(
+    visibleSessionTypes?.[0] || 'goal_review'
+  );
   const [currentStage, setCurrentStage] = useState(null);
   const [stageIndex, setStageIndex] = useState(0);
   const messagesEndRef = useRef(null);
@@ -73,12 +82,16 @@ const MyCoachingSessions = ({
     } else {
       setMessages([]);
     }
-  }, [userNumber, loadInitialHistory]);
+  }, [userNumber, loadInitialHistory, selectedSessionType]);
 
   const loadChatHistory = async () => {
     try {
       const response = await axios.get(`${apiUrl}/api/chat/history`, {
-        params: { user_number: userNumber, limit: 50 }
+        params: {
+          user_number: userNumber,
+          limit: 50,
+          conversation_type: CONVERSATION_TYPE_BY_SESSION[selectedSessionType]
+        }
       });
       setMessages(response.data.messages || []);
     } catch (error) {
@@ -94,6 +107,7 @@ const MyCoachingSessions = ({
     console.log('User Number:', userNumber);
 
     setActiveSession(sessionType);
+    setSelectedSessionType(sessionType);
     
     // Set appropriate initial stage
     if (sessionType === 'goal_review') {
@@ -123,7 +137,8 @@ const MyCoachingSessions = ({
       const response = await axios.post(`${apiUrl}/api/chat`, {
         user_number: userNumber,
         message: startMessage,
-        preferred_language: language
+        preferred_language: language,
+        conversation_type: CONVERSATION_TYPE_BY_SESSION[sessionType]
       });
 
       console.log('Response received:', response.data);
@@ -225,7 +240,8 @@ const MyCoachingSessions = ({
       const response = await axios.post(`${apiUrl}/api/chat`, {
         user_number: userNumber,
         message: userMsg,
-        preferred_language: language
+        preferred_language: language,
+        conversation_type: CONVERSATION_TYPE_BY_SESSION[activeSession || selectedSessionType]
       });
 
       const assistantMessage = {
@@ -339,7 +355,32 @@ const MyCoachingSessions = ({
               <p className="mt-1 text-sm text-gray-500">{selectedVisionTitle}</p>
             )}
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap justify-end gap-3">
+            <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1">
+              {SESSION_TYPES.filter(session => !visibleSessionTypes || visibleSessionTypes.includes(session.id)).map(session => (
+                <button
+                  key={`tab-${session.id}`}
+                  type="button"
+                  onClick={() => {
+                    if (activeSession) return;
+                    setSelectedSessionType(session.id);
+                    setCurrentStage(null);
+                    setStageIndex(0);
+                  }}
+                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    selectedSessionType === session.id
+                      ? 'bg-white text-slate-950 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800'
+                  } ${activeSession ? 'cursor-not-allowed opacity-60' : ''}`}
+                >
+                  {session.id === 'goal_review'
+                    ? 'Goal'
+                    : session.id === 'people_review'
+                    ? 'Team'
+                    : 'Leadership'}
+                </button>
+              ))}
+            </div>
             {SESSION_TYPES.filter(session => !visibleSessionTypes || visibleSessionTypes.includes(session.id)).map(session => {
               const colorClasses = {
                 blue: {
@@ -372,6 +413,7 @@ const MyCoachingSessions = ({
                       : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     }
                     ${activeSession && activeSession !== session.id ? 'opacity-50' : ''}
+                    ${selectedSessionType !== session.id && !activeSession ? 'hidden' : ''}
                   `}
                 >
                   <span>{session.icon}</span>

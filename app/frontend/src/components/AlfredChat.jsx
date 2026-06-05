@@ -1,300 +1,178 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import GoalReviewBanner from './GoalReviewBanner';
-import { useLanguage } from '../i18n/LanguageContext';
 
-export default function AlfredChat({ apiUrl, userNumber, preferredLanguage, onTourStep }) {
+export default function AlfredChat({ apiUrl, userNumber }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
-  const [inputValue, setInputValue] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [goalReviewStatus, setGoalReviewStatus] = useState(null); // Track goal review status
+  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
-  const { t, language } = useLanguage();
-  const requestLanguage = preferredLanguage || language;
 
-  // Auto-scroll to bottom when new messages arrive
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const loadMessages = async () => {
+    if (!userNumber) return;
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  // Focus input when chat opens
-  useEffect(() => {
-    if (isOpen && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [isOpen]);
-
-  // Load recent conversation history on mount
-  useEffect(() => {
-    loadRecentMessages();
-  }, []);
-
-  const loadRecentMessages = async () => {
+    setIsLoading(true);
     try {
       const response = await axios.get(`${apiUrl}/api/chat/history`, {
-        params: { user_number: userNumber, limit: 10 }
+        params: {
+          user_number: userNumber,
+          limit: 50,
+          conversation_type: 'messages'
+        }
       });
-      if (response.data.messages) {
-        setMessages(response.data.messages);
-      }
+      setMessages(response.data.messages || []);
     } catch (error) {
-      console.error('Failed to load chat history:', error);
+      console.error('Failed to load Alfred messages:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const sendMessage = async () => {
-    if (!inputValue.trim()) return;
-
-    const userMessage = {
-      role: 'user',
-      content: inputValue,
-      timestamp: new Date().toISOString()
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInputValue('');
-    setIsTyping(true);
+  const loadUnreadCount = async () => {
+    if (!userNumber) return;
 
     try {
-      const response = await axios.post(`${apiUrl}/api/chat`, {
-        user_number: userNumber,
-        message: inputValue,
-        preferred_language: requestLanguage
+      const response = await axios.get(`${apiUrl}/api/chat/unread-nudges`, {
+        params: { user_number: userNumber }
       });
-
-      const assistantMessage = {
-        role: 'assistant',
-        content: response.data.reply,
-        timestamp: new Date().toISOString()
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-
-      // Update goal review status from response
-      setGoalReviewStatus(response.data.goal_review_status);
-
-      // Check if this is a tour-related message
-      if (onTourStep && response.data.tour_action) {
-        onTourStep(response.data.tour_action);
-      }
-
+      setUnreadCount(response.data.count || 0);
     } catch (error) {
-      console.error('Failed to send message:', error);
-      const errorMessage = {
-        role: 'assistant',
-        content: t('chat.error'),
-        timestamp: new Date().toISOString()
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsTyping(false);
+      console.error('Failed to load unread Alfred messages:', error);
     }
   };
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  };
+  const markMessagesRead = async () => {
+    if (!userNumber) return;
 
-  const toggleChat = () => {
-    setIsOpen(!isOpen);
-    if (!isOpen) {
+    try {
+      await axios.post(`${apiUrl}/api/chat/mark-nudges-read`, null, {
+        params: { user_number: userNumber }
+      });
       setUnreadCount(0);
+    } catch (error) {
+      console.error('Failed to mark Alfred messages read:', error);
     }
   };
 
-  // Handle session end from banner
-  const handleSessionEnd = () => {
-    setGoalReviewStatus(null);
-    // Add a system message
-    const systemMessage = {
-      role: 'assistant',
-      content: t('chat.goalReviewEnded'),
-      timestamp: new Date().toISOString()
-    };
-    setMessages(prev => [...prev, systemMessage]);
-  };
+  useEffect(() => {
+    loadMessages();
+    loadUnreadCount();
+  }, [userNumber]);
 
-  // Simulate Alfred sending a message (for onboarding triggers)
-  const sendAlfredMessage = (content) => {
-    const message = {
-      role: 'assistant',
-      content,
-      timestamp: new Date().toISOString()
-    };
-    setMessages(prev => [...prev, message]);
-    if (!isOpen) {
-      setUnreadCount(prev => prev + 1);
+  useEffect(() => {
+    if (isOpen) {
+      loadMessages();
+      markMessagesRead();
     }
-  };
+  }, [isOpen]);
 
-  // Expose method for parent components to trigger Alfred messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isOpen]);
+
   useEffect(() => {
     window.alfredChat = {
-      sendMessage: sendAlfredMessage,
-      open: () => setIsOpen(true)
+      open: () => setIsOpen(true),
+      sendMessage: (content) => {
+        setMessages((current) => [
+          ...current,
+          {
+            role: 'assistant',
+            content,
+            timestamp: new Date().toISOString(),
+            message_type: 'notification',
+            conversation_type: 'messages'
+          }
+        ]);
+        setIsOpen(true);
+      },
+      refreshMessages: () => {
+        loadMessages();
+        loadUnreadCount();
+      }
     };
-  }, [isOpen]);
+  }, [userNumber]);
+
+  const formatType = (messageType) => {
+    if (messageType === 'nudge') return 'Nudge';
+    if (messageType === 'notification') return 'Notification';
+    return 'Message';
+  };
 
   return (
     <>
-      {/* Chat Window */}
       <div
-        className={`fixed bottom-24 right-6 w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col transition-all duration-300 ease-out z-50 ${
-          isOpen ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'
+        className={`fixed bottom-24 right-6 w-96 max-w-[calc(100vw-2rem)] bg-white rounded-lg shadow-2xl border border-gray-200 flex flex-col transition-all duration-200 ease-out z-50 ${
+          isOpen ? 'scale-100 opacity-100' : 'scale-95 opacity-0 pointer-events-none'
         }`}
-        style={{ 
-          transformOrigin: 'bottom right',
-          height: goalReviewStatus ? '640px' : '600px'
-        }}
+        style={{ transformOrigin: 'bottom right', height: '560px' }}
       >
-        {/* Header */}
-        <div className="bg-gradient-to-r from-slate-800 to-slate-700 text-white p-4 rounded-t-2xl flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center">
-              <img 
-                src="/alfred-logo.png" 
-                alt="Alfred" 
-                className="w-8 h-8 object-contain"
-                onError={(e) => {
-                  e.target.style.display = 'none';
-                  e.target.nextSibling.style.display = 'block';
-                }}
-              />
-              <span className="text-2xl" style={{ display: 'none' }}>🎩</span>
-            </div>
-            <div>
-              <h3 className="font-semibold text-lg">Alfred</h3>
-              <p className="text-xs text-gray-300">{t('chat.subtitle')}</p>
-            </div>
+        <div className="bg-slate-900 text-white px-5 py-4 rounded-t-lg flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-lg">Messages</h3>
+            <p className="text-xs text-slate-300">Nudges, reminders, and Alfred updates</p>
           </div>
           <button
-            onClick={toggleChat}
-            className="text-gray-300 hover:text-white transition-colors"
+            onClick={() => setIsOpen(false)}
+            className="h-9 w-9 rounded-md text-slate-300 hover:bg-slate-800 hover:text-white"
+            aria-label="Close messages"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            X
           </button>
         </div>
 
-        {/* Goal Review Banner */}
-        <GoalReviewBanner 
-          status={goalReviewStatus}
-          userNumber={userNumber}
-          onSessionEnd={handleSessionEnd}
-        />
+        <div className="flex-1 overflow-y-auto bg-slate-50 px-4 py-4 space-y-3">
+          {isLoading && (
+            <div className="text-sm text-slate-500">Loading messages...</div>
+          )}
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-          {messages.length === 0 && (
-            <div className="text-center text-gray-500 mt-8">
-              <div className="text-4xl mb-2">👋</div>
-              <p className="text-sm">{t('chat.emptyHello')}</p>
-              <p className="text-xs mt-1">{t('chat.emptyPrompt')}</p>
+          {!isLoading && messages.length === 0 && (
+            <div className="h-full flex items-center justify-center text-center text-sm text-slate-500 px-8">
+              Alfred messages, nudges, and system updates will appear here.
             </div>
           )}
-          
-          {messages.map((msg, idx) => (
-            <div
-              key={idx}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+
+          {messages.map((msg) => (
+            <article
+              key={msg.message_id || `${msg.timestamp}-${msg.content}`}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"
             >
-              <div
-                className={`max-w-[80%] rounded-2xl px-4 py-2 ${
-                  msg.role === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white text-gray-800 shadow-sm border border-gray-200'
-                }`}
-              >
-                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                <p className={`text-xs mt-1 ${msg.role === 'user' ? 'text-blue-200' : 'text-gray-400'}`}>
-                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </p>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {formatType(msg.message_type)}
+                </span>
+                <time className="text-xs text-slate-400">
+                  {new Date(msg.timestamp).toLocaleString([], {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </time>
               </div>
-            </div>
+              <p className="whitespace-pre-wrap text-sm leading-6 text-slate-800">{msg.content}</p>
+            </article>
           ))}
 
-          {isTyping && (
-            <div className="flex justify-start">
-              <div className="bg-white text-gray-800 shadow-sm border border-gray-200 rounded-2xl px-4 py-3">
-                <div className="flex space-x-2">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                </div>
-              </div>
-            </div>
-          )}
-          
           <div ref={messagesEndRef} />
-        </div>
-
-        {/* Input */}
-        <div className="p-4 border-t border-gray-200 bg-white rounded-b-2xl">
-          <div className="flex gap-2">
-            <input
-              ref={inputRef}
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder={t('chat.placeholder')}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-            <button
-              onClick={sendMessage}
-              disabled={!inputValue.trim()}
-              className="px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-            >
-              {t('chat.send')}
-            </button>
-          </div>
         </div>
       </div>
 
-      {/* Floating Button */}
-      {false && (
       <button
-        onClick={toggleChat}
-        className="hidden"
+        onClick={() => setIsOpen((open) => !open)}
+        className="fixed bottom-6 right-6 z-50 flex min-w-[116px] items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-xl transition-colors hover:bg-slate-800"
+        aria-label="Open Alfred messages"
       >
-        {/* Alfred Logo */}
-        <img 
-          src="/alfred-logo.png" 
-          alt="Chat with Alfred" 
-          className="w-10 h-10 object-contain transition-transform duration-300 group-hover:rotate-12"
-          onError={(e) => {
-            e.target.style.display = 'none';
-            e.target.nextSibling.style.display = 'block';
-          }}
-        />
-        <span className="text-3xl" style={{ display: 'none' }}>🎩</span>
-        
-        {/* Unread Badge */}
-        {unreadCount > 0 && !isOpen && (
-          <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center animate-bounce">
-            {unreadCount}
-          </div>
+        {unreadCount > 0 && (
+          <span className="h-2.5 w-2.5 rounded-full bg-amber-400" aria-hidden="true" />
         )}
-
-        {/* Goal Review Indicator on Floating Button */}
-        {goalReviewStatus && !isOpen && (
-          <div className="absolute -top-2 -left-2 bg-blue-500 text-white text-xs font-bold rounded-full w-8 h-8 flex items-center justify-center shadow-lg">
-            🎯
-          </div>
+        <span>Alfred</span>
+        {unreadCount > 0 && (
+          <span className="rounded-full bg-amber-400 px-2 py-0.5 text-xs font-bold text-slate-950">
+            {unreadCount}
+          </span>
         )}
       </button>
-      )}
     </>
   );
 }

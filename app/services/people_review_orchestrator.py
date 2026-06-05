@@ -234,7 +234,7 @@ def _handle_reflection(
     
     # Generate ONE adaptive question using GPT
     journey_context = build_journey_context(db, user_number)
-    history = load_conversation_history(db, user_number)
+    history = load_conversation_history(db, user_number, conversation_type="team_coaching")
     
     try:
         text = _generate_reflection_question(
@@ -287,7 +287,7 @@ def _handle_diagnostics(
     
     # Generate ONE diagnostic question using GPT
     journey_context = build_journey_context(db, user_number)
-    history = load_conversation_history(db, user_number)
+    history = load_conversation_history(db, user_number, conversation_type="team_coaching")
     reflection_summary = state_context.get('user_reflection', '')
     
     try:
@@ -342,7 +342,7 @@ def _handle_planning(
     
     # Generate ONE planning question using GPT
     journey_context = build_journey_context(db, user_number)
-    history = load_conversation_history(db, user_number)
+    history = load_conversation_history(db, user_number, conversation_type="team_coaching")
     reflection_summary = state_context.get('user_reflection', '')
     diagnosis_summary = state_context.get('diagnosis_input', '')
     

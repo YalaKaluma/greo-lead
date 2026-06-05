@@ -8,7 +8,12 @@ from app.models import Message
 from app.db import get_db
 from app.models import User, OnboardingStep
 from app.services.orchestrator import orchestrate
-from app.services.message_service import load_conversation_history, save_message
+from app.services.message_service import (
+    load_conversation_history,
+    message_types_for_conversation,
+    normalize_conversation_type,
+    save_message,
+)
 from app.services.language import normalize_language
 
 router = APIRouter()
@@ -18,6 +23,7 @@ class ChatMessage(BaseModel):
     user_number: str
     message: str
     preferred_language: Optional[str] = None
+    conversation_type: Optional[str] = None
 
 
 class ChatHistoryResponse(BaseModel):
@@ -29,6 +35,36 @@ class ChatHistoryResponse(BaseModel):
 class JumpToStageRequest(BaseModel):
     user_number: str
     stage: str
+
+
+def _conversation_type_from_state(state: str, requested: Optional[str] = None) -> str:
+    normalized = normalize_conversation_type(requested)
+    if normalized in {
+        "journal",
+        "goal_coaching",
+        "leadership_coaching",
+        "team_coaching",
+        "messages",
+    }:
+        return normalized
+
+    state_map = {
+        "GOAL_REVIEW": "goal_coaching",
+        "LEADERSHIP_COACHING": "leadership_coaching",
+        "PEOPLE_REVIEW": "team_coaching",
+        "COACHING": "goal_coaching",
+    }
+    return state_map.get(state, "messages")
+
+
+def _message_type_for_conversation(conversation_type: str) -> str:
+    return {
+        "journal": "journal",
+        "goal_coaching": "goal_coaching",
+        "leadership_coaching": "leadership_coaching",
+        "team_coaching": "team_coaching",
+        "messages": "notification",
+    }.get(conversation_type, "notification")
 
 
 @router.post("/chat")
@@ -51,14 +87,6 @@ async def send_chat_message(
         chat_msg.preferred_language or getattr(user, "language_preference", None)
     )
 
-    # Save user message to history
-    user_message = save_message(
-        db=db,
-        sender="user",
-        user_number=chat_msg.user_number,
-        content=chat_msg.message
-    )
-
     # Process message using brain orchestrator (same as WhatsApp/Email)
     result = orchestrate(
         db=db,
@@ -69,13 +97,26 @@ async def send_chat_message(
     )
 
     reply = result.response
+    conversation_type = _conversation_type_from_state(result.state, chat_msg.conversation_type)
+    message_type = _message_type_for_conversation(conversation_type)
 
-    # Save assistant response to history
+    # Save the exchange into the channel-specific history.
+    user_message = save_message(
+        db=db,
+        sender="user",
+        user_number=chat_msg.user_number,
+        content=chat_msg.message,
+        message_type=message_type,
+        conversation_type=conversation_type,
+    )
+
     assistant_message = save_message(
         db=db,
         sender="assistant",
         user_number=chat_msg.user_number,
-        content=reply
+        content=reply,
+        message_type=message_type,
+        conversation_type=conversation_type,
     )
 
     print(f"   Alfred Response: {reply}")
@@ -88,6 +129,8 @@ async def send_chat_message(
 
     # Extract goal review status from result data
     goal_review_status = result.data.get('goal_review_status')
+    people_review_status = result.data.get('people_review_status')
+    leadership_coaching_status = result.data.get('leadership_coaching_status')
 
     return {
         "reply": reply,
@@ -102,7 +145,10 @@ async def send_chat_message(
         "timestamp": datetime.utcnow().isoformat(),
         "state": result.state,
         "actions": result.actions,
-        "goal_review_status": goal_review_status
+        "goal_review_status": goal_review_status,
+        "people_review_status": people_review_status,
+        "leadership_coaching_status": leadership_coaching_status,
+        "conversation_type": conversation_type,
     }
 
 
@@ -160,7 +206,9 @@ async def jump_to_stage(
         db=db,
         sender="assistant",
         user_number=request.user_number,
-        content=message
+        content=message,
+        message_type="goal_coaching",
+        conversation_type="goal_coaching",
     )
     
     return {
@@ -223,7 +271,9 @@ async def end_goal_review_session(
         db=db,
         sender="assistant",
         user_number=user_number,
-        content=message
+        content=message,
+        message_type="goal_coaching",
+        conversation_type="goal_coaching",
     )
     
     print(f"✅ Goal review session ended for {user_number}")
@@ -239,6 +289,7 @@ async def end_goal_review_session(
 async def get_chat_history(
         user_number: str,
         limit: int = 50,
+        conversation_type: Optional[str] = None,
         db: Session = Depends(get_db)
 ):
     """
@@ -249,14 +300,17 @@ async def get_chat_history(
     try:
         from app.models import Message
 
-        # Load messages directly from database with actual timestamps
-        messages = (
-            db.query(Message)
-            .filter(Message.user_number == user_number)
-            .order_by(Message.timestamp.desc())
-            .limit(limit)
-            .all()
-        )
+        query = db.query(Message).filter(Message.user_number == user_number)
+        normalized_conversation_type = normalize_conversation_type(conversation_type)
+        allowed_message_types = message_types_for_conversation(normalized_conversation_type)
+
+        if normalized_conversation_type:
+            query = query.filter(
+                (Message.conversation_type == normalized_conversation_type)
+                | (Message.message_type.in_(allowed_message_types or []))
+            )
+
+        messages = query.order_by(Message.timestamp.desc()).limit(limit).all()
 
         # Reverse to get chronological order
         messages = reversed(messages)
@@ -270,6 +324,7 @@ async def get_chat_history(
                 "content": msg.content,
                 "timestamp": msg.timestamp.isoformat(),
                 "message_type": getattr(msg, "message_type", "chat"),
+                "conversation_type": getattr(msg, "conversation_type", None),
                 "is_read": getattr(msg, "is_read", True),
                 "reflection_depth_score": getattr(msg, "reflection_depth_score", None),
                 "reflection_depth_level": getattr(msg, "reflection_depth_level", None),
@@ -293,7 +348,7 @@ def get_unread_nudges(
 ):
     count = db.query(Message).filter(
         Message.user_number == user_number,
-        Message.message_type == "nudge",
+        Message.message_type.in_(["nudge", "notification"]),
         Message.is_read == False
     ).count()
 
@@ -306,7 +361,7 @@ def mark_nudges_read(
 ):
     db.query(Message).filter(
         Message.user_number == user_number,
-        Message.message_type == "nudge",
+        Message.message_type.in_(["nudge", "notification"]),
         Message.is_read == False
     ).update({"is_read": True})
 
@@ -399,7 +454,10 @@ async def notify_user(
         db=db,
         sender="assistant",
         user_number=user_number,
-        content=message
+        content=message,
+        message_type="notification",
+        conversation_type="messages",
+        is_read=False,
     )
 
     return {

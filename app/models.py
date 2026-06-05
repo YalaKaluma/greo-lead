@@ -42,6 +42,7 @@ class Message(Base):
 
     # NEW
     message_type = Column(String, default="chat")
+    conversation_type = Column(String, default="messages", index=True)
     is_read = Column(Boolean, default=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     reflection_depth_score = Column(Float, nullable=True)

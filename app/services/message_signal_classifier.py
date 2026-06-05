@@ -41,7 +41,15 @@ def _source_type_for_message(message: Message) -> str:
     message_type = (message.message_type or "").strip().lower()
     if message_type == "journal":
         return "journal"
-    if message_type in {"coaching", "coaching_session", "goal_review", "people_review", "leadership_coaching"}:
+    if message_type in {
+        "coaching",
+        "coaching_session",
+        "goal_coaching",
+        "goal_review",
+        "team_coaching",
+        "people_review",
+        "leadership_coaching",
+    }:
         return "coaching_session"
     return "journal" if message.sender == "user" else "chat"
 
@@ -278,4 +286,3 @@ def mark_message_for_reclassification(db: Session, message_id: int) -> int:
     db.commit()
     logger.info("Marked message %s for reclassification by deleting %s current flags", message_id, deleted)
     return deleted
-

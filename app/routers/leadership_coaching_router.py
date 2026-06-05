@@ -82,6 +82,7 @@ def process_message(
             user_number=request.user_number,
             content=request.message,
             message_type="leadership_coaching",
+            conversation_type="leadership_coaching",
         )
         result = orchestrate_leadership_coaching(
             db=db,
@@ -98,6 +99,7 @@ def process_message(
             user_number=request.user_number,
             content=result["response"],
             message_type="leadership_coaching",
+            conversation_type="leadership_coaching",
         )
         
         return {

@@ -187,7 +187,7 @@ def _handle_situation(
     
     # Generate first reflection question based on what they said
     journey_context = build_journey_context(db, user_number)
-    recent_history = load_conversation_history(db, user_number, limit=5)
+    recent_history = load_conversation_history(db, user_number, conversation_type="leadership_coaching", limit=5)
     
     reflection_question = _generate_reflection_question(
         quadrant=quadrant,
