@@ -1126,12 +1126,22 @@ const MTN_CHART_HEIGHT = 240;
 const MTN_CHART_PADDING = 34;
 const MTN_CHART_BOTTOM_PADDING = 46;
 
+const percentile = (values, ratio) => {
+  const sorted = values
+    .filter(value => Number.isFinite(value))
+    .sort((a, b) => a - b);
+  if (!sorted.length) return 0;
+  const index = Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * ratio));
+  return sorted[index];
+};
+
 const buildMtnPath = (points, key, maxValue) => {
   if (!points.length) return '';
   return points
     .map((point, index) => {
       const x = MTN_CHART_PADDING + (index / Math.max(points.length - 1, 1)) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2);
-      const y = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING - ((Number(point[key]) || 0) / maxValue) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING - MTN_CHART_BOTTOM_PADDING);
+      const scaledValue = Math.min(Number(point[key]) || 0, maxValue);
+      const y = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING - (scaledValue / maxValue) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING - MTN_CHART_BOTTOM_PADDING);
       return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
     })
     .join(' ');
@@ -1167,9 +1177,18 @@ function TaskMtnTrendChart({ data }) {
     Number(point.mtn_score || 0),
     Number(point.rolling_average || 0)
   ]);
+  const positiveDailyValues = points
+    .map(point => Number(point.mtn_score || 0))
+    .filter(value => value > 0);
+  const robustMax = Math.max(
+    percentile(positiveDailyValues, 0.9),
+    Math.max(...points.map(point => Number(point.rolling_average || 0)), 0)
+  );
+  const absoluteMax = Math.max(...values, 0);
+  const hasCappedOutliers = absoluteMax > robustMax && robustMax > 0;
   const maxScore = Math.max(
     1,
-    Math.ceil(Math.max(...values, 0) * 1.15)
+    Math.ceil(robustMax * 1.2)
   );
   const dailyPath = buildMtnPath(points, 'mtn_score', maxScore);
   const rollingPath = buildMtnPath(points, 'rolling_average', maxScore);
@@ -1189,6 +1208,9 @@ function TaskMtnTrendChart({ data }) {
         <div className="flex gap-4 text-xs text-slate-500">
           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> Daily</span>
           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> 7-day average</span>
+          {hasCappedOutliers && (
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-rose-400" /> Outlier capped</span>
+          )}
         </div>
       </div>
 
@@ -1205,6 +1227,22 @@ function TaskMtnTrendChart({ data }) {
           })}
           <path d={dailyPath} fill="none" stroke="#cbd5e1" strokeWidth="2" />
           <path d={rollingPath} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" />
+          {points.map((point, index) => {
+            const value = Number(point.mtn_score || 0);
+            if (value <= maxScore) return null;
+            const x = MTN_CHART_PADDING + (index / Math.max(points.length - 1, 1)) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2);
+            return (
+              <circle
+                key={`outlier-${point.date}`}
+                cx={x}
+                cy={MTN_CHART_PADDING}
+                r="3"
+                fill="#fb7185"
+              >
+                <title>{`${formatShortDate(point.date)}: ${formatMtnNumber(value)} MTN`}</title>
+              </circle>
+            );
+          })}
           {tickIndexes.map(index => {
             const x = MTN_CHART_PADDING + (index / Math.max(points.length - 1, 1)) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2);
             return (
