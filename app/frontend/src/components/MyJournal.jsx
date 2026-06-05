@@ -117,7 +117,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
     setTrendsLoading(true);
     setTrendsError(null);
     try {
-      const response = await axios.get(`${apiUrl}/api/journal/trends`, {
+      const response = await axios.get(`${apiUrl}/api/journal/journal/trends`, {
         params: { user_number: userNumber }
       });
       setTrends(response.data);
@@ -130,10 +130,10 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   };
 
   useEffect(() => {
-    if (activeTab === 'trends' && !trends && !trendsLoading) {
+    if (activeTab === 'trends' && !trends && !trendsLoading && !trendsError) {
       fetchReflectionTrends();
     }
-  }, [activeTab, trends, trendsLoading, userNumber]);
+  }, [activeTab, trends, trendsLoading, trendsError, userNumber]);
 
   const getDepthDetails = (message) => {
     const score = message.reflection_depth_score;
