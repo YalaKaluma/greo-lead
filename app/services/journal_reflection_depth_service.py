@@ -22,6 +22,18 @@ DEPTH_LEVELS = {
     5: "Growth & Transformation",
 }
 
+DEPTH_LEVEL_NAMES = {
+    "description": 1,
+    "emotion": 2,
+    "root cause": 3,
+    "root_cause": 3,
+    "pattern recognition": 4,
+    "pattern_recognition": 4,
+    "growth & transformation": 5,
+    "growth and transformation": 5,
+    "growth transformation": 5,
+}
+
 
 LEVEL_BADGES = {
     1: "Emerging Reflection",
@@ -44,6 +56,24 @@ def depth_level_for_score(score: float | None) -> int | None:
     if score <= 8:
         return 4
     return 5
+
+
+def normalize_depth_level(value: Any, score: float | None = None) -> int:
+    if isinstance(value, int):
+        return max(1, min(5, value))
+    if isinstance(value, float):
+        return max(1, min(5, int(value)))
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized.isdigit():
+            return max(1, min(5, int(normalized)))
+        if normalized.startswith("level "):
+            suffix = normalized.replace("level ", "", 1).strip()
+            if suffix.isdigit():
+                return max(1, min(5, int(suffix)))
+        if normalized in DEPTH_LEVEL_NAMES:
+            return DEPTH_LEVEL_NAMES[normalized]
+    return depth_level_for_score(score) or 1
 
 
 def _fallback_score(text: str) -> dict[str, Any]:
@@ -102,8 +132,7 @@ recommendations must be 2-3 short personalized strings.
         )
         payload = json.loads(response.choices[0].message.content)
         score = max(1.0, min(10.0, round(float(payload.get("score", 1)), 1)))
-        level = int(payload.get("level") or depth_level_for_score(score) or 1)
-        level = max(1, min(5, level))
+        level = normalize_depth_level(payload.get("level"), score)
         return {
             "score": score,
             "level": level,
@@ -151,8 +180,7 @@ recommendations must be 2-3 short personalized strings.
 
     for item in payload.get("scores", []):
         score = max(1.0, min(10.0, round(float(item.get("score", 1)), 1)))
-        level = int(item.get("level") or depth_level_for_score(score) or 1)
-        level = max(1, min(5, level))
+        level = normalize_depth_level(item.get("level"), score)
         recommendations = item.get("recommendations") or []
         if not isinstance(recommendations, list):
             recommendations = []
