@@ -418,7 +418,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
             {t('journal.title')}
           </h1>
           <p className="mt-2 text-sm text-slate-500 md:text-base">
-            Transform experiences into insight. Insight into growth.
+            Transform experiences into insight, and insight into growth.
           </p>
         </div>
 
