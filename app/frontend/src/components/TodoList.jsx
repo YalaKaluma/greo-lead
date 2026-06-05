@@ -701,20 +701,12 @@ export default function TodoList({ apiUrl, userNumber }) {
                   {selectedTasks.length} task(s) selected
                 </span>
               ) : (
-                <>
-                  {filterType === 'due_today' && 'Tasks due today'}
-                  {filterType === 'due_tomorrow' && 'Tasks due tomorrow'}
-                  {filterType === 'next_7_days' && 'Tasks due in the next 7 days'}
-                  {filterType === 'all' && 'All active tasks'}
-                  {selectedProject && ` • Project: ${selectedProject}`}
-                  {selectedDelegate && ` • Delegated to: ${selectedDelegate}`}
-                  {selectedGoal && ` • Goal: ${goals.find(g => g.id === parseInt(selectedGoal))?.title || 'Selected'}`}
-                </>
+                'Move the needle'
               )}
             </p>
           </div>
           {!selectionMode && (
-            <div className="flex justify-center">
+            <div className="flex justify-center pt-9">
               <DailyMtnNeedle score={todayMtnScore} completedTasks={todayCompletedTasks} />
             </div>
           )}
@@ -1125,10 +1117,7 @@ function DailyMtnNeedle({ score, completedTasks }) {
       title={label}
       aria-label={label}
     >
-      <div className="text-center text-[11px] font-medium text-slate-400">
-        Move the needle
-      </div>
-      <div className="relative mt-1 h-5">
+      <div className="relative h-5">
         <div className="absolute inset-x-0 top-2 grid h-2 grid-cols-5 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
           <span className="bg-blue-100" />
           <span className="bg-blue-200" />
