@@ -47,7 +47,9 @@ def _normalize_mtn_score(raw_score: Any) -> float:
         return 0.0
 
     score = float(raw_score)
-    return score / 10 if score > 1 else score
+    if score <= 1:
+        score *= 10
+    return max(0.0, min(10.0, score))
 
 
 def _task_mtn_score(
