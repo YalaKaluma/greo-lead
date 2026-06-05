@@ -1266,18 +1266,17 @@ const weekdayIndexFromDate = (dateString) => {
   return (jsDay + 6) % 7;
 };
 
-const colorForMtnScore = (score, maxScore) => {
+const colorForMtnScore = (score) => {
   if (!score) return 'bg-slate-200';
-  const ratio = maxScore > 0 ? score / maxScore : 0;
-  if (ratio >= 0.85) return 'bg-blue-700';
-  if (ratio >= 0.65) return 'bg-blue-500';
-  if (ratio >= 0.4) return 'bg-blue-300';
+  if (score >= 20) return 'bg-blue-700';
+  if (score >= 15) return 'bg-blue-500';
+  if (score >= 10) return 'bg-blue-300';
+  if (score >= 5) return 'bg-blue-200';
   return 'bg-blue-100';
 };
 
 function TaskMtnHeatmap({ data }) {
   const days = Array.isArray(data) ? data : [];
-  const maxScore = Math.max(...days.map(day => Number(day.mtn_score || 0)), 0);
   const weeks = [];
 
   days.forEach((day, index) => {
@@ -1311,7 +1310,7 @@ function TaskMtnHeatmap({ data }) {
                   <div
                     key={day.date}
                     title={`${formatShortDate(day.date)}: ${formatMtnNumber(day.mtn_score)} MTN from ${day.completed_tasks || 0} completed task(s)`}
-                    className={`h-4 min-w-4 rounded-sm ${colorForMtnScore(Number(day.mtn_score || 0), maxScore)}`}
+                    className={`h-4 min-w-4 rounded-sm ${colorForMtnScore(Number(day.mtn_score || 0))}`}
                   />
                 ) : (
                   <div key={`${weekIndex}-${weekday}`} className="h-4 min-w-4" />
@@ -1326,6 +1325,7 @@ function TaskMtnHeatmap({ data }) {
         <span>Low</span>
         <span className="h-3 w-3 rounded-sm bg-slate-200" />
         <span className="h-3 w-3 rounded-sm bg-blue-100" />
+        <span className="h-3 w-3 rounded-sm bg-blue-200" />
         <span className="h-3 w-3 rounded-sm bg-blue-300" />
         <span className="h-3 w-3 rounded-sm bg-blue-500" />
         <span className="h-3 w-3 rounded-sm bg-blue-700" />
