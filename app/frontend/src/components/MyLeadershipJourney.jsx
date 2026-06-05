@@ -1782,7 +1782,7 @@ function LeadershipWheelModal({ dimensionStates, topicData, journeyBelt, onClose
 function BeltGuideModal({ onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 md:p-6">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+      <div className="flex max-h-[92vh] w-full max-w-[1480px] flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 md:px-6">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Belt Progression</p>
@@ -1802,14 +1802,14 @@ function BeltGuideModal({ onClose }) {
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 px-4 py-5 md:px-6">
-          <div className="grid gap-4 lg:grid-cols-2">
+        <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-4 py-5 md:px-6">
+          <div className="grid min-w-[1180px] gap-4 xl:grid-cols-5">
             {BELT_GUIDE.map((guide) => {
               const belt = getBeltById(guide.id);
               const isBlackBelt = belt.id === "black";
 
               return (
-                <article key={guide.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <article key={guide.id} className="flex min-h-[520px] flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-start gap-3">
                     <span
                       className={`mt-1 h-4 w-4 flex-none rounded-full border ${
@@ -1837,7 +1837,7 @@ function BeltGuideModal({ onClose }) {
                     </ul>
                   </div>
 
-                  <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <div className="mt-auto rounded-md border border-slate-200 bg-slate-50 p-3">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Objective</p>
                     <p className="mt-1 text-sm font-semibold text-slate-900">{guide.objective}</p>
                     <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Key Question</p>
