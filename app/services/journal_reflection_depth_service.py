@@ -230,7 +230,7 @@ def backfill_recent_reflection_depth(
         for message in batch:
             result = results_by_id.get(message.id)
             if not result:
-                raise ValueError(f"Missing reflection depth score for message {message.id}")
+                result = score_reflection_depth(message.content or "")
             apply_reflection_depth_result(message, result, now)
 
         db.commit()
