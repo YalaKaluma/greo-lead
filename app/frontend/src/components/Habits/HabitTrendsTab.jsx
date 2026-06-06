@@ -8,6 +8,18 @@ import HabitLeaderboard from './HabitLeaderboard';
 import HabitScores from './HabitScores';
 import HabitTrendSummary from './HabitTrendSummary';
 
+const extractTrendChart = (payload) => {
+  const candidates = [
+    payload?.trend_chart,
+    payload?.trendChart,
+    payload?.data?.trend_chart,
+    payload?.data?.trendChart,
+    payload?.trends?.trend_chart,
+    payload?.trends?.trendChart,
+  ];
+  return candidates.find(Array.isArray) || [];
+};
+
 export default function HabitTrendsTab({
   apiUrl,
   userNumber,
@@ -34,8 +46,8 @@ export default function HabitTrendsTab({
         ]);
         if (cancelled) return;
         setOverlayTrends({
-          tasks: tasksResponse.status === 'fulfilled' ? tasksResponse.value.data?.trend_chart || [] : [],
-          journal: journalResponse.status === 'fulfilled' ? journalResponse.value.data?.trend_chart || [] : [],
+          tasks: tasksResponse.status === 'fulfilled' ? extractTrendChart(tasksResponse.value.data) : [],
+          journal: journalResponse.status === 'fulfilled' ? extractTrendChart(journalResponse.value.data) : [],
         });
         setOverlayErrors({
           tasks: tasksResponse.status === 'rejected',

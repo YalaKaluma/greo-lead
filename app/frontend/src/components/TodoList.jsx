@@ -1252,6 +1252,18 @@ const TREND_OVERLAY_DEFS = {
   journal: { label: 'Journal', color: '#7c3aed', unit: 'Depth', axisMax: 10 },
 };
 
+const extractTrendChart = (payload) => {
+  const candidates = [
+    payload?.trend_chart,
+    payload?.trendChart,
+    payload?.data?.trend_chart,
+    payload?.data?.trendChart,
+    payload?.trends?.trend_chart,
+    payload?.trends?.trendChart,
+  ];
+  return candidates.find(Array.isArray) || [];
+};
+
 const percentile = (values, ratio) => {
   const sorted = values
     .filter(value => Number.isFinite(value))
@@ -1323,8 +1335,11 @@ const overlayStats = (points, startTime, endTime) => {
     return pointTime !== null && startTime !== null && endTime !== null && pointTime >= startTime && pointTime <= endTime;
   });
   return {
+    loaded: points.length,
     total: inRange.length,
     nonZero: inRange.filter(point => Number(point.overlay_score || 0) > 0).length,
+    firstDate: points[0]?.date || null,
+    lastDate: points[points.length - 1]?.date || null,
   };
 };
 
@@ -1431,8 +1446,10 @@ function TaskMtnTrendChart({ data, overlays, overlayErrors = {} }) {
   const selectedOverlayStats = selectedOverlay && overlayConfig ? overlayStats(overlayPoints, startTime, endTime) : null;
   const overlayStatus = selectedOverlay && overlayErrors[selectedOverlay]
     ? `${selectedOverlayLabel} data could not be loaded.`
-    : selectedOverlayStats && selectedOverlayStats.total === 0
-      ? `No ${selectedOverlayLabel.toLowerCase()} data loaded for this date range.`
+    : selectedOverlayStats && selectedOverlayStats.loaded === 0
+      ? `${selectedOverlayLabel}: endpoint returned 0 days.`
+      : selectedOverlayStats && selectedOverlayStats.total === 0
+        ? `${selectedOverlayLabel}: ${selectedOverlayStats.loaded} days loaded (${formatShortDate(selectedOverlayStats.firstDate)}-${formatShortDate(selectedOverlayStats.lastDate)}), none overlap this chart.`
       : selectedOverlayStats
         ? `${selectedOverlayLabel}: ${selectedOverlayStats.total} days loaded, ${selectedOverlayStats.nonZero} non-zero.`
         : '';
@@ -1634,8 +1651,8 @@ function TaskMtnTrendsTab({ apiUrl, userNumber, trends, loading, error }) {
         ]);
         if (cancelled) return;
         setOverlayTrends({
-          habits: habitsResponse.status === 'fulfilled' ? habitsResponse.value.data?.trend_chart || [] : [],
-          journal: journalResponse.status === 'fulfilled' ? journalResponse.value.data?.trend_chart || [] : [],
+          habits: habitsResponse.status === 'fulfilled' ? extractTrendChart(habitsResponse.value.data) : [],
+          journal: journalResponse.status === 'fulfilled' ? extractTrendChart(journalResponse.value.data) : [],
         });
         setOverlayErrors({
           habits: habitsResponse.status === 'rejected',
@@ -1680,7 +1697,7 @@ function TaskMtnTrendsTab({ apiUrl, userNumber, trends, loading, error }) {
   const sign = delta > 0 ? '+' : '';
   const overlays = {
     habits: overlayTrends.habits,
-    tasks: trends?.trend_chart || [],
+    tasks: extractTrendChart(trends),
     journal: overlayTrends.journal,
   };
 
@@ -1709,8 +1726,8 @@ function TaskMtnTrendsTab({ apiUrl, userNumber, trends, loading, error }) {
         />
       </div>
 
-      <TaskMtnTrendChart data={trends?.trend_chart} overlays={overlays} overlayErrors={overlayErrors} />
-      <TaskMtnHeatmap data={trends?.trend_chart} />
+      <TaskMtnTrendChart data={extractTrendChart(trends)} overlays={overlays} overlayErrors={overlayErrors} />
+      <TaskMtnHeatmap data={extractTrendChart(trends)} />
 
       <div className="rounded-lg border bg-white p-4">
         <h2 className="text-lg font-semibold text-slate-800">90-Day Total</h2>

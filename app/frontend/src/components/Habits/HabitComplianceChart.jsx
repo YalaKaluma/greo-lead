@@ -72,8 +72,11 @@ const overlayStats = (points, startTime, endTime) => {
     return pointTime !== null && startTime !== null && endTime !== null && pointTime >= startTime && pointTime <= endTime;
   });
   return {
+    loaded: points.length,
     total: inRange.length,
     nonZero: inRange.filter(point => Number(point.overlay_score || 0) > 0).length,
+    firstDate: points[0]?.date || null,
+    lastDate: points[points.length - 1]?.date || null,
   };
 };
 
@@ -166,8 +169,10 @@ export default function HabitComplianceChart({ data, overlays, overlayErrors = {
   const selectedOverlayStats = selectedOverlay && overlayConfig ? overlayStats(overlayPoints, startTime, endTime) : null;
   const overlayStatus = selectedOverlay && overlayErrors[selectedOverlay]
     ? `${selectedOverlayLabel} data could not be loaded.`
-    : selectedOverlayStats && selectedOverlayStats.total === 0
-      ? `No ${selectedOverlayLabel.toLowerCase()} data loaded for this date range.`
+    : selectedOverlayStats && selectedOverlayStats.loaded === 0
+      ? `${selectedOverlayLabel}: endpoint returned 0 days.`
+      : selectedOverlayStats && selectedOverlayStats.total === 0
+        ? `${selectedOverlayLabel}: ${selectedOverlayStats.loaded} days loaded (${formatShortDate(selectedOverlayStats.firstDate)}-${formatShortDate(selectedOverlayStats.lastDate)}), none overlap this chart.`
       : selectedOverlayStats
         ? `${selectedOverlayLabel}: ${selectedOverlayStats.total} days loaded, ${selectedOverlayStats.nonZero} non-zero.`
         : '';

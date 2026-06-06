@@ -11,6 +11,18 @@ const OVERLAY_DEFS = {
   journal: { label: 'Journal', color: '#7c3aed', unit: 'Depth', axisMax: 10 },
 };
 
+const extractTrendChart = (payload) => {
+  const candidates = [
+    payload?.trend_chart,
+    payload?.trendChart,
+    payload?.data?.trend_chart,
+    payload?.data?.trendChart,
+    payload?.trends?.trend_chart,
+    payload?.trends?.trendChart,
+  ];
+  return candidates.find(Array.isArray) || [];
+};
+
 const formatShortDate = (dateString) => {
   if (!dateString) return '';
   const date = new Date(`${dateString}T00:00:00`);
@@ -88,8 +100,11 @@ const overlayStats = (points, startTime, endTime) => {
     return pointTime !== null && startTime !== null && endTime !== null && pointTime >= startTime && pointTime <= endTime;
   });
   return {
+    loaded: points.length,
     total: inRange.length,
     nonZero: inRange.filter(point => Number(point.overlay_score || 0) > 0).length,
+    firstDate: points[0]?.date || null,
+    lastDate: points[points.length - 1]?.date || null,
   };
 };
 
@@ -205,8 +220,10 @@ function DepthTrendChart({ data, overlays, overlayErrors = {} }) {
   const selectedOverlayStats = selectedOverlay && overlayConfig ? overlayStats(overlayPoints, startTime, endTime) : null;
   const overlayStatus = selectedOverlay && overlayErrors[selectedOverlay]
     ? `${selectedOverlayLabel} data could not be loaded.`
-    : selectedOverlayStats && selectedOverlayStats.total === 0
-      ? `No ${selectedOverlayLabel.toLowerCase()} data loaded for this date range.`
+    : selectedOverlayStats && selectedOverlayStats.loaded === 0
+      ? `${selectedOverlayLabel}: endpoint returned 0 days.`
+      : selectedOverlayStats && selectedOverlayStats.total === 0
+        ? `${selectedOverlayLabel}: ${selectedOverlayStats.loaded} days loaded (${formatShortDate(selectedOverlayStats.firstDate)}-${formatShortDate(selectedOverlayStats.lastDate)}), none overlap this chart.`
       : selectedOverlayStats
         ? `${selectedOverlayLabel}: ${selectedOverlayStats.total} days loaded, ${selectedOverlayStats.nonZero} non-zero.`
         : '';
@@ -391,8 +408,8 @@ export default function JournalTrendsTab({ apiUrl, userNumber, trends, loading, 
         ]);
         if (cancelled) return;
         setOverlayTrends({
-          habits: habitsResponse.status === 'fulfilled' ? habitsResponse.value.data?.trend_chart || [] : [],
-          tasks: tasksResponse.status === 'fulfilled' ? tasksResponse.value.data?.trend_chart || [] : [],
+          habits: habitsResponse.status === 'fulfilled' ? extractTrendChart(habitsResponse.value.data) : [],
+          tasks: tasksResponse.status === 'fulfilled' ? extractTrendChart(tasksResponse.value.data) : [],
         });
         setOverlayErrors({
           habits: habitsResponse.status === 'rejected',
@@ -415,7 +432,7 @@ export default function JournalTrendsTab({ apiUrl, userNumber, trends, loading, 
   const overlays = useMemo(() => ({
     habits: overlayTrends.habits,
     tasks: overlayTrends.tasks,
-    journal: trends?.trend_chart || [],
+    journal: extractTrendChart(trends),
   }), [overlayTrends, trends]);
 
   if (loading) {
@@ -463,8 +480,8 @@ export default function JournalTrendsTab({ apiUrl, userNumber, trends, loading, 
         />
       </div>
 
-      <DepthTrendChart data={trends?.trend_chart} overlays={overlays} overlayErrors={overlayErrors} />
-      <ReflectionDepthHeatmap data={trends?.trend_chart} />
+      <DepthTrendChart data={extractTrendChart(trends)} overlays={overlays} overlayErrors={overlayErrors} />
+      <ReflectionDepthHeatmap data={extractTrendChart(trends)} />
 
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         <h2 className="text-lg font-semibold text-slate-800">Alfred Reflection Coach</h2>
