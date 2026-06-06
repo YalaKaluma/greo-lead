@@ -410,7 +410,7 @@ dimensions:
         criteria: Integrate learning, resilience, humility, and self-awareness into a continuous process of personal evolution and adaptation.
         reflection:
           title: Reflection Trial
-          prompt: What have your failures and scars taught you about resilience, identity, and growth?
+          prompt: What pattern keeps showing up in your life, and what is it trying to teach you?
           grading_focus: [resilience, identity, growth integration, humility]
           completion_hint: Show how past pain has become useful perspective and capacity.
         real_world:
