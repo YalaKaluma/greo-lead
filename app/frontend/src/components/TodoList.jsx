@@ -1247,9 +1247,9 @@ const MTN_CHART_HEIGHT = 240;
 const MTN_CHART_PADDING = 34;
 const MTN_CHART_BOTTOM_PADDING = 46;
 const TREND_OVERLAY_DEFS = {
-  habits: { label: 'Habits', color: '#16a34a' },
-  tasks: { label: 'Tasks', color: '#f97316' },
-  journal: { label: 'Journal', color: '#7c3aed' },
+  habits: { label: 'Habits', color: '#16a34a', unit: '%', axisMax: 100 },
+  tasks: { label: 'Tasks', color: '#f97316', unit: 'MTN' },
+  journal: { label: 'Journal', color: '#7c3aed', unit: 'Depth', axisMax: 10 },
 };
 
 const percentile = (values, ratio) => {
@@ -1263,6 +1263,18 @@ const percentile = (values, ratio) => {
 
 const buildMtnPath = (points, key, maxValue) => {
   if (!points.length) return '';
+  return points
+    .map((point, index) => {
+      const x = MTN_CHART_PADDING + (index / Math.max(points.length - 1, 1)) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2);
+      const scaledValue = Math.min(Number(point[key]) || 0, maxValue);
+      const y = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING - (scaledValue / maxValue) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING - MTN_CHART_BOTTOM_PADDING);
+      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(' ');
+};
+
+const buildMtnAxisPath = (points, key, maxValue) => {
+  if (!points.length || !maxValue) return '';
   return points
     .map((point, index) => {
       const x = MTN_CHART_PADDING + (index / Math.max(points.length - 1, 1)) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2);
@@ -1297,46 +1309,35 @@ function StatTile({ label, value, detail }) {
   );
 }
 
-const normalizeTaskOverlayPoints = (basePoints, overlays, maxScore) => {
+const getTaskOverlayConfig = (overlayKey, overlays) => {
+  if (!overlayKey) return null;
   const overlayData = overlays || {};
-  const taskValues = (overlayData.tasks || []).map(point => Number(point.mtn_score || 0));
-  const maxTask = Math.max(...taskValues, 0);
   const byDate = {
-    habits: new Map((overlayData.habits || []).map(point => [
-      point.date,
-      (Number(point.compliance_rate || 0) / 100) * maxScore
-    ])),
-    tasks: new Map((overlayData.tasks || []).map(point => [
-      point.date,
-      maxTask > 0 ? (Number(point.mtn_score || 0) / maxTask) * maxScore : 0
-    ])),
+    habits: new Map((overlayData.habits || []).map(point => [point.date, Number(point.compliance_rate || 0)])),
+    tasks: new Map((overlayData.tasks || []).map(point => [point.date, Number(point.mtn_score || 0)])),
     journal: new Map((overlayData.journal || []).map(point => [
       point.date,
-      Number(point.entry_count || 0) > 0 ? (Number(point.daily_average || 0) / 10) * maxScore : 0
+      Number(point.entry_count || 0) > 0 ? Number(point.daily_average || 0) : 0
     ])),
   };
+  const values = Array.from(byDate[overlayKey]?.values() || []);
 
-  return Object.fromEntries(
-    Object.keys(TREND_OVERLAY_DEFS).map(key => [
-      key,
-      basePoints.map(point => ({
-        date: point.date,
-        overlay_score: byDate[key].get(point.date) ?? 0,
-      })),
-    ])
-  );
+  return {
+    axisMax: TREND_OVERLAY_DEFS[overlayKey]?.axisMax || Math.max(1, Math.ceil(Math.max(...values, 0) * 1.2)),
+    byDate: byDate[overlayKey] || new Map(),
+  };
 };
 
-function TrendOverlayButtons({ selected, onToggle }) {
+function TrendOverlayButtons({ selected, onSelect }) {
   return (
     <div className="flex flex-wrap justify-end gap-2">
       {Object.entries(TREND_OVERLAY_DEFS).map(([key, item]) => (
         <button
           key={key}
           type="button"
-          onClick={() => onToggle(key)}
+          onClick={() => onSelect(selected === key ? null : key)}
           className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
-            selected.includes(key)
+            selected === key
               ? 'border-slate-700 bg-slate-900 text-white'
               : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
           }`}
@@ -1350,7 +1351,7 @@ function TrendOverlayButtons({ selected, onToggle }) {
 
 function TaskMtnTrendChart({ data, overlays }) {
   const points = Array.isArray(data) ? data : [];
-  const [selectedOverlays, setSelectedOverlays] = useState([]);
+  const [selectedOverlay, setSelectedOverlay] = useState(null);
   const values = points.flatMap(point => [
     Number(point.mtn_score || 0),
     Number(point.rolling_average || 0)
@@ -1370,12 +1371,13 @@ function TaskMtnTrendChart({ data, overlays }) {
   );
   const dailyPath = buildMtnPath(points, 'mtn_score', maxScore);
   const rollingPath = buildMtnPath(points, 'rolling_average', maxScore);
-  const overlayPoints = normalizeTaskOverlayPoints(points, overlays, maxScore);
-  const toggleOverlay = (key) => {
-    setSelectedOverlays(current =>
-      current.includes(key) ? current.filter(item => item !== key) : [...current, key]
-    );
-  };
+  const overlayConfig = getTaskOverlayConfig(selectedOverlay, overlays);
+  const overlayPoints = selectedOverlay && overlayConfig
+    ? points.map(point => ({ date: point.date, overlay_score: overlayConfig.byDate.get(point.date) ?? 0 }))
+    : [];
+  const overlayAxisValues = overlayConfig
+    ? [0, overlayConfig.axisMax / 4, overlayConfig.axisMax / 2, (overlayConfig.axisMax * 3) / 4, overlayConfig.axisMax]
+    : [];
   const gridValues = [0, maxScore / 4, maxScore / 2, (maxScore * 3) / 4, maxScore];
   const tickIndexes = Array.from(new Set([
     0,
@@ -1393,47 +1395,52 @@ function TaskMtnTrendChart({ data, overlays }) {
           <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> Daily</span>
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> 7-day average</span>
-            {selectedOverlays.map(key => (
-              <span key={key} className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: TREND_OVERLAY_DEFS[key].color }} />
-                {TREND_OVERLAY_DEFS[key].label}
+            {selectedOverlay && (
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: TREND_OVERLAY_DEFS[selectedOverlay].color }} />
+                {TREND_OVERLAY_DEFS[selectedOverlay].label}
               </span>
-            ))}
+            )}
             {hasCappedOutliers && (
               <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-rose-400" /> Outlier capped</span>
             )}
           </div>
         </div>
-        <TrendOverlayButtons selected={selectedOverlays} onToggle={toggleOverlay} />
+        <TrendOverlayButtons selected={selectedOverlay} onSelect={setSelectedOverlay} />
       </div>
 
       <div className="mt-4 overflow-hidden rounded-md bg-slate-50">
         <svg viewBox={`0 0 ${MTN_CHART_WIDTH} ${MTN_CHART_HEIGHT}`} className="h-64 w-full">
           {gridValues.map(value => {
             const y = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING - (value / maxScore) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING - MTN_CHART_BOTTOM_PADDING);
-            const overlayAxisValue = Math.round((value / maxScore) * 100);
             return (
               <g key={value}>
                 <line x1={MTN_CHART_PADDING} x2={MTN_CHART_WIDTH - MTN_CHART_PADDING} y1={y} y2={y} stroke="#e2e8f0" />
                 <text x={6} y={y + 4} className="fill-slate-400 text-[10px]">{formatMtnNumber(value)}</text>
-                <text x={MTN_CHART_WIDTH - MTN_CHART_PADDING + 6} y={y + 4} className="fill-slate-400 text-[10px]">{overlayAxisValue}</text>
               </g>
+            );
+          })}
+          {overlayAxisValues.map(value => {
+            const y = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING - (value / overlayConfig.axisMax) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING - MTN_CHART_BOTTOM_PADDING);
+            return (
+              <text key={`overlay-axis-${value}`} x={MTN_CHART_WIDTH - MTN_CHART_PADDING + 6} y={y + 4} className="fill-slate-400 text-[10px]">
+                {value.toFixed(selectedOverlay === 'journal' ? 1 : 0)}
+              </text>
             );
           })}
           <line x1={MTN_CHART_WIDTH - MTN_CHART_PADDING} x2={MTN_CHART_WIDTH - MTN_CHART_PADDING} y1={MTN_CHART_PADDING} y2={MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING} stroke="#cbd5e1" />
           <path d={dailyPath} fill="none" stroke="#cbd5e1" strokeWidth="2" />
           <path d={rollingPath} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" />
-          {selectedOverlays.map(key => (
+          {selectedOverlay && overlayConfig && (
             <path
-              key={key}
-              d={buildMtnPath(overlayPoints[key] || [], 'overlay_score', maxScore)}
+              d={buildMtnAxisPath(overlayPoints, 'overlay_score', overlayConfig.axisMax)}
               fill="none"
-              stroke={TREND_OVERLAY_DEFS[key].color}
+              stroke={TREND_OVERLAY_DEFS[selectedOverlay].color}
               strokeWidth="2"
               strokeLinecap="round"
               strokeDasharray="5 4"
             />
-          ))}
+          )}
           {points.map((point, index) => {
             const value = Number(point.mtn_score || 0);
             if (value <= maxScore) return null;

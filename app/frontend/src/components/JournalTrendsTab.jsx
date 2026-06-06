@@ -6,9 +6,9 @@ const HEIGHT = 240;
 const PADDING = 32;
 
 const OVERLAY_DEFS = {
-  habits: { label: 'Habits', color: '#16a34a' },
-  tasks: { label: 'Tasks', color: '#f97316' },
-  journal: { label: 'Journal', color: '#7c3aed' },
+  habits: { label: 'Habits', color: '#16a34a', unit: '%', axisMax: 100 },
+  tasks: { label: 'Tasks', color: '#f97316', unit: 'MTN' },
+  journal: { label: 'Journal', color: '#7c3aed', unit: 'Depth', axisMax: 10 },
 };
 
 const formatShortDate = (dateString) => {
@@ -34,6 +34,18 @@ const buildPath = (points, key) => {
       const x = PADDING + (point.index / Math.max(points.length - 1, 1)) * (WIDTH - PADDING * 2);
       const y = HEIGHT - PADDING - (Number(point[key]) / 10) * (HEIGHT - PADDING * 2);
       return `${pathIndex === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(' ');
+};
+
+const buildAxisPath = (points, key, maxValue) => {
+  if (!points.length || !maxValue) return '';
+  return points
+    .map((point, index) => {
+      const x = PADDING + (index / Math.max(points.length - 1, 1)) * (WIDTH - PADDING * 2);
+      const scaledValue = Math.min(Number(point[key]) || 0, maxValue);
+      const y = HEIGHT - PADDING - (scaledValue / maxValue) * (HEIGHT - PADDING * 2);
+      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
     })
     .join(' ');
 };
@@ -83,43 +95,35 @@ function KpiCard({ label, value, detail, tone = 'slate' }) {
   );
 }
 
-const normalizeOverlayPoints = (basePoints, overlays) => {
+const getOverlayConfig = (overlayKey, overlays) => {
+  if (!overlayKey) return null;
   const overlayData = overlays || {};
-  const taskValues = (overlayData.tasks || []).map(point => Number(point.mtn_score || 0));
-  const maxTask = Math.max(...taskValues, 0);
   const byDate = {
-    habits: new Map((overlayData.habits || []).map(point => [point.date, Math.min(Number(point.compliance_rate || 0) / 10, 10)])),
-    tasks: new Map((overlayData.tasks || []).map(point => [
-      point.date,
-      maxTask > 0 ? (Number(point.mtn_score || 0) / maxTask) * 10 : 0
-    ])),
+    habits: new Map((overlayData.habits || []).map(point => [point.date, Number(point.compliance_rate || 0)])),
+    tasks: new Map((overlayData.tasks || []).map(point => [point.date, Number(point.mtn_score || 0)])),
     journal: new Map((overlayData.journal || []).map(point => [
       point.date,
       Number(point.entry_count || 0) > 0 ? Number(point.daily_average || 0) : 0
     ])),
   };
+  const values = Array.from(byDate[overlayKey]?.values() || []);
 
-  return Object.fromEntries(
-    Object.keys(OVERLAY_DEFS).map(key => [
-      key,
-      basePoints.map(point => ({
-        date: point.date,
-        overlay_score: byDate[key].get(point.date) ?? 0,
-      })),
-    ])
-  );
+  return {
+    axisMax: OVERLAY_DEFS[overlayKey]?.axisMax || Math.max(1, Math.ceil(Math.max(...values, 0) * 1.2)),
+    byDate: byDate[overlayKey] || new Map(),
+  };
 };
 
-function OverlayButtons({ selected, onToggle }) {
+function OverlayButtons({ selected, onSelect }) {
   return (
     <div className="flex flex-wrap justify-end gap-2">
       {Object.entries(OVERLAY_DEFS).map(([key, item]) => (
         <button
           key={key}
           type="button"
-          onClick={() => onToggle(key)}
+          onClick={() => onSelect(selected === key ? null : key)}
           className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
-            selected.includes(key)
+            selected === key
               ? 'border-slate-700 bg-slate-900 text-white'
               : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
           }`}
@@ -136,17 +140,18 @@ function DepthTrendChart({ data, overlays }) {
     ...point,
     daily_plot_score: Number(point.entry_count || 0) > 0 ? point.daily_average : 0,
   }));
-  const [selectedOverlays, setSelectedOverlays] = useState([]);
+  const [selectedOverlay, setSelectedOverlay] = useState(null);
   const dailyPath = buildPath(points, 'daily_plot_score');
   const weeklyPath = buildPath(points, 'weekly_average');
   const rollingPath = buildPath(points, 'rolling_30_day_average');
   const dateTicks = buildDateTicks(points);
-  const overlayPoints = normalizeOverlayPoints(points, overlays);
-  const toggleOverlay = (key) => {
-    setSelectedOverlays(current =>
-      current.includes(key) ? current.filter(item => item !== key) : [...current, key]
-    );
-  };
+  const overlayConfig = getOverlayConfig(selectedOverlay, overlays);
+  const overlayPoints = selectedOverlay && overlayConfig
+    ? points.map(point => ({ date: point.date, overlay_score: overlayConfig.byDate.get(point.date) ?? 0 }))
+    : [];
+  const overlayAxisValues = overlayConfig
+    ? [0, overlayConfig.axisMax / 4, overlayConfig.axisMax / 2, (overlayConfig.axisMax * 3) / 4, overlayConfig.axisMax]
+    : [];
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
@@ -158,15 +163,15 @@ function DepthTrendChart({ data, overlays }) {
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-500" /> No input</span>
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> Weekly</span>
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-600" /> 30-day</span>
-            {selectedOverlays.map(key => (
-              <span key={key} className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: OVERLAY_DEFS[key].color }} />
-                {OVERLAY_DEFS[key].label}
+            {selectedOverlay && (
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: OVERLAY_DEFS[selectedOverlay].color }} />
+                {OVERLAY_DEFS[selectedOverlay].label}
               </span>
-            ))}
+            )}
           </div>
         </div>
-        <OverlayButtons selected={selectedOverlays} onToggle={toggleOverlay} />
+        <OverlayButtons selected={selectedOverlay} onSelect={setSelectedOverlay} />
       </div>
 
       <div className="mt-4 overflow-hidden rounded-md bg-slate-50">
@@ -177,8 +182,15 @@ function DepthTrendChart({ data, overlays }) {
               <g key={value}>
                 <line x1={PADDING} x2={WIDTH - PADDING} y1={y} y2={y} stroke="#e2e8f0" />
                 <text x={6} y={y + 4} className="fill-slate-400 text-[10px]">{value}</text>
-                <text x={WIDTH - PADDING + 6} y={y + 4} className="fill-slate-400 text-[10px]">{value * 10}</text>
               </g>
+            );
+          })}
+          {overlayAxisValues.map(value => {
+            const y = HEIGHT - PADDING - (value / overlayConfig.axisMax) * (HEIGHT - PADDING * 2);
+            return (
+              <text key={`overlay-axis-${value}`} x={WIDTH - PADDING + 6} y={y + 4} className="fill-slate-400 text-[10px]">
+                {value.toFixed(selectedOverlay === 'journal' ? 1 : 0)}
+              </text>
             );
           })}
           <line x1={PADDING} x2={WIDTH - PADDING} y1={HEIGHT - PADDING} y2={HEIGHT - PADDING} stroke="#cbd5e1" />
@@ -209,17 +221,16 @@ function DepthTrendChart({ data, overlays }) {
               </circle>
             );
           })}
-          {selectedOverlays.map(key => (
+          {selectedOverlay && overlayConfig && (
             <path
-              key={key}
-              d={buildPath(overlayPoints[key] || [], 'overlay_score')}
+              d={buildAxisPath(overlayPoints, 'overlay_score', overlayConfig.axisMax)}
               fill="none"
-              stroke={OVERLAY_DEFS[key].color}
+              stroke={OVERLAY_DEFS[selectedOverlay].color}
               strokeWidth="2"
               strokeLinecap="round"
               strokeDasharray="5 4"
             />
-          ))}
+          )}
         </svg>
       </div>
     </div>
