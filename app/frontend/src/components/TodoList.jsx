@@ -1,5 +1,5 @@
 // frontend/src/components/TodoList.jsx
-import { useState, useEffect, useRef } from 'react';
+import { Component, useState, useEffect, useRef } from 'react';
 import { DragDropContext, Droppable } from 'react-beautiful-dnd';
 import axios from 'axios';
 import TaskItem from './TodoList/TaskItem';
@@ -938,15 +938,17 @@ export default function TodoList({ apiUrl, userNumber }) {
         )}
 
         {activeTab === 'trends' && (
-          <TaskMtnTrendsTab
-            apiUrl={apiUrl}
-            userNumber={userNumber}
-            trends={mtnTrends}
-            overlayTrends={mtnOverlayTrends}
-            overlayErrors={mtnOverlayErrors}
-            loading={mtnTrendsLoading}
-            error={mtnTrendsError}
-          />
+          <TrendsErrorBoundary>
+            <TaskMtnTrendsTab
+              apiUrl={apiUrl}
+              userNumber={userNumber}
+              trends={mtnTrends}
+              overlayTrends={mtnOverlayTrends}
+              overlayErrors={mtnOverlayErrors}
+              loading={mtnTrendsLoading}
+              error={mtnTrendsError}
+            />
+          </TrendsErrorBoundary>
         )}
 
         {/* Tasks List */}
@@ -1445,6 +1447,40 @@ function StatTile({ label, value, detail }) {
   );
 }
 
+class TrendsErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error) {
+    console.error('Task trends render failed:', error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
+          Task trends could not render with the current chart data. The task list is still available.
+          <button
+            type="button"
+            onClick={() => this.setState({ hasError: false })}
+            className="ml-3 rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 const getTaskOverlayConfig = (overlayKey, overlays) => {
   if (!overlayKey) return null;
   const overlayData = overlays || {};
@@ -1489,8 +1525,18 @@ function TrendOverlayButtons({ selected, onSelect }) {
 }
 
 function TaskMtnTrendChart({ data, overlays, overlayErrors = {} }) {
-  const points = Array.isArray(data) ? data : [];
   const [selectedOverlay, setSelectedOverlay] = useState(null);
+  const activeOverlay = selectedOverlay && TREND_OVERLAY_DEFS[selectedOverlay] ? selectedOverlay : null;
+  const activeOverlayDef = activeOverlay ? TREND_OVERLAY_DEFS[activeOverlay] : null;
+  const points = (Array.isArray(data) ? data : [])
+    .filter(item => item && typeof item === 'object' && dateKey(item.date))
+    .map(item => ({
+      ...item,
+      date: dateKey(item.date),
+      mtn_score: Number(item.mtn_score || 0),
+      rolling_average: Number(item.rolling_average || 0),
+      completed_tasks: Number(item.completed_tasks || 0),
+    }));
   const values = points.flatMap(point => [
     Number(point.mtn_score || 0),
     Number(point.rolling_average || 0)
@@ -1510,8 +1556,8 @@ function TaskMtnTrendChart({ data, overlays, overlayErrors = {} }) {
   );
   const dailyPath = buildMtnPath(points, 'mtn_score', maxScore);
   const rollingPath = buildMtnPath(points, 'rolling_average', maxScore);
-  const overlayConfig = getTaskOverlayConfig(selectedOverlay, overlays);
-  const overlayPoints = selectedOverlay && overlayConfig ? overlayConfig.points : [];
+  const overlayConfig = getTaskOverlayConfig(activeOverlay, overlays);
+  const overlayPoints = activeOverlay && overlayConfig ? overlayConfig.points : [];
   const startTime = points.length ? dateToTime(points[0].date) : null;
   const endTime = points.length ? dateToTime(points[points.length - 1].date) : null;
   const overlayDots = overlayConfig
@@ -1520,12 +1566,12 @@ function TaskMtnTrendChart({ data, overlays, overlayErrors = {} }) {
   const overlayAxisValues = overlayConfig
     ? [0, overlayConfig.axisMax / 4, overlayConfig.axisMax / 2, (overlayConfig.axisMax * 3) / 4, overlayConfig.axisMax]
     : [];
-  const selectedOverlayLabel = selectedOverlay ? TREND_OVERLAY_DEFS[selectedOverlay].label : '';
-  const selectedOverlayStats = selectedOverlay && overlayConfig ? overlayStats(overlayPoints, startTime, endTime) : null;
-  const overlayStatus = selectedOverlay && overlayErrors[selectedOverlay]
+  const selectedOverlayLabel = activeOverlayDef?.label || '';
+  const selectedOverlayStats = activeOverlay && overlayConfig ? overlayStats(overlayPoints, startTime, endTime) : null;
+  const overlayStatus = activeOverlay && overlayErrors[activeOverlay]
     ? `${selectedOverlayLabel} data could not be loaded.`
     : selectedOverlayStats && selectedOverlayStats.loaded === 0
-      ? `${selectedOverlayLabel}: endpoint returned 0 days. Response: ${overlayErrors[`${selectedOverlay}Shape`] || 'unknown'}.`
+      ? `${selectedOverlayLabel}: endpoint returned 0 days. Response: ${overlayErrors[`${activeOverlay}Shape`] || 'unknown'}.`
       : selectedOverlayStats && selectedOverlayStats.total === 0
         ? `${selectedOverlayLabel}: ${selectedOverlayStats.loaded} days loaded (${formatShortDate(selectedOverlayStats.firstDate)}-${formatShortDate(selectedOverlayStats.lastDate)}), none overlap this chart.`
       : selectedOverlayStats
@@ -1548,10 +1594,10 @@ function TaskMtnTrendChart({ data, overlays, overlayErrors = {} }) {
           <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> Daily</span>
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> 7-day average</span>
-            {selectedOverlay && (
+            {activeOverlay && activeOverlayDef && (
               <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: TREND_OVERLAY_DEFS[selectedOverlay].color }} />
-                {TREND_OVERLAY_DEFS[selectedOverlay].label}
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: activeOverlayDef.color }} />
+                {activeOverlayDef.label}
               </span>
             )}
             {hasCappedOutliers && (
@@ -1559,7 +1605,7 @@ function TaskMtnTrendChart({ data, overlays, overlayErrors = {} }) {
             )}
           </div>
           {overlayStatus && (
-            <div className={`mt-1 text-[11px] ${overlayErrors[selectedOverlay] ? 'text-rose-600' : 'text-slate-400'}`}>
+            <div className={`mt-1 text-[11px] ${overlayErrors[activeOverlay] ? 'text-rose-600' : 'text-slate-400'}`}>
               {overlayStatus}
             </div>
           )}
@@ -1582,25 +1628,25 @@ function TaskMtnTrendChart({ data, overlays, overlayErrors = {} }) {
             const y = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING - (value / overlayConfig.axisMax) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING - MTN_CHART_BOTTOM_PADDING);
             return (
               <text key={`overlay-axis-${value}`} x={MTN_CHART_WIDTH - MTN_CHART_PADDING + 6} y={y + 4} className="fill-slate-400 text-[10px]">
-                {value.toFixed(selectedOverlay === 'journal' ? 1 : 0)}
+                {value.toFixed(activeOverlay === 'journal' ? 1 : 0)}
               </text>
             );
           })}
           <line x1={MTN_CHART_WIDTH - MTN_CHART_PADDING} x2={MTN_CHART_WIDTH - MTN_CHART_PADDING} y1={MTN_CHART_PADDING} y2={MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING} stroke="#cbd5e1" />
           <path d={dailyPath} fill="none" stroke="#cbd5e1" strokeWidth="2" />
           <path d={rollingPath} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" />
-          {selectedOverlay && overlayConfig && (
+          {activeOverlay && activeOverlayDef && overlayConfig && (
             <>
               <path
                 d={buildMtnDatePath(overlayPoints, 'overlay_score', overlayConfig.axisMax, startTime, endTime)}
                 fill="none"
-                stroke={TREND_OVERLAY_DEFS[selectedOverlay].color}
+                stroke={activeOverlayDef.color}
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeDasharray="5 4"
               />
               {overlayDots.map(point => (
-                <circle key={`${selectedOverlay}-${point.date}`} cx={point.x} cy={point.y} r="2.2" fill={TREND_OVERLAY_DEFS[selectedOverlay].color} />
+                <circle key={`${activeOverlay}-${point.date}`} cx={point.x} cy={point.y} r="2.2" fill={activeOverlayDef.color} />
               ))}
             </>
           )}
