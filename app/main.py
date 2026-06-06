@@ -13,6 +13,7 @@ from app.routers import auth
 from sqlalchemy import text
 import threading
 from app.email_poller import run_email_loop
+from app.services.admin_bootstrap import ensure_admin_schema_and_seed
 
 # Configure logging with timestamp
 logging.basicConfig(
@@ -67,6 +68,7 @@ else:
 logger.info("💾 Initializing Database...")
 try:
     Base.metadata.create_all(bind=engine)
+    ensure_admin_schema_and_seed()
     logger.info("✓ Database tables created/verified successfully")
     logger.info(f"  Database engine: {engine.url.drivername}")
     logger.info(f"  Database host: {engine.url.host}")
