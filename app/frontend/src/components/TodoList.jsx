@@ -116,17 +116,23 @@ export default function TodoList({ apiUrl, userNumber }) {
 
   // Initial data fetching
   useEffect(() => {
+    if (!apiUrl || !userNumber) return;
     fetchFilters();
     fetchGoals();
     fetchMtnTrends();
-  }, []);
+  }, [apiUrl, userNumber]);
 
   // Refetch tasks when filters change
   useEffect(() => {
+    if (!apiUrl || !userNumber) {
+      setLoading(false);
+      return;
+    }
     fetchTasks();
-  }, [filterType, selectedProject, selectedDelegate, selectedGoal, timezone]);
+  }, [apiUrl, userNumber, filterType, selectedProject, selectedDelegate, selectedGoal, timezone]);
 
   useEffect(() => {
+    if (!apiUrl || !userNumber) return;
     setTodayKey(getTodayET(timezone));
     const timer = setInterval(() => {
       const currentToday = getTodayET(timezone);
@@ -141,13 +147,14 @@ export default function TodoList({ apiUrl, userNumber }) {
     }, 60000);
 
     return () => clearInterval(timer);
-  }, [timezone]);
+  }, [apiUrl, userNumber, timezone]);
 
   // ============================================================================
   // DATA FETCHING
   // ============================================================================
 
   const fetchFilters = async () => {
+    if (!apiUrl || !userNumber) return;
     try {
       const response = await axios.get(`${apiUrl}/api/tasks/filters`, {
         params: { user_number: userNumber }
@@ -162,6 +169,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const fetchGoals = async () => {
+    if (!apiUrl || !userNumber) return;
     try {
       const response = await axios.get(`${apiUrl}/api/journey/goals`, {
         params: { user_number: userNumber }
@@ -175,6 +183,10 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const fetchTasks = async () => {
+    if (!apiUrl || !userNumber) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
