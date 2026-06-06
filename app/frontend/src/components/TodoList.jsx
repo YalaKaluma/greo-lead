@@ -55,6 +55,8 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [mtnTrends, setMtnTrends] = useState(null);
   const [mtnTrendsLoading, setMtnTrendsLoading] = useState(false);
   const [mtnTrendsError, setMtnTrendsError] = useState(null);
+  const [mtnOverlayTrends, setMtnOverlayTrends] = useState({ habits: [], journal: [] });
+  const [mtnOverlayErrors, setMtnOverlayErrors] = useState({});
   const [showMtnBreakdown, setShowMtnBreakdown] = useState(false);
   const [todayKey, setTodayKey] = useState(getTodayET(timezone));
 
@@ -200,13 +202,32 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const fetchMtnTrends = async () => {
+    if (!apiUrl || !userNumber) return;
     setMtnTrendsLoading(true);
     setMtnTrendsError(null);
     try {
-      const response = await axios.get(`${apiUrl}/api/tasks/mtn-trends`, {
-        params: { user_number: userNumber }
+      const [tasksResponse, habitsResponse, journalResponse] = await Promise.allSettled([
+        axios.get(`${apiUrl}/api/tasks/mtn-trends`, { params: { user_number: userNumber } }),
+        axios.get(`${apiUrl}/api/habits/trends`, { params: { user_number: userNumber } }),
+        axios.get(`${apiUrl}/api/journal/journal/trends`, { params: { user_number: userNumber } }),
+      ]);
+
+      if (tasksResponse.status === 'fulfilled') {
+        setMtnTrends(tasksResponse.value.data);
+      } else {
+        throw tasksResponse.reason;
+      }
+
+      setMtnOverlayTrends({
+        habits: habitsResponse.status === 'fulfilled' ? extractTrendChart(habitsResponse.value.data) : [],
+        journal: journalResponse.status === 'fulfilled' ? extractTrendChart(journalResponse.value.data) : [],
       });
-      setMtnTrends(response.data);
+      setMtnOverlayErrors({
+        habits: habitsResponse.status === 'rejected' ? 'request failed' : '',
+        journal: journalResponse.status === 'rejected' ? 'request failed' : '',
+        habitsShape: habitsResponse.status === 'fulfilled' ? responseShape(habitsResponse.value.data) : '',
+        journalShape: journalResponse.status === 'fulfilled' ? responseShape(journalResponse.value.data) : '',
+      });
     } catch (err) {
       console.error('Error fetching MTN trends:', err);
       setMtnTrendsError('Unable to load MTN trends right now.');
@@ -873,6 +894,8 @@ export default function TodoList({ apiUrl, userNumber }) {
             apiUrl={apiUrl}
             userNumber={userNumber}
             trends={mtnTrends}
+            overlayTrends={mtnOverlayTrends}
+            overlayErrors={mtnOverlayErrors}
             loading={mtnTrendsLoading}
             error={mtnTrendsError}
           />
@@ -1642,45 +1665,7 @@ function TaskMtnHeatmap({ data }) {
   );
 }
 
-function TaskMtnTrendsTab({ apiUrl, userNumber, trends, loading, error }) {
-  const [overlayTrends, setOverlayTrends] = useState({ habits: [], journal: [] });
-  const [overlayErrors, setOverlayErrors] = useState({});
-
-  useEffect(() => {
-    if (!apiUrl || !userNumber) return;
-    let cancelled = false;
-
-    const fetchOverlays = async () => {
-      try {
-        const [habitsResponse, journalResponse] = await Promise.allSettled([
-          axios.get(`${apiUrl}/api/habits/trends`, { params: { user_number: userNumber } }),
-          axios.get(`${apiUrl}/api/journal/journal/trends`, { params: { user_number: userNumber } }),
-        ]);
-        if (cancelled) return;
-        setOverlayTrends({
-          habits: habitsResponse.status === 'fulfilled' ? extractTrendChart(habitsResponse.value.data) : [],
-          journal: journalResponse.status === 'fulfilled' ? extractTrendChart(journalResponse.value.data) : [],
-        });
-        setOverlayErrors({
-          habits: habitsResponse.status === 'rejected' ? 'request failed' : '',
-          journal: journalResponse.status === 'rejected' ? 'request failed' : '',
-          habitsShape: habitsResponse.status === 'fulfilled' ? responseShape(habitsResponse.value.data) : '',
-          journalShape: journalResponse.status === 'fulfilled' ? responseShape(journalResponse.value.data) : '',
-        });
-      } catch (fetchError) {
-        if (!cancelled) {
-          setOverlayTrends({ habits: [], journal: [] });
-          setOverlayErrors({ habits: 'request failed', journal: 'request failed' });
-        }
-      }
-    };
-
-    fetchOverlays();
-    return () => {
-      cancelled = true;
-    };
-  }, [apiUrl, userNumber]);
-
+function TaskMtnTrendsTab({ trends, overlayTrends = { habits: [], journal: [] }, overlayErrors = {}, loading, error }) {
   if (loading) {
     return (
       <div className="rounded-lg border bg-white p-6 text-sm text-slate-500">
