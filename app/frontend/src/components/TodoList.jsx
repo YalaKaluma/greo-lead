@@ -116,7 +116,7 @@ export default function TodoList({ apiUrl, userNumber }) {
 
   // Initial data fetching
   useEffect(() => {
-    if (!apiUrl || !userNumber) return;
+    if (apiUrl == null || !userNumber) return;
     fetchFilters();
     fetchGoals();
     fetchMtnTrends();
@@ -124,7 +124,7 @@ export default function TodoList({ apiUrl, userNumber }) {
 
   // Refetch tasks when filters change
   useEffect(() => {
-    if (!apiUrl || !userNumber) {
+    if (apiUrl == null || !userNumber) {
       setLoading(false);
       return;
     }
@@ -132,7 +132,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   }, [apiUrl, userNumber, filterType, selectedProject, selectedDelegate, selectedGoal, timezone]);
 
   useEffect(() => {
-    if (!apiUrl || !userNumber) return;
+    if (apiUrl == null || !userNumber) return;
     setTodayKey(getTodayET(timezone));
     const timer = setInterval(() => {
       const currentToday = getTodayET(timezone);
@@ -154,7 +154,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   // ============================================================================
 
   const fetchFilters = async () => {
-    if (!apiUrl || !userNumber) return;
+    if (apiUrl == null || !userNumber) return;
     try {
       const response = await axios.get(`${apiUrl}/api/tasks/filters`, {
         params: { user_number: userNumber }
@@ -169,7 +169,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const fetchGoals = async () => {
-    if (!apiUrl || !userNumber) return;
+    if (apiUrl == null || !userNumber) return;
     try {
       const response = await axios.get(`${apiUrl}/api/journey/goals`, {
         params: { user_number: userNumber }
@@ -183,7 +183,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const fetchTasks = async () => {
-    if (!apiUrl || !userNumber) {
+    if (apiUrl == null || !userNumber) {
       setLoading(false);
       return;
     }
@@ -210,7 +210,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const fetchMtnTrends = async () => {
-    if (!apiUrl || !userNumber) return;
+    if (apiUrl == null || !userNumber) return;
     setMtnTrendsLoading(true);
     setMtnTrendsError(null);
     try {
