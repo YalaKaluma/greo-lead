@@ -1524,161 +1524,59 @@ function TrendOverlayButtons({ selected, onSelect }) {
   );
 }
 
-function TaskMtnTrendChart({ data, overlays, overlayErrors = {} }) {
-  const [selectedOverlay, setSelectedOverlay] = useState(null);
-  const activeOverlay = selectedOverlay && TREND_OVERLAY_DEFS[selectedOverlay] ? selectedOverlay : null;
-  const activeOverlayDef = activeOverlay ? TREND_OVERLAY_DEFS[activeOverlay] : null;
-  const points = (Array.isArray(data) ? data : [])
+function TaskMtnTrendChart({ data }) {
+  const rows = (Array.isArray(data) ? data : [])
     .filter(item => item && typeof item === 'object' && dateKey(item.date))
     .map(item => ({
-      ...item,
       date: dateKey(item.date),
-      mtn_score: Number(item.mtn_score || 0),
-      rolling_average: Number(item.rolling_average || 0),
-      completed_tasks: Number(item.completed_tasks || 0),
+      mtnScore: Number(item.mtn_score || 0),
+      rollingAverage: Number(item.rolling_average || 0),
+      completedTasks: Number(item.completed_tasks || 0),
     }));
-  const values = points.flatMap(point => [
-    Number(point.mtn_score || 0),
-    Number(point.rolling_average || 0)
-  ]);
-  const positiveDailyValues = points
-    .map(point => Number(point.mtn_score || 0))
-    .filter(value => value > 0);
-  const robustMax = Math.max(
-    percentile(positiveDailyValues, 0.9),
-    Math.max(...points.map(point => Number(point.rolling_average || 0)), 0)
-  );
-  const absoluteMax = Math.max(...values, 0);
-  const hasCappedOutliers = absoluteMax > robustMax && robustMax > 0;
-  const maxScore = Math.max(
+  const visibleRows = rows.slice(-30);
+  const maxValue = Math.max(
     1,
-    Math.ceil(robustMax * 1.2)
+    ...visibleRows.flatMap(item => [item.mtnScore, item.rollingAverage])
   );
-  const dailyPath = buildMtnPath(points, 'mtn_score', maxScore);
-  const rollingPath = buildMtnPath(points, 'rolling_average', maxScore);
-  const overlayConfig = getTaskOverlayConfig(activeOverlay, overlays);
-  const overlayPoints = activeOverlay && overlayConfig ? overlayConfig.points : [];
-  const startTime = points.length ? dateToTime(points[0].date) : null;
-  const endTime = points.length ? dateToTime(points[points.length - 1].date) : null;
-  const overlayDots = overlayConfig
-    ? buildMtnDateDots(overlayPoints, 'overlay_score', overlayConfig.axisMax, startTime, endTime)
-    : [];
-  const overlayAxisValues = overlayConfig
-    ? [0, overlayConfig.axisMax / 4, overlayConfig.axisMax / 2, (overlayConfig.axisMax * 3) / 4, overlayConfig.axisMax]
-    : [];
-  const selectedOverlayLabel = activeOverlayDef?.label || '';
-  const selectedOverlayStats = activeOverlay && overlayConfig ? overlayStats(overlayPoints, startTime, endTime) : null;
-  const overlayStatus = activeOverlay && overlayErrors[activeOverlay]
-    ? `${selectedOverlayLabel} data could not be loaded.`
-    : selectedOverlayStats && selectedOverlayStats.loaded === 0
-      ? `${selectedOverlayLabel}: endpoint returned 0 days. Response: ${overlayErrors[`${activeOverlay}Shape`] || 'unknown'}.`
-      : selectedOverlayStats && selectedOverlayStats.total === 0
-        ? `${selectedOverlayLabel}: ${selectedOverlayStats.loaded} days loaded (${formatShortDate(selectedOverlayStats.firstDate)}-${formatShortDate(selectedOverlayStats.lastDate)}), none overlap this chart.`
-      : selectedOverlayStats
-        ? `${selectedOverlayLabel}: ${selectedOverlayStats.total} days loaded, ${selectedOverlayStats.nonZero} non-zero.`
-        : '';
-  const gridValues = [0, maxScore / 4, maxScore / 2, (maxScore * 3) / 4, maxScore];
-  const tickIndexes = Array.from(new Set([
-    0,
-    Math.floor((points.length - 1) * 0.25),
-    Math.floor((points.length - 1) * 0.5),
-    Math.floor((points.length - 1) * 0.75),
-    points.length - 1
-  ])).filter(index => index >= 0 && points[index]);
 
   return (
     <div className="rounded-lg border bg-white p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">MTN Score Trend</h2>
-          <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
-            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> Daily</span>
-            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> 7-day average</span>
-            {activeOverlay && activeOverlayDef && (
-              <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: activeOverlayDef.color }} />
-                {activeOverlayDef.label}
-              </span>
-            )}
-            {hasCappedOutliers && (
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-rose-400" /> Outlier capped</span>
-            )}
-          </div>
-          {overlayStatus && (
-            <div className={`mt-1 text-[11px] ${overlayErrors[activeOverlay] ? 'text-rose-600' : 'text-slate-400'}`}>
-              {overlayStatus}
-            </div>
-          )}
+          <p className="mt-1 text-sm text-slate-500">Last 30 days of task momentum.</p>
         </div>
-        <TrendOverlayButtons selected={selectedOverlay} onSelect={setSelectedOverlay} />
+        <div className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
+          {rows.length} days
+        </div>
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-md bg-slate-50">
-        <svg viewBox={`0 0 ${MTN_CHART_WIDTH} ${MTN_CHART_HEIGHT}`} className="h-64 w-full">
-          {gridValues.map(value => {
-            const y = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING - (value / maxScore) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING - MTN_CHART_BOTTOM_PADDING);
-            return (
-              <g key={value}>
-                <line x1={MTN_CHART_PADDING} x2={MTN_CHART_WIDTH - MTN_CHART_PADDING} y1={y} y2={y} stroke="#e2e8f0" />
-                <text x={6} y={y + 4} className="fill-slate-400 text-[10px]">{formatMtnNumber(value)}</text>
-              </g>
-            );
-          })}
-          {overlayAxisValues.map(value => {
-            const y = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING - (value / overlayConfig.axisMax) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING - MTN_CHART_BOTTOM_PADDING);
-            return (
-              <text key={`overlay-axis-${value}`} x={MTN_CHART_WIDTH - MTN_CHART_PADDING + 6} y={y + 4} className="fill-slate-400 text-[10px]">
-                {value.toFixed(activeOverlay === 'journal' ? 1 : 0)}
-              </text>
-            );
-          })}
-          <line x1={MTN_CHART_WIDTH - MTN_CHART_PADDING} x2={MTN_CHART_WIDTH - MTN_CHART_PADDING} y1={MTN_CHART_PADDING} y2={MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING} stroke="#cbd5e1" />
-          <path d={dailyPath} fill="none" stroke="#cbd5e1" strokeWidth="2" />
-          <path d={rollingPath} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" />
-          {activeOverlay && activeOverlayDef && overlayConfig && (
-            <>
-              <path
-                d={buildMtnDatePath(overlayPoints, 'overlay_score', overlayConfig.axisMax, startTime, endTime)}
-                fill="none"
-                stroke={activeOverlayDef.color}
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeDasharray="5 4"
-              />
-              {overlayDots.map(point => (
-                <circle key={`${activeOverlay}-${point.date}`} cx={point.x} cy={point.y} r="2.2" fill={activeOverlayDef.color} />
-              ))}
-            </>
-          )}
-          {points.map((point, index) => {
-            const value = Number(point.mtn_score || 0);
-            if (value <= maxScore) return null;
-            const x = MTN_CHART_PADDING + (index / Math.max(points.length - 1, 1)) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2);
-            return (
-              <circle
-                key={`outlier-${point.date}`}
-                cx={x}
-                cy={MTN_CHART_PADDING}
-                r="3"
-                fill="#fb7185"
-              >
-                <title>{`${formatShortDate(point.date)}: ${formatMtnNumber(value)} MTN`}</title>
-              </circle>
-            );
-          })}
-          {tickIndexes.map(index => {
-            const x = MTN_CHART_PADDING + (index / Math.max(points.length - 1, 1)) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2);
-            return (
-              <g key={points[index].date}>
-                <line x1={x} x2={x} y1={MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING + 4} y2={MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING + 9} stroke="#94a3b8" />
-                <text x={x} y={MTN_CHART_HEIGHT - 18} textAnchor="middle" className="fill-slate-400 text-[10px]">
-                  {formatShortDate(points[index].date)}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
+      {visibleRows.length === 0 ? (
+        <div className="mt-4 rounded border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+          No MTN trend data is available yet.
+        </div>
+      ) : (
+        <div className="mt-5">
+          <div className="flex h-56 items-end gap-1 rounded-md bg-slate-50 px-3 py-4">
+            {visibleRows.map(item => {
+              const barHeight = Math.max(4, Math.round((item.mtnScore / maxValue) * 180));
+              return (
+                <div key={item.date} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1">
+                  <div
+                    className="w-full rounded-t bg-blue-500"
+                    style={{ height: `${barHeight}px` }}
+                    title={`${formatShortDate(item.date)}: ${formatMtnNumber(item.mtnScore)} MTN from ${item.completedTasks} task(s)`}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-2 flex justify-between text-[11px] text-slate-400">
+            <span>{formatShortDate(visibleRows[0]?.date)}</span>
+            <span>{formatShortDate(visibleRows[visibleRows.length - 1]?.date)}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1862,7 +1760,7 @@ function ProcrastinationRanking({ tasks }) {
                 <div className="truncate text-sm font-medium text-slate-800">{task.title}</div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                   {task.project && <span>{task.project}</span>}
-                  {task.due_date && <span>Due {formatDueDate(task.due_date)}</span>}
+                  {task.due_date && <span>Due {formatShortDate(dateKey(task.due_date))}</span>}
                   {task.status && <span className="capitalize">{task.status}</span>}
                 </div>
               </div>
