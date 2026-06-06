@@ -710,13 +710,13 @@ function getTrialProgressDetail(dimensionId, targetBeltId, trialType, beltValida
 }
 
 function getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryAverage, topicData, beltValidations) {
-  if (targetBeltId === "yellow") {
-    const trialValidation = getTrialTypeValidation(dimensionId, targetBeltId, "behavioral", beltValidations);
-    const validationStatus = trialValidation
-      ? (trialValidation.passed ? "submitted" : trialValidation.signals.some((signal) => Number(signal.actual || 0) > 0) ? "in_progress" : "not_started")
-      : getYellowValidationBehavioralStatus(dimensionId, beltValidations?.yellow);
-    if (validationStatus && validationStatus !== "not_started") return validationStatus;
-  }
+  const trialValidation = getTrialTypeValidation(dimensionId, targetBeltId, "behavioral", beltValidations);
+  const validationStatus = trialValidation
+    ? (trialValidation.passed ? "submitted" : trialValidation.signals.some((signal) => Number(signal.actual || 0) > 0) ? "in_progress" : "not_started")
+    : targetBeltId === "yellow"
+      ? getYellowValidationBehavioralStatus(dimensionId, beltValidations?.yellow)
+      : null;
+  if (validationStatus && validationStatus !== "not_started") return validationStatus;
 
   const storedBehavioralTrial = getStoredTrial(trialRecords, dimensionId, targetBeltId, "behavioral");
   if (storedBehavioralTrial?.status) return normalizeStatus(storedBehavioralTrial.status);
