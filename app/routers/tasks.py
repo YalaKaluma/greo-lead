@@ -86,6 +86,7 @@ class TaskResponse(BaseModel):
     ai_enriched: Optional[bool] = False
     sort_order: Optional[int] = None
     in_top10: Optional[bool] = False
+    times_postponed: Optional[int] = 0
     top10_position: Optional[int] = None
     last_prioritized_at: Optional[datetime] = None
     mtn_score_today: Optional[float] = None
@@ -140,6 +141,12 @@ def _as_date(value) -> Optional[date]:
     if isinstance(value, datetime):
         return value.date()
     return value
+
+
+def _is_due_date_postponed(previous_due_date, next_due_date) -> bool:
+    previous_day = _as_date(previous_due_date)
+    next_day = _as_date(next_due_date)
+    return bool(previous_day and next_day and next_day > previous_day)
 
 
 def _add_months_clamped(start: date, months: int, day_of_month: int) -> date:
@@ -471,6 +478,10 @@ def update_task(
     # Update only provided fields
     update_data = updates.model_dump(exclude_unset=True)
     recurrence_update_scope = update_data.pop("recurrence_update_scope", None)
+    should_increment_postponed = (
+        "due_date" in update_data
+        and _is_due_date_postponed(task.due_date, update_data.get("due_date"))
+    )
 
     # Capitalize priority if provided
     if 'priority' in update_data:
@@ -478,6 +489,9 @@ def update_task(
 
     for field, value in update_data.items():
         setattr(task, field, value)
+
+    if should_increment_postponed:
+        task.times_postponed = (task.times_postponed or 0) + 1
 
     if "is_recurring" in update_data and not update_data["is_recurring"]:
         task.recurrence_type = None
@@ -590,6 +604,8 @@ def bulk_defer_non_top_10(
     updated = 0
     for task in tasks:
         if task.id in move_ids:
+            if _is_due_date_postponed(task.due_date, request.target_date):
+                task.times_postponed = (task.times_postponed or 0) + 1
             task.due_date = request.target_date
             task.updated_at = datetime.now()
             updated += 1

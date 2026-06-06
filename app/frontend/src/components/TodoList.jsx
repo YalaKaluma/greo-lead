@@ -1780,6 +1780,53 @@ function TaskMtnTrendsTab({ trends, overlayTrends = { habits: [], journal: [] },
           {last90.completed_tasks || 0} completed task(s) contributed to this score.
         </p>
       </div>
+
+      <ProcrastinationRanking tasks={summary.procrastination_ranking || []} />
+    </div>
+  );
+}
+
+function ProcrastinationRanking({ tasks }) {
+  const rankedTasks = Array.isArray(tasks) ? tasks : [];
+
+  return (
+    <div className="rounded-lg border bg-white p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Procrastination Ranking</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Tasks most often moved to a later due date.
+          </p>
+        </div>
+        <div className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
+          Top {Math.min(rankedTasks.length, 10)}
+        </div>
+      </div>
+
+      {rankedTasks.length === 0 ? (
+        <div className="mt-4 rounded border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+          No postponed tasks recorded yet.
+        </div>
+      ) : (
+        <div className="mt-4 divide-y divide-slate-100">
+          {rankedTasks.map((task, index) => (
+            <div key={task.id} className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 py-3">
+              <div className="text-sm font-semibold text-slate-400">#{index + 1}</div>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium text-slate-800">{task.title}</div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                  {task.project && <span>{task.project}</span>}
+                  {task.due_date && <span>Due {formatDueDate(task.due_date)}</span>}
+                  {task.status && <span className="capitalize">{task.status}</span>}
+                </div>
+              </div>
+              <div className="rounded bg-amber-50 px-2 py-1 text-sm font-semibold text-amber-700">
+                {task.times_postponed}x
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

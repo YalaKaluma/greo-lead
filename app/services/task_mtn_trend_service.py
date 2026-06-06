@@ -112,6 +112,17 @@ def get_task_mtn_trends(
     start_date = end_date - timedelta(days=89)
 
     query_start = datetime.combine(start_date - timedelta(days=1), datetime.min.time())
+    procrastination_ranking = (
+        db.query(Task)
+        .filter(
+            Task.user_number == user_number,
+            Task.status != "archived",
+            Task.times_postponed > 0,
+        )
+        .order_by(Task.times_postponed.desc(), Task.updated_at.desc())
+        .limit(10)
+        .all()
+    )
     tasks = (
         db.query(Task)
         .filter(
@@ -182,6 +193,18 @@ def get_task_mtn_trends(
         "last_7_days": _period_stats(trend_chart, 7),
         "last_30_days": _period_stats(trend_chart, 30),
         "last_90_days": _period_stats(trend_chart, 90),
+        "procrastination_ranking": [
+            {
+                "id": task.id,
+                "title": task.title,
+                "times_postponed": task.times_postponed or 0,
+                "status": task.status,
+                "due_date": task.due_date.isoformat() if task.due_date else None,
+                "project": task.project,
+                "goal_id": task.goal_id,
+            }
+            for task in procrastination_ranking
+        ],
     }
     delta = summary["last_7_days"]["average_score"] - summary["last_30_days"]["average_score"]
     summary["last_7_days"]["trend"] = {
