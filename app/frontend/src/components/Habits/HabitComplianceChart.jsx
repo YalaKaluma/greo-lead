@@ -22,8 +22,13 @@ const buildPath = (points, key) => {
     .join(' ');
 };
 
+const dateKey = (dateString) => {
+  const match = String(dateString || '').match(/\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : '';
+};
+
 const dateToTime = (dateString) => {
-  const [year, month, day] = String(dateString || '').split('-').map(Number);
+  const [year, month, day] = dateKey(dateString).split('-').map(Number);
   if (!year || !month || !day) return null;
   return new Date(year, month - 1, day).getTime();
 };
@@ -31,7 +36,7 @@ const dateToTime = (dateString) => {
 const buildDatePath = (points, key, maxValue, startTime, endTime) => {
   if (!points.length || !maxValue || startTime === null || endTime === null) return '';
   const range = Math.max(endTime - startTime, 1);
-  return points
+  const plotted = points
     .map(point => {
       const pointTime = dateToTime(point.date);
       if (pointTime === null || pointTime < startTime || pointTime > endTime) return null;
@@ -41,8 +46,24 @@ const buildDatePath = (points, key, maxValue, startTime, endTime) => {
       return { x, y };
     })
     .filter(Boolean)
+  return plotted
     .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
     .join(' ');
+};
+
+const buildDateDots = (points, key, maxValue, startTime, endTime) => {
+  if (!points.length || !maxValue || startTime === null || endTime === null) return [];
+  const range = Math.max(endTime - startTime, 1);
+  return points
+    .map(point => {
+      const pointTime = dateToTime(point.date);
+      if (pointTime === null || pointTime < startTime || pointTime > endTime) return null;
+      const x = PADDING + ((pointTime - startTime) / range) * (WIDTH - PADDING * 2);
+      const scaledValue = Math.min(Number(point[key]) || 0, maxValue);
+      const y = HEIGHT - BOTTOM_PADDING - (scaledValue / maxValue) * (HEIGHT - PADDING - BOTTOM_PADDING);
+      return { ...point, x, y, value: Number(point[key]) || 0 };
+    })
+    .filter(point => point && point.value > 0);
 };
 
 const formatShortDate = (dateString) => {
@@ -74,14 +95,16 @@ const getOverlayConfig = (overlayKey, overlays) => {
   if (!overlayKey) return null;
   const overlayData = overlays || {};
   const series = {
-    habits: (overlayData.habits || []).map(point => ({ date: point.date, overlay_score: Number(point.compliance_rate || 0) })),
-    tasks: (overlayData.tasks || []).map(point => ({ date: point.date, overlay_score: Number(point.mtn_score || 0) })),
+    habits: (overlayData.habits || []).map(point => ({ date: dateKey(point.date), overlay_score: Number(point.compliance_rate || 0) })),
+    tasks: (overlayData.tasks || []).map(point => ({ date: dateKey(point.date), overlay_score: Number(point.mtn_score || 0) })),
     journal: (overlayData.journal || []).map(point => ({
-      date: point.date,
+      date: dateKey(point.date),
       overlay_score: Number(point.entry_count || 0) > 0 ? Number(point.daily_average || 0) : 0,
     })),
   };
-  const points = series[overlayKey] || [];
+  const points = (series[overlayKey] || [])
+    .filter(point => point.date)
+    .sort((a, b) => dateToTime(a.date) - dateToTime(b.date));
   const values = points.map(point => Number(point.overlay_score || 0));
   const axisMax = OVERLAY_DEFS[overlayKey]?.axisMax || Math.max(1, Math.ceil(Math.max(...values, 0) * 1.2));
 
@@ -121,6 +144,9 @@ export default function HabitComplianceChart({ data, overlays }) {
   const overlayPoints = selectedOverlay && overlayConfig ? overlayConfig.points : [];
   const startTime = points.length ? dateToTime(points[0].date) : null;
   const endTime = points.length ? dateToTime(points[points.length - 1].date) : null;
+  const overlayDots = overlayConfig
+    ? buildDateDots(overlayPoints, 'overlay_score', overlayConfig.axisMax, startTime, endTime)
+    : [];
   const dateTicks = buildDateTicks(points);
   const overlayAxisValues = overlayConfig
     ? [0, overlayConfig.axisMax / 4, overlayConfig.axisMax / 2, (overlayConfig.axisMax * 3) / 4, overlayConfig.axisMax]
@@ -177,14 +203,19 @@ export default function HabitComplianceChart({ data, overlays }) {
           <path d={dailyPath} fill="none" stroke="#cbd5e1" strokeWidth="2" />
           <path d={rollingPath} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" />
           {selectedOverlay && overlayConfig && (
-            <path
-              d={buildDatePath(overlayPoints, 'overlay_score', overlayConfig.axisMax, startTime, endTime)}
-              fill="none"
-              stroke={OVERLAY_DEFS[selectedOverlay].color}
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeDasharray="5 4"
-            />
+            <>
+              <path
+                d={buildDatePath(overlayPoints, 'overlay_score', overlayConfig.axisMax, startTime, endTime)}
+                fill="none"
+                stroke={OVERLAY_DEFS[selectedOverlay].color}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeDasharray="5 4"
+              />
+              {overlayDots.map(point => (
+                <circle key={`${selectedOverlay}-${point.date}`} cx={point.x} cy={point.y} r="2.2" fill={OVERLAY_DEFS[selectedOverlay].color} />
+              ))}
+            </>
           )}
         </svg>
       </div>
