@@ -35,7 +35,9 @@ from app.db import get_db
 from app.services.journey_context import build_journey_context
 from app.services.message_service import load_conversation_history, save_message
 from app.services.timezone_service import get_user_timezone, today_for_timezone
-from app.models import Task, Habit, HabitCompletion, Message
+from app.models import Task, Habit, HabitCompletion, JourneyGoal, Message
+from app.services.habit_coaching_service import refresh_habit_coaching_review
+from app.services.vision_progress_review_service import VisionProgressReviewService
 from app.config import (
     TWILIO_SID,
     TWILIO_AUTH_TOKEN,
@@ -204,6 +206,117 @@ def build_context_summary_for_log(task_context: str, habit_context: str) -> str:
     tasks_count = task_context.count("□") if task_context else 0
     habits_count = (habit_context.count("○") + habit_context.count("✓")) if habit_context else 0
     return f"{tasks_count} tasks, {habits_count} habits"
+
+
+def refresh_sunday_review_data(db: Session, user_number: str) -> Dict:
+    """
+    Refresh persisted review data that the Sunday nudge sends the user to inspect.
+
+    Failures are captured per surface so one stale review does not prevent the
+    Sunday nudge from being created.
+    """
+    result = {
+        "vision_reviews": {
+            "attempted": 0,
+            "refreshed": 0,
+            "failed": 0,
+            "errors": [],
+        },
+        "habit_trends": {
+            "attempted": True,
+            "refreshed": False,
+            "error": None,
+        },
+    }
+
+    visions = (
+        db.query(JourneyGoal)
+        .filter(
+            JourneyGoal.user_number == user_number,
+            JourneyGoal.time_horizon.in_(["long", "vision"]),
+        )
+        .order_by(JourneyGoal.created_at)
+        .all()
+    )
+    result["vision_reviews"]["attempted"] = len(visions)
+
+    for vision in visions:
+        try:
+            VisionProgressReviewService.refresh_vision_progress_review(db, user_number, vision.id)
+            result["vision_reviews"]["refreshed"] += 1
+        except Exception as exc:
+            db.rollback()
+            result["vision_reviews"]["failed"] += 1
+            result["vision_reviews"]["errors"].append({
+                "vision_id": vision.id,
+                "title": vision.title or vision.goal_text,
+                "error": str(exc),
+            })
+            logger.warning(
+                "Failed to refresh Sunday vision progress review for %s vision_id=%s: %s",
+                user_number,
+                vision.id,
+                exc,
+            )
+
+    try:
+        refresh_habit_coaching_review(db, user_number)
+        result["habit_trends"]["refreshed"] = True
+    except Exception as exc:
+        db.rollback()
+        result["habit_trends"]["error"] = str(exc)
+        logger.warning("Failed to refresh Sunday habit trends review for %s: %s", user_number, exc)
+
+    return result
+
+
+def build_sunday_refresh_context(refresh_result: Optional[Dict]) -> str:
+    if not refresh_result:
+        return ""
+
+    vision_reviews = refresh_result.get("vision_reviews", {})
+    habit_trends = refresh_result.get("habit_trends", {})
+    attempted = vision_reviews.get("attempted", 0)
+    refreshed = vision_reviews.get("refreshed", 0)
+    failed = vision_reviews.get("failed", 0)
+    habit_refreshed = habit_trends.get("refreshed", False)
+
+    if failed or not habit_refreshed:
+        return (
+            "SUNDAY REFRESH STATUS:\n"
+            f"- Refreshed {refreshed} of {attempted} Goals Progress Review page(s).\n"
+            f"- Habit Trends refresh {'completed' if habit_refreshed else 'did not complete'}.\n"
+            "- Tell the user Alfred refreshed the available review data and invite them to take a look."
+        )
+
+    return (
+        "SUNDAY REFRESH STATUS:\n"
+        f"- Refreshed {refreshed} Goals Progress Review page(s).\n"
+        "- Refreshed the Habit Trends page data.\n"
+        "- Tell the user Alfred refreshed both areas and invite them to take a look."
+    )
+
+
+def add_sunday_refresh_notice(message_text: str, refresh_result: Optional[Dict]) -> str:
+    if not refresh_result:
+        return message_text
+
+    lower_message = (message_text or "").lower()
+    if "refreshed" in lower_message and ("habit" in lower_message or "trend" in lower_message):
+        return message_text
+
+    vision_reviews = refresh_result.get("vision_reviews", {})
+    habit_trends = refresh_result.get("habit_trends", {})
+    attempted = vision_reviews.get("attempted", 0)
+    refreshed = vision_reviews.get("refreshed", 0)
+    habit_refreshed = habit_trends.get("refreshed", False)
+
+    if refreshed == attempted and habit_refreshed:
+        notice = "I also refreshed your Goals Progress Reviews and Habit Trends data, so take a look there as you plan the week."
+    else:
+        notice = "I also refreshed the available Goals Progress Reviews and Habit Trends data, so take a look there as you plan the week."
+
+    return f"{message_text.rstrip()}\n\n{notice}"
 
 
 # -------------------------------------------------
@@ -658,6 +771,10 @@ def send_nudge_for_user(
         if not config:
             raise ValueError(f"Unknown nudge type: {nudge_type}")
 
+        sunday_refresh_result = None
+        if nudge_type == "sunday_review":
+            sunday_refresh_result = refresh_sunday_review_data(db, user_number)
+
         # Build full context
         context_text, conversation_history = build_full_context(db, user_number)
 
@@ -676,10 +793,12 @@ def send_nudge_for_user(
         context_summary = build_context_summary_for_log(task_ctx, habit_ctx)
 
         # Create system prompt from template
+        sunday_refresh_context = build_sunday_refresh_context(sunday_refresh_result)
 
         system_prompt = config["system_prompt"].format(
             context=context_text,
             move_the_needle=move_the_needle_context,
+            sunday_refresh=sunday_refresh_context,
             max_length=config["max_length"]
         )
 
@@ -700,6 +819,8 @@ def send_nudge_for_user(
             user_number,
             max_tokens=max_tokens
         )
+        if nudge_type == "sunday_review":
+            message_text = add_sunday_refresh_notice(message_text, sunday_refresh_result)
 
         # Send via WhatsApp
         #Temporarly disabled
@@ -738,6 +859,7 @@ def send_nudge_for_user(
             "user_number": user_number,
             "message_length": len(message_text),
             "duration_seconds": duration,
+            "sunday_refresh": sunday_refresh_result,
         }
 
     except Exception as e:

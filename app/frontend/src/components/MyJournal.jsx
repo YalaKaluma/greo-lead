@@ -587,10 +587,14 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
                       <button
                         type="button"
                         onClick={() => setSelectedDepth(depth)}
-                        className="rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                        className={`inline-flex h-7 items-center justify-center rounded-full px-2 text-xs transition-colors ${
+                          msg.role === 'user'
+                            ? 'text-blue-100 hover:bg-blue-500'
+                            : 'text-gray-600 hover:bg-gray-200'
+                        }`}
                         title="Show reflection depth details"
                       >
-                        Depth
+                        Score
                       </button>
                     )}
                     <ReadAloudButton
@@ -601,15 +605,14 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
                         : 'text-gray-600 hover:bg-gray-200'
                       }
                     />
-                    <MessageFeedbackButton
-                      apiUrl={apiUrl}
-                      messageId={msg.message_id}
-                      sourceContext="journal"
-                      className={msg.role === 'user'
-                        ? 'text-blue-100 hover:bg-blue-500'
-                        : 'text-gray-600 hover:bg-gray-200'
-                      }
-                    />
+                    {msg.role !== 'user' && (
+                      <MessageFeedbackButton
+                        apiUrl={apiUrl}
+                        messageId={msg.message_id}
+                        sourceContext="journal"
+                        className="text-gray-600 hover:bg-gray-200"
+                      />
+                    )}
                   </div>
                 </div>
               </div>
