@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import date, timedelta
@@ -28,7 +30,7 @@ class HabitCreate(BaseModel):
 class EnergyCheckinRequest(BaseModel):
     user_number: str
     energy_level: int
-    date: date | None = None
+    checkin_date: str | None = None
     source: str = "evening_nudge"
     message_id: int | None = None
 
@@ -218,7 +220,13 @@ def save_energy_checkin(payload: EnergyCheckinRequest, db: Session = Depends(get
     if payload.energy_level < 1 or payload.energy_level > 5:
         raise HTTPException(status_code=400, detail="Energy level must be between 1 and 5")
 
-    checkin_date = payload.date or today_for_timezone(get_user_timezone(db, payload.user_number))
+    if payload.checkin_date:
+        try:
+            checkin_date = date.fromisoformat(payload.checkin_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="checkin_date must use YYYY-MM-DD format")
+    else:
+        checkin_date = today_for_timezone(get_user_timezone(db, payload.user_number))
     checkin = db.query(DailyEnergyCheckin).filter(
         DailyEnergyCheckin.user_number == payload.user_number,
         DailyEnergyCheckin.date == checkin_date,

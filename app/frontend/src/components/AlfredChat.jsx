@@ -195,7 +195,7 @@ export default function AlfredChat({ apiUrl, userNumber, currentPage, showLaunch
       const response = await axios.post(`${apiUrl}/api/habits/energy-checkin`, {
         user_number: userNumber,
         energy_level: level,
-        date: dateForMessage(msg.timestamp),
+        checkin_date: dateForMessage(msg.timestamp),
         source: 'evening_nudge',
         message_id: msg.message_id || null
       });
