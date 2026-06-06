@@ -26,7 +26,6 @@ export default function TodoList({ apiUrl, userNumber }) {
   const { t, timezone } = useLanguage();
   // Task data
   const [tasks, setTasks] = useState([]);
-  const [taskLoadDebug, setTaskLoadDebug] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
@@ -201,13 +200,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       if (selectedGoal) params.goal_id = parseInt(selectedGoal);
 
       const response = await axios.get(`${apiUrl}/api/tasks/`, { params });
-      const taskList = extractTaskList(response.data);
-      const activeTasks = taskList.filter(task => String(task.status || '').toLowerCase() !== 'completed');
-      const nextTasks = activeTasks.length > 0 || taskList.length === 0 ? activeTasks : taskList;
-      setTasks(nextTasks);
-      const debugMessage = `tasks response ${responseShape(response.data)} | raw ${taskList.length} | active ${activeTasks.length} | shown ${nextTasks.length}`;
-      setTaskLoadDebug(debugMessage);
-      console.info('[TodoList] ' + debugMessage, { params });
+      setTasks(Array.isArray(response.data) ? response.data : []);
     } catch (err) {
       console.error('Error fetching tasks:', err);
       setError(err.response?.data?.detail || 'Failed to load tasks');
@@ -726,7 +719,6 @@ export default function TodoList({ apiUrl, userNumber }) {
 
   const hasActiveFilters = selectedProject || selectedDelegate || selectedGoal || filterType !== 'due_today';
   const sortedTasks = getSortedTasks();
-  const visibleTasks = sortedTasks.length > 0 || tasks.length === 0 ? sortedTasks : tasks;
   const todayMtnScore = Number(mtnTrends?.summary?.today?.mtn_score || 0);
   const todayCompletedTasks = Number(mtnTrends?.summary?.today?.completed_tasks || 0);
   const todayMtnTasks = Array.isArray(mtnTrends?.summary?.today?.tasks)
@@ -819,7 +811,7 @@ export default function TodoList({ apiUrl, userNumber }) {
                   </button>
                   <button
                     onClick={openDeferNonTop10Modal}
-                    disabled={visibleTasks.length <= 10}
+                    disabled={sortedTasks.length <= 10}
                     className="h-10 w-10 inline-flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Move non-Top-10 tasks to tomorrow"
                     aria-label="Move non-Top-10 tasks to tomorrow"
@@ -905,12 +897,6 @@ export default function TodoList({ apiUrl, userNumber }) {
           </div>
         )}
 
-        {activeTab === 'tasks' && taskLoadDebug && (
-          <div className="mb-3 text-[11px] text-slate-400">
-            {taskLoadDebug}
-          </div>
-        )}
-
         {activeTab === 'trends' && (
           <TaskMtnTrendsTab
             apiUrl={apiUrl}
@@ -924,7 +910,7 @@ export default function TodoList({ apiUrl, userNumber }) {
         )}
 
         {/* Tasks List */}
-        {activeTab === 'tasks' && visibleTasks.length === 0 ? (
+        {activeTab === 'tasks' && sortedTasks.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-slate-600 text-lg">{t('tasks.empty')}</p>
             <p className="text-slate-500 text-sm mt-2">
@@ -940,7 +926,7 @@ export default function TodoList({ apiUrl, userNumber }) {
                   ref={provided.innerRef}
                   className="space-y-1"
                 >
-                  {visibleTasks.map((task, index) => {
+                  {sortedTasks.map((task, index) => {
                     const scoreData = getVisibleTaskScore(task);
 
                     return (
@@ -1314,17 +1300,6 @@ const responseShape = (payload) => {
   if (Array.isArray(payload)) return 'array';
   if (!payload || typeof payload !== 'object') return typeof payload;
   return Object.keys(payload).slice(0, 6).join(', ') || 'object';
-};
-
-const extractTaskList = (payload) => {
-  if (Array.isArray(payload)) return payload;
-  const candidates = [
-    payload?.tasks,
-    payload?.items,
-    payload?.data,
-    payload?.data?.tasks,
-  ];
-  return candidates.find(Array.isArray) || [];
 };
 
 const percentile = (values, ratio) => {
