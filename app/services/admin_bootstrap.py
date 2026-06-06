@@ -35,6 +35,10 @@ def ensure_admin_schema_and_seed() -> None:
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_target_user ON admin_audit_logs(target_user_id)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_action ON admin_audit_logs(action)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_created_at ON admin_audit_logs(created_at)"))
+        conn.execute(text("ALTER TABLE message_feedback ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'New'"))
+        conn.execute(text("ALTER TABLE message_feedback ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP"))
+        conn.execute(text("ALTER TABLE message_feedback ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_message_feedback_status ON message_feedback(status)"))
 
         admin_count = conn.execute(text("SELECT COUNT(*) FROM users WHERE is_admin = TRUE")).scalar() or 0
         if admin_count > 0:

@@ -66,6 +66,9 @@ class MessageFeedback(Base):
     source_context = Column(String(50), nullable=False, index=True)
     rating = Column(Integer, nullable=False)
     feedback_text = Column(Text, nullable=True)
+    status = Column(String(20), default="New", nullable=False, index=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")

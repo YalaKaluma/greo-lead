@@ -273,6 +273,40 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
 }
 
 function AdminUserManagement({ apiUrl, userNumber }) {
+  const [adminView, setAdminView] = useState('users');
+
+  return (
+    <section className="py-8">
+      <div className="mb-6 flex flex-wrap gap-2 border-b border-slate-200">
+        {[
+          { id: 'users', label: 'User Management' },
+          { id: 'feedback', label: 'Feedback Review' }
+        ].map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setAdminView(item.id)}
+            className={`border-b-2 px-3 py-2 text-sm font-semibold transition-colors ${
+              adminView === item.id
+                ? 'border-slate-950 text-slate-950'
+                : 'border-transparent text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {adminView === 'users' ? (
+        <AdminUsersPanel apiUrl={apiUrl} userNumber={userNumber} />
+      ) : (
+        <AdminFeedbackPanel apiUrl={apiUrl} userNumber={userNumber} />
+      )}
+    </section>
+  );
+}
+
+function AdminUsersPanel({ apiUrl, userNumber }) {
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
@@ -362,7 +396,7 @@ function AdminUserManagement({ apiUrl, userNumber }) {
   };
 
   return (
-    <section className="py-8">
+    <div>
       <div className="mb-8">
         <h2 className="text-lg font-semibold text-slate-900">User Management</h2>
         <p className="mt-1 text-sm text-slate-500">Create users, manage access, and keep admin actions auditable.</p>
@@ -490,6 +524,156 @@ function AdminUserManagement({ apiUrl, userNumber }) {
           </tbody>
         </table>
       </div>
-    </section>
+    </div>
+  );
+}
+
+function AdminFeedbackPanel({ apiUrl, userNumber }) {
+  const [feedback, setFeedback] = useState([]);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [updatingId, setUpdatingId] = useState(null);
+  const adminParams = { user_number: userNumber };
+
+  const loadFeedback = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const params = statusFilter ? { ...adminParams, status: statusFilter } : adminParams;
+      const response = await axios.get(`${apiUrl}/api/admin/feedback`, { params });
+      setFeedback(response.data.feedback || []);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Feedback could not be loaded.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadFeedback();
+  }, [apiUrl, userNumber, statusFilter]);
+
+  const updateStatus = async (feedbackId, status) => {
+    setUpdatingId(feedbackId);
+    setError('');
+    try {
+      await axios.patch(
+        `${apiUrl}/api/admin/feedback/${feedbackId}`,
+        { status },
+        { params: adminParams }
+      );
+      await loadFeedback();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Feedback status could not be updated.');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  return (
+    <div>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Feedback Review</h2>
+          <p className="mt-1 text-sm text-slate-500">Review user feedback from Alfred responses and track follow-up status.</p>
+        </div>
+        <label className="text-sm font-medium text-slate-700">
+          Status
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            className="mt-1 block rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+          >
+            <option value="">All</option>
+            <option value="New">New</option>
+            <option value="Reviewed">Reviewed</option>
+            <option value="Resolved">Resolved</option>
+            <option value="Ignored">Ignored</option>
+          </select>
+        </label>
+      </div>
+
+      {error && (
+        <div className="mb-6 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-4 py-3">User</th>
+              <th className="px-4 py-3">Date</th>
+              <th className="px-4 py-3">Source Page</th>
+              <th className="px-4 py-3">Feedback Type</th>
+              <th className="px-4 py-3">Rating</th>
+              <th className="px-4 py-3">Comment</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 bg-white">
+            {loading ? (
+              <tr>
+                <td className="px-4 py-6 text-slate-500" colSpan="8">Loading feedback...</td>
+              </tr>
+            ) : feedback.length === 0 ? (
+              <tr>
+                <td className="px-4 py-6 text-slate-500" colSpan="8">No feedback found.</td>
+              </tr>
+            ) : feedback.map((item) => (
+              <tr key={item.id}>
+                <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">{item.user}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(item.date)}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-600 capitalize">{item.source_page || '-'}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-600">{item.feedback_type}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-600">{item.rating}/5</td>
+                <td className="min-w-72 max-w-xl px-4 py-3 text-slate-700">
+                  <div>{item.comment || '-'}</div>
+                  {item.message_excerpt && (
+                    <div className="mt-1 line-clamp-2 text-xs text-slate-400">{item.message_excerpt}</div>
+                  )}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                    {item.status || 'New'}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateStatus(item.id, 'Reviewed')}
+                      disabled={updatingId === item.id}
+                      className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Mark Reviewed
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateStatus(item.id, 'Resolved')}
+                      disabled={updatingId === item.id}
+                      className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Mark Resolved
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateStatus(item.id, 'Ignored')}
+                      disabled={updatingId === item.id}
+                      className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Ignore
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

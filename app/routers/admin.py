@@ -8,7 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import AdminAuditLog, User
+from app.models import AdminAuditLog, Message, MessageFeedback, User
 from app.services.gmail_service import send_email
 from app.utils.security import generate_temporary_password, hash_password
 
@@ -28,6 +28,13 @@ class UpdateAdminUserRequest(BaseModel):
     last_name: Optional[str] = None
     email: Optional[str] = None
     is_admin: Optional[bool] = None
+
+
+class UpdateFeedbackStatusRequest(BaseModel):
+    status: str
+
+
+FEEDBACK_STATUSES = {"New", "Reviewed", "Resolved", "Ignored"}
 
 
 def _split_name(name: str | None) -> tuple[str, str]:
@@ -59,6 +66,27 @@ def _display_user(user: User) -> dict[str, Any]:
         "is_active": bool(getattr(user, "is_active", True)),
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "last_login_at": user.last_login_at.isoformat() if getattr(user, "last_login_at", None) else None,
+    }
+
+
+def _display_feedback(feedback: MessageFeedback) -> dict[str, Any]:
+    user = feedback.user
+    message = feedback.message
+    return {
+        "id": feedback.id,
+        "user": user.name if user and user.name else "Unknown",
+        "user_email": user.email if user else "",
+        "user_id": user.id if user else None,
+        "date": feedback.created_at.isoformat() if feedback.created_at else None,
+        "source_page": feedback.source_context,
+        "feedback_type": "Message Feedback",
+        "rating": feedback.rating,
+        "comment": feedback.feedback_text or "",
+        "status": getattr(feedback, "status", None) or "New",
+        "message_id": feedback.message_id,
+        "message_excerpt": (message.content[:180] if message and message.content else ""),
+        "reviewed_at": feedback.reviewed_at.isoformat() if getattr(feedback, "reviewed_at", None) else None,
+        "resolved_at": feedback.resolved_at.isoformat() if getattr(feedback, "resolved_at", None) else None,
     }
 
 
@@ -321,3 +349,64 @@ def send_invitation(
         "temporary_password": temporary_password if not email_sent else None,
         "invitation_text": None if email_sent else _invitation_body(target, temporary_password),
     }
+
+
+@router.get("/feedback")
+def list_feedback(
+    status: Optional[str] = None,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    query = (
+        db.query(MessageFeedback)
+        .outerjoin(User, MessageFeedback.user_id == User.id)
+        .outerjoin(Message, MessageFeedback.message_id == Message.id)
+    )
+    if status:
+        normalized_status = status.strip().title()
+        if normalized_status not in FEEDBACK_STATUSES:
+            raise HTTPException(status_code=422, detail="Invalid feedback status")
+        query = query.filter(MessageFeedback.status == normalized_status)
+
+    feedback_items = query.order_by(MessageFeedback.created_at.desc(), MessageFeedback.id.desc()).limit(250).all()
+    return {
+        "feedback": [_display_feedback(item) for item in feedback_items],
+        "statuses": sorted(FEEDBACK_STATUSES),
+        "current_admin_id": admin_user.id,
+    }
+
+
+@router.patch("/feedback/{feedback_id}")
+def update_feedback_status(
+    feedback_id: int,
+    request: UpdateFeedbackStatusRequest,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    normalized_status = request.status.strip().title()
+    if normalized_status not in FEEDBACK_STATUSES:
+        raise HTTPException(status_code=422, detail="Invalid feedback status")
+
+    feedback = db.query(MessageFeedback).filter(MessageFeedback.id == feedback_id).first()
+    if not feedback:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+
+    feedback.status = normalized_status
+    now = datetime.utcnow()
+    if normalized_status in {"Reviewed", "Resolved", "Ignored"} and not feedback.reviewed_at:
+        feedback.reviewed_at = now
+    if normalized_status == "Resolved":
+        feedback.resolved_at = now
+    elif normalized_status != "Resolved":
+        feedback.resolved_at = None
+
+    _log_admin_action(
+        db,
+        admin_user,
+        f"feedback_marked_{normalized_status.lower()}",
+        feedback.user,
+        {"feedback_id": feedback.id, "status": normalized_status},
+    )
+    db.commit()
+    db.refresh(feedback)
+    return {"feedback": _display_feedback(feedback)}
