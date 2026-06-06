@@ -1273,15 +1273,26 @@ const buildMtnPath = (points, key, maxValue) => {
     .join(' ');
 };
 
-const buildMtnAxisPath = (points, key, maxValue) => {
-  if (!points.length || !maxValue) return '';
+const dateToTime = (dateString) => {
+  const [year, month, day] = String(dateString || '').split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day).getTime();
+};
+
+const buildMtnDatePath = (points, key, maxValue, startTime, endTime) => {
+  if (!points.length || !maxValue || startTime === null || endTime === null) return '';
+  const range = Math.max(endTime - startTime, 1);
   return points
-    .map((point, index) => {
-      const x = MTN_CHART_PADDING + (index / Math.max(points.length - 1, 1)) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2);
+    .map(point => {
+      const pointTime = dateToTime(point.date);
+      if (pointTime === null || pointTime < startTime || pointTime > endTime) return null;
+      const x = MTN_CHART_PADDING + ((pointTime - startTime) / range) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2);
       const scaledValue = Math.min(Number(point[key]) || 0, maxValue);
       const y = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING - (scaledValue / maxValue) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING - MTN_CHART_BOTTOM_PADDING);
-      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+      return { x, y };
     })
+    .filter(Boolean)
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
     .join(' ');
 };
 
@@ -1312,19 +1323,20 @@ function StatTile({ label, value, detail }) {
 const getTaskOverlayConfig = (overlayKey, overlays) => {
   if (!overlayKey) return null;
   const overlayData = overlays || {};
-  const byDate = {
-    habits: new Map((overlayData.habits || []).map(point => [point.date, Number(point.compliance_rate || 0)])),
-    tasks: new Map((overlayData.tasks || []).map(point => [point.date, Number(point.mtn_score || 0)])),
-    journal: new Map((overlayData.journal || []).map(point => [
-      point.date,
-      Number(point.entry_count || 0) > 0 ? Number(point.daily_average || 0) : 0
-    ])),
+  const series = {
+    habits: (overlayData.habits || []).map(point => ({ date: point.date, overlay_score: Number(point.compliance_rate || 0) })),
+    tasks: (overlayData.tasks || []).map(point => ({ date: point.date, overlay_score: Number(point.mtn_score || 0) })),
+    journal: (overlayData.journal || []).map(point => ({
+      date: point.date,
+      overlay_score: Number(point.entry_count || 0) > 0 ? Number(point.daily_average || 0) : 0,
+    })),
   };
-  const values = Array.from(byDate[overlayKey]?.values() || []);
+  const points = series[overlayKey] || [];
+  const values = points.map(point => Number(point.overlay_score || 0));
 
   return {
     axisMax: TREND_OVERLAY_DEFS[overlayKey]?.axisMax || Math.max(1, Math.ceil(Math.max(...values, 0) * 1.2)),
-    byDate: byDate[overlayKey] || new Map(),
+    points,
   };
 };
 
@@ -1372,9 +1384,9 @@ function TaskMtnTrendChart({ data, overlays }) {
   const dailyPath = buildMtnPath(points, 'mtn_score', maxScore);
   const rollingPath = buildMtnPath(points, 'rolling_average', maxScore);
   const overlayConfig = getTaskOverlayConfig(selectedOverlay, overlays);
-  const overlayPoints = selectedOverlay && overlayConfig
-    ? points.map(point => ({ date: point.date, overlay_score: overlayConfig.byDate.get(point.date) ?? 0 }))
-    : [];
+  const overlayPoints = selectedOverlay && overlayConfig ? overlayConfig.points : [];
+  const startTime = points.length ? dateToTime(points[0].date) : null;
+  const endTime = points.length ? dateToTime(points[points.length - 1].date) : null;
   const overlayAxisValues = overlayConfig
     ? [0, overlayConfig.axisMax / 4, overlayConfig.axisMax / 2, (overlayConfig.axisMax * 3) / 4, overlayConfig.axisMax]
     : [];
@@ -1433,7 +1445,7 @@ function TaskMtnTrendChart({ data, overlays }) {
           <path d={rollingPath} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" />
           {selectedOverlay && overlayConfig && (
             <path
-              d={buildMtnAxisPath(overlayPoints, 'overlay_score', overlayConfig.axisMax)}
+              d={buildMtnDatePath(overlayPoints, 'overlay_score', overlayConfig.axisMax, startTime, endTime)}
               fill="none"
               stroke={TREND_OVERLAY_DEFS[selectedOverlay].color}
               strokeWidth="2"

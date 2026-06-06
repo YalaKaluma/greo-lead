@@ -38,15 +38,26 @@ const buildPath = (points, key) => {
     .join(' ');
 };
 
-const buildAxisPath = (points, key, maxValue) => {
-  if (!points.length || !maxValue) return '';
+const dateToTime = (dateString) => {
+  const [year, month, day] = String(dateString || '').split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day).getTime();
+};
+
+const buildDatePath = (points, key, maxValue, startTime, endTime) => {
+  if (!points.length || !maxValue || startTime === null || endTime === null) return '';
+  const range = Math.max(endTime - startTime, 1);
   return points
-    .map((point, index) => {
-      const x = PADDING + (index / Math.max(points.length - 1, 1)) * (WIDTH - PADDING * 2);
+    .map(point => {
+      const pointTime = dateToTime(point.date);
+      if (pointTime === null || pointTime < startTime || pointTime > endTime) return null;
+      const x = PADDING + ((pointTime - startTime) / range) * (WIDTH - PADDING * 2);
       const scaledValue = Math.min(Number(point[key]) || 0, maxValue);
       const y = HEIGHT - PADDING - (scaledValue / maxValue) * (HEIGHT - PADDING * 2);
-      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+      return { x, y };
     })
+    .filter(Boolean)
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
     .join(' ');
 };
 
@@ -98,19 +109,20 @@ function KpiCard({ label, value, detail, tone = 'slate' }) {
 const getOverlayConfig = (overlayKey, overlays) => {
   if (!overlayKey) return null;
   const overlayData = overlays || {};
-  const byDate = {
-    habits: new Map((overlayData.habits || []).map(point => [point.date, Number(point.compliance_rate || 0)])),
-    tasks: new Map((overlayData.tasks || []).map(point => [point.date, Number(point.mtn_score || 0)])),
-    journal: new Map((overlayData.journal || []).map(point => [
-      point.date,
-      Number(point.entry_count || 0) > 0 ? Number(point.daily_average || 0) : 0
-    ])),
+  const series = {
+    habits: (overlayData.habits || []).map(point => ({ date: point.date, overlay_score: Number(point.compliance_rate || 0) })),
+    tasks: (overlayData.tasks || []).map(point => ({ date: point.date, overlay_score: Number(point.mtn_score || 0) })),
+    journal: (overlayData.journal || []).map(point => ({
+      date: point.date,
+      overlay_score: Number(point.entry_count || 0) > 0 ? Number(point.daily_average || 0) : 0,
+    })),
   };
-  const values = Array.from(byDate[overlayKey]?.values() || []);
+  const points = series[overlayKey] || [];
+  const values = points.map(point => Number(point.overlay_score || 0));
 
   return {
     axisMax: OVERLAY_DEFS[overlayKey]?.axisMax || Math.max(1, Math.ceil(Math.max(...values, 0) * 1.2)),
-    byDate: byDate[overlayKey] || new Map(),
+    points,
   };
 };
 
@@ -146,9 +158,9 @@ function DepthTrendChart({ data, overlays }) {
   const rollingPath = buildPath(points, 'rolling_30_day_average');
   const dateTicks = buildDateTicks(points);
   const overlayConfig = getOverlayConfig(selectedOverlay, overlays);
-  const overlayPoints = selectedOverlay && overlayConfig
-    ? points.map(point => ({ date: point.date, overlay_score: overlayConfig.byDate.get(point.date) ?? 0 }))
-    : [];
+  const overlayPoints = selectedOverlay && overlayConfig ? overlayConfig.points : [];
+  const startTime = points.length ? dateToTime(points[0].date) : null;
+  const endTime = points.length ? dateToTime(points[points.length - 1].date) : null;
   const overlayAxisValues = overlayConfig
     ? [0, overlayConfig.axisMax / 4, overlayConfig.axisMax / 2, (overlayConfig.axisMax * 3) / 4, overlayConfig.axisMax]
     : [];
@@ -223,7 +235,7 @@ function DepthTrendChart({ data, overlays }) {
           })}
           {selectedOverlay && overlayConfig && (
             <path
-              d={buildAxisPath(overlayPoints, 'overlay_score', overlayConfig.axisMax)}
+              d={buildDatePath(overlayPoints, 'overlay_score', overlayConfig.axisMax, startTime, endTime)}
               fill="none"
               stroke={OVERLAY_DEFS[selectedOverlay].color}
               strokeWidth="2"
