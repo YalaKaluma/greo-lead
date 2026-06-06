@@ -621,6 +621,14 @@ function AdminFeedbackPanel({ apiUrl, userNumber }) {
         </div>
       </div>
 
+      <AdminAIBriefingBox
+        apiUrl={apiUrl}
+        userNumber={userNumber}
+        briefingType="feedback"
+        buttonLabel="Summarize Feedback"
+        emptyText="No feedback intelligence generated yet."
+      />
+
       {error && (
         <div className="mb-6 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
           {error}
@@ -751,6 +759,14 @@ function AdminAnalyticsPanel({ apiUrl, userNumber }) {
         <h2 className="text-lg font-semibold text-slate-900">User Analytics & Adoption</h2>
         <p className="mt-1 text-sm text-slate-500">Track platform usage, adoption, and user-level activity.</p>
       </div>
+
+      <AdminAIBriefingBox
+        apiUrl={apiUrl}
+        userNumber={userNumber}
+        briefingType="usage"
+        buttonLabel="Analyze Adoption"
+        emptyText="No adoption intelligence generated yet."
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {platformMetrics.map((metric) => (
@@ -905,6 +921,14 @@ function AdminSystemHealthPanel({ apiUrl, userNumber }) {
         </button>
       </div>
 
+      <AdminAIBriefingBox
+        apiUrl={apiUrl}
+        userNumber={userNumber}
+        briefingType="operations"
+        buttonLabel="Analyze Operations"
+        emptyText="No operations intelligence generated yet."
+      />
+
       <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
         <div className="flex flex-wrap items-center gap-3">
           <span className={`rounded px-2 py-1 text-xs font-semibold ${
@@ -1027,6 +1051,90 @@ function AdminSystemHealthPanel({ apiUrl, userNumber }) {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function AdminAIBriefingBox({ apiUrl, userNumber, briefingType, buttonLabel, emptyText }) {
+  const [briefing, setBriefing] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState('');
+  const adminParams = { user_number: userNumber };
+
+  const loadBriefing = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await axios.get(`${apiUrl}/api/admin/ai-briefings/${briefingType}`, { params: adminParams });
+      setBriefing(response.data.briefing || null);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'AI briefing could not be loaded.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateBriefing = async () => {
+    setGenerating(true);
+    setError('');
+    try {
+      const response = await axios.post(
+        `${apiUrl}/api/admin/ai-briefings`,
+        { briefing_type: briefingType },
+        { params: adminParams }
+      );
+      setBriefing(response.data.briefing || null);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'AI briefing could not be generated.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBriefing();
+  }, [apiUrl, userNumber, briefingType]);
+
+  return (
+    <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900">AI Intelligence</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            {loading ? 'Loading latest briefing...' : briefing ? `Generated ${formatDate(briefing.created_at)}` : emptyText}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={generateBriefing}
+          disabled={generating}
+          className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300"
+        >
+          {generating ? 'Generating...' : buttonLabel}
+        </button>
+      </div>
+
+      {error && (
+        <div className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {error}
+        </div>
+      )}
+
+      {briefing && (
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <h4 className="text-base font-semibold text-slate-950">{briefing.title}</h4>
+          <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{briefing.summary_text}</p>
+          <div className="mt-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top Recommendations</div>
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-slate-700">
+              {(briefing.top_recommendations || []).map((item, index) => (
+                <li key={`${item}-${index}`}>{item}</li>
+              ))}
+            </ol>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

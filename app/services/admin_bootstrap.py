@@ -75,6 +75,21 @@ def ensure_admin_schema_and_seed() -> None:
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_system_health_events_type_created ON system_health_events(event_type, created_at)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_system_health_events_status_created ON system_health_events(status_code, created_at)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_system_health_events_path_created ON system_health_events(path, created_at)"))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS admin_ai_briefings (
+                id SERIAL PRIMARY KEY,
+                briefing_type VARCHAR(40) NOT NULL,
+                admin_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                title VARCHAR(160) NOT NULL,
+                summary_text TEXT NOT NULL,
+                top_recommendations JSONB,
+                source_snapshot JSONB,
+                model VARCHAR(80),
+                created_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_admin_ai_briefings_type_created ON admin_ai_briefings(briefing_type, created_at)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_admin_ai_briefings_admin_created ON admin_ai_briefings(admin_user_id, created_at)"))
 
         admin_count = conn.execute(text("SELECT COUNT(*) FROM users WHERE is_admin = TRUE")).scalar() or 0
         if admin_count > 0:

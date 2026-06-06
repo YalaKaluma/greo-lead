@@ -115,6 +115,26 @@ class SystemHealthEvent(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
 
+class AdminAIBriefing(Base):
+    __tablename__ = "admin_ai_briefings"
+    __table_args__ = (
+        Index("idx_admin_ai_briefings_type_created", "briefing_type", "created_at"),
+        Index("idx_admin_ai_briefings_admin_created", "admin_user_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    briefing_type = Column(String(40), nullable=False, index=True)
+    admin_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    title = Column(String(160), nullable=False)
+    summary_text = Column(Text, nullable=False)
+    top_recommendations = Column(JSONB, nullable=True)
+    source_snapshot = Column(JSONB, nullable=True)
+    model = Column(String(80), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    admin_user = relationship("User")
+
+
 class MessageSignalFlag(Base):
     __tablename__ = "message_signal_flags"
     __table_args__ = (

@@ -23,9 +23,11 @@ from app.models import (
     TaskPriorityDecision,
     UsageEvent,
     User,
+    AdminAIBriefing,
 )
 from app.utils.security import generate_temporary_password, hash_password
 from app.services.admin_system_health_service import AdminSystemHealthService
+from app.services.admin_ai_briefing_service import AdminAIBriefingService
 
 
 router = APIRouter(tags=["admin"])
@@ -49,7 +51,12 @@ class UpdateFeedbackStatusRequest(BaseModel):
     status: str
 
 
+class GenerateAIBriefingRequest(BaseModel):
+    briefing_type: str
+
+
 FEEDBACK_STATUSES = {"New", "Reviewed", "Resolved", "Ignored"}
+AI_BRIEFING_TYPES = {"feedback", "usage", "operations"}
 
 
 def _split_name(name: str | None) -> tuple[str, str]:
@@ -298,6 +305,21 @@ def _distinct_active_user_ids(db: Session, since: datetime) -> set[int]:
 
 def _platform_metric(label: str, value: int | float, hint: str = "") -> dict[str, Any]:
     return {"label": label, "value": value, "hint": hint}
+
+
+def _display_ai_briefing(briefing: AdminAIBriefing | None) -> dict[str, Any] | None:
+    if not briefing:
+        return None
+    return {
+        "id": briefing.id,
+        "briefing_type": briefing.briefing_type,
+        "title": briefing.title,
+        "summary_text": briefing.summary_text,
+        "top_recommendations": briefing.top_recommendations or [],
+        "model": briefing.model,
+        "created_at": briefing.created_at.isoformat() if briefing.created_at else None,
+        "admin_user_id": briefing.admin_user_id,
+    }
 
 
 @router.get("/users")
@@ -748,3 +770,44 @@ def get_system_health(
     snapshot = service.get_health_snapshot()
     snapshot["current_admin_id"] = admin_user.id
     return snapshot
+
+
+@router.get("/ai-briefings/{briefing_type}")
+def get_latest_ai_briefing(
+    briefing_type: str,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    if briefing_type not in AI_BRIEFING_TYPES:
+        raise HTTPException(status_code=422, detail="Invalid briefing type")
+    service = AdminAIBriefingService(db)
+    return {
+        "briefing": _display_ai_briefing(service.latest(briefing_type)),
+        "current_admin_id": admin_user.id,
+    }
+
+
+@router.post("/ai-briefings")
+def generate_ai_briefing(
+    request: GenerateAIBriefingRequest,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    briefing_type = request.briefing_type.strip().lower()
+    if briefing_type not in AI_BRIEFING_TYPES:
+        raise HTTPException(status_code=422, detail="Invalid briefing type")
+    service = AdminAIBriefingService(db)
+    briefing = service.generate(briefing_type, admin_user)
+    _log_admin_action(
+        db,
+        admin_user,
+        "generated_ai_briefing",
+        None,
+        {"briefing_type": briefing_type, "briefing_id": briefing.id},
+    )
+    db.commit()
+    db.refresh(briefing)
+    return {
+        "briefing": _display_ai_briefing(briefing),
+        "current_admin_id": admin_user.id,
+    }
