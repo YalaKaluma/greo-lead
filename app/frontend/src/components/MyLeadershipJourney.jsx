@@ -653,6 +653,27 @@ function getSignalUnit(signal) {
   return null;
 }
 
+function getSignalActual(signal) {
+  return Number(signal?.actual || 0);
+}
+
+function getSignalRequired(signal) {
+  return Number(signal?.required || 0);
+}
+
+function isSignalComplete(signal) {
+  const required = getSignalRequired(signal);
+  if (signal?.passed) return true;
+  return required > 0 && getSignalActual(signal) >= required;
+}
+
+function formatSingleSignalProgress(signal) {
+  const unit = getSignalUnit(signal);
+  const required = getSignalRequired(signal);
+  const actual = required > 0 ? Math.min(getSignalActual(signal), required) : getSignalActual(signal);
+  return `${actual}/${required}${unit ? ` ${unit}` : ""}`;
+}
+
 function getPrimaryProgressSignal(signals) {
   const priority = [
     "scars_failures_behavior_reflections",
@@ -669,25 +690,23 @@ function getPrimaryProgressSignal(signals) {
     "high_energy_habits_identified",
     "tasks_consistently_entered",
   ];
-  return priority.map((signalName) => signals.find((signal) => signal.signal === signalName)).find(Boolean);
+  const orderedSignals = priority.map((signalName) => signals.find((signal) => signal.signal === signalName)).filter(Boolean);
+  return orderedSignals.find((signal) => !isSignalComplete(signal)) || orderedSignals[0] || null;
 }
 
 function formatSignalProgressDetail(signals) {
   if (!signals?.length) return null;
 
   if (signals.length === 1) {
-    const signal = signals[0];
-    const unit = getSignalUnit(signal);
-    return `${signal.actual || 0}/${signal.required || 0}${unit ? ` ${unit}` : ""}`;
+    return formatSingleSignalProgress(signals[0]);
   }
 
   const primarySignal = getPrimaryProgressSignal(signals);
   if (primarySignal) {
-    const unit = getSignalUnit(primarySignal);
-    return `${primarySignal.actual || 0}/${primarySignal.required || 0}${unit ? ` ${unit}` : ""}`;
+    return formatSingleSignalProgress(primarySignal);
   }
 
-  const completed = signals.filter((signal) => signal.passed).length;
+  const completed = signals.filter((signal) => isSignalComplete(signal)).length;
   return `${completed}/${signals.length}`;
 }
 
@@ -712,7 +731,13 @@ function getTrialProgressDetail(dimensionId, targetBeltId, trialType, beltValida
 function getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryAverage, topicData, beltValidations) {
   const trialValidation = getTrialTypeValidation(dimensionId, targetBeltId, "behavioral", beltValidations);
   const validationStatus = trialValidation
-    ? (trialValidation.passed ? "submitted" : trialValidation.signals.some((signal) => Number(signal.actual || 0) > 0) ? "in_progress" : "not_started")
+    ? (
+        trialValidation.passed || trialValidation.signals.every((signal) => isSignalComplete(signal))
+          ? "submitted"
+          : trialValidation.signals.some((signal) => getSignalActual(signal) > 0)
+            ? "in_progress"
+            : "not_started"
+      )
     : targetBeltId === "yellow"
       ? getYellowValidationBehavioralStatus(dimensionId, beltValidations?.yellow)
       : null;
