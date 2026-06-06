@@ -3,7 +3,7 @@ import axios from 'axios';
 import ReadAloudButton from './ReadAloudButton';
 import MessageFeedbackButton from './MessageFeedbackButton';
 
-export default function AlfredChat({ apiUrl, userNumber, currentPage }) {
+export default function AlfredChat({ apiUrl, userNumber, currentPage, showLauncher = true }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -270,23 +270,25 @@ export default function AlfredChat({ apiUrl, userNumber, currentPage }) {
         </div>
       </div>
 
-      <button
-        onClick={() => setIsOpen((open) => !open)}
-        className="fixed bottom-8 left-6 z-50 flex h-16 w-16 items-center justify-center rounded-full border-2 border-amber-300 bg-slate-950 p-1 shadow-xl transition-transform hover:scale-105 lg:left-[232px]"
-        aria-label="Open Alfred messages"
-      >
-        <img
-          src="/alfred-logo.png"
-          alt=""
-          className="h-full w-full rounded-full object-cover"
-          aria-hidden="true"
-        />
-        {unreadCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-6 min-w-6 items-center justify-center rounded-full bg-amber-400 px-1.5 text-xs font-bold text-slate-950 ring-2 ring-white">
-            {unreadCount}
-          </span>
-        )}
-      </button>
+      {showLauncher && (
+        <button
+          onClick={() => setIsOpen((open) => !open)}
+          className="fixed bottom-8 left-6 z-50 flex h-16 w-16 items-center justify-center rounded-full border-2 border-amber-300 bg-slate-950 p-1 shadow-xl transition-transform hover:scale-105 lg:left-[232px]"
+          aria-label="Open Alfred messages"
+        >
+          <img
+            src="/alfred-logo.png"
+            alt=""
+            className="h-full w-full rounded-full object-cover"
+            aria-hidden="true"
+          />
+          {unreadCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-6 min-w-6 items-center justify-center rounded-full bg-amber-400 px-1.5 text-xs font-bold text-slate-950 ring-2 ring-white">
+              {unreadCount}
+            </span>
+          )}
+        </button>
+      )}
     </>
   );
 }

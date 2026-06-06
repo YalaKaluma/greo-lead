@@ -590,7 +590,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
                         className="rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
                         title="Show reflection depth details"
                       >
-                        Depth: {Number(depth.score).toFixed(1)}/10
+                        Depth
                       </button>
                     )}
                     <ReadAloudButton

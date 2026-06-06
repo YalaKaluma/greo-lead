@@ -304,6 +304,7 @@ function MainAppShell({
         apiUrl={API_URL} 
         userNumber={userNumber}
         currentPage={currentPage}
+        showLauncher={!isMobile || isSidebarOpen}
         preferredLanguage={language}
         onTourStep={(action) => {
           // Handle tour navigation from chat
