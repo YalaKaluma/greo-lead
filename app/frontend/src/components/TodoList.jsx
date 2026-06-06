@@ -1411,13 +1411,16 @@ function TaskMtnTrendChart({ data, overlays }) {
         <svg viewBox={`0 0 ${MTN_CHART_WIDTH} ${MTN_CHART_HEIGHT}`} className="h-64 w-full">
           {gridValues.map(value => {
             const y = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING - (value / maxScore) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING - MTN_CHART_BOTTOM_PADDING);
+            const overlayAxisValue = Math.round((value / maxScore) * 100);
             return (
               <g key={value}>
                 <line x1={MTN_CHART_PADDING} x2={MTN_CHART_WIDTH - MTN_CHART_PADDING} y1={y} y2={y} stroke="#e2e8f0" />
                 <text x={6} y={y + 4} className="fill-slate-400 text-[10px]">{formatMtnNumber(value)}</text>
+                <text x={MTN_CHART_WIDTH - MTN_CHART_PADDING + 6} y={y + 4} className="fill-slate-400 text-[10px]">{overlayAxisValue}</text>
               </g>
             );
           })}
+          <line x1={MTN_CHART_WIDTH - MTN_CHART_PADDING} x2={MTN_CHART_WIDTH - MTN_CHART_PADDING} y1={MTN_CHART_PADDING} y2={MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING} stroke="#cbd5e1" />
           <path d={dailyPath} fill="none" stroke="#cbd5e1" strokeWidth="2" />
           <path d={rollingPath} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" />
           {selectedOverlays.map(key => (
@@ -1470,7 +1473,8 @@ const weekdayIndexFromDate = (dateString) => {
   return (jsDay + 6) % 7;
 };
 
-const colorForMtnScore = (score) => {
+const colorForMtnScore = (score, completedTasks) => {
+  if (!completedTasks) return 'bg-slate-100';
   if (score >= 20) return 'bg-emerald-700';
   if (score >= 15) return 'bg-emerald-500';
   if (score >= 10) return 'bg-amber-300';
@@ -1513,7 +1517,7 @@ function TaskMtnHeatmap({ data }) {
                   <div
                     key={day.date}
                     title={`${formatShortDate(day.date)}: ${formatMtnNumber(day.mtn_score)} MTN from ${day.completed_tasks || 0} completed task(s)`}
-                    className={`h-4 min-w-4 rounded-sm ${colorForMtnScore(Number(day.mtn_score || 0))}`}
+                    className={`h-4 min-w-4 rounded-sm ${colorForMtnScore(Number(day.mtn_score || 0), Number(day.completed_tasks || 0))}`}
                   />
                 ) : (
                   <div key={`${weekIndex}-${weekday}`} className="h-4 min-w-4" />
@@ -1525,6 +1529,8 @@ function TaskMtnHeatmap({ data }) {
       </div>
 
       <div className="mt-3 flex items-center justify-end gap-2 text-xs text-slate-500">
+        <span>No entry</span>
+        <span className="h-3 w-3 rounded-sm bg-slate-100" />
         <span>Low</span>
         <span className="h-3 w-3 rounded-sm bg-rose-600" />
         <span className="h-3 w-3 rounded-sm bg-rose-300" />

@@ -3,6 +3,7 @@ import { useState } from 'react';
 const WIDTH = 720;
 const HEIGHT = 220;
 const PADDING = 28;
+const BOTTOM_PADDING = 42;
 
 const OVERLAY_DEFS = {
   habits: { label: 'Habits', color: '#16a34a' },
@@ -15,10 +16,35 @@ const buildPath = (points, key) => {
   return points
     .map((point, index) => {
       const x = PADDING + (index / Math.max(points.length - 1, 1)) * (WIDTH - PADDING * 2);
-      const y = HEIGHT - PADDING - ((point[key] || 0) / 100) * (HEIGHT - PADDING * 2);
+      const y = HEIGHT - BOTTOM_PADDING - ((point[key] || 0) / 100) * (HEIGHT - PADDING - BOTTOM_PADDING);
       return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
     })
     .join(' ');
+};
+
+const formatShortDate = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(`${dateString}T00:00:00`);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+const buildDateTicks = (points) => {
+  if (!points.length) return [];
+  const tickCount = Math.min(6, points.length);
+  const used = new Set();
+
+  return Array.from({ length: tickCount })
+    .map((_, index) => Math.round((index / Math.max(tickCount - 1, 1)) * (points.length - 1)))
+    .filter((pointIndex) => {
+      if (used.has(pointIndex)) return false;
+      used.add(pointIndex);
+      return true;
+    })
+    .map((pointIndex) => ({
+      index: pointIndex,
+      date: points[pointIndex]?.date,
+      x: PADDING + (pointIndex / Math.max(points.length - 1, 1)) * (WIDTH - PADDING * 2),
+    }));
 };
 
 const normalizeOverlayPoints = (basePoints, overlays) => {
@@ -75,6 +101,7 @@ export default function HabitComplianceChart({ data, overlays }) {
   const dailyPath = buildPath(points, 'compliance_rate');
   const rollingPath = buildPath(points, 'rolling_average');
   const overlayPoints = normalizeOverlayPoints(points, overlays);
+  const dateTicks = buildDateTicks(points);
   const toggleOverlay = (key) => {
     setSelectedOverlays(current =>
       current.includes(key) ? current.filter(item => item !== key) : [...current, key]
@@ -103,14 +130,25 @@ export default function HabitComplianceChart({ data, overlays }) {
       <div className="mt-4 overflow-hidden rounded-md bg-slate-50">
         <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="h-64 w-full">
           {[0, 25, 50, 75, 100].map(value => {
-            const y = HEIGHT - PADDING - (value / 100) * (HEIGHT - PADDING * 2);
+            const y = HEIGHT - BOTTOM_PADDING - (value / 100) * (HEIGHT - PADDING - BOTTOM_PADDING);
             return (
               <g key={value}>
                 <line x1={PADDING} x2={WIDTH - PADDING} y1={y} y2={y} stroke="#e2e8f0" />
                 <text x={6} y={y + 4} className="fill-slate-400 text-[10px]">{value}%</text>
+                <text x={WIDTH - PADDING + 6} y={y + 4} className="fill-slate-400 text-[10px]">{value}</text>
               </g>
             );
           })}
+          <line x1={PADDING} x2={WIDTH - PADDING} y1={HEIGHT - BOTTOM_PADDING} y2={HEIGHT - BOTTOM_PADDING} stroke="#cbd5e1" />
+          <line x1={WIDTH - PADDING} x2={WIDTH - PADDING} y1={PADDING} y2={HEIGHT - BOTTOM_PADDING} stroke="#cbd5e1" />
+          {dateTicks.map((tick) => (
+            <g key={`${tick.index}-${tick.date}`}>
+              <line x1={tick.x} x2={tick.x} y1={HEIGHT - BOTTOM_PADDING} y2={HEIGHT - BOTTOM_PADDING + 4} stroke="#94a3b8" />
+              <text x={tick.x} y={HEIGHT - 12} textAnchor="middle" className="fill-slate-400 text-[10px]">
+                {formatShortDate(tick.date)}
+              </text>
+            </g>
+          ))}
           <path d={dailyPath} fill="none" stroke="#cbd5e1" strokeWidth="2" />
           <path d={rollingPath} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" />
           {selectedOverlays.map(key => (

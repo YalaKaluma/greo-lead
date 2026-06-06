@@ -177,10 +177,12 @@ function DepthTrendChart({ data, overlays }) {
               <g key={value}>
                 <line x1={PADDING} x2={WIDTH - PADDING} y1={y} y2={y} stroke="#e2e8f0" />
                 <text x={6} y={y + 4} className="fill-slate-400 text-[10px]">{value}</text>
+                <text x={WIDTH - PADDING + 6} y={y + 4} className="fill-slate-400 text-[10px]">{value * 10}</text>
               </g>
             );
           })}
           <line x1={PADDING} x2={WIDTH - PADDING} y1={HEIGHT - PADDING} y2={HEIGHT - PADDING} stroke="#cbd5e1" />
+          <line x1={WIDTH - PADDING} x2={WIDTH - PADDING} y1={PADDING} y2={HEIGHT - PADDING} stroke="#cbd5e1" />
           {dateTicks.map((tick) => (
             <g key={`${tick.index}-${tick.date}`}>
               <line x1={tick.x} x2={tick.x} y1={HEIGHT - PADDING} y2={HEIGHT - PADDING + 4} stroke="#94a3b8" />
