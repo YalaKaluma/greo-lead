@@ -94,6 +94,27 @@ class UsageEvent(Base):
     user = relationship("User")
 
 
+class SystemHealthEvent(Base):
+    __tablename__ = "system_health_events"
+    __table_args__ = (
+        Index("idx_system_health_events_type_created", "event_type", "created_at"),
+        Index("idx_system_health_events_status_created", "status_code", "created_at"),
+        Index("idx_system_health_events_path_created", "path", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_type = Column(String(80), nullable=False, index=True)
+    severity = Column(String(20), default="info", nullable=False, index=True)
+    source = Column(String(80), nullable=True, index=True)
+    path = Column(String(240), nullable=True, index=True)
+    method = Column(String(12), nullable=True)
+    status_code = Column(Integer, nullable=True, index=True)
+    response_time_ms = Column(Integer, nullable=True)
+    message = Column(Text, nullable=True)
+    metadata_json = Column(JSONB, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
 class MessageSignalFlag(Base):
     __tablename__ = "message_signal_flags"
     __table_args__ = (

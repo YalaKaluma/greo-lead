@@ -25,6 +25,7 @@ from app.models import (
     User,
 )
 from app.utils.security import generate_temporary_password, hash_password
+from app.services.admin_system_health_service import AdminSystemHealthService
 
 
 router = APIRouter(tags=["admin"])
@@ -736,3 +737,14 @@ def get_analytics(
         ],
         "current_admin_id": admin_user.id,
     }
+
+
+@router.get("/system-health")
+def get_system_health(
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    service = AdminSystemHealthService(db)
+    snapshot = service.get_health_snapshot()
+    snapshot["current_admin_id"] = admin_user.id
+    return snapshot

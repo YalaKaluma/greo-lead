@@ -281,7 +281,8 @@ function AdminUserManagement({ apiUrl, userNumber }) {
         {[
           { id: 'users', label: 'User Management' },
           { id: 'feedback', label: 'Feedback Review' },
-          { id: 'analytics', label: 'Analytics' }
+          { id: 'analytics', label: 'Analytics' },
+          { id: 'health', label: 'System Health' }
         ].map((item) => (
           <button
             key={item.id}
@@ -302,8 +303,10 @@ function AdminUserManagement({ apiUrl, userNumber }) {
         <AdminUsersPanel apiUrl={apiUrl} userNumber={userNumber} />
       ) : adminView === 'feedback' ? (
         <AdminFeedbackPanel apiUrl={apiUrl} userNumber={userNumber} />
-      ) : (
+      ) : adminView === 'analytics' ? (
         <AdminAnalyticsPanel apiUrl={apiUrl} userNumber={userNumber} />
+      ) : (
+        <AdminSystemHealthPanel apiUrl={apiUrl} userNumber={userNumber} />
       )}
     </section>
   );
@@ -829,6 +832,200 @@ function AdminAnalyticsPanel({ apiUrl, userNumber }) {
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+function AdminSystemHealthPanel({ apiUrl, userNumber }) {
+  const [health, setHealth] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const adminParams = { user_number: userNumber };
+
+  const loadHealth = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await axios.get(`${apiUrl}/api/admin/system-health`, { params: adminParams });
+      setHealth(response.data);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'System health could not be loaded.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadHealth();
+  }, [apiUrl, userNumber]);
+
+  if (loading) {
+    return <div className="py-6 text-sm text-slate-500">Loading system health...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        {error}
+      </div>
+    );
+  }
+
+  const summary = health?.summary || {};
+  const database = health?.database || {};
+  const environment = health?.environment || {};
+  const deployment = health?.deployment_status || {};
+  const railwayLogs = health?.railway_logs || {};
+  const recentErrors = health?.recent_errors || [];
+  const eventTypes = summary.events_by_type_7_days || [];
+  const healthTiles = [
+    { label: 'Recent Errors', value: summary.recent_errors || 0 },
+    { label: 'OpenAI Failures', value: summary.openai_failures || 0 },
+    { label: 'Database Failures', value: summary.database_failures || 0 },
+    { label: 'Email Failures', value: summary.email_failures || 0 },
+    { label: 'Auth Failures', value: summary.authentication_failures || 0 },
+    { label: 'Slow Requests', value: summary.slow_requests || 0 },
+    { label: 'Railway Errors', value: (railwayLogs.error_logs || []).length }
+  ];
+
+  return (
+    <div>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">System Health</h2>
+          <p className="mt-1 text-sm text-slate-500">Monitor recent failures, response times, and service readiness.</p>
+        </div>
+        <button
+          type="button"
+          onClick={loadHealth}
+          className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          Refresh
+        </button>
+      </div>
+
+      <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className={`rounded px-2 py-1 text-xs font-semibold ${
+            health?.status === 'Healthy'
+              ? 'bg-emerald-50 text-emerald-700'
+              : health?.status === 'Watch'
+                ? 'bg-amber-50 text-amber-700'
+                : 'bg-rose-50 text-rose-700'
+          }`}>
+            {health?.status || 'Unknown'}
+          </span>
+          <span className="text-sm text-slate-500">Checked {formatDate(health?.checked_at)}</span>
+          <span className="text-sm text-slate-500">Database: {database.status || 'Unknown'}{database.response_time_ms != null ? ` (${database.response_time_ms} ms)` : ''}</span>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
+        {healthTiles.map((tile) => (
+          <div key={tile.label} className="rounded-lg border border-slate-200 bg-white p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{tile.label}</div>
+            <div className="mt-2 text-2xl font-bold text-slate-950">{tile.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-8 grid gap-6 lg:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900">API Response Times</div>
+          <div className="space-y-3 px-4 py-4 text-sm text-slate-700">
+            <div className="flex justify-between">
+              <span>Average</span>
+              <span className="font-semibold text-slate-950">{summary.api_response_times?.average_ms || 0} ms</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Max</span>
+              <span className="font-semibold text-slate-950">{summary.api_response_times?.max_ms || 0} ms</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900">Service Readiness</div>
+          <div className="space-y-3 px-4 py-4 text-sm text-slate-700">
+            <div className="flex justify-between"><span>OpenAI</span><span className="font-semibold">{environment.openai_configured ? 'Configured' : 'Missing'}</span></div>
+            <div className="flex justify-between"><span>Mailgun</span><span className="font-semibold">{environment.mailgun_configured ? 'Configured' : 'Missing'}</span></div>
+            <div className="flex justify-between"><span>Gmail Token</span><span className="font-semibold">{environment.gmail_token_present ? 'Present' : 'Not set'}</span></div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900">Recent Deployments</div>
+          <div className="px-4 py-4 text-sm text-slate-700">
+            <div className="font-semibold text-slate-950">{deployment.status || 'Unknown'}</div>
+            <p className="mt-2 text-slate-500">{deployment.message || 'Deployment integration is not connected.'}</p>
+            {(deployment.recent_deployments || []).length > 0 && (
+              <div className="mt-4 space-y-2">
+                {deployment.recent_deployments.map((item) => (
+                  <div key={item.id} className="rounded border border-slate-100 px-3 py-2">
+                    <div className="font-semibold text-slate-900">{item.status || 'Unknown'}</div>
+                    <div className="text-xs text-slate-400">{formatDate(item.created_at)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+        <div className="rounded-lg border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900">Events By Type - 7 Days</div>
+          <div className="divide-y divide-slate-100">
+            {eventTypes.length === 0 ? (
+              <div className="px-4 py-4 text-sm text-slate-500">No health events recorded yet.</div>
+            ) : eventTypes.map((item) => (
+              <div key={item.event_type} className="flex items-center justify-between px-4 py-3 text-sm">
+                <span className="text-slate-700">{item.event_type}</span>
+                <span className="font-semibold text-slate-950">{item.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900">Recent Alfred API Errors</div>
+          <div className="divide-y divide-slate-100">
+            {recentErrors.length === 0 ? (
+              <div className="px-4 py-4 text-sm text-slate-500">No recent errors recorded.</div>
+            ) : recentErrors.map((item) => (
+              <div key={item.id} className="px-4 py-3 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-slate-950">{item.event_type}</span>
+                  <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{item.status_code || '-'}</span>
+                  <span className="text-xs text-slate-400">{formatDate(item.created_at)}</span>
+                </div>
+                <div className="mt-1 text-slate-600">{item.method || ''} {item.path || ''}</div>
+                {item.message && <div className="mt-1 text-xs text-slate-400">{item.message}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8 rounded-lg border border-slate-200 bg-white">
+        <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900">Railway Log Errors</div>
+        <div className="divide-y divide-slate-100">
+          {railwayLogs.status && railwayLogs.status !== 'Connected' && (
+            <div className="px-4 py-4 text-sm text-amber-700">{railwayLogs.message || railwayLogs.status}</div>
+          )}
+          {(railwayLogs.error_logs || []).length === 0 ? (
+            <div className="px-4 py-4 text-sm text-slate-500">No Railway error logs found for the latest deployment.</div>
+          ) : railwayLogs.error_logs.map((item, index) => (
+            <div key={`${item.timestamp}-${index}`} className="px-4 py-3 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">{item.severity || 'error'}</span>
+                <span className="text-xs text-slate-400">{formatDate(item.timestamp)}</span>
+              </div>
+              <div className="mt-1 text-slate-700">{item.message || '-'}</div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

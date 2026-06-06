@@ -6,14 +6,16 @@ from pathlib import Path
 import logging
 import sys
 import os
+import time
 from datetime import datetime
-from app.db import Base, engine
+from app.db import Base, engine, SessionLocal
 from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits, waitlist, onboarding, chat, priority, leadership_coaching_router, audio, message_feedback, opportunities, message_signals, settings, admin, usage
 from app.routers import auth
 from sqlalchemy import text
 import threading
 from app.email_poller import run_email_loop
 from app.services.admin_bootstrap import ensure_admin_schema_and_seed
+from app.models import SystemHealthEvent
 
 # Configure logging with timestamp
 logging.basicConfig(
@@ -107,13 +109,107 @@ logger.info("✓ CORS middleware configured (allowing all origins)")
 # --------------------------------------
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
+    start = time.perf_counter()
     logger.info(f"📥 {request.method} {request.url.path}")
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        elapsed_ms = round((time.perf_counter() - start) * 1000)
+        _record_system_health_event(
+            event_type=_classify_exception_event(request.url.path, exc),
+            severity="error",
+            source="api",
+            path=request.url.path,
+            method=request.method,
+            status_code=500,
+            response_time_ms=elapsed_ms,
+            message=str(exc)[:500],
+        )
+        logger.exception(f"📤 {request.method} {request.url.path} → 500")
+        raise
+
+    elapsed_ms = round((time.perf_counter() - start) * 1000)
     logger.info(f"📤 {request.method} {request.url.path} → {response.status_code}")
+    if request.url.path.startswith("/api/"):
+        _record_system_health_event(
+            event_type=_classify_response_event(request.url.path, response.status_code, elapsed_ms),
+            severity=_severity_for_response(response.status_code, elapsed_ms),
+            source="api",
+            path=request.url.path,
+            method=request.method,
+            status_code=response.status_code,
+            response_time_ms=elapsed_ms,
+            message=None if response.status_code < 400 else f"HTTP {response.status_code}",
+        )
     return response
 
 
 logger.info("✓ Request logging middleware configured")
+
+
+def _classify_response_event(path: str, status_code: int, elapsed_ms: int) -> str:
+    path_lower = path.lower()
+    if status_code in {401, 403} or ("auth" in path_lower and status_code >= 400):
+        return "auth_failure"
+    if status_code >= 500 and any(part in path_lower for part in ["chat", "journey", "priority", "nudge", "audio", "opportunities"]):
+        return "openai_failure"
+    if status_code >= 500 and any(part in path_lower for part in ["email", "invitation"]):
+        return "email_failure"
+    if status_code >= 500:
+        return "api_error"
+    if elapsed_ms >= 2000:
+        return "slow_request"
+    return "api_response"
+
+
+def _classify_exception_event(path: str, exc: Exception) -> str:
+    combined = f"{path} {type(exc).__name__} {exc}".lower()
+    if "database" in combined or "sqlalchemy" in combined or "psycopg" in combined:
+        return "database_failure"
+    if "openai" in combined:
+        return "openai_failure"
+    if "gmail" in combined or "mailgun" in combined or "email" in combined:
+        return "email_failure"
+    return "api_error"
+
+
+def _severity_for_response(status_code: int, elapsed_ms: int) -> str:
+    if status_code >= 500:
+        return "error"
+    if status_code in {401, 403} or elapsed_ms >= 2000:
+        return "warning"
+    return "info"
+
+
+def _record_system_health_event(
+    event_type: str,
+    severity: str,
+    source: str,
+    path: str,
+    method: str,
+    status_code: int,
+    response_time_ms: int,
+    message: str | None = None,
+) -> None:
+    try:
+        db = SessionLocal()
+        try:
+            db.add(SystemHealthEvent(
+                event_type=event_type,
+                severity=severity,
+                source=source,
+                path=path[:240],
+                method=method[:12],
+                status_code=status_code,
+                response_time_ms=response_time_ms,
+                message=message,
+                metadata_json={},
+            ))
+            db.commit()
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning(f"Could not record system health event: {exc}")
 
 # --------------------------------------
 # Include API routers
