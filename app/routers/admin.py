@@ -9,8 +9,21 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import AdminAuditLog, Message, MessageFeedback, Task, TaskPriorityDecision, User
-from app.services.gmail_service import send_email
+from app.models import (
+    AdminAuditLog,
+    Habit,
+    HabitCompletion,
+    JournalEntry,
+    JourneyBeltTrial,
+    JourneyGoal,
+    LeadershipCoachingSession,
+    Message,
+    MessageFeedback,
+    Task,
+    TaskPriorityDecision,
+    UsageEvent,
+    User,
+)
 from app.utils.security import generate_temporary_password, hash_password
 
 
@@ -220,6 +233,8 @@ def _send_invitation_email(user: User, temp_password: str) -> bool:
     if not user.email:
         return False
     try:
+        from app.services.gmail_service import send_email
+
         send_email(
             to=user.email,
             subject="You have been invited to Alfred",
@@ -235,6 +250,53 @@ def _set_new_temp_password(user: User) -> str:
     user.temp_password = hash_password(temporary_password)
     user.temp_password_expires = datetime.utcnow() + timedelta(hours=24)
     return temporary_password
+
+
+def _count(db: Session, model, *filters) -> int:
+    return db.query(func.count(model.id)).filter(*filters).scalar() or 0
+
+
+def _iso(value) -> str | None:
+    return value.isoformat() if value else None
+
+
+def _latest_datetime(*values):
+    present = []
+    for value in values:
+        if not value:
+            continue
+        if getattr(value, "tzinfo", None) is not None:
+            value = value.astimezone().replace(tzinfo=None)
+        present.append(value)
+    return max(present) if present else None
+
+
+def _phone_or_email_filters(model_field, user: User):
+    values = [value for value in [user.phone_number, user.email] if value]
+    if not values:
+        return model_field == "__no_user_number__"
+    return model_field.in_(values)
+
+
+def _distinct_active_user_ids(db: Session, since: datetime) -> set[int]:
+    ids = {
+        row[0]
+        for row in db.query(UsageEvent.user_id)
+        .filter(UsageEvent.user_id.isnot(None), UsageEvent.created_at >= since)
+        .distinct()
+        .all()
+    }
+    ids.update(
+        row[0]
+        for row in db.query(User.id)
+        .filter(User.last_login_at.isnot(None), User.last_login_at >= since)
+        .all()
+    )
+    return ids
+
+
+def _platform_metric(label: str, value: int | float, hint: str = "") -> dict[str, Any]:
+    return {"label": label, "value": value, "hint": hint}
 
 
 @router.get("/users")
@@ -431,9 +493,7 @@ def list_feedback(
 
     message_items = query.order_by(MessageFeedback.created_at.desc(), MessageFeedback.id.desc()).limit(250).all()
 
-    priority_query = db.query(TaskPriorityDecision).filter(
-        TaskPriorityDecision.user_reason.ilike('%"source": "mtn_tag_feedback"%')
-    )
+    priority_query = db.query(TaskPriorityDecision).filter(TaskPriorityDecision.user_reason.isnot(None))
     if status:
         priority_query = priority_query.filter(TaskPriorityDecision.admin_review_status == normalized_status)
 
@@ -441,6 +501,11 @@ def list_feedback(
         TaskPriorityDecision.decided_at.desc(),
         TaskPriorityDecision.id.desc(),
     ).limit(250).all()
+    priority_items = [
+        item
+        for item in priority_items
+        if _parse_priority_feedback(item).get("source") == "mtn_tag_feedback"
+    ]
 
     user_numbers = {item.user_number for item in priority_items if item.user_number}
     users_by_number = {}
@@ -549,3 +614,125 @@ def update_feedback_status(
     db.commit()
     db.refresh(feedback)
     return {"feedback": _display_feedback(feedback)}
+
+
+@router.get("/analytics")
+def get_analytics(
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    now = datetime.utcnow()
+    since_7 = now - timedelta(days=7)
+    since_30 = now - timedelta(days=30)
+
+    users = db.query(User).order_by(User.created_at.desc().nullslast(), User.id.desc()).all()
+    total_users = len(users)
+    active_7_ids = _distinct_active_user_ids(db, since_7)
+    active_30_ids = _distinct_active_user_ids(db, since_30)
+
+    page_views = _count(db, UsageEvent, UsageEvent.event_type == "page_view")
+    average_sessions = round(page_views / total_users, 1) if total_users else 0
+    messages_sent = _count(db, Message, Message.sender != "assistant")
+    tasks_completed = _count(db, Task, Task.status == "completed")
+    habits_tracked = _count(db, HabitCompletion, HabitCompletion.status == "done")
+    journal_entries = _count(db, JournalEntry)
+    journey_activities = (
+        _count(db, JourneyGoal)
+        + _count(db, JourneyBeltTrial)
+    )
+    coaching_sessions = _count(db, LeadershipCoachingSession)
+
+    recent_event_rows = (
+        db.query(UsageEvent.event_type, UsageEvent.page, func.count(UsageEvent.id))
+        .filter(UsageEvent.created_at >= since_30)
+        .group_by(UsageEvent.event_type, UsageEvent.page)
+        .order_by(func.count(UsageEvent.id).desc())
+        .limit(12)
+        .all()
+    )
+
+    page_rows = (
+        db.query(UsageEvent.page, func.count(UsageEvent.id))
+        .filter(UsageEvent.page.isnot(None), UsageEvent.created_at >= since_30)
+        .group_by(UsageEvent.page)
+        .order_by(func.count(UsageEvent.id).desc())
+        .limit(12)
+        .all()
+    )
+
+    user_metrics = []
+    for user in users:
+        user_number_filter = _phone_or_email_filters(Message.user_number, user)
+        task_user_filter = _phone_or_email_filters(Task.user_number, user)
+        habit_user_filter = _phone_or_email_filters(Habit.user_number, user)
+        goal_user_filter = _phone_or_email_filters(JourneyGoal.user_number, user)
+        trial_user_filter = _phone_or_email_filters(JourneyBeltTrial.user_number, user)
+        coaching_user_filter = _phone_or_email_filters(LeadershipCoachingSession.user_number, user)
+
+        latest_event = db.query(func.max(UsageEvent.created_at)).filter(UsageEvent.user_id == user.id).scalar()
+        latest_message = db.query(func.max(Message.timestamp)).filter(user_number_filter).scalar()
+        latest_task = db.query(func.max(Task.updated_at)).filter(task_user_filter).scalar()
+        latest_journal = db.query(func.max(JournalEntry.created_at)).filter(JournalEntry.user_id == user.id).scalar()
+        last_active = _latest_datetime(user.last_login_at, latest_event, latest_message, latest_task, latest_journal)
+
+        pages_used = [
+            row[0]
+            for row in db.query(UsageEvent.page)
+            .filter(UsageEvent.user_id == user.id, UsageEvent.page.isnot(None))
+            .distinct()
+            .all()
+        ]
+        features_used = [
+            row[0]
+            for row in db.query(UsageEvent.feature)
+            .filter(UsageEvent.user_id == user.id, UsageEvent.feature.isnot(None))
+            .distinct()
+            .all()
+        ]
+
+        user_metrics.append({
+            "user_id": user.id,
+            "name": user.name or user.email or user.phone_number or "Unknown",
+            "email": user.email or "",
+            "last_active_date": _iso(last_active),
+            "sessions": _count(db, UsageEvent, UsageEvent.user_id == user.id, UsageEvent.event_type == "page_view"),
+            "pages_used": sorted(pages_used),
+            "features_used": sorted(features_used),
+            "messages_sent": _count(db, Message, user_number_filter, Message.sender != "assistant"),
+            "tasks_completed": _count(db, Task, task_user_filter, Task.status == "completed"),
+            "habits_completed": (
+                db.query(func.count(HabitCompletion.id))
+                .join(Habit, HabitCompletion.habit_id == Habit.id)
+                .filter(habit_user_filter, HabitCompletion.status == "done")
+                .scalar()
+                or 0
+            ),
+            "journal_entries": _count(db, JournalEntry, JournalEntry.user_id == user.id),
+            "journey_progress": _count(db, JourneyGoal, goal_user_filter) + _count(db, JourneyBeltTrial, trial_user_filter),
+            "coaching_sessions": _count(db, LeadershipCoachingSession, coaching_user_filter),
+        })
+
+    return {
+        "platform_metrics": [
+            _platform_metric("Total Users", total_users),
+            _platform_metric("Active Users (7 days)", len(active_7_ids)),
+            _platform_metric("Active Users (30 days)", len(active_30_ids)),
+            _platform_metric("Average Sessions", average_sessions, "Based on tracked page views"),
+            _platform_metric("Messages Sent", messages_sent),
+            _platform_metric("Tasks Completed", tasks_completed),
+            _platform_metric("Habits Tracked", habits_tracked),
+            _platform_metric("Journal Entries", journal_entries),
+            _platform_metric("Journey Activities", journey_activities),
+            _platform_metric("Coaching Sessions", coaching_sessions),
+        ],
+        "user_metrics": user_metrics,
+        "top_pages_30_days": [
+            {"page": page or "Unknown", "count": count}
+            for page, count in page_rows
+        ],
+        "recent_events_30_days": [
+            {"event_type": event_type, "page": page or "Unknown", "count": count}
+            for event_type, page, count in recent_event_rows
+        ],
+        "current_admin_id": admin_user.id,
+    }

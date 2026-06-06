@@ -75,6 +75,25 @@ class MessageFeedback(Base):
     message = relationship("Message")
 
 
+class UsageEvent(Base):
+    __tablename__ = "usage_events"
+    __table_args__ = (
+        Index("idx_usage_events_user_created", "user_id", "created_at"),
+        Index("idx_usage_events_type_created", "event_type", "created_at"),
+        Index("idx_usage_events_page_created", "page", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    event_type = Column(String(80), nullable=False, index=True)
+    page = Column(String(80), nullable=True, index=True)
+    feature = Column(String(120), nullable=True, index=True)
+    metadata_json = Column(JSONB, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    user = relationship("User")
+
+
 class MessageSignalFlag(Base):
     __tablename__ = "message_signal_flags"
     __table_args__ = (

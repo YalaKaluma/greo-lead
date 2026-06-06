@@ -280,7 +280,8 @@ function AdminUserManagement({ apiUrl, userNumber }) {
       <div className="mb-6 flex flex-wrap gap-2 border-b border-slate-200">
         {[
           { id: 'users', label: 'User Management' },
-          { id: 'feedback', label: 'Feedback Review' }
+          { id: 'feedback', label: 'Feedback Review' },
+          { id: 'analytics', label: 'Analytics' }
         ].map((item) => (
           <button
             key={item.id}
@@ -299,8 +300,10 @@ function AdminUserManagement({ apiUrl, userNumber }) {
 
       {adminView === 'users' ? (
         <AdminUsersPanel apiUrl={apiUrl} userNumber={userNumber} />
-      ) : (
+      ) : adminView === 'feedback' ? (
         <AdminFeedbackPanel apiUrl={apiUrl} userNumber={userNumber} />
+      ) : (
+        <AdminAnalyticsPanel apiUrl={apiUrl} userNumber={userNumber} />
       )}
     </section>
   );
@@ -690,6 +693,138 @@ function AdminFeedbackPanel({ apiUrl, userNumber }) {
                     </button>
                   </div>
                 </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function AdminAnalyticsPanel({ apiUrl, userNumber }) {
+  const [analytics, setAnalytics] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const adminParams = { user_number: userNumber };
+
+  const loadAnalytics = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await axios.get(`${apiUrl}/api/admin/analytics`, { params: adminParams });
+      setAnalytics(response.data);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Analytics could not be loaded.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAnalytics();
+  }, [apiUrl, userNumber]);
+
+  if (loading) {
+    return <div className="py-6 text-sm text-slate-500">Loading analytics...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        {error}
+      </div>
+    );
+  }
+
+  const platformMetrics = analytics?.platform_metrics || [];
+  const userMetrics = analytics?.user_metrics || [];
+  const topPages = analytics?.top_pages_30_days || [];
+  const recentEvents = analytics?.recent_events_30_days || [];
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold text-slate-900">User Analytics & Adoption</h2>
+        <p className="mt-1 text-sm text-slate-500">Track platform usage, adoption, and user-level activity.</p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {platformMetrics.map((metric) => (
+          <div key={metric.label} className="rounded-lg border border-slate-200 bg-white p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{metric.label}</div>
+            <div className="mt-2 text-2xl font-bold text-slate-950">{metric.value}</div>
+            {metric.hint && <div className="mt-1 text-xs text-slate-400">{metric.hint}</div>}
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+        <div className="rounded-lg border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900">Top Pages - 30 Days</div>
+          <div className="divide-y divide-slate-100">
+            {topPages.length === 0 ? (
+              <div className="px-4 py-4 text-sm text-slate-500">No page usage tracked yet.</div>
+            ) : topPages.map((item) => (
+              <div key={item.page} className="flex items-center justify-between px-4 py-3 text-sm">
+                <span className="text-slate-700">{item.page}</span>
+                <span className="font-semibold text-slate-950">{item.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900">Recent Events - 30 Days</div>
+          <div className="divide-y divide-slate-100">
+            {recentEvents.length === 0 ? (
+              <div className="px-4 py-4 text-sm text-slate-500">No events tracked yet.</div>
+            ) : recentEvents.map((item) => (
+              <div key={`${item.event_type}-${item.page}`} className="flex items-center justify-between px-4 py-3 text-sm">
+                <span className="text-slate-700">{item.event_type} - {item.page}</span>
+                <span className="font-semibold text-slate-950">{item.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8 overflow-x-auto rounded-lg border border-slate-200">
+        <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-4 py-3">User</th>
+              <th className="px-4 py-3">Last Active</th>
+              <th className="px-4 py-3">Sessions</th>
+              <th className="px-4 py-3">Pages Used</th>
+              <th className="px-4 py-3">Features Used</th>
+              <th className="px-4 py-3">Messages</th>
+              <th className="px-4 py-3">Tasks</th>
+              <th className="px-4 py-3">Habits</th>
+              <th className="px-4 py-3">Journal</th>
+              <th className="px-4 py-3">Journey</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 bg-white">
+            {userMetrics.length === 0 ? (
+              <tr>
+                <td className="px-4 py-6 text-slate-500" colSpan="10">No users found.</td>
+              </tr>
+            ) : userMetrics.map((user) => (
+              <tr key={user.user_id}>
+                <td className="whitespace-nowrap px-4 py-3">
+                  <div className="font-medium text-slate-900">{user.name}</div>
+                  <div className="text-xs text-slate-400">{user.email || '-'}</div>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(user.last_active_date)}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-600">{user.sessions}</td>
+                <td className="min-w-48 px-4 py-3 text-slate-600">{(user.pages_used || []).join(', ') || '-'}</td>
+                <td className="min-w-48 px-4 py-3 text-slate-600">{(user.features_used || []).join(', ') || '-'}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-600">{user.messages_sent}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-600">{user.tasks_completed}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-600">{user.habits_completed}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-600">{user.journal_entries}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-600">{user.journey_progress}</td>
               </tr>
             ))}
           </tbody>

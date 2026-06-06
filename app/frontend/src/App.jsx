@@ -232,6 +232,23 @@ function MainAppShell({
     settings: t('settings.title')
   };
 
+  useEffect(() => {
+    if (!userNumber || !currentPage) return;
+
+    fetch(`${API_URL}/api/usage-events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_number: userNumber,
+        event_type: 'page_view',
+        page: currentPage,
+        feature: 'navigation'
+      })
+    }).catch(() => {
+      // Usage tracking should never block the user experience.
+    });
+  }, [userNumber, currentPage]);
+
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Tour Overlay - Only shows if onboarding NOT completed */}

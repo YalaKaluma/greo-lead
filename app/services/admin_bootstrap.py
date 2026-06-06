@@ -43,6 +43,20 @@ def ensure_admin_schema_and_seed() -> None:
         conn.execute(text("ALTER TABLE task_priority_decisions ADD COLUMN IF NOT EXISTS admin_reviewed_at TIMESTAMP"))
         conn.execute(text("ALTER TABLE task_priority_decisions ADD COLUMN IF NOT EXISTS admin_resolved_at TIMESTAMP"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_task_priority_decisions_admin_review_status ON task_priority_decisions(admin_review_status)"))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS usage_events (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                event_type VARCHAR(80) NOT NULL,
+                page VARCHAR(80),
+                feature VARCHAR(120),
+                metadata_json JSONB,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )
+        """))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_usage_events_user_created ON usage_events(user_id, created_at)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_usage_events_type_created ON usage_events(event_type, created_at)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_usage_events_page_created ON usage_events(page, created_at)"))
 
         admin_count = conn.execute(text("SELECT COUNT(*) FROM users WHERE is_admin = TRUE")).scalar() or 0
         if admin_count > 0:
