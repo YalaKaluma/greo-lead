@@ -1,5 +1,5 @@
 // frontend/src/components/TodoList.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { DragDropContext, Droppable } from 'react-beautiful-dnd';
 import axios from 'axios';
 import TaskItem from './TodoList/TaskItem';
@@ -59,6 +59,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [mtnOverlayErrors, setMtnOverlayErrors] = useState({});
   const [showMtnBreakdown, setShowMtnBreakdown] = useState(false);
   const [todayKey, setTodayKey] = useState(getTodayET(timezone));
+  const mtnBackfillRequestsRef = useRef(new Set());
 
   // Multi-select state
   const [selectedTasks, setSelectedTasks] = useState([]);
@@ -182,7 +183,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
   };
 
-  const fetchTasks = async () => {
+  const fetchTasks = async ({ skipMtnBackfill = false } = {}) => {
     if (apiUrl == null || !userNumber) {
       setLoading(false);
       return;
@@ -201,12 +202,50 @@ export default function TodoList({ apiUrl, userNumber }) {
 
       const response = await axios.get(`${apiUrl}/api/tasks/`, { params });
       const taskList = Array.isArray(response.data) ? response.data : [];
-      setTasks(taskList.filter(task => String(task.status || '').toLowerCase() !== 'completed'));
+      const openTasks = taskList.filter(task => String(task.status || '').toLowerCase() !== 'completed');
+      setTasks(openTasks);
+      if (!skipMtnBackfill) {
+        backfillMissingMtnScores(openTasks);
+      }
     } catch (err) {
       console.error('Error fetching tasks:', err);
       setError(err.response?.data?.detail || 'Failed to load tasks');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const hasTodayMtnScore = (task) => {
+    return task.mtn_score_today !== null && task.mtn_score_today !== undefined;
+  };
+
+  const backfillMissingMtnScores = async (visibleTasks) => {
+    if (apiUrl == null || !userNumber || !Array.isArray(visibleTasks) || visibleTasks.length === 0) return;
+
+    const taskIds = visibleTasks
+      .filter(task => task?.id && String(task.status || 'open').toLowerCase() !== 'completed')
+      .filter(task => !hasTodayMtnScore(task))
+      .map(task => task.id);
+
+    if (taskIds.length === 0) return;
+
+    const signature = `${todayKey}:${taskIds.slice().sort((a, b) => a - b).join(',')}`;
+    if (mtnBackfillRequestsRef.current.has(signature)) return;
+    mtnBackfillRequestsRef.current.add(signature);
+
+    try {
+      const response = await axios.post(`${apiUrl}/api/priority/backfill-task-scores`, {
+        user_number: userNumber,
+        task_ids: taskIds
+      });
+
+      if (Number(response.data?.scored || 0) > 0) {
+        await fetchTasks({ skipMtnBackfill: true });
+        fetchMtnTrends();
+      }
+    } catch (err) {
+      console.error('MTN backfill failed:', err);
+      mtnBackfillRequestsRef.current.delete(signature);
     }
   };
 

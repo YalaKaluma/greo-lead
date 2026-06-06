@@ -199,10 +199,7 @@ class PriorityService:
             user_number: str
     ) -> Optional[TaskPriorityRecommendation]:
         """Return the latest MTN recommendation generated today in the user's timezone."""
-        user_tz = self._timezone_for_user(user_number)
-        now = datetime.now(user_tz)
-        start = user_tz.localize(datetime.combine(now.date(), time.min))
-        end = user_tz.localize(datetime.combine(now.date(), time.max))
+        start, end = self._today_window(user_number)
 
         return (
             self.db.query(TaskPriorityRecommendation)
@@ -218,6 +215,41 @@ class PriorityService:
             .order_by(desc(TaskPriorityRecommendation.generated_at))
             .first()
         )
+
+    def _today_window(self, user_number: str) -> Tuple[datetime, datetime]:
+        """Return the user's local start/end timestamps for today."""
+        user_tz = self._timezone_for_user(user_number)
+        now = datetime.now(user_tz)
+        start = user_tz.localize(datetime.combine(now.date(), time.min))
+        end = user_tz.localize(datetime.combine(now.date(), time.max))
+        return start, end
+
+    def get_latest_scores_for_today(
+            self,
+            user_number: str,
+            task_ids: Optional[List[int]] = None
+    ) -> Dict[int, TaskPriorityScore]:
+        """Return each task's latest MTN score generated today."""
+        start, end = self._today_window(user_number)
+        query = (
+            self.db.query(TaskPriorityScore)
+            .filter(
+                TaskPriorityScore.user_number == user_number,
+                TaskPriorityScore.scored_at >= start,
+                TaskPriorityScore.scored_at <= end
+            )
+            .order_by(TaskPriorityScore.task_id, desc(TaskPriorityScore.scored_at))
+        )
+
+        if task_ids:
+            query = query.filter(TaskPriorityScore.task_id.in_(task_ids))
+
+        latest_by_task_id = {}
+        for score in query.all():
+            if score.task_id not in latest_by_task_id:
+                latest_by_task_id[score.task_id] = score
+
+        return latest_by_task_id
 
     def run_prioritization(
             self,
@@ -258,6 +290,91 @@ class PriorityService:
         self.persist_mtn_results_to_tasks(scores, recommendation)
 
         return context, recommendation, scores, llm_result["tokens_used"]
+
+    def backfill_task_scores_for_today(
+            self,
+            user_number: str,
+            task_ids: List[int],
+            llm_service,
+            max_tasks: int = 50
+    ) -> Dict:
+        """
+        Score visible open tasks that do not yet have an MTN score today.
+
+        This is intentionally narrower than the full morning prioritization:
+        it does not rewrite Top 10 membership or create a new recommendation
+        that could override the morning run.
+        """
+        requested_ids = list(dict.fromkeys([int(task_id) for task_id in task_ids if task_id]))
+        if not requested_ids:
+            return {
+                "requested": 0,
+                "eligible": 0,
+                "already_scored": 0,
+                "scored": 0,
+                "skipped": 0,
+                "tokens_used": 0,
+                "message": "No tasks were sent for MTN backfill."
+            }
+
+        tasks = self.db.query(Task).filter(
+            Task.user_number == user_number,
+            Task.status == "open",
+            Task.id.in_(requested_ids)
+        ).all()
+        tasks_by_id = {task.id: task for task in tasks}
+
+        existing_scores = self.get_latest_scores_for_today(user_number, requested_ids)
+        missing_tasks = [
+            tasks_by_id[task_id]
+            for task_id in requested_ids
+            if task_id in tasks_by_id and task_id not in existing_scores
+        ]
+
+        if max_tasks and len(missing_tasks) > max_tasks:
+            missing_tasks = missing_tasks[:max_tasks]
+
+        if not missing_tasks:
+            return {
+                "requested": len(requested_ids),
+                "eligible": len(tasks),
+                "already_scored": len(existing_scores),
+                "scored": 0,
+                "skipped": len(requested_ids) - len(tasks),
+                "tokens_used": 0,
+                "message": "All visible tasks already have today's MTN score."
+            }
+
+        context = self.create_context_snapshot(user_number)
+        llm_result = llm_service.score_tasks(missing_tasks, context)
+        scores = self.save_priority_scores(
+            context_id=context.id,
+            scores=llm_result["scores"],
+            llm_model=getattr(llm_service, "model", "gpt-4o"),
+            tokens_used=llm_result["tokens_used"]
+        )
+
+        now = datetime.now(self._timezone_for_user(user_number))
+        for score in scores:
+            task = tasks_by_id.get(score.task_id)
+            if not task:
+                continue
+            task.move_the_needle_score = float(score.top10_likelihood)
+            task.last_prioritized_at = now
+
+        self.db.commit()
+
+        return {
+            "requested": len(requested_ids),
+            "eligible": len(tasks),
+            "already_scored": len(existing_scores),
+            "scored": len(scores),
+            "skipped": len(requested_ids) - len(tasks),
+            "tokens_used": llm_result["tokens_used"],
+            "context_id": context.id,
+            "task_ids": [score.task_id for score in scores],
+            "message": f"Backfilled MTN scores for {len(scores)} task(s)."
+        }
 
     def get_scores_for_recommendation(self, recommendation_id: int) -> List[TaskPriorityScore]:
         recommendation = self.db.query(TaskPriorityRecommendation).get(recommendation_id)

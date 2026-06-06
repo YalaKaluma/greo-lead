@@ -236,28 +236,41 @@ def create_new_task_from_recurring_template(task: Task, next_due_date: date, db:
 def attach_today_mtn_metadata(db: Session, user_number: str, tasks: List[Task]) -> None:
     """Add today's stored MTN rank/score to task response objects."""
     try:
+        from app.models import TaskPriorityRecommendation
         from app.services.priority_service import PriorityService
 
         priority_service = PriorityService(db)
-        latest = priority_service.serialize_recommendation(
-            priority_service.get_latest_recommendation_for_today(user_number)
-        )
-        if not latest:
+        latest_scores = priority_service.get_latest_scores_for_today(user_number)
+        if not latest_scores:
             return
 
-        by_task_id = {item["task_id"]: item for item in latest.get("all_scored_tasks", [])}
+        ranked_scores = sorted(
+            latest_scores.values(),
+            key=lambda item: float(item.top10_likelihood or 0),
+            reverse=True
+        )
+        rank_by_task_id = {score.task_id: index + 1 for index, score in enumerate(ranked_scores)}
+        context_ids = list({score.context_id for score in latest_scores.values() if score.context_id})
+        recommendation_by_context_id = {}
+        if context_ids:
+            recommendations = db.query(TaskPriorityRecommendation).filter(
+                TaskPriorityRecommendation.context_id.in_(context_ids)
+            ).order_by(TaskPriorityRecommendation.generated_at.desc()).all()
+            for recommendation in recommendations:
+                recommendation_by_context_id.setdefault(recommendation.context_id, recommendation.id)
+
         for task in tasks:
-            score = by_task_id.get(task.id)
+            score = latest_scores.get(task.id)
             if not score:
                 continue
 
-            task.mtn_score_today = score.get("score")
-            task.mtn_rank_today = score.get("rank")
-            task.mtn_recommended_today = bool(score.get("is_top_mtn"))
-            task.mtn_reason_today = score.get("reason")
-            task.mtn_risk_today = score.get("risk_if_ignored")
-            task.mtn_recommendation_id = latest.get("recommendation_id")
-            task.mtn_prioritized_at = latest.get("prioritized_at")
+            task.mtn_score_today = float(score.top10_likelihood)
+            task.mtn_rank_today = rank_by_task_id.get(task.id)
+            task.mtn_recommended_today = bool(task.mtn_rank_today and task.mtn_rank_today <= 3)
+            task.mtn_reason_today = score.primary_reason
+            task.mtn_risk_today = score.risk_if_ignored
+            task.mtn_recommendation_id = recommendation_by_context_id.get(score.context_id)
+            task.mtn_prioritized_at = score.scored_at.isoformat() if score.scored_at else None
     except Exception as exc:
         print(f"[TASKS API] Failed to attach MTN metadata: {exc}")
 

@@ -17,7 +17,7 @@ export function usePriority(apiUrl, userNumber) {
   const [latestPriorityLoading, setLatestPriorityLoading] = useState(false);
 
   const loadLatestPrioritization = async () => {
-    if (!apiUrl || !userNumber) return;
+    if (apiUrl == null || !userNumber) return;
 
     setLatestPriorityLoading(true);
     try {

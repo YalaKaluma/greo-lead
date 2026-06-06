@@ -33,6 +33,26 @@ class PriorityRunRequest(BaseModel):
     user_number: str = Field(..., description="User identifier (phone number or email)")
 
 
+class PriorityBackfillRequest(BaseModel):
+    """Request to score visible tasks that missed today's MTN run."""
+    user_number: str = Field(..., description="User identifier (phone number or email)")
+    task_ids: List[int] = Field(default_factory=list, description="Visible open task IDs to check")
+    max_tasks: int = Field(50, ge=1, le=100, description="Safety limit for one background catch-up pass")
+
+
+class PriorityBackfillResponse(BaseModel):
+    """Response from background MTN scoring catch-up."""
+    requested: int
+    eligible: int
+    already_scored: int
+    scored: int
+    skipped: int
+    tokens_used: int
+    message: str
+    context_id: Optional[int] = None
+    task_ids: List[int] = Field(default_factory=list)
+
+
 class PriorityRunResponse(BaseModel):
     """Response from prioritization run."""
     context_id: int
@@ -139,6 +159,35 @@ def run_prioritization(
         raise HTTPException(
             status_code=500,
             detail=f"Prioritization failed: {str(e)}"
+        )
+
+
+@router.post("/backfill-task-scores", response_model=PriorityBackfillResponse)
+def backfill_task_scores(
+        request: PriorityBackfillRequest,
+        db: Session = Depends(get_db)
+):
+    """
+    Score visible open tasks that do not yet have today's MTN score.
+
+    This is used by the To-Do List after load/create/update so tasks added
+    after the morning run still get an MTN lens without slowing down saving.
+    """
+    priority_service = PriorityService(db)
+    llm_service = PriorityLLMService()
+
+    try:
+        return priority_service.backfill_task_scores_for_today(
+            user_number=request.user_number,
+            task_ids=request.task_ids,
+            llm_service=llm_service,
+            max_tasks=request.max_tasks
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"MTN backfill failed: {str(e)}"
         )
 
 
