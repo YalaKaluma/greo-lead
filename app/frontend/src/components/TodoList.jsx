@@ -200,11 +200,9 @@ export default function TodoList({ apiUrl, userNumber }) {
       if (selectedGoal) params.goal_id = parseInt(selectedGoal);
 
       const response = await axios.get(`${apiUrl}/api/tasks/`, { params });
-      if (response.data && Array.isArray(response.data)) {
-        // Filter out completed tasks
-        let activeTasks = response.data.filter(t => t.status !== 'completed');
-        setTasks(activeTasks);
-      }
+      const taskList = extractTaskList(response.data);
+      const activeTasks = taskList.filter(task => String(task.status || '').toLowerCase() !== 'completed');
+      setTasks(activeTasks.length > 0 || taskList.length === 0 ? activeTasks : taskList);
     } catch (err) {
       console.error('Error fetching tasks:', err);
       setError(err.response?.data?.detail || 'Failed to load tasks');
@@ -1304,6 +1302,17 @@ const responseShape = (payload) => {
   if (Array.isArray(payload)) return 'array';
   if (!payload || typeof payload !== 'object') return typeof payload;
   return Object.keys(payload).slice(0, 6).join(', ') || 'object';
+};
+
+const extractTaskList = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  const candidates = [
+    payload?.tasks,
+    payload?.items,
+    payload?.data,
+    payload?.data?.tasks,
+  ];
+  return candidates.find(Array.isArray) || [];
 };
 
 const percentile = (values, ratio) => {
