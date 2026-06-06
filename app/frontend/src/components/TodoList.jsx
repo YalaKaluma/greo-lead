@@ -6,7 +6,7 @@ import TaskItem from './TodoList/TaskItem';
 import TaskModal from './TodoList/TaskModal';
 import BulkActionModal from './TodoList/BulkActionModal';
 import FilterSection from './TodoList/FilterSection';
-import { getTodayET, getETDate, formatDateForInput, isOverdueET, getSortedGoals } from '../utils/taskHelpers';
+import { getTodayET, getETDate, formatDateForInput, isOverdueET, getSortedGoals, getLongTermGoals } from '../utils/taskHelpers';
 import { useLanguage } from '../i18n/LanguageContext';
 import { usePriority } from '../hooks/usePriority';
 
@@ -1040,7 +1040,7 @@ export default function TodoList({ apiUrl, userNumber }) {
             setEditingTask(null);
           } : null}
           delegates={delegates}
-          goals={getSortedGoals(goals)}
+          goals={getLongTermGoals(goals)}
           timezone={timezone}
         />
       )}
@@ -1052,7 +1052,7 @@ export default function TodoList({ apiUrl, userNumber }) {
           onApply={applyBulkAction}
           onCancel={() => setShowBulkActionModal(false)}
           delegates={delegates}
-          goals={getSortedGoals(goals)}
+          goals={getLongTermGoals(goals)}
           timezone={timezone}
         />
       )}

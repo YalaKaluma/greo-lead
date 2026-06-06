@@ -134,6 +134,11 @@ export const getSortedGoals = (goals) => {
   return result;
 };
 
+export const getLongTermGoals = (goals) => getSortedGoals(goals).filter(goal => {
+  const h = goal.time_horizon?.toLowerCase();
+  return h === 'long' || h === 'long_term' || h === 'vision';
+});
+
 // Helper function to get goal indentation
 export const getGoalIndentation = (timeHorizon) => {
   const h = timeHorizon?.toLowerCase();

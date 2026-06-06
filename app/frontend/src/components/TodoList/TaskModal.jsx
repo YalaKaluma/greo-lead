@@ -1,5 +1,5 @@
 // frontend/src/components/TodoList/TaskModal.jsx
-import { getTodayET, getETDate, formatDateForInput, formatDateForDisplay, normalizeDateString, getNextMonday, getSortedGoals, getGoalIndentation } from '../../utils/taskHelpers';
+import { getTodayET, getETDate, formatDateForInput, formatDateForDisplay, normalizeDateString, getNextMonday } from '../../utils/taskHelpers';
 import { useState, useEffect } from 'react';
 import VoiceRecorder from '../VoiceRecorder';
 
@@ -402,11 +402,10 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
                 <option value="">No goal</option>
-                {getSortedGoals(goals).map(g => {
+                {goals.map(g => {
                   const displayText = g.title || g.goal_text;
                   const truncatedText = displayText.length > 50 ? displayText.substring(0, 50) + '...' : displayText;
-                  const indentation = getGoalIndentation(g.time_horizon);
-                  return <option key={g.id} value={g.id}>{indentation}{truncatedText}</option>;
+                  return <option key={g.id} value={g.id}>{truncatedText}</option>;
                 })}
               </select>
             </div>

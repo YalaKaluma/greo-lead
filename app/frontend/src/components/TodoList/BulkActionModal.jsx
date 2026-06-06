@@ -1,6 +1,6 @@
 // frontend/src/components/TodoList/BulkActionModal.jsx
 import { useState } from 'react';
-import { getTodayET, getETDate, formatDateForInput, formatDateForDisplay, getNextMonday, getSortedGoals, getGoalIndentation } from '../../utils/taskHelpers';
+import { getTodayET, getETDate, formatDateForInput, formatDateForDisplay, getNextMonday } from '../../utils/taskHelpers';
 
 /**
  * BulkActionModal Component
@@ -175,11 +175,10 @@ export default function BulkActionModal({ selectedCount, onApply, onCancel, dele
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
                 <option value="">Leave unchanged</option>
-                {getSortedGoals(goals).map(g => {
+                {goals.map(g => {
                   const displayText = g.title || g.goal_text;
                   const truncatedText = displayText.length > 50 ? displayText.substring(0, 50) + '...' : displayText;
-                  const indentation = getGoalIndentation(g.time_horizon);
-                  return <option key={g.id} value={g.id}>{indentation}{truncatedText}</option>;
+                  return <option key={g.id} value={g.id}>{truncatedText}</option>;
                 })}
               </select>
             </div>
