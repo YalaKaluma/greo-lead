@@ -284,7 +284,10 @@ def get_tasks(
         print(
             f"[TASKS API] Filters - type: {filter_type}, project: {project}, delegate: {delegated_to}, goal_id: {goal_id}")
 
-        query = db.query(Task).filter(Task.user_number == user_number)
+        query = db.query(Task).filter(
+            Task.user_number == user_number,
+            Task.status == "open",
+        )
         user_timezone = get_user_timezone(db, user_number)
         today = today_for_timezone(user_timezone)
 

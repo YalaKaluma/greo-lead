@@ -200,7 +200,8 @@ export default function TodoList({ apiUrl, userNumber }) {
       if (selectedGoal) params.goal_id = parseInt(selectedGoal);
 
       const response = await axios.get(`${apiUrl}/api/tasks/`, { params });
-      setTasks(Array.isArray(response.data) ? response.data : []);
+      const taskList = Array.isArray(response.data) ? response.data : [];
+      setTasks(taskList.filter(task => String(task.status || '').toLowerCase() !== 'completed'));
     } catch (err) {
       console.error('Error fetching tasks:', err);
       setError(err.response?.data?.detail || 'Failed to load tasks');
