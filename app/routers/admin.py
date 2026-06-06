@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
@@ -8,7 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import AdminAuditLog, Message, MessageFeedback, User
+from app.models import AdminAuditLog, Message, MessageFeedback, Task, TaskPriorityDecision, User
 from app.services.gmail_service import send_email
 from app.utils.security import generate_temporary_password, hash_password
 
@@ -72,14 +73,17 @@ def _display_user(user: User) -> dict[str, Any]:
 def _display_feedback(feedback: MessageFeedback) -> dict[str, Any]:
     user = feedback.user
     message = feedback.message
+    source_page, feedback_type = _message_feedback_labels(feedback, message)
     return {
-        "id": feedback.id,
+        "id": f"message:{feedback.id}",
+        "raw_id": feedback.id,
+        "kind": "message",
         "user": user.name if user and user.name else "Unknown",
         "user_email": user.email if user else "",
         "user_id": user.id if user else None,
         "date": feedback.created_at.isoformat() if feedback.created_at else None,
-        "source_page": feedback.source_context,
-        "feedback_type": "Message Feedback",
+        "source_page": source_page,
+        "feedback_type": feedback_type,
         "rating": feedback.rating,
         "comment": feedback.feedback_text or "",
         "status": getattr(feedback, "status", None) or "New",
@@ -87,6 +91,63 @@ def _display_feedback(feedback: MessageFeedback) -> dict[str, Any]:
         "message_excerpt": (message.content[:180] if message and message.content else ""),
         "reviewed_at": feedback.reviewed_at.isoformat() if getattr(feedback, "reviewed_at", None) else None,
         "resolved_at": feedback.resolved_at.isoformat() if getattr(feedback, "resolved_at", None) else None,
+    }
+
+
+def _message_feedback_labels(feedback: MessageFeedback, message: Message | None) -> tuple[str, str]:
+    source_context = (feedback.source_context or "").strip().lower()
+    message_type = (getattr(message, "message_type", "") or "").strip().lower()
+    conversation_type = (getattr(message, "conversation_type", "") or "").strip().lower()
+
+    if message_type == "nudge":
+        return "Nudge", "Nudge Feedback"
+    if source_context == "journal" or conversation_type == "journal" or message_type == "journal":
+        return "Journal", "Journal Message Feedback"
+    if source_context == "coaching_session" or conversation_type in {"goal_coaching", "team_coaching", "leadership_coaching"}:
+        labels = {
+            "goal_coaching": "Goal Coaching",
+            "team_coaching": "People Coaching",
+            "leadership_coaching": "Leadership Coaching",
+        }
+        return labels.get(conversation_type, "Coaching"), "Coaching Message Feedback"
+    if source_context == "messages" or conversation_type == "messages":
+        return "Messages", "General Chat Feedback"
+    return source_context.replace("_", " ").title() or "Unknown", "Message Feedback"
+
+
+def _parse_priority_feedback(decision: TaskPriorityDecision) -> dict[str, Any]:
+    try:
+        parsed = json.loads(decision.user_reason or "{}")
+        return parsed if isinstance(parsed, dict) else {}
+    except (TypeError, json.JSONDecodeError):
+        return {}
+
+
+def _display_priority_feedback(decision: TaskPriorityDecision, task: Task | None, user: User | None) -> dict[str, Any]:
+    payload = _parse_priority_feedback(decision)
+    rating = payload.get("rating")
+    tag = payload.get("tag")
+    comment = payload.get("feedback") or ""
+    task_title = task.title if task else (decision.task_state_snapshot or {}).get("title", "")
+    context_bits = [part for part in [f"Tag: {tag}" if tag else "", f"Task: {task_title}" if task_title else ""] if part]
+
+    return {
+        "id": f"mtn:{decision.id}",
+        "raw_id": decision.id,
+        "kind": "mtn",
+        "user": user.name if user and user.name else decision.user_number,
+        "user_email": user.email if user else "",
+        "user_id": user.id if user else None,
+        "date": decision.decided_at.isoformat() if decision.decided_at else None,
+        "source_page": "Tasks",
+        "feedback_type": "MTN Scoring Feedback",
+        "rating": rating,
+        "comment": comment,
+        "status": getattr(decision, "admin_review_status", None) or "New",
+        "message_id": None,
+        "message_excerpt": " | ".join(context_bits),
+        "reviewed_at": decision.admin_reviewed_at.isoformat() if getattr(decision, "admin_reviewed_at", None) else None,
+        "resolved_at": decision.admin_resolved_at.isoformat() if getattr(decision, "admin_resolved_at", None) else None,
     }
 
 
@@ -368,17 +429,58 @@ def list_feedback(
             raise HTTPException(status_code=422, detail="Invalid feedback status")
         query = query.filter(MessageFeedback.status == normalized_status)
 
-    feedback_items = query.order_by(MessageFeedback.created_at.desc(), MessageFeedback.id.desc()).limit(250).all()
+    message_items = query.order_by(MessageFeedback.created_at.desc(), MessageFeedback.id.desc()).limit(250).all()
+
+    priority_query = db.query(TaskPriorityDecision).filter(
+        TaskPriorityDecision.user_reason.ilike('%"source": "mtn_tag_feedback"%')
+    )
+    if status:
+        priority_query = priority_query.filter(TaskPriorityDecision.admin_review_status == normalized_status)
+
+    priority_items = priority_query.order_by(
+        TaskPriorityDecision.decided_at.desc(),
+        TaskPriorityDecision.id.desc(),
+    ).limit(250).all()
+
+    user_numbers = {item.user_number for item in priority_items if item.user_number}
+    users_by_number = {}
+    if user_numbers:
+        users = db.query(User).filter((User.phone_number.in_(user_numbers)) | (User.email.in_(user_numbers))).all()
+        users_by_number = {
+            key: user
+            for user in users
+            for key in [user.phone_number, user.email]
+            if key
+        }
+
+    task_ids = [item.task_id for item in priority_items if item.task_id]
+    tasks_by_id = {}
+    if task_ids:
+        tasks_by_id = {task.id: task for task in db.query(Task).filter(Task.id.in_(task_ids)).all()}
+
+    feedback_items = [
+        *[_display_feedback(item) for item in message_items],
+        *[
+            _display_priority_feedback(
+                item,
+                tasks_by_id.get(item.task_id),
+                users_by_number.get(item.user_number),
+            )
+            for item in priority_items
+        ],
+    ]
+    feedback_items.sort(key=lambda item: item.get("date") or "", reverse=True)
+
     return {
-        "feedback": [_display_feedback(item) for item in feedback_items],
+        "feedback": feedback_items[:250],
         "statuses": sorted(FEEDBACK_STATUSES),
         "current_admin_id": admin_user.id,
     }
 
 
-@router.patch("/feedback/{feedback_id}")
+@router.patch("/feedback/{feedback_key}")
 def update_feedback_status(
-    feedback_id: int,
+    feedback_key: str,
     request: UpdateFeedbackStatusRequest,
     db: Session = Depends(get_db),
     admin_user: User = Depends(require_admin),
@@ -387,12 +489,49 @@ def update_feedback_status(
     if normalized_status not in FEEDBACK_STATUSES:
         raise HTTPException(status_code=422, detail="Invalid feedback status")
 
-    feedback = db.query(MessageFeedback).filter(MessageFeedback.id == feedback_id).first()
+    kind, _, raw_id = feedback_key.partition(":")
+    if not raw_id:
+        kind = "message"
+        raw_id = feedback_key
+
+    try:
+        numeric_id = int(raw_id)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail="Invalid feedback id") from error
+
+    now = datetime.utcnow()
+    if kind == "mtn":
+        feedback = db.query(TaskPriorityDecision).filter(TaskPriorityDecision.id == numeric_id).first()
+        if not feedback:
+            raise HTTPException(status_code=404, detail="Feedback not found")
+        feedback.admin_review_status = normalized_status
+        if normalized_status in {"Reviewed", "Resolved", "Ignored"} and not feedback.admin_reviewed_at:
+            feedback.admin_reviewed_at = now
+        if normalized_status == "Resolved":
+            feedback.admin_resolved_at = now
+        else:
+            feedback.admin_resolved_at = None
+
+        target_user = db.query(User).filter(
+            (User.phone_number == feedback.user_number) | (User.email == feedback.user_number)
+        ).first()
+        _log_admin_action(
+            db,
+            admin_user,
+            f"feedback_marked_{normalized_status.lower()}",
+            target_user,
+            {"feedback_id": feedback.id, "feedback_kind": "mtn", "status": normalized_status},
+        )
+        db.commit()
+        db.refresh(feedback)
+        task = db.query(Task).filter(Task.id == feedback.task_id).first()
+        return {"feedback": _display_priority_feedback(feedback, task, target_user)}
+
+    feedback = db.query(MessageFeedback).filter(MessageFeedback.id == numeric_id).first()
     if not feedback:
         raise HTTPException(status_code=404, detail="Feedback not found")
 
     feedback.status = normalized_status
-    now = datetime.utcnow()
     if normalized_status in {"Reviewed", "Resolved", "Ignored"} and not feedback.reviewed_at:
         feedback.reviewed_at = now
     if normalized_status == "Resolved":
@@ -405,7 +544,7 @@ def update_feedback_status(
         admin_user,
         f"feedback_marked_{normalized_status.lower()}",
         feedback.user,
-        {"feedback_id": feedback.id, "status": normalized_status},
+        {"feedback_id": feedback.id, "feedback_kind": "message", "status": normalized_status},
     )
     db.commit()
     db.refresh(feedback)

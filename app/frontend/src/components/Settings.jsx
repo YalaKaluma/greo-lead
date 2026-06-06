@@ -531,6 +531,7 @@ function AdminUsersPanel({ apiUrl, userNumber }) {
 function AdminFeedbackPanel({ apiUrl, userNumber }) {
   const [feedback, setFeedback] = useState([]);
   const [statusFilter, setStatusFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [updatingId, setUpdatingId] = useState(null);
@@ -571,6 +572,11 @@ function AdminFeedbackPanel({ apiUrl, userNumber }) {
     }
   };
 
+  const feedbackTypes = Array.from(new Set(feedback.map((item) => item.feedback_type).filter(Boolean))).sort();
+  const visibleFeedback = typeFilter
+    ? feedback.filter((item) => item.feedback_type === typeFilter)
+    : feedback;
+
   return (
     <div>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -578,20 +584,35 @@ function AdminFeedbackPanel({ apiUrl, userNumber }) {
           <h2 className="text-lg font-semibold text-slate-900">Feedback Review</h2>
           <p className="mt-1 text-sm text-slate-500">Review user feedback from Alfred responses and track follow-up status.</p>
         </div>
-        <label className="text-sm font-medium text-slate-700">
-          Status
-          <select
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-            className="mt-1 block rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-          >
-            <option value="">All</option>
-            <option value="New">New</option>
-            <option value="Reviewed">Reviewed</option>
-            <option value="Resolved">Resolved</option>
-            <option value="Ignored">Ignored</option>
-          </select>
-        </label>
+        <div className="flex flex-wrap gap-3">
+          <label className="text-sm font-medium text-slate-700">
+            Status
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              className="mt-1 block rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+            >
+              <option value="">All</option>
+              <option value="New">New</option>
+              <option value="Reviewed">Reviewed</option>
+              <option value="Resolved">Resolved</option>
+              <option value="Ignored">Ignored</option>
+            </select>
+          </label>
+          <label className="text-sm font-medium text-slate-700">
+            Type
+            <select
+              value={typeFilter}
+              onChange={(event) => setTypeFilter(event.target.value)}
+              className="mt-1 block rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+            >
+              <option value="">All</option>
+              {feedbackTypes.map((type) => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
 
       {error && (
@@ -619,17 +640,17 @@ function AdminFeedbackPanel({ apiUrl, userNumber }) {
               <tr>
                 <td className="px-4 py-6 text-slate-500" colSpan="8">Loading feedback...</td>
               </tr>
-            ) : feedback.length === 0 ? (
+            ) : visibleFeedback.length === 0 ? (
               <tr>
                 <td className="px-4 py-6 text-slate-500" colSpan="8">No feedback found.</td>
               </tr>
-            ) : feedback.map((item) => (
+            ) : visibleFeedback.map((item) => (
               <tr key={item.id}>
                 <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">{item.user}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(item.date)}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-slate-600 capitalize">{item.source_page || '-'}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-slate-600">{item.feedback_type}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-600">{item.rating}/5</td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-600">{item.rating ? `${item.rating}/5` : '-'}</td>
                 <td className="min-w-72 max-w-xl px-4 py-3 text-slate-700">
                   <div>{item.comment || '-'}</div>
                   {item.message_excerpt && (

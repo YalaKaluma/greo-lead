@@ -1056,6 +1056,10 @@ class TaskPriorityDecision(Base):
     user_action = Column(String, nullable=False)  # "accept", "reject", "replace", "skip"
     user_reason = Column(Text)  # Optional: why they disagreed
 
+    admin_review_status = Column(String(20), default="New", nullable=False, index=True)
+    admin_reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    admin_resolved_at = Column(DateTime(timezone=True), nullable=True)
+
     # Task state at decision time (for feature engineering)
     task_state_snapshot = Column(JSONB, nullable=False)  # {title, priority, due_date, etc.}
 
