@@ -6,9 +6,11 @@ This folder contains Alfred's Vite/React frontend.
 
 - `src/App.jsx` owns top-level page routing and passes API/user context into page components.
 - `src/main.jsx` is the React entry point.
+- `src/config.js` resolves the API base URL.
+- `src/i18n/` contains language and timezone context.
+- `src/utils/` contains frontend helpers such as goal taxonomy and timezone-aware task date logic.
 - `src/components/` contains main product screens and shared UI components.
-- `src/components/README.md` describes the component map.
-- `public/` contains static frontend assets.
+- `public/` contains frontend static assets.
 - `vite.config.js`, `tailwind.config.js`, and `postcss.config.js` configure the frontend build.
 
 ## Main Screens
@@ -21,16 +23,19 @@ This folder contains Alfred's Vite/React frontend.
 - My Coaching Sessions
 - My Journal
 - Alfred in-app chat
-- Settings, including English/French interface language selection
+- Settings for language and timezone
 
-## Internationalization
+## Internationalization And Timezone
 
-The frontend language layer lives in `src/i18n/`.
+The frontend language/timezone layer lives in `src/i18n/`.
 
 - `src/i18n/en.json` and `src/i18n/fr.json` hold stable translation keys.
-- `src/i18n/LanguageContext.jsx` loads the current user's backend language setting, falls back to `localStorage`, and updates visible labels immediately.
-- `src/components/Settings.jsx` lets users choose English or Français.
-- API calls that generate Alfred responses include the selected language so new chat and coaching content follows the user's preference. Existing chat history and user-generated content are not translated retroactively.
+- `src/i18n/LanguageContext.jsx` loads the current user's backend language and timezone settings, falls back to `localStorage`, and updates visible labels immediately.
+- `src/components/Settings.jsx` lets users choose English/French and a timezone.
+- API calls that generate Alfred responses include the selected language so new chat and coaching content follows the user's preference.
+- Task and habit date helpers use timezone-aware logic so "today", overdue, streaks, trends, and energy check-ins align with the user's preference.
+
+Existing chat history and user-generated content are not translated retroactively.
 
 ## Journey 2.0 Frontend Notes
 
@@ -39,6 +44,7 @@ The frontend language layer lives in `src/i18n/`.
 - Leadership wheel rendering.
 - Clickable domain and subdomain navigation.
 - Belt status and trial progression.
+- Readiness assessment and promotion flows.
 - Evidence library under the wheel.
 - Reflection and real-world trial submission modal.
 - Subdomain add/edit/delete modal connected to Journey API endpoints.

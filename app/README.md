@@ -4,15 +4,51 @@ This folder contains the FastAPI backend for Alfred / Leadership OS.
 
 ## What Lives Here
 
-- `main.py` wires the application together, registers routers, configures CORS, and serves the built React frontend from `static`.
-- `models.py` contains the SQLAlchemy models for users, messages, tasks, habits, Journey memory, priority review, goal reviews, and leadership coaching.
-- `db.py` manages the database session connection to Neon/PostgreSQL.
+- `main.py` creates the FastAPI app, checks core environment variables, registers routers, configures CORS, serves the built React frontend from `static/`, exposes `/api/health`, and starts the email polling loop.
+- `models.py` contains SQLAlchemy models for users, messages, tasks, opportunities, habits, Journey memory, priority review, goal reviews, leadership coaching, and settings.
+- `db.py` manages the SQLAlchemy engine/session connection to Neon/PostgreSQL.
 - `config.py` centralizes environment-backed settings.
-- `journey_trials.yaml` is the source of truth for Journey 2.0 belt curriculum, trial prompts, real-world exercises, and behavioral evidence requirements.
+- `journey_trials.yaml` is the Journey 2.0 belt curriculum source of truth.
+- `journey_subdomain_prompts.yaml` stores Journey subdomain coaching/evidence prompts.
 - `routers/` exposes API endpoints.
-- `services/` contains orchestration and business logic used by routers, webhooks, coaching, priority review, nudges, and message handling.
+- `services/` contains orchestration and business logic used by routers, webhooks, coaching, nudges, and message handling.
 - `frontend/` contains the React application source.
-- `prompts/` and `nudge_prompts.yaml` hold prompt assets that are intentionally editable without changing Python code.
+- `prompts/` and `nudge_prompts.yaml` hold editable prompt assets.
+- `templates/` contains legacy/server-rendered templates still present in the codebase.
+- `utils/` contains shared helpers such as security, task context, and message splitting.
+
+## Runtime Behavior
+
+On startup the backend:
+
+- Loads `.env` through `app/config.py`.
+- Verifies the presence of required database, OpenAI, Twilio, Mailgun, and default-user settings.
+- Creates/verifies SQLAlchemy tables with `Base.metadata.create_all`.
+- Registers API routers under `/api/...`.
+- Serves built frontend assets from repository-level `static/` when present.
+- Starts `app.email_poller.run_email_loop` in a daemon thread.
+
+## Environment Variables
+
+Core required values checked by `main.py`:
+
+- `DATABASE_URL`
+- `OPENAI_API_KEY`
+- `DEFAULT_USER_NUMBER`
+- `TWILIO_SID`
+- `TWILIO_AUTH_TOKEN`
+- `TWILIO_WHATSAPP_NUMBER`
+- `MAILGUN_API_KEY`
+- `MAILGUN_DOMAIN`
+- `MAILGUN_FROM`
+
+Additional settings loaded by `config.py`:
+
+- `OPENAI_MODEL`, defaulting to `gpt-4o`
+- `GMAIL_CLIENT_ID`
+- `GMAIL_CLIENT_SECRET`
+- `GMAIL_REFRESH_TOKEN`
+- `GMAIL_SENDER_EMAIL`
 
 ## Current Product Shape
 
@@ -20,15 +56,31 @@ Alfred combines:
 
 - Conversational coaching through WhatsApp, email, and in-app chat.
 - A React executive operating system UI.
-- Journey 2.0, a leadership development system using domains, subdomains, belts, trials, readiness assessment, and behavioral evidence.
-- Vision/Pillar/Outcome goals, transformation roadmap waves, and AI-assisted opportunity suggestions.
-- Task, habit, people, journal, priority review, message feedback, signal classification, and coaching workflows.
+- Journey 2.0 domains, subdomains, belts, trials, readiness assessment, and behavioral evidence.
+- Vision/Pillar/Outcome goals, transformation roadmap waves, goal progress reviews, and AI-assisted opportunity suggestions.
+- Task, habit, people, journal, priority review, message feedback, signal classification, audio, settings, and coaching workflows.
+- Persisted language and timezone preferences used by UI and time-sensitive product logic.
+
+## Development
+
+Run the backend from the repository root:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+Useful local endpoints:
+
+- `/api/health` - backend and dependency health check.
+- `/docs` - generated FastAPI API docs.
+- `/` - built React app, when `static/index.html` exists.
 
 ## Journey 2.0 Notes
 
 The current Journey experience is driven by both static curriculum and live user evidence:
 
 - Curriculum: `journey_trials.yaml`
+- Subdomain prompts: `journey_subdomain_prompts.yaml`
 - Submitted trials: `journey_belt_trials`
 - Readiness assessments: `belt_assessments`
 - Subdomain evidence: existing `journey_*` tables
