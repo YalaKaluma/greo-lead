@@ -350,6 +350,28 @@ export default function AlfredChat({ apiUrl, userNumber, currentPage, showLaunch
 
 function EnergyGauge({ messageKey, selected, saving, error, onSelect }) {
   const labels = ['Depleted', 'Low', 'Steady', 'Strong', 'Charged'];
+  const levelStyles = {
+    1: {
+      selected: 'border-red-700 bg-red-600 text-white',
+      idle: 'border-red-200 bg-red-50 text-red-800 hover:border-red-300 hover:bg-red-100'
+    },
+    2: {
+      selected: 'border-orange-700 bg-orange-500 text-white',
+      idle: 'border-orange-200 bg-orange-50 text-orange-800 hover:border-orange-300 hover:bg-orange-100'
+    },
+    3: {
+      selected: 'border-amber-700 bg-amber-400 text-slate-950',
+      idle: 'border-amber-200 bg-amber-50 text-amber-900 hover:border-amber-300 hover:bg-amber-100'
+    },
+    4: {
+      selected: 'border-lime-700 bg-lime-500 text-white',
+      idle: 'border-lime-200 bg-lime-50 text-lime-800 hover:border-lime-300 hover:bg-lime-100'
+    },
+    5: {
+      selected: 'border-green-800 bg-green-600 text-white',
+      idle: 'border-green-200 bg-green-50 text-green-800 hover:border-green-300 hover:bg-green-100'
+    }
+  };
 
   return (
     <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
@@ -362,6 +384,7 @@ function EnergyGauge({ messageKey, selected, saving, error, onSelect }) {
       <div className="mt-2 grid grid-cols-5 gap-1.5">
         {[1, 2, 3, 4, 5].map((level) => {
           const isSelected = selected === level;
+          const style = levelStyles[level];
           return (
             <button
               key={`${messageKey}-${level}`}
@@ -371,8 +394,8 @@ function EnergyGauge({ messageKey, selected, saving, error, onSelect }) {
               title={`${level}: ${labels[level - 1]}`}
               className={`h-10 rounded-md border text-sm font-semibold transition-colors ${
                 isSelected
-                  ? 'border-blue-700 bg-blue-600 text-white'
-                  : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50'
+                  ? style.selected
+                  : style.idle
               } disabled:cursor-not-allowed disabled:opacity-60`}
             >
               {level}
