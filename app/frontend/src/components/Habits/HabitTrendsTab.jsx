@@ -9,6 +9,7 @@ import HabitScores from './HabitScores';
 import HabitTrendSummary from './HabitTrendSummary';
 
 const extractTrendChart = (payload) => {
+  if (Array.isArray(payload)) return payload;
   const candidates = [
     payload?.trend_chart,
     payload?.trendChart,
@@ -18,6 +19,12 @@ const extractTrendChart = (payload) => {
     payload?.trends?.trendChart,
   ];
   return candidates.find(Array.isArray) || [];
+};
+
+const responseShape = (payload) => {
+  if (Array.isArray(payload)) return 'array';
+  if (!payload || typeof payload !== 'object') return typeof payload;
+  return Object.keys(payload).slice(0, 6).join(', ') || 'object';
 };
 
 export default function HabitTrendsTab({
@@ -50,13 +57,15 @@ export default function HabitTrendsTab({
           journal: journalResponse.status === 'fulfilled' ? extractTrendChart(journalResponse.value.data) : [],
         });
         setOverlayErrors({
-          tasks: tasksResponse.status === 'rejected',
-          journal: journalResponse.status === 'rejected',
+          tasks: tasksResponse.status === 'rejected' ? 'request failed' : '',
+          journal: journalResponse.status === 'rejected' ? 'request failed' : '',
+          tasksShape: tasksResponse.status === 'fulfilled' ? responseShape(tasksResponse.value.data) : '',
+          journalShape: journalResponse.status === 'fulfilled' ? responseShape(journalResponse.value.data) : '',
         });
       } catch (error) {
         if (!cancelled) {
           setOverlayTrends({ tasks: [], journal: [] });
-          setOverlayErrors({ tasks: true, journal: true });
+          setOverlayErrors({ tasks: 'request failed', journal: 'request failed' });
         }
       }
     };

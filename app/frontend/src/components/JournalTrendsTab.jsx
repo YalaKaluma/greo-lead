@@ -12,6 +12,7 @@ const OVERLAY_DEFS = {
 };
 
 const extractTrendChart = (payload) => {
+  if (Array.isArray(payload)) return payload;
   const candidates = [
     payload?.trend_chart,
     payload?.trendChart,
@@ -21,6 +22,12 @@ const extractTrendChart = (payload) => {
     payload?.trends?.trendChart,
   ];
   return candidates.find(Array.isArray) || [];
+};
+
+const responseShape = (payload) => {
+  if (Array.isArray(payload)) return 'array';
+  if (!payload || typeof payload !== 'object') return typeof payload;
+  return Object.keys(payload).slice(0, 6).join(', ') || 'object';
 };
 
 const formatShortDate = (dateString) => {
@@ -221,7 +228,7 @@ function DepthTrendChart({ data, overlays, overlayErrors = {} }) {
   const overlayStatus = selectedOverlay && overlayErrors[selectedOverlay]
     ? `${selectedOverlayLabel} data could not be loaded.`
     : selectedOverlayStats && selectedOverlayStats.loaded === 0
-      ? `${selectedOverlayLabel}: endpoint returned 0 days.`
+      ? `${selectedOverlayLabel}: endpoint returned 0 days. Response: ${overlayErrors[`${selectedOverlay}Shape`] || 'unknown'}.`
       : selectedOverlayStats && selectedOverlayStats.total === 0
         ? `${selectedOverlayLabel}: ${selectedOverlayStats.loaded} days loaded (${formatShortDate(selectedOverlayStats.firstDate)}-${formatShortDate(selectedOverlayStats.lastDate)}), none overlap this chart.`
       : selectedOverlayStats
@@ -412,13 +419,15 @@ export default function JournalTrendsTab({ apiUrl, userNumber, trends, loading, 
           tasks: tasksResponse.status === 'fulfilled' ? extractTrendChart(tasksResponse.value.data) : [],
         });
         setOverlayErrors({
-          habits: habitsResponse.status === 'rejected',
-          tasks: tasksResponse.status === 'rejected',
+          habits: habitsResponse.status === 'rejected' ? 'request failed' : '',
+          tasks: tasksResponse.status === 'rejected' ? 'request failed' : '',
+          habitsShape: habitsResponse.status === 'fulfilled' ? responseShape(habitsResponse.value.data) : '',
+          tasksShape: tasksResponse.status === 'fulfilled' ? responseShape(tasksResponse.value.data) : '',
         });
       } catch (fetchError) {
         if (!cancelled) {
           setOverlayTrends({ habits: [], tasks: [] });
-          setOverlayErrors({ habits: true, tasks: true });
+          setOverlayErrors({ habits: 'request failed', tasks: 'request failed' });
         }
       }
     };
