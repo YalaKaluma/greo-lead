@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.models import Habit, HabitCompletion
+from app.models import DailyEnergyCheckin, Habit, HabitCompletion
 from app.services.timezone_service import DEFAULT_TIMEZONE, today_for_timezone
 
 
@@ -114,6 +114,17 @@ def _build_daily_trend(habits: list[Habit], completion_lookup: dict[tuple[int, d
         })
 
     return trend
+
+
+def _build_energy_trend(checkins: list[DailyEnergyCheckin], start_date: date, end_date: date) -> list[dict[str, Any]]:
+    levels_by_date = {checkin.date: checkin.energy_level for checkin in checkins}
+    return [
+        {
+            "date": _iso(day),
+            "energy_level": levels_by_date.get(day),
+        }
+        for day in _date_range(start_date, end_date)
+    ]
 
 
 def _build_heatmap(trend_chart: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -286,6 +297,16 @@ def get_habit_trends(user_number: str, db: Session, timezone_name: str = DEFAULT
         )
 
     completion_lookup = {(completion.habit_id, completion.date): completion.status for completion in completions}
+    energy_checkins = (
+        db.query(DailyEnergyCheckin)
+        .filter(
+            DailyEnergyCheckin.user_number == user_number,
+            DailyEnergyCheckin.date >= start_date,
+            DailyEnergyCheckin.date <= end_date,
+        )
+        .order_by(DailyEnergyCheckin.date.asc())
+        .all()
+    )
 
     summary = {
         "last_7_days": _period_stats(habits, completion_lookup, end_date, 7),
@@ -333,6 +354,7 @@ def get_habit_trends(user_number: str, db: Session, timezone_name: str = DEFAULT
     return {
         "summary": summary,
         "trend_chart": trend_chart,
+        "energy_trend": _build_energy_trend(energy_checkins, start_date, end_date),
         "heatmap": _build_heatmap(trend_chart),
         "leaderboard": leaderboard,
         "scores": scores,

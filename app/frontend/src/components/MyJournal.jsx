@@ -594,7 +594,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
                         }`}
                         title="Show reflection depth details"
                       >
-                        Score
+                        Depth
                       </button>
                     )}
                     <ReadAloudButton

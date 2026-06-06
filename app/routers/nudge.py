@@ -819,6 +819,11 @@ def send_nudge_for_user(
             user_number,
             max_tokens=max_tokens
         )
+        if nudge_type == "evening":
+            message_text = (
+                f"{message_text.rstrip()}\n\n"
+                "Energy check: tap your level below from 1 (depleted) to 5 (fully charged)."
+            )
         if nudge_type == "sunday_review":
             message_text = add_sunday_refresh_notice(message_text, sunday_refresh_result)
 

@@ -80,6 +80,7 @@ export default function HabitTrendsTab({
     habits: trends?.trend_chart || [],
     tasks: overlayTrends.tasks,
     journal: overlayTrends.journal,
+    energy: trends?.energy_trend || [],
   }), [trends, overlayTrends]);
 
   if (loading) {

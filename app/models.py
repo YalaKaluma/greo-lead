@@ -706,6 +706,26 @@ class HabitCompletion(Base):
     habit = relationship("Habit", backref="completions")
 
 
+class DailyEnergyCheckin(Base):
+    __tablename__ = "daily_energy_checkins"
+    __table_args__ = (
+        CheckConstraint("energy_level BETWEEN 1 AND 5", name="ck_daily_energy_checkins_energy_level"),
+        UniqueConstraint("user_number", "date", name="uq_daily_energy_checkins_user_date"),
+        Index("idx_daily_energy_checkins_user_date", "user_number", "date"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, index=True, nullable=False)
+    date = Column(Date, nullable=False)
+    energy_level = Column(Integer, nullable=False)
+    source = Column(String, nullable=False, default="evening_nudge")
+    message_id = Column(Integer, ForeignKey("messages.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    message = relationship("Message")
+
+
 class HabitCoachingReview(Base):
     __tablename__ = "habit_coaching_reviews"
 

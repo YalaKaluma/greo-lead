@@ -11,6 +11,9 @@ export default function AlfredChat({ apiUrl, userNumber, currentPage, showLaunch
   const [replyText, setReplyText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef(null);
+  const [energySelections, setEnergySelections] = useState({});
+  const [energySaving, setEnergySaving] = useState({});
+  const [energyErrors, setEnergyErrors] = useState({});
 
   const loadMessages = async () => {
     if (!userNumber) return;
@@ -168,6 +171,49 @@ export default function AlfredChat({ apiUrl, userNumber, currentPage, showLaunch
     }
   };
 
+  const shouldShowEnergyGauge = (msg) => (
+    msg.role === 'assistant'
+    && msg.message_type === 'nudge'
+    && String(msg.content || '').toLowerCase().includes('energy check:')
+  );
+
+  const dateForMessage = (timestamp) => {
+    const date = timestamp ? new Date(timestamp) : new Date();
+    if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const saveEnergyLevel = async (msg, level) => {
+    const key = msg.message_id || `${msg.timestamp}-${msg.content}`;
+    setEnergySaving((current) => ({ ...current, [key]: true }));
+    setEnergyErrors((current) => ({ ...current, [key]: '' }));
+
+    try {
+      const response = await axios.post(`${apiUrl}/api/habits/energy-checkin`, {
+        user_number: userNumber,
+        energy_level: level,
+        date: dateForMessage(msg.timestamp),
+        source: 'evening_nudge',
+        message_id: msg.message_id || null
+      });
+      setEnergySelections((current) => ({
+        ...current,
+        [key]: response.data.energy_level || level
+      }));
+    } catch (error) {
+      console.error('Failed to save energy check-in:', error);
+      setEnergyErrors((current) => ({
+        ...current,
+        [key]: 'Could not save energy level.'
+      }));
+    } finally {
+      setEnergySaving((current) => ({ ...current, [key]: false }));
+    }
+  };
+
   return (
     <>
       <div
@@ -223,6 +269,15 @@ export default function AlfredChat({ apiUrl, userNumber, currentPage, showLaunch
                 </time>
               </div>
               <p className="whitespace-pre-wrap text-sm leading-6 text-slate-800">{msg.content}</p>
+              {shouldShowEnergyGauge(msg) && (
+                <EnergyGauge
+                  messageKey={msg.message_id || `${msg.timestamp}-${msg.content}`}
+                  selected={energySelections[msg.message_id || `${msg.timestamp}-${msg.content}`]}
+                  saving={energySaving[msg.message_id || `${msg.timestamp}-${msg.content}`]}
+                  error={energyErrors[msg.message_id || `${msg.timestamp}-${msg.content}`]}
+                  onSelect={(level) => saveEnergyLevel(msg, level)}
+                />
+              )}
               <div className="mt-3 flex items-center justify-end gap-2 border-t border-slate-100 pt-2">
                 <ReadAloudButton
                   text={msg.content}
@@ -290,5 +345,42 @@ export default function AlfredChat({ apiUrl, userNumber, currentPage, showLaunch
         </button>
       )}
     </>
+  );
+}
+
+function EnergyGauge({ messageKey, selected, saving, error, onSelect }) {
+  const labels = ['Depleted', 'Low', 'Steady', 'Strong', 'Charged'];
+
+  return (
+    <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Energy</span>
+        <span className="text-xs text-slate-500">
+          {selected ? `${labels[selected - 1]} saved` : saving ? 'Saving...' : 'Tap a level'}
+        </span>
+      </div>
+      <div className="mt-2 grid grid-cols-5 gap-1.5">
+        {[1, 2, 3, 4, 5].map((level) => {
+          const isSelected = selected === level;
+          return (
+            <button
+              key={`${messageKey}-${level}`}
+              type="button"
+              disabled={saving}
+              onClick={() => onSelect(level)}
+              title={`${level}: ${labels[level - 1]}`}
+              className={`h-10 rounded-md border text-sm font-semibold transition-colors ${
+                isSelected
+                  ? 'border-blue-700 bg-blue-600 text-white'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50'
+              } disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              {level}
+            </button>
+          );
+        })}
+      </div>
+      {error && <div className="mt-2 text-xs text-rose-600">{error}</div>}
+    </div>
   );
 }

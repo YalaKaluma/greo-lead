@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from pydantic import BaseModel
 
 from app.db import get_db
-from app.models import Habit, HabitCompletion, JourneyGoal
+from app.models import DailyEnergyCheckin, Habit, HabitCompletion, JourneyGoal
 from app.services.timezone_service import get_user_timezone, today_for_timezone
 from app.services.habit_coaching_service import (
     get_latest_habit_coaching_review,
@@ -23,6 +23,23 @@ class HabitCreate(BaseModel):
     title: str
     goal_id: int | None = None
     frequency: str = "daily"  # NEW: "daily" or "weekdays"
+
+
+class EnergyCheckinRequest(BaseModel):
+    user_number: str
+    energy_level: int
+    date: date | None = None
+    source: str = "evening_nudge"
+    message_id: int | None = None
+
+
+class EnergyCheckinResponse(BaseModel):
+    id: int
+    user_number: str
+    date: str
+    energy_level: int
+    source: str
+    message_id: int | None = None
 
 
 class HabitUpdate(BaseModel):
@@ -192,6 +209,45 @@ def delete_habit(habit_id: int, user_number: str, db: Session = Depends(get_db))
     habit.is_active = False
     db.commit()
     return {"status": "deleted"}
+
+
+@router.post("/energy-checkin", response_model=EnergyCheckinResponse)
+def save_energy_checkin(payload: EnergyCheckinRequest, db: Session = Depends(get_db)):
+    """Save or update the user's daily energy level."""
+
+    if payload.energy_level < 1 or payload.energy_level > 5:
+        raise HTTPException(status_code=400, detail="Energy level must be between 1 and 5")
+
+    checkin_date = payload.date or today_for_timezone(get_user_timezone(db, payload.user_number))
+    checkin = db.query(DailyEnergyCheckin).filter(
+        DailyEnergyCheckin.user_number == payload.user_number,
+        DailyEnergyCheckin.date == checkin_date,
+    ).first()
+
+    if checkin:
+        checkin.energy_level = payload.energy_level
+        checkin.source = payload.source or "evening_nudge"
+        checkin.message_id = payload.message_id
+    else:
+        checkin = DailyEnergyCheckin(
+            user_number=payload.user_number,
+            date=checkin_date,
+            energy_level=payload.energy_level,
+            source=payload.source or "evening_nudge",
+            message_id=payload.message_id,
+        )
+        db.add(checkin)
+
+    db.commit()
+    db.refresh(checkin)
+    return {
+        "id": checkin.id,
+        "user_number": checkin.user_number,
+        "date": checkin.date.isoformat(),
+        "energy_level": checkin.energy_level,
+        "source": checkin.source,
+        "message_id": checkin.message_id,
+    }
 
 
 @router.get("/trends")

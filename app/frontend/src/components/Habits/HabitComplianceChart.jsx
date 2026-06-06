@@ -9,6 +9,7 @@ const OVERLAY_DEFS = {
   habits: { label: 'Habits', color: '#16a34a', unit: '%', axisMax: 100 },
   tasks: { label: 'Tasks', color: '#f97316', unit: 'MTN' },
   journal: { label: 'Journal', color: '#7c3aed', unit: 'Depth', axisMax: 10 },
+  energy: { label: 'Energy', color: '#0f766e', unit: 'Level', axisMax: 5 },
 };
 
 const buildPath = (points, key) => {
@@ -114,6 +115,10 @@ const getOverlayConfig = (overlayKey, overlays) => {
     journal: (overlayData.journal || []).map(point => ({
       date: dateKey(point.date),
       overlay_score: Number(point.entry_count || 0) > 0 ? Number(point.daily_average || 0) : 0,
+    })),
+    energy: (overlayData.energy || []).map(point => ({
+      date: dateKey(point.date),
+      overlay_score: point.energy_level === null || point.energy_level === undefined ? 0 : Number(point.energy_level || 0),
     })),
   };
   const points = (series[overlayKey] || [])
