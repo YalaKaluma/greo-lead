@@ -421,7 +421,7 @@ dimensions:
           completion_hint: Show how past pain has become useful perspective and capacity.
         real_world:
           title: Real-World Trial
-          prompt: Revisit a past failure, relationship, or unresolved experience and intentionally extract a deeper lesson or new perspective from it.
+          prompt: What pattern keeps showing up in your life, and what is it trying to teach you?
           completion_hint: Return to an old experience and find a more mature lesson inside it.
         behavioral:
           title: Behavioral Evidence
