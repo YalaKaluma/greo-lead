@@ -338,9 +338,9 @@ dimensions:
           completion_hint: Make a structural change that reduces a recurring energy drain.
         behavioral:
           title: Behavioral Evidence
-          prompt: Maintain a 7-day habit streak and complete 3 journal entries where you call out your energy level and sources explicitly.
-          signals: [seven_day_habit_streak, three_energy_level_and_source_journals]
-          completion_hint: Alfred looks for sustained habit consistency and explicit energy-source reflection.
+          prompt: Maintain a 7-day habit streak.
+          signals: [seven_day_habit_streak]
+          completion_hint: Alfred looks for sustained habit consistency.
       brown:
         criteria: Develop the ability to model and teach sustainable high performance, emotional balance, and healthy ambition through wisdom, discipline, and example.
         reflection:

@@ -43,7 +43,7 @@ GREEN_BELT_DIMENSION_SIGNALS = {
     "vision": ["vision_linked_to_values"],
     "people": ["two_team_reviews"],
     "execute": ["mtn_classifications_reviewed"],
-    "energy": ["seven_day_habit_streak", "three_energy_level_and_source_journals"],
+    "energy": ["seven_day_habit_streak"],
     "learning": [
         "seven_behavior_change_journals",
         "self_awareness_reflections",
