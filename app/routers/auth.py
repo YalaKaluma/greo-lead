@@ -6,8 +6,10 @@ app/routers/auth.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from datetime import datetime
 from app.db import get_db
 from app.models import User
+from app.utils.security import verify_password
 
 router = APIRouter(tags=["auth"])
 
@@ -22,8 +24,10 @@ async def login(credentials: LoginRequest, db: Session = Depends(get_db)):
     """
     Login endpoint - handles both temporary passwords and permanent passwords.
     """
-    # Try to find user by name (username field)
-    user = db.query(User).filter(User.name == credentials.username).first()
+    username = credentials.username.strip()
+    user = db.query(User).filter(
+        (User.name == username) | (User.email == username) | (User.phone_number == username)
+    ).first()
 
     if not user:
         return {
@@ -31,23 +35,36 @@ async def login(credentials: LoginRequest, db: Session = Depends(get_db)):
             "message": "Invalid credentials"
         }
 
+    if not getattr(user, "is_active", True):
+        return {
+            "success": False,
+            "message": "Account inactive"
+        }
+
     # Check temporary password first (onboarding users)
-    if user.temp_password and user.temp_password == credentials.password:
+    if user.temp_password and verify_password(credentials.password, user.temp_password):
+        user.last_login_at = datetime.utcnow()
+        user.last_active_at = user.last_login_at
+        db.commit()
         return {
             "success": True,
             "user_number": user.phone_number,
             "user_name": user.name,
+            "is_admin": bool(getattr(user, "is_admin", False)),
             "needs_tour": not user.tour_completed,
             "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 21
         }
 
     # Check permanent password (returning users)
-    # TODO: Implement proper bcrypt password hashing
-    if user.password_hash and user.password_hash == credentials.password:
+    if user.password_hash and verify_password(credentials.password, user.password_hash):
+        user.last_login_at = datetime.utcnow()
+        user.last_active_at = user.last_login_at
+        db.commit()
         return {
             "success": True,
             "user_number": user.phone_number,
             "user_name": user.name,
+            "is_admin": bool(getattr(user, "is_admin", False)),
             "needs_tour": False,
             "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 0
         }
@@ -74,7 +91,7 @@ async def get_current_user(user_number: str, db: Session = Depends(get_db)):
     Get current user info.
     Used by frontend to check auth status and get user details.
     """
-    user = db.query(User).filter(User.phone_number == user_number).first()
+    user = db.query(User).filter((User.phone_number == user_number) | (User.email == user_number)).first()
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -86,6 +103,8 @@ async def get_current_user(user_number: str, db: Session = Depends(get_db)):
             "email": user.email,
             "profession": user.profession,
             "phone_number": user.phone_number,
+            "is_admin": bool(getattr(user, "is_admin", False)),
+            "is_active": bool(getattr(user, "is_active", True)),
             "subscription_status": user.subscription_status,
             "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 0,
             "onboarding_completed": user.onboarding_completed,

@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.mutable import MutableDict, MutableList  # ← ADDED FOR FIX
 import enum
 import secrets
+from app.utils.security import hash_password
 
 
 # from app.database import Base
@@ -790,8 +791,10 @@ class User(Base):
 
     # Authentication
     password_hash = Column(String, nullable=True)  # Hashed password
-    temp_password = Column(String, nullable=True)  # One-time password for first login
+    temp_password = Column(String, nullable=True)  # Hashed one-time password for first login
     temp_password_expires = Column(DateTime, nullable=True)
+    is_admin = Column(Boolean, default=False, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
 
     # Onboarding state
     onboarding_step = Column(SQLEnum(OnboardingStep), default=OnboardingStep.INITIAL)
@@ -816,6 +819,7 @@ class User(Base):
     tour_completed_steps = Column(MutableList.as_mutable(JSONB), nullable=True)  # List of completed steps
 
     # Timestamps
+    last_login_at = Column(DateTime, nullable=True)
     last_active_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -830,9 +834,10 @@ class User(Base):
 
     def generate_temp_password(self, length=8):
         """Generate a secure one-time password"""
-        self.temp_password = secrets.token_urlsafe(length)[:length].upper()
+        temporary_password = secrets.token_urlsafe(length)[:length].upper()
+        self.temp_password = hash_password(temporary_password)
         self.temp_password_expires = datetime.utcnow() + timedelta(hours=24)
-        return self.temp_password
+        return temporary_password
 
     def is_trial_active(self):
         """Check if trial is still valid"""
@@ -846,6 +851,20 @@ class User(Base):
             return 0
         delta = self.trial_end_date - datetime.utcnow()
         return max(0, delta.days)
+
+
+class AdminAuditLog(Base):
+    __tablename__ = "admin_audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    target_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    action = Column(String, nullable=False, index=True)
+    metadata_json = Column("metadata", MutableDict.as_mutable(JSONB), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    admin_user = relationship("User", foreign_keys=[admin_user_id])
+    target_user = relationship("User", foreign_keys=[target_user_id])
 
 
 class EmailVerification(Base):

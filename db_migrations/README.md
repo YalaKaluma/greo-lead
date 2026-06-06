@@ -31,6 +31,7 @@ This folder contains SQL migrations for Neon/PostgreSQL.
 - `2026-06-05_create_journey_goal_values.sql` creates goal-value relationship data.
 - `2026-06-06_add_task_postpone_tracking.sql` adds task postpone tracking.
 - `2026-06-06_create_daily_energy_checkins.sql` creates daily habit energy check-ins.
+- `2026-06-06_admin_user_management.sql` adds admin role/status fields and admin audit logging.
 
 ## Migration Conventions
 

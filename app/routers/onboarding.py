@@ -21,8 +21,13 @@ from app.services.onboarding_service import (
 )
 from app.services import journey_service
 from app.routers.tasks import Task as TaskModel
+from app.utils.security import hash_password, verify_password
 
 router = APIRouter(tags=["onboarding"])
+
+
+def _find_user_by_number_or_email(db: Session, user_number: str) -> Optional[User]:
+    return db.query(User).filter((User.phone_number == user_number) | (User.email == user_number)).first()
 
 
 # ============== PYDANTIC MODELS ==============
@@ -73,10 +78,18 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
             message="User not found. Please check your link."
         )
 
+    if not getattr(user, "is_active", True):
+        return LoginResponse(
+            success=False,
+            message="This account is inactive. Please contact support."
+        )
+
     # Check if already has permanent password (returning user)
     if user.password_hash:
-        # TODO: Implement proper password hashing with bcrypt
-        if user.password_hash == request.password:
+        if verify_password(request.password, user.password_hash):
+            user.last_login_at = datetime.utcnow()
+            user.last_active_at = user.last_login_at
+            db.commit()
             return LoginResponse(
                 success=True,
                 message="Welcome back!",
@@ -106,7 +119,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         )
 
     # Verify temp password
-    if user.temp_password.upper() == request.password.upper():
+    if verify_password(request.password, user.temp_password) or user.temp_password.upper() == request.password.upper():
         # Generate permanent password or just mark as logged in
         # For now, we'll accept temp password and start tour
 
@@ -114,7 +127,8 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         TourManager.start_tour(db, user)
 
         # Update last active
-        user.last_active_at = datetime.utcnow()
+        user.last_login_at = datetime.utcnow()
+        user.last_active_at = user.last_login_at
         db.commit()
 
         return LoginResponse(
@@ -146,8 +160,7 @@ async def set_permanent_password(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # For now, storing plain text (MUST implement hashing in production)
-    user.password_hash = new_password
+    user.password_hash = hash_password(new_password)
     user.temp_password = None  # Clear temp password
     user.temp_password_expires = None
     db.commit()
@@ -160,7 +173,7 @@ async def set_permanent_password(
 @router.get("/tour/progress", response_model=TourProgressResponse)
 async def get_tour_progress(user_number: str, db: Session = Depends(get_db)):
     """Get current tour progress for a user"""
-    user = db.query(User).filter(User.phone_number == user_number).first()
+    user = _find_user_by_number_or_email(db, user_number)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -178,7 +191,7 @@ async def complete_tour_step(
     Mark a tour step as completed and get the next step.
     Called by frontend when user completes a tour interaction.
     """
-    user = db.query(User).filter(User.phone_number == user_number).first()
+    user = _find_user_by_number_or_email(db, user_number)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -199,7 +212,7 @@ async def skip_tour(user_number: str, db: Session = Depends(get_db)):
     Note: Per requirements, tour should NOT be skippable initially.
     This endpoint is here for future flexibility.
     """
-    user = db.query(User).filter(User.phone_number == user_number).first()
+    user = _find_user_by_number_or_email(db, user_number)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -223,7 +236,7 @@ async def verify_email(
     Verify email using code sent via WhatsApp.
     User sends email to Alfred → Alfred replies with code → User sends code via WhatsApp.
     """
-    user = db.query(User).filter(User.phone_number == user_number).first()
+    user = _find_user_by_number_or_email(db, user_number)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -242,7 +255,7 @@ async def get_user_status(user_number: str, db: Session = Depends(get_db)):
     Get user's current status including trial info, onboarding progress, etc.
     Useful for dashboard display.
     """
-    user = db.query(User).filter(User.phone_number == user_number).first()
+    user = _find_user_by_number_or_email(db, user_number)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -277,7 +290,7 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
     print(f"{'=' * 60}")
 
     # Get user
-    user = db.query(User).filter(User.phone_number == user_number).first()
+    user = _find_user_by_number_or_email(db, user_number)
     if not user:
         print(f"❌ DEBUG: User not found for phone_number={user_number}")
         raise HTTPException(status_code=404, detail="User not found")
@@ -449,7 +462,7 @@ async def debug_user_data(user_number: str, db: Session = Depends(get_db)):
     """
     print(f"\n🔍 DEBUG ENDPOINT: Checking user data for {user_number}")
 
-    user = db.query(User).filter(User.phone_number == user_number).first()
+    user = _find_user_by_number_or_email(db, user_number)
 
     if not user:
         print(f"❌ DEBUG: User not found")

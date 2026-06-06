@@ -28,7 +28,7 @@ class ReflectionDepthBackfillRequest(BaseModel):
 
 @router.get("/settings")
 def get_settings(user_number: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.phone_number == user_number).first()
+    user = db.query(User).filter((User.phone_number == user_number) | (User.email == user_number)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -41,7 +41,7 @@ def get_settings(user_number: str, db: Session = Depends(get_db)):
 
 @router.put("/settings/language")
 def update_language(request: LanguageSettingsRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.phone_number == request.user_number).first()
+    user = db.query(User).filter((User.phone_number == request.user_number) | (User.email == request.user_number)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -57,7 +57,7 @@ def update_language(request: LanguageSettingsRequest, db: Session = Depends(get_
 
 @router.put("/settings/timezone")
 def update_timezone(request: TimezoneSettingsRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.phone_number == request.user_number).first()
+    user = db.query(User).filter((User.phone_number == request.user_number) | (User.email == request.user_number)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -73,7 +73,7 @@ def update_timezone(request: TimezoneSettingsRequest, db: Session = Depends(get_
 
 @router.post("/settings/journal/reflection-depth-backfill")
 def backfill_reflection_depth(request: ReflectionDepthBackfillRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.phone_number == request.user_number).first()
+    user = db.query(User).filter((User.phone_number == request.user_number) | (User.email == request.user_number)).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
