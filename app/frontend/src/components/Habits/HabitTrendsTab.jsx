@@ -20,6 +20,7 @@ export default function HabitTrendsTab({
   mtnTaskState
 }) {
   const [overlayTrends, setOverlayTrends] = useState({ tasks: [], journal: [] });
+  const [overlayErrors, setOverlayErrors] = useState({});
 
   useEffect(() => {
     if (!apiUrl || !userNumber) return;
@@ -36,8 +37,15 @@ export default function HabitTrendsTab({
           tasks: tasksResponse.status === 'fulfilled' ? tasksResponse.value.data?.trend_chart || [] : [],
           journal: journalResponse.status === 'fulfilled' ? journalResponse.value.data?.trend_chart || [] : [],
         });
+        setOverlayErrors({
+          tasks: tasksResponse.status === 'rejected',
+          journal: journalResponse.status === 'rejected',
+        });
       } catch (error) {
-        if (!cancelled) setOverlayTrends({ tasks: [], journal: [] });
+        if (!cancelled) {
+          setOverlayTrends({ tasks: [], journal: [] });
+          setOverlayErrors({ tasks: true, journal: true });
+        }
       }
     };
 
@@ -80,7 +88,7 @@ export default function HabitTrendsTab({
         mtnTaskState={mtnTaskState}
       />
       <HabitTrendSummary summary={trends?.summary} />
-      <HabitComplianceChart data={trends?.trend_chart} overlays={overlays} />
+      <HabitComplianceChart data={trends?.trend_chart} overlays={overlays} overlayErrors={overlayErrors} />
       <HabitHeatmap data={trends?.heatmap} />
       <HabitLeaderboard data={trends?.leaderboard} />
       <HabitScores scores={trends?.scores} />

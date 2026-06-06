@@ -82,6 +82,17 @@ const buildDateDots = (points, key, maxValue, startTime, endTime) => {
     .filter(point => point && point.value > 0);
 };
 
+const overlayStats = (points, startTime, endTime) => {
+  const inRange = points.filter(point => {
+    const pointTime = dateToTime(point.date);
+    return pointTime !== null && startTime !== null && endTime !== null && pointTime >= startTime && pointTime <= endTime;
+  });
+  return {
+    total: inRange.length,
+    nonZero: inRange.filter(point => Number(point.overlay_score || 0) > 0).length,
+  };
+};
+
 const buildDateTicks = (points) => {
   if (!points.length) return [];
   const tickCount = Math.min(6, points.length);
@@ -170,7 +181,7 @@ function OverlayButtons({ selected, onSelect }) {
   );
 }
 
-function DepthTrendChart({ data, overlays }) {
+function DepthTrendChart({ data, overlays, overlayErrors = {} }) {
   const points = (Array.isArray(data) ? data : []).map(point => ({
     ...point,
     daily_plot_score: Number(point.entry_count || 0) > 0 ? point.daily_average : 0,
@@ -190,6 +201,15 @@ function DepthTrendChart({ data, overlays }) {
   const overlayAxisValues = overlayConfig
     ? [0, overlayConfig.axisMax / 4, overlayConfig.axisMax / 2, (overlayConfig.axisMax * 3) / 4, overlayConfig.axisMax]
     : [];
+  const selectedOverlayLabel = selectedOverlay ? OVERLAY_DEFS[selectedOverlay].label : '';
+  const selectedOverlayStats = selectedOverlay && overlayConfig ? overlayStats(overlayPoints, startTime, endTime) : null;
+  const overlayStatus = selectedOverlay && overlayErrors[selectedOverlay]
+    ? `${selectedOverlayLabel} data could not be loaded.`
+    : selectedOverlayStats && selectedOverlayStats.total === 0
+      ? `No ${selectedOverlayLabel.toLowerCase()} data loaded for this date range.`
+      : selectedOverlayStats
+        ? `${selectedOverlayLabel}: ${selectedOverlayStats.total} days loaded, ${selectedOverlayStats.nonZero} non-zero.`
+        : '';
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
@@ -208,6 +228,11 @@ function DepthTrendChart({ data, overlays }) {
               </span>
             )}
           </div>
+          {overlayStatus && (
+            <div className={`mt-1 text-[11px] ${overlayErrors[selectedOverlay] ? 'text-rose-600' : 'text-slate-400'}`}>
+              {overlayStatus}
+            </div>
+          )}
         </div>
         <OverlayButtons selected={selectedOverlay} onSelect={setSelectedOverlay} />
       </div>
@@ -352,6 +377,7 @@ function ReflectionDepthHeatmap({ data }) {
 
 export default function JournalTrendsTab({ apiUrl, userNumber, trends, loading, error }) {
   const [overlayTrends, setOverlayTrends] = useState({ habits: [], tasks: [] });
+  const [overlayErrors, setOverlayErrors] = useState({});
 
   useEffect(() => {
     if (!apiUrl || !userNumber) return;
@@ -368,8 +394,15 @@ export default function JournalTrendsTab({ apiUrl, userNumber, trends, loading, 
           habits: habitsResponse.status === 'fulfilled' ? habitsResponse.value.data?.trend_chart || [] : [],
           tasks: tasksResponse.status === 'fulfilled' ? tasksResponse.value.data?.trend_chart || [] : [],
         });
+        setOverlayErrors({
+          habits: habitsResponse.status === 'rejected',
+          tasks: tasksResponse.status === 'rejected',
+        });
       } catch (fetchError) {
-        if (!cancelled) setOverlayTrends({ habits: [], tasks: [] });
+        if (!cancelled) {
+          setOverlayTrends({ habits: [], tasks: [] });
+          setOverlayErrors({ habits: true, tasks: true });
+        }
       }
     };
 
@@ -430,7 +463,7 @@ export default function JournalTrendsTab({ apiUrl, userNumber, trends, loading, 
         />
       </div>
 
-      <DepthTrendChart data={trends?.trend_chart} overlays={overlays} />
+      <DepthTrendChart data={trends?.trend_chart} overlays={overlays} overlayErrors={overlayErrors} />
       <ReflectionDepthHeatmap data={trends?.trend_chart} />
 
       <div className="rounded-lg border border-slate-200 bg-white p-4">

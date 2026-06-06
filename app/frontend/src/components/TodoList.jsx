@@ -1317,6 +1317,17 @@ const buildMtnDateDots = (points, key, maxValue, startTime, endTime) => {
     .filter(point => point && point.value > 0);
 };
 
+const overlayStats = (points, startTime, endTime) => {
+  const inRange = points.filter(point => {
+    const pointTime = dateToTime(point.date);
+    return pointTime !== null && startTime !== null && endTime !== null && pointTime >= startTime && pointTime <= endTime;
+  });
+  return {
+    total: inRange.length,
+    nonZero: inRange.filter(point => Number(point.overlay_score || 0) > 0).length,
+  };
+};
+
 function formatShortDate(dateString) {
   if (!dateString) return '';
   const [year, month, day] = dateString.split('-').map(Number);
@@ -1384,7 +1395,7 @@ function TrendOverlayButtons({ selected, onSelect }) {
   );
 }
 
-function TaskMtnTrendChart({ data, overlays }) {
+function TaskMtnTrendChart({ data, overlays, overlayErrors = {} }) {
   const points = Array.isArray(data) ? data : [];
   const [selectedOverlay, setSelectedOverlay] = useState(null);
   const values = points.flatMap(point => [
@@ -1416,6 +1427,15 @@ function TaskMtnTrendChart({ data, overlays }) {
   const overlayAxisValues = overlayConfig
     ? [0, overlayConfig.axisMax / 4, overlayConfig.axisMax / 2, (overlayConfig.axisMax * 3) / 4, overlayConfig.axisMax]
     : [];
+  const selectedOverlayLabel = selectedOverlay ? TREND_OVERLAY_DEFS[selectedOverlay].label : '';
+  const selectedOverlayStats = selectedOverlay && overlayConfig ? overlayStats(overlayPoints, startTime, endTime) : null;
+  const overlayStatus = selectedOverlay && overlayErrors[selectedOverlay]
+    ? `${selectedOverlayLabel} data could not be loaded.`
+    : selectedOverlayStats && selectedOverlayStats.total === 0
+      ? `No ${selectedOverlayLabel.toLowerCase()} data loaded for this date range.`
+      : selectedOverlayStats
+        ? `${selectedOverlayLabel}: ${selectedOverlayStats.total} days loaded, ${selectedOverlayStats.nonZero} non-zero.`
+        : '';
   const gridValues = [0, maxScore / 4, maxScore / 2, (maxScore * 3) / 4, maxScore];
   const tickIndexes = Array.from(new Set([
     0,
@@ -1443,6 +1463,11 @@ function TaskMtnTrendChart({ data, overlays }) {
               <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-rose-400" /> Outlier capped</span>
             )}
           </div>
+          {overlayStatus && (
+            <div className={`mt-1 text-[11px] ${overlayErrors[selectedOverlay] ? 'text-rose-600' : 'text-slate-400'}`}>
+              {overlayStatus}
+            </div>
+          )}
         </div>
         <TrendOverlayButtons selected={selectedOverlay} onSelect={setSelectedOverlay} />
       </div>
@@ -1595,6 +1620,7 @@ function TaskMtnHeatmap({ data }) {
 
 function TaskMtnTrendsTab({ apiUrl, userNumber, trends, loading, error }) {
   const [overlayTrends, setOverlayTrends] = useState({ habits: [], journal: [] });
+  const [overlayErrors, setOverlayErrors] = useState({});
 
   useEffect(() => {
     if (!apiUrl || !userNumber) return;
@@ -1611,8 +1637,15 @@ function TaskMtnTrendsTab({ apiUrl, userNumber, trends, loading, error }) {
           habits: habitsResponse.status === 'fulfilled' ? habitsResponse.value.data?.trend_chart || [] : [],
           journal: journalResponse.status === 'fulfilled' ? journalResponse.value.data?.trend_chart || [] : [],
         });
+        setOverlayErrors({
+          habits: habitsResponse.status === 'rejected',
+          journal: journalResponse.status === 'rejected',
+        });
       } catch (fetchError) {
-        if (!cancelled) setOverlayTrends({ habits: [], journal: [] });
+        if (!cancelled) {
+          setOverlayTrends({ habits: [], journal: [] });
+          setOverlayErrors({ habits: true, journal: true });
+        }
       }
     };
 
@@ -1676,7 +1709,7 @@ function TaskMtnTrendsTab({ apiUrl, userNumber, trends, loading, error }) {
         />
       </div>
 
-      <TaskMtnTrendChart data={trends?.trend_chart} overlays={overlays} />
+      <TaskMtnTrendChart data={trends?.trend_chart} overlays={overlays} overlayErrors={overlayErrors} />
       <TaskMtnHeatmap data={trends?.trend_chart} />
 
       <div className="rounded-lg border bg-white p-4">

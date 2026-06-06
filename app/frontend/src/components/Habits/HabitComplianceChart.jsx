@@ -66,6 +66,17 @@ const buildDateDots = (points, key, maxValue, startTime, endTime) => {
     .filter(point => point && point.value > 0);
 };
 
+const overlayStats = (points, startTime, endTime) => {
+  const inRange = points.filter(point => {
+    const pointTime = dateToTime(point.date);
+    return pointTime !== null && startTime !== null && endTime !== null && pointTime >= startTime && pointTime <= endTime;
+  });
+  return {
+    total: inRange.length,
+    nonZero: inRange.filter(point => Number(point.overlay_score || 0) > 0).length,
+  };
+};
+
 const formatShortDate = (dateString) => {
   if (!dateString) return '';
   const date = new Date(`${dateString}T00:00:00`);
@@ -135,7 +146,7 @@ function OverlayButtons({ selected, onSelect }) {
   );
 }
 
-export default function HabitComplianceChart({ data, overlays }) {
+export default function HabitComplianceChart({ data, overlays, overlayErrors = {} }) {
   const points = Array.isArray(data) ? data : [];
   const [selectedOverlay, setSelectedOverlay] = useState(null);
   const dailyPath = buildPath(points, 'compliance_rate');
@@ -151,6 +162,15 @@ export default function HabitComplianceChart({ data, overlays }) {
   const overlayAxisValues = overlayConfig
     ? [0, overlayConfig.axisMax / 4, overlayConfig.axisMax / 2, (overlayConfig.axisMax * 3) / 4, overlayConfig.axisMax]
     : [];
+  const selectedOverlayLabel = selectedOverlay ? OVERLAY_DEFS[selectedOverlay].label : '';
+  const selectedOverlayStats = selectedOverlay && overlayConfig ? overlayStats(overlayPoints, startTime, endTime) : null;
+  const overlayStatus = selectedOverlay && overlayErrors[selectedOverlay]
+    ? `${selectedOverlayLabel} data could not be loaded.`
+    : selectedOverlayStats && selectedOverlayStats.total === 0
+      ? `No ${selectedOverlayLabel.toLowerCase()} data loaded for this date range.`
+      : selectedOverlayStats
+        ? `${selectedOverlayLabel}: ${selectedOverlayStats.total} days loaded, ${selectedOverlayStats.nonZero} non-zero.`
+        : '';
 
   return (
     <div className="rounded-lg border bg-white p-4">
@@ -167,6 +187,11 @@ export default function HabitComplianceChart({ data, overlays }) {
               </span>
             )}
           </div>
+          {overlayStatus && (
+            <div className={`mt-1 text-[11px] ${overlayErrors[selectedOverlay] ? 'text-rose-600' : 'text-slate-400'}`}>
+              {overlayStatus}
+            </div>
+          )}
         </div>
         <OverlayButtons selected={selectedOverlay} onSelect={setSelectedOverlay} />
       </div>
