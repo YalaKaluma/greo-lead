@@ -1,6 +1,15 @@
+import { useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
+
 const WIDTH = 720;
 const HEIGHT = 240;
 const PADDING = 32;
+
+const OVERLAY_DEFS = {
+  habits: { label: 'Habits', color: '#16a34a' },
+  tasks: { label: 'Tasks', color: '#f97316' },
+  journal: { label: 'Journal', color: '#7c3aed' },
+};
 
 const formatShortDate = (dateString) => {
   if (!dateString) return '';
@@ -23,7 +32,7 @@ const buildPath = (points, key) => {
   return valid
     .map((point, pathIndex) => {
       const x = PADDING + (point.index / Math.max(points.length - 1, 1)) * (WIDTH - PADDING * 2);
-      const y = HEIGHT - PADDING - ((Number(point[key]) - 1) / 9) * (HEIGHT - PADDING * 2);
+      const y = HEIGHT - PADDING - (Number(point[key]) / 10) * (HEIGHT - PADDING * 2);
       return `${pathIndex === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
     })
     .join(' ');
@@ -57,9 +66,9 @@ const colorForDepth = (score, entryCount) => {
   if (!entryCount || score === null || score === undefined) return 'bg-slate-100';
   if (score >= 8) return 'bg-emerald-700';
   if (score >= 6.5) return 'bg-emerald-500';
-  if (score >= 5) return 'bg-emerald-300';
-  if (score >= 3) return 'bg-emerald-100';
-  return 'bg-slate-200';
+  if (score >= 5) return 'bg-amber-300';
+  if (score >= 3) return 'bg-rose-300';
+  return 'bg-rose-600';
 };
 
 function KpiCard({ label, value, detail, tone = 'slate' }) {
@@ -74,28 +83,96 @@ function KpiCard({ label, value, detail, tone = 'slate' }) {
   );
 }
 
-function DepthTrendChart({ data }) {
-  const points = Array.isArray(data) ? data : [];
-  const dailyPath = buildPath(points, 'daily_average');
+const normalizeOverlayPoints = (basePoints, overlays) => {
+  const overlayData = overlays || {};
+  const taskValues = (overlayData.tasks || []).map(point => Number(point.mtn_score || 0));
+  const maxTask = Math.max(...taskValues, 0);
+  const byDate = {
+    habits: new Map((overlayData.habits || []).map(point => [point.date, Math.min(Number(point.compliance_rate || 0) / 10, 10)])),
+    tasks: new Map((overlayData.tasks || []).map(point => [
+      point.date,
+      maxTask > 0 ? (Number(point.mtn_score || 0) / maxTask) * 10 : 0
+    ])),
+    journal: new Map((overlayData.journal || []).map(point => [
+      point.date,
+      Number(point.entry_count || 0) > 0 ? Number(point.daily_average || 0) : 0
+    ])),
+  };
+
+  return Object.fromEntries(
+    Object.keys(OVERLAY_DEFS).map(key => [
+      key,
+      basePoints.map(point => ({
+        date: point.date,
+        overlay_score: byDate[key].get(point.date) ?? 0,
+      })),
+    ])
+  );
+};
+
+function OverlayButtons({ selected, onToggle }) {
+  return (
+    <div className="flex flex-wrap justify-end gap-2">
+      {Object.entries(OVERLAY_DEFS).map(([key, item]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onToggle(key)}
+          className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
+            selected.includes(key)
+              ? 'border-slate-700 bg-slate-900 text-white'
+              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+          }`}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DepthTrendChart({ data, overlays }) {
+  const points = (Array.isArray(data) ? data : []).map(point => ({
+    ...point,
+    daily_plot_score: Number(point.entry_count || 0) > 0 ? point.daily_average : 0,
+  }));
+  const [selectedOverlays, setSelectedOverlays] = useState([]);
+  const dailyPath = buildPath(points, 'daily_plot_score');
   const weeklyPath = buildPath(points, 'weekly_average');
   const rollingPath = buildPath(points, 'rolling_30_day_average');
   const dateTicks = buildDateTicks(points);
+  const overlayPoints = normalizeOverlayPoints(points, overlays);
+  const toggleOverlay = (key) => {
+    setSelectedOverlays(current =>
+      current.includes(key) ? current.filter(item => item !== key) : [...current, key]
+    );
+  };
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-slate-800">Reflection Depth Trend</h2>
-        <div className="flex flex-wrap gap-4 text-xs text-slate-500">
-          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> Daily</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> Weekly</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-600" /> 30-day</span>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Reflection Depth Trend</h2>
+          <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> Daily</span>
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-500" /> No input</span>
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> Weekly</span>
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-600" /> 30-day</span>
+            {selectedOverlays.map(key => (
+              <span key={key} className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: OVERLAY_DEFS[key].color }} />
+                {OVERLAY_DEFS[key].label}
+              </span>
+            ))}
+          </div>
         </div>
+        <OverlayButtons selected={selectedOverlays} onToggle={toggleOverlay} />
       </div>
 
       <div className="mt-4 overflow-hidden rounded-md bg-slate-50">
         <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="h-72 w-full">
-          {[1, 3, 5, 7, 9, 10].map((value) => {
-            const y = HEIGHT - PADDING - ((value - 1) / 9) * (HEIGHT - PADDING * 2);
+          {[0, 2, 4, 6, 8, 10].map((value) => {
+            const y = HEIGHT - PADDING - (value / 10) * (HEIGHT - PADDING * 2);
             return (
               <g key={value}>
                 <line x1={PADDING} x2={WIDTH - PADDING} y1={y} y2={y} stroke="#e2e8f0" />
@@ -120,6 +197,27 @@ function DepthTrendChart({ data }) {
           <path d={dailyPath} fill="none" stroke="#cbd5e1" strokeWidth="2" />
           <path d={weeklyPath} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" />
           <path d={rollingPath} fill="none" stroke="#059669" strokeWidth="3" strokeLinecap="round" />
+          {points.map((point, index) => {
+            if (Number(point.entry_count || 0) > 0) return null;
+            const x = PADDING + (index / Math.max(points.length - 1, 1)) * (WIDTH - PADDING * 2);
+            const y = HEIGHT - PADDING;
+            return (
+              <circle key={`no-input-${point.date}`} cx={x} cy={y} r="2.5" fill="#64748b">
+                <title>{`${formatShortDate(point.date)}: no input`}</title>
+              </circle>
+            );
+          })}
+          {selectedOverlays.map(key => (
+            <path
+              key={key}
+              d={buildPath(overlayPoints[key] || [], 'overlay_score')}
+              fill="none"
+              stroke={OVERLAY_DEFS[key].color}
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeDasharray="5 4"
+            />
+          ))}
         </svg>
       </div>
     </div>
@@ -164,8 +262,8 @@ function ReflectionDepthHeatmap({ data }) {
                 }
 
                 const score = day.daily_average;
-                const label = score === null || score === undefined
-                  ? 'No scored entries'
+                const label = !day.entry_count
+                  ? 'No input'
                   : `${formatNumber(score)} depth score from ${day.entry_count} entr${day.entry_count === 1 ? 'y' : 'ies'}`;
 
                 return (
@@ -185,9 +283,9 @@ function ReflectionDepthHeatmap({ data }) {
         <span>No entry</span>
         <span className="h-3 w-3 rounded-sm bg-slate-100" />
         <span>Low</span>
-        <span className="h-3 w-3 rounded-sm bg-slate-200" />
-        <span className="h-3 w-3 rounded-sm bg-emerald-100" />
-        <span className="h-3 w-3 rounded-sm bg-emerald-300" />
+        <span className="h-3 w-3 rounded-sm bg-rose-600" />
+        <span className="h-3 w-3 rounded-sm bg-rose-300" />
+        <span className="h-3 w-3 rounded-sm bg-amber-300" />
         <span className="h-3 w-3 rounded-sm bg-emerald-500" />
         <span className="h-3 w-3 rounded-sm bg-emerald-700" />
         <span>High</span>
@@ -196,7 +294,41 @@ function ReflectionDepthHeatmap({ data }) {
   );
 }
 
-export default function JournalTrendsTab({ trends, loading, error }) {
+export default function JournalTrendsTab({ apiUrl, userNumber, trends, loading, error }) {
+  const [overlayTrends, setOverlayTrends] = useState({ habits: [], tasks: [] });
+
+  useEffect(() => {
+    if (!apiUrl || !userNumber) return;
+    let cancelled = false;
+
+    const fetchOverlays = async () => {
+      try {
+        const [habitsResponse, tasksResponse] = await Promise.allSettled([
+          axios.get(`${apiUrl}/api/habits/trends`, { params: { user_number: userNumber } }),
+          axios.get(`${apiUrl}/api/tasks/mtn-trends`, { params: { user_number: userNumber } }),
+        ]);
+        if (cancelled) return;
+        setOverlayTrends({
+          habits: habitsResponse.status === 'fulfilled' ? habitsResponse.value.data?.trend_chart || [] : [],
+          tasks: tasksResponse.status === 'fulfilled' ? tasksResponse.value.data?.trend_chart || [] : [],
+        });
+      } catch (fetchError) {
+        if (!cancelled) setOverlayTrends({ habits: [], tasks: [] });
+      }
+    };
+
+    fetchOverlays();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiUrl, userNumber]);
+
+  const overlays = useMemo(() => ({
+    habits: overlayTrends.habits,
+    tasks: overlayTrends.tasks,
+    journal: trends?.trend_chart || [],
+  }), [overlayTrends, trends]);
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center text-slate-500">
@@ -242,7 +374,7 @@ export default function JournalTrendsTab({ trends, loading, error }) {
         />
       </div>
 
-      <DepthTrendChart data={trends?.trend_chart} />
+      <DepthTrendChart data={trends?.trend_chart} overlays={overlays} />
       <ReflectionDepthHeatmap data={trends?.trend_chart} />
 
       <div className="rounded-lg border border-slate-200 bg-white p-4">

@@ -870,6 +870,8 @@ export default function TodoList({ apiUrl, userNumber }) {
 
         {activeTab === 'trends' && (
           <TaskMtnTrendsTab
+            apiUrl={apiUrl}
+            userNumber={userNumber}
             trends={mtnTrends}
             loading={mtnTrendsLoading}
             error={mtnTrendsError}
@@ -1244,6 +1246,11 @@ const MTN_CHART_WIDTH = 720;
 const MTN_CHART_HEIGHT = 240;
 const MTN_CHART_PADDING = 34;
 const MTN_CHART_BOTTOM_PADDING = 46;
+const TREND_OVERLAY_DEFS = {
+  habits: { label: 'Habits', color: '#16a34a' },
+  tasks: { label: 'Tasks', color: '#f97316' },
+  journal: { label: 'Journal', color: '#7c3aed' },
+};
 
 const percentile = (values, ratio) => {
   const sorted = values
@@ -1290,8 +1297,60 @@ function StatTile({ label, value, detail }) {
   );
 }
 
-function TaskMtnTrendChart({ data }) {
+const normalizeTaskOverlayPoints = (basePoints, overlays, maxScore) => {
+  const overlayData = overlays || {};
+  const taskValues = (overlayData.tasks || []).map(point => Number(point.mtn_score || 0));
+  const maxTask = Math.max(...taskValues, 0);
+  const byDate = {
+    habits: new Map((overlayData.habits || []).map(point => [
+      point.date,
+      (Number(point.compliance_rate || 0) / 100) * maxScore
+    ])),
+    tasks: new Map((overlayData.tasks || []).map(point => [
+      point.date,
+      maxTask > 0 ? (Number(point.mtn_score || 0) / maxTask) * maxScore : 0
+    ])),
+    journal: new Map((overlayData.journal || []).map(point => [
+      point.date,
+      Number(point.entry_count || 0) > 0 ? (Number(point.daily_average || 0) / 10) * maxScore : 0
+    ])),
+  };
+
+  return Object.fromEntries(
+    Object.keys(TREND_OVERLAY_DEFS).map(key => [
+      key,
+      basePoints.map(point => ({
+        date: point.date,
+        overlay_score: byDate[key].get(point.date) ?? 0,
+      })),
+    ])
+  );
+};
+
+function TrendOverlayButtons({ selected, onToggle }) {
+  return (
+    <div className="flex flex-wrap justify-end gap-2">
+      {Object.entries(TREND_OVERLAY_DEFS).map(([key, item]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onToggle(key)}
+          className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
+            selected.includes(key)
+              ? 'border-slate-700 bg-slate-900 text-white'
+              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+          }`}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function TaskMtnTrendChart({ data, overlays }) {
   const points = Array.isArray(data) ? data : [];
+  const [selectedOverlays, setSelectedOverlays] = useState([]);
   const values = points.flatMap(point => [
     Number(point.mtn_score || 0),
     Number(point.rolling_average || 0)
@@ -1311,6 +1370,12 @@ function TaskMtnTrendChart({ data }) {
   );
   const dailyPath = buildMtnPath(points, 'mtn_score', maxScore);
   const rollingPath = buildMtnPath(points, 'rolling_average', maxScore);
+  const overlayPoints = normalizeTaskOverlayPoints(points, overlays, maxScore);
+  const toggleOverlay = (key) => {
+    setSelectedOverlays(current =>
+      current.includes(key) ? current.filter(item => item !== key) : [...current, key]
+    );
+  };
   const gridValues = [0, maxScore / 4, maxScore / 2, (maxScore * 3) / 4, maxScore];
   const tickIndexes = Array.from(new Set([
     0,
@@ -1322,15 +1387,24 @@ function TaskMtnTrendChart({ data }) {
 
   return (
     <div className="rounded-lg border bg-white p-4">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-lg font-semibold text-slate-800">MTN Score Trend</h2>
-        <div className="flex gap-4 text-xs text-slate-500">
-          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> Daily</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> 7-day average</span>
-          {hasCappedOutliers && (
-            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-rose-400" /> Outlier capped</span>
-          )}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">MTN Score Trend</h2>
+          <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> Daily</span>
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> 7-day average</span>
+            {selectedOverlays.map(key => (
+              <span key={key} className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: TREND_OVERLAY_DEFS[key].color }} />
+                {TREND_OVERLAY_DEFS[key].label}
+              </span>
+            ))}
+            {hasCappedOutliers && (
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-rose-400" /> Outlier capped</span>
+            )}
+          </div>
         </div>
+        <TrendOverlayButtons selected={selectedOverlays} onToggle={toggleOverlay} />
       </div>
 
       <div className="mt-4 overflow-hidden rounded-md bg-slate-50">
@@ -1346,6 +1420,17 @@ function TaskMtnTrendChart({ data }) {
           })}
           <path d={dailyPath} fill="none" stroke="#cbd5e1" strokeWidth="2" />
           <path d={rollingPath} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" />
+          {selectedOverlays.map(key => (
+            <path
+              key={key}
+              d={buildMtnPath(overlayPoints[key] || [], 'overlay_score', maxScore)}
+              fill="none"
+              stroke={TREND_OVERLAY_DEFS[key].color}
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeDasharray="5 4"
+            />
+          ))}
           {points.map((point, index) => {
             const value = Number(point.mtn_score || 0);
             if (value <= maxScore) return null;
@@ -1386,12 +1471,11 @@ const weekdayIndexFromDate = (dateString) => {
 };
 
 const colorForMtnScore = (score) => {
-  if (!score) return 'bg-slate-200';
-  if (score >= 20) return 'bg-blue-700';
-  if (score >= 15) return 'bg-blue-500';
-  if (score >= 10) return 'bg-blue-300';
-  if (score >= 5) return 'bg-blue-200';
-  return 'bg-blue-100';
+  if (score >= 20) return 'bg-emerald-700';
+  if (score >= 15) return 'bg-emerald-500';
+  if (score >= 10) return 'bg-amber-300';
+  if (score >= 5) return 'bg-rose-300';
+  return 'bg-rose-600';
 };
 
 function TaskMtnHeatmap({ data }) {
@@ -1442,19 +1526,46 @@ function TaskMtnHeatmap({ data }) {
 
       <div className="mt-3 flex items-center justify-end gap-2 text-xs text-slate-500">
         <span>Low</span>
-        <span className="h-3 w-3 rounded-sm bg-slate-200" />
-        <span className="h-3 w-3 rounded-sm bg-blue-100" />
-        <span className="h-3 w-3 rounded-sm bg-blue-200" />
-        <span className="h-3 w-3 rounded-sm bg-blue-300" />
-        <span className="h-3 w-3 rounded-sm bg-blue-500" />
-        <span className="h-3 w-3 rounded-sm bg-blue-700" />
+        <span className="h-3 w-3 rounded-sm bg-rose-600" />
+        <span className="h-3 w-3 rounded-sm bg-rose-300" />
+        <span className="h-3 w-3 rounded-sm bg-amber-300" />
+        <span className="h-3 w-3 rounded-sm bg-emerald-500" />
+        <span className="h-3 w-3 rounded-sm bg-emerald-700" />
         <span>High</span>
       </div>
     </div>
   );
 }
 
-function TaskMtnTrendsTab({ trends, loading, error }) {
+function TaskMtnTrendsTab({ apiUrl, userNumber, trends, loading, error }) {
+  const [overlayTrends, setOverlayTrends] = useState({ habits: [], journal: [] });
+
+  useEffect(() => {
+    if (!apiUrl || !userNumber) return;
+    let cancelled = false;
+
+    const fetchOverlays = async () => {
+      try {
+        const [habitsResponse, journalResponse] = await Promise.allSettled([
+          axios.get(`${apiUrl}/api/habits/trends`, { params: { user_number: userNumber } }),
+          axios.get(`${apiUrl}/api/journal/journal/trends`, { params: { user_number: userNumber } }),
+        ]);
+        if (cancelled) return;
+        setOverlayTrends({
+          habits: habitsResponse.status === 'fulfilled' ? habitsResponse.value.data?.trend_chart || [] : [],
+          journal: journalResponse.status === 'fulfilled' ? journalResponse.value.data?.trend_chart || [] : [],
+        });
+      } catch (fetchError) {
+        if (!cancelled) setOverlayTrends({ habits: [], journal: [] });
+      }
+    };
+
+    fetchOverlays();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiUrl, userNumber]);
+
   if (loading) {
     return (
       <div className="rounded-lg border bg-white p-6 text-sm text-slate-500">
@@ -1478,6 +1589,11 @@ function TaskMtnTrendsTab({ trends, loading, error }) {
   const last90 = summary.last_90_days || {};
   const delta = Number(last7.trend?.delta_vs_30 || 0);
   const sign = delta > 0 ? '+' : '';
+  const overlays = {
+    habits: overlayTrends.habits,
+    tasks: trends?.trend_chart || [],
+    journal: overlayTrends.journal,
+  };
 
   return (
     <div className="space-y-5">
@@ -1504,7 +1620,7 @@ function TaskMtnTrendsTab({ trends, loading, error }) {
         />
       </div>
 
-      <TaskMtnTrendChart data={trends?.trend_chart} />
+      <TaskMtnTrendChart data={trends?.trend_chart} overlays={overlays} />
       <TaskMtnHeatmap data={trends?.trend_chart} />
 
       <div className="rounded-lg border bg-white p-4">

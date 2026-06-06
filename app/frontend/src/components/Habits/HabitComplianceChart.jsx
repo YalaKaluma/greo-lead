@@ -1,6 +1,14 @@
+import { useState } from 'react';
+
 const WIDTH = 720;
 const HEIGHT = 220;
 const PADDING = 28;
+
+const OVERLAY_DEFS = {
+  habits: { label: 'Habits', color: '#16a34a' },
+  tasks: { label: 'Tasks', color: '#f97316' },
+  journal: { label: 'Journal', color: '#7c3aed' },
+};
 
 const buildPath = (points, key) => {
   if (!points.length) return '';
@@ -13,19 +21,83 @@ const buildPath = (points, key) => {
     .join(' ');
 };
 
-export default function HabitComplianceChart({ data }) {
+const normalizeOverlayPoints = (basePoints, overlays) => {
+  const overlayData = overlays || {};
+  const taskValues = (overlayData.tasks || []).map(point => Number(point.mtn_score || 0));
+  const maxTask = Math.max(...taskValues, 0);
+  const byDate = {
+    habits: new Map((overlayData.habits || []).map(point => [point.date, Number(point.compliance_rate || 0)])),
+    tasks: new Map((overlayData.tasks || []).map(point => [
+      point.date,
+      maxTask > 0 ? (Number(point.mtn_score || 0) / maxTask) * 100 : 0
+    ])),
+    journal: new Map((overlayData.journal || []).map(point => [
+      point.date,
+      Number(point.entry_count || 0) > 0 ? Math.min(Number(point.daily_average || 0) * 10, 100) : 0
+    ])),
+  };
+
+  return Object.fromEntries(
+    Object.keys(OVERLAY_DEFS).map(key => [
+      key,
+      basePoints.map(point => ({
+        date: point.date,
+        overlay_score: byDate[key].get(point.date) ?? 0,
+      })),
+    ])
+  );
+};
+
+function OverlayButtons({ selected, onToggle }) {
+  return (
+    <div className="flex flex-wrap justify-end gap-2">
+      {Object.entries(OVERLAY_DEFS).map(([key, item]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onToggle(key)}
+          className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
+            selected.includes(key)
+              ? 'border-slate-700 bg-slate-900 text-white'
+              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+          }`}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export default function HabitComplianceChart({ data, overlays }) {
   const points = Array.isArray(data) ? data : [];
+  const [selectedOverlays, setSelectedOverlays] = useState([]);
   const dailyPath = buildPath(points, 'compliance_rate');
   const rollingPath = buildPath(points, 'rolling_average');
+  const overlayPoints = normalizeOverlayPoints(points, overlays);
+  const toggleOverlay = (key) => {
+    setSelectedOverlays(current =>
+      current.includes(key) ? current.filter(item => item !== key) : [...current, key]
+    );
+  };
 
   return (
     <div className="rounded-lg border bg-white p-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-800">Compliance Trend</h2>
-        <div className="flex gap-4 text-xs text-slate-500">
-          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> Daily</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> 7-day average</span>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800">Compliance Trend</h2>
+          <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> Daily</span>
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> 7-day average</span>
+            {selectedOverlays.map(key => (
+              <span key={key} className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: OVERLAY_DEFS[key].color }} />
+                {OVERLAY_DEFS[key].label}
+              </span>
+            ))}
+          </div>
         </div>
+        <OverlayButtons selected={selectedOverlays} onToggle={toggleOverlay} />
       </div>
 
       <div className="mt-4 overflow-hidden rounded-md bg-slate-50">
@@ -41,6 +113,17 @@ export default function HabitComplianceChart({ data }) {
           })}
           <path d={dailyPath} fill="none" stroke="#cbd5e1" strokeWidth="2" />
           <path d={rollingPath} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" />
+          {selectedOverlays.map(key => (
+            <path
+              key={key}
+              d={buildPath(overlayPoints[key] || [], 'overlay_score')}
+              fill="none"
+              stroke={OVERLAY_DEFS[key].color}
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeDasharray="5 4"
+            />
+          ))}
         </svg>
       </div>
     </div>

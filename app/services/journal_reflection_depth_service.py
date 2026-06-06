@@ -295,9 +295,9 @@ def _build_chart(entries: list[Message], start_date: date, end_date: date) -> li
     chart = []
     daily_scores = []
     for day in _date_range(start_date, end_date):
-        daily_average = _avg(values_by_date.get(day, []))
-        if daily_average is not None:
-            daily_scores.append((day, daily_average))
+        entry_count = len(values_by_date.get(day, []))
+        daily_average = _avg(values_by_date.get(day, [])) if entry_count else 0
+        daily_scores.append((day, daily_average))
 
         last_7 = [value for score_day, value in daily_scores if day - timedelta(days=6) <= score_day <= day]
         last_30 = [value for score_day, value in daily_scores if day - timedelta(days=29) <= score_day <= day]
@@ -307,7 +307,7 @@ def _build_chart(entries: list[Message], start_date: date, end_date: date) -> li
             "daily_average": daily_average,
             "weekly_average": _avg(last_7),
             "rolling_30_day_average": _avg(last_30),
-            "entry_count": len(values_by_date.get(day, [])),
+            "entry_count": entry_count,
         })
 
     return chart

@@ -533,6 +533,8 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
       {activeTab === 'trends' ? (
         <div className="flex-1 overflow-y-auto bg-slate-50 px-4 pb-6 md:px-10">
           <JournalTrendsTab
+            apiUrl={apiUrl}
+            userNumber={userNumber}
             trends={trends}
             loading={trendsLoading}
             error={trendsError}

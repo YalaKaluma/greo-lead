@@ -543,6 +543,8 @@ export default function MyHabits({ apiUrl, userNumber }) {
 
       {activeTab === 'trends' && (
         <HabitTrendsTab
+          apiUrl={apiUrl}
+          userNumber={userNumber}
           trends={trends}
           loading={trendsLoading}
           error={trendsError}
