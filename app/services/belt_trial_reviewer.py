@@ -1,4 +1,6 @@
 import json
+import logging
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -8,6 +10,7 @@ from app.config import OPENAI_API_KEY, OPENAI_MODEL
 
 
 PASSING_SCORE = 4
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_PROMPT = {
@@ -153,8 +156,15 @@ def review_belt_trial(
     prompt: str,
     response_text: str,
     attempt_number: int = 1,
+    trace_id: Optional[str] = None,
 ) -> dict[str, Any]:
     if not OPENAI_API_KEY:
+        logger.warning(
+            "[belt_trial_reviewer:%s] openai_key_missing attempt=%s response_len=%s",
+            trace_id or "no-trace",
+            attempt_number,
+            len(response_text or ""),
+        )
         return normalize_review(fallback_review(response_text, attempt_number), response_text, attempt_number)
 
     prompt_config = load_trial_review_prompt()
@@ -176,6 +186,14 @@ def review_belt_trial(
     try:
         from openai import OpenAI
 
+        started = time.perf_counter()
+        logger.info(
+            "[belt_trial_reviewer:%s] openai_start model=%s attempt=%s timeout_seconds=25 response_len=%s",
+            trace_id or "no-trace",
+            OPENAI_MODEL,
+            attempt_number,
+            len(response_text or ""),
+        )
         client = OpenAI(
             api_key=OPENAI_API_KEY,
             timeout=25.0,
@@ -190,8 +208,33 @@ def review_belt_trial(
             temperature=0.2,
             max_tokens=900,
         )
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
         raw_text = response.choices[0].message.content or "{}"
-        return normalize_review(parse_review_response(raw_text), response_text, attempt_number)
+        normalized = normalize_review(parse_review_response(raw_text), response_text, attempt_number)
+        logger.info(
+            "[belt_trial_reviewer:%s] openai_success elapsed_ms=%s attempt=%s status=%s score=%s feedback_len=%s",
+            trace_id or "no-trace",
+            elapsed_ms,
+            attempt_number,
+            "passed" if normalized.get("passed") else "needs_revision",
+            normalized.get("score"),
+            len(normalized.get("feedback") or ""),
+        )
+        return normalized
     except Exception as error:
-        print(f"Error reviewing belt trial: {error}")
-        return normalize_review(fallback_review(response_text, attempt_number), response_text, attempt_number)
+        logger.exception(
+            "[belt_trial_reviewer:%s] openai_failed_using_fallback attempt=%s error=%s",
+            trace_id or "no-trace",
+            attempt_number,
+            error,
+        )
+        normalized = normalize_review(fallback_review(response_text, attempt_number), response_text, attempt_number)
+        logger.info(
+            "[belt_trial_reviewer:%s] fallback_complete attempt=%s status=%s score=%s feedback_len=%s",
+            trace_id or "no-trace",
+            attempt_number,
+            "passed" if normalized.get("passed") else "needs_revision",
+            normalized.get("score"),
+            len(normalized.get("feedback") or ""),
+        )
+        return normalized

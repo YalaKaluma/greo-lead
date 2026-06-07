@@ -40,8 +40,11 @@ from datetime import datetime, date
 from typing import Optional, Any
 from pathlib import Path
 from types import SimpleNamespace
+import hashlib
+import logging
 import yaml
 import json
+import uuid
 from app.services.people_review_service import PeopleReviewService
 from app.models import GoalReviewSession
 from app.services.yellow_belt_validator import (
@@ -55,6 +58,8 @@ from app.services.yellow_belt_validator import (
 )
 from app.services.vision_progress_review_service import VisionProgressReviewService
 from app.services.belt_trial_reviewer import review_belt_trial
+
+logger = logging.getLogger(__name__)
 
 STRUCTURAL_LEVEL_ALIASES = {
     "long": "vision",
@@ -305,13 +310,33 @@ def append_trial_feedback_history(trial: JourneyBeltTrial, review: dict[str, Any
     return evidence
 
 
-def apply_trial_review(db: Session, trial: JourneyBeltTrial, config: dict) -> JourneyBeltTrial:
+def response_fingerprint(response_text: Optional[str]) -> str:
+    return hashlib.sha256((response_text or "").encode("utf-8")).hexdigest()[:12]
+
+
+def apply_trial_review(db: Session, trial: JourneyBeltTrial, config: dict, trace_id: Optional[str] = None) -> JourneyBeltTrial:
     dimension = JOURNEY_DIMENSIONS.get(trial.dimension_id, {})
     belt_requirement = get_belt_requirement(config, trial.dimension_id, trial.target_belt)
     requirement = get_trial_requirement(config, trial.dimension_id, trial.target_belt, trial.trial_type)
     evidence = dict(trial.evidence or {})
     history = evidence.get("feedback_history") if isinstance(evidence.get("feedback_history"), list) else []
     attempt_number = len(history) + 1
+    response_text = trial.response_text or ""
+    logger.info(
+        "[belt_trial_review:%s] start trial_id=%s user=%s dimension=%s belt=%s type=%s attempt=%s response_len=%s response_hash=%s prior_status=%s prior_score=%s prior_reviewed_at=%s",
+        trace_id or "no-trace",
+        trial.id,
+        trial.user_number,
+        trial.dimension_id,
+        trial.target_belt,
+        trial.trial_type,
+        attempt_number,
+        len(response_text),
+        response_fingerprint(response_text),
+        trial.status,
+        trial.score,
+        trial.reviewed_at,
+    )
     review = review_belt_trial(
         domain_name=dimension.get("name", trial.dimension_id.title()),
         target_belt=trial.target_belt,
@@ -319,8 +344,9 @@ def apply_trial_review(db: Session, trial: JourneyBeltTrial, config: dict) -> Jo
         trial_title=requirement.get("title") or trial.trial_type.replace("_", " ").title(),
         belt_objective=requirement.get("criteria") or belt_requirement.get("criteria") or requirement.get("completion_hint"),
         prompt=trial.prompt,
-        response_text=trial.response_text or "",
+        response_text=response_text,
         attempt_number=attempt_number,
+        trace_id=trace_id,
     )
     trial.status = "passed" if review.get("passed") else "needs_revision"
     trial.score = review.get("score")
@@ -329,6 +355,17 @@ def apply_trial_review(db: Session, trial: JourneyBeltTrial, config: dict) -> Jo
     trial.reviewed_at = datetime.now()
     trial.updated_at = datetime.now()
     db.add(trial)
+    logger.info(
+        "[belt_trial_review:%s] complete trial_id=%s attempt=%s status=%s score=%s source=%s feedback_len=%s history_count=%s",
+        trace_id or "no-trace",
+        trial.id,
+        attempt_number,
+        trial.status,
+        trial.score,
+        review.get("review_source"),
+        len(trial.ai_feedback or ""),
+        len((trial.evidence or {}).get("feedback_history") or []),
+    )
     return trial
 
 
@@ -1314,6 +1351,7 @@ def get_belt_trials(
         target_belt: Optional[str] = None,
         db: Session = Depends(get_db)
 ):
+    trace_id = uuid.uuid4().hex[:8]
     query = db.query(JourneyBeltTrial).filter(JourneyBeltTrial.user_number == user_number)
 
     if dimension_id:
@@ -1321,7 +1359,30 @@ def get_belt_trials(
     if target_belt:
         query = query.filter(JourneyBeltTrial.target_belt == target_belt)
 
-    return query.order_by(JourneyBeltTrial.started_at.desc()).all()
+    trials = query.order_by(JourneyBeltTrial.started_at.desc()).all()
+    logger.info(
+        "[belt_trials_get:%s] user=%s dimension_filter=%s belt_filter=%s count=%s statuses=%s",
+        trace_id,
+        user_number,
+        dimension_id,
+        target_belt,
+        len(trials),
+        [
+            {
+                "id": trial.id,
+                "dimension": trial.dimension_id,
+                "belt": trial.target_belt,
+                "type": trial.trial_type,
+                "status": trial.status,
+                "score": trial.score,
+                "reviewed_at": trial.reviewed_at.isoformat() if trial.reviewed_at else None,
+                "response_hash": response_fingerprint(trial.response_text),
+                "history_count": len(((trial.evidence or {}).get("feedback_history") or [])),
+            }
+            for trial in trials[:15]
+        ],
+    )
+    return trials
 
 
 @router.post("/belt-trials", response_model=BeltTrialResponse)
@@ -1329,6 +1390,18 @@ def start_belt_trial(
         trial_data: BeltTrialCreate,
         db: Session = Depends(get_db)
 ):
+    trace_id = uuid.uuid4().hex[:8]
+    logger.info(
+        "[belt_trial_create:%s] received user=%s dimension=%s belt=%s type=%s requested_status=%s response_len=%s response_hash=%s",
+        trace_id,
+        trial_data.user_number,
+        trial_data.dimension_id,
+        trial_data.target_belt or "yellow",
+        trial_data.trial_type,
+        trial_data.status,
+        len(trial_data.response_text or ""),
+        response_fingerprint(trial_data.response_text),
+    )
     config = load_journey_trials_config()
     existing = db.query(JourneyBeltTrial).filter(
         JourneyBeltTrial.user_number == trial_data.user_number,
@@ -1338,15 +1411,31 @@ def start_belt_trial(
     ).first()
 
     if existing:
+        logger.info(
+            "[belt_trial_create:%s] existing trial_id=%s prior_status=%s prior_score=%s prior_response_hash=%s",
+            trace_id,
+            existing.id,
+            existing.status,
+            existing.score,
+            response_fingerprint(existing.response_text),
+        )
         if trial_data.response_text is not None:
             existing.response_text = trial_data.response_text
             existing.status = trial_data.status or "in_progress"
             existing.updated_at = datetime.now()
             if existing.status == "submitted":
                 existing.submitted_at = datetime.now()
-                apply_trial_review(db, existing, config)
+                apply_trial_review(db, existing, config, trace_id=trace_id)
             db.commit()
             db.refresh(existing)
+            logger.info(
+                "[belt_trial_create:%s] existing saved trial_id=%s final_status=%s final_score=%s reviewed_at=%s",
+                trace_id,
+                existing.id,
+                existing.status,
+                existing.score,
+                existing.reviewed_at,
+            )
         return existing
 
     trial = JourneyBeltTrial(
@@ -1363,10 +1452,18 @@ def start_belt_trial(
     )
     if trial.status == "submitted":
         trial.submitted_at = datetime.now()
-        apply_trial_review(db, trial, config)
+        apply_trial_review(db, trial, config, trace_id=trace_id)
     db.add(trial)
     db.commit()
     db.refresh(trial)
+    logger.info(
+        "[belt_trial_create:%s] created trial_id=%s final_status=%s final_score=%s reviewed_at=%s",
+        trace_id,
+        trial.id,
+        trial.status,
+        trial.score,
+        trial.reviewed_at,
+    )
     return trial
 
 
@@ -1377,14 +1474,35 @@ def submit_belt_trial(
         user_number: str,
         db: Session = Depends(get_db)
 ):
+    trace_id = uuid.uuid4().hex[:8]
+    logger.info(
+        "[belt_trial_submit:%s] received trial_id=%s user=%s requested_status=%s response_len=%s response_hash=%s",
+        trace_id,
+        trial_id,
+        user_number,
+        trial_data.status,
+        len(trial_data.response_text or ""),
+        response_fingerprint(trial_data.response_text),
+    )
     trial = db.query(JourneyBeltTrial).filter(
         JourneyBeltTrial.id == trial_id,
         JourneyBeltTrial.user_number == user_number
     ).first()
 
     if not trial:
+        logger.warning("[belt_trial_submit:%s] not_found trial_id=%s user=%s", trace_id, trial_id, user_number)
         raise HTTPException(status_code=404, detail="Belt trial not found")
 
+    logger.info(
+        "[belt_trial_submit:%s] loaded trial_id=%s prior_status=%s prior_score=%s prior_response_hash=%s prior_reviewed_at=%s history_count=%s",
+        trace_id,
+        trial.id,
+        trial.status,
+        trial.score,
+        response_fingerprint(trial.response_text),
+        trial.reviewed_at,
+        len(((trial.evidence or {}).get("feedback_history") or [])),
+    )
     trial.response_text = trial_data.response_text
     trial.status = trial_data.status or "submitted"
     if trial_data.prompt is not None:
@@ -1393,9 +1511,19 @@ def submit_belt_trial(
     if normalize_trial_status(trial.status) == "submitted":
         trial.submitted_at = datetime.now()
         config = load_journey_trials_config()
-        apply_trial_review(db, trial, config)
+        apply_trial_review(db, trial, config, trace_id=trace_id)
     db.commit()
     db.refresh(trial)
+    logger.info(
+        "[belt_trial_submit:%s] saved trial_id=%s final_status=%s final_score=%s reviewed_at=%s response_hash=%s history_count=%s",
+        trace_id,
+        trial.id,
+        trial.status,
+        trial.score,
+        trial.reviewed_at,
+        response_fingerprint(trial.response_text),
+        len(((trial.evidence or {}).get("feedback_history") or [])),
+    )
     return trial
 
 
