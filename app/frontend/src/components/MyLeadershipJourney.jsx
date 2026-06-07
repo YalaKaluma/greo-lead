@@ -1330,6 +1330,16 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
         response_text: trialDraft.trim(),
         status,
       };
+      const requestMode = activeTrial.id ? "update" : "create";
+      console.info("[belt_trial_ui] saving", {
+        mode: requestMode,
+        trialId: activeTrial.id,
+        dimensionId: activeTrial.dimension_id,
+        targetBelt: activeTrial.target_belt || "yellow",
+        trialType: activeTrial.trial_type,
+        status,
+        responseLength: trialDraft.trim().length,
+      });
 
       const response = activeTrial.id
         ? await axios.put(
@@ -1344,6 +1354,14 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
         : await axios.post(`${apiUrl}/api/journey/belt-trials`, payload);
 
       const updatedTrial = response.data;
+      console.info("[belt_trial_ui] saved", {
+        mode: requestMode,
+        trialId: updatedTrial.id,
+        status: updatedTrial.status,
+        score: updatedTrial.score,
+        reviewedAt: updatedTrial.reviewed_at,
+        feedbackLength: updatedTrial.ai_feedback?.length || 0,
+      });
       setTrialRecords((current) =>
         current.some((trial) => trial.id === updatedTrial.id)
           ? current.map((trial) => (trial.id === updatedTrial.id ? updatedTrial : trial))

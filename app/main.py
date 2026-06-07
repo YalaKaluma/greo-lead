@@ -32,6 +32,13 @@ logger.info("=" * 70)
 logger.info(f"Python version: {sys.version.split()[0]}")
 logger.info(f"FastAPI initializing...")
 logger.info(f"Timestamp: {datetime.now().isoformat()}")
+logger.info(
+    "Deployment marker: commit=%s service=%s environment=%s deployment=%s",
+    os.getenv("RAILWAY_GIT_COMMIT_SHA") or os.getenv("GIT_COMMIT_SHA") or "unknown",
+    os.getenv("RAILWAY_SERVICE_NAME") or "unknown",
+    os.getenv("RAILWAY_ENVIRONMENT_NAME") or "unknown",
+    os.getenv("RAILWAY_DEPLOYMENT_ID") or "unknown",
+)
 logger.info("=" * 70)
 
 # --------------------------------------
@@ -276,6 +283,12 @@ def health():
         "status": "ok",
         "service": "Leadership OS",
         "version": "3.0",
+        "deployment": {
+            "commit": os.getenv("RAILWAY_GIT_COMMIT_SHA") or os.getenv("GIT_COMMIT_SHA") or "unknown",
+            "service": os.getenv("RAILWAY_SERVICE_NAME") or "unknown",
+            "environment": os.getenv("RAILWAY_ENVIRONMENT_NAME") or "unknown",
+            "deployment_id": os.getenv("RAILWAY_DEPLOYMENT_ID") or "unknown",
+        },
         "timestamp": datetime.now().isoformat(),
         "database": db_status,
         "database_test": db_test,
