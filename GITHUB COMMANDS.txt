@@ -1,0 +1,19 @@
+# Make sure I am on dev
+
+git checkout main
+git pull origin main
+
+# make changes
+
+git add .
+git commit -m "Feature name"
+git push origin main
+
+# test dev
+
+git checkout prod
+git pull origin prod
+git merge main
+git push origin prod
+
+git checkout main

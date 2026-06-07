@@ -55,8 +55,6 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [mtnTrends, setMtnTrends] = useState(null);
   const [mtnTrendsLoading, setMtnTrendsLoading] = useState(false);
   const [mtnTrendsError, setMtnTrendsError] = useState(null);
-  const [mtnOverlayTrends, setMtnOverlayTrends] = useState({ habits: [], journal: [] });
-  const [mtnOverlayErrors, setMtnOverlayErrors] = useState({});
   const [showMtnBreakdown, setShowMtnBreakdown] = useState(false);
   const [todayKey, setTodayKey] = useState(getTodayET(timezone));
   const mtnBackfillRequestsRef = useRef(new Set());
@@ -254,28 +252,10 @@ export default function TodoList({ apiUrl, userNumber }) {
     setMtnTrendsLoading(true);
     setMtnTrendsError(null);
     try {
-      const [tasksResponse, habitsResponse, journalResponse] = await Promise.allSettled([
-        axios.get(`${apiUrl}/api/tasks/mtn-trends`, { params: { user_number: userNumber } }),
-        axios.get(`${apiUrl}/api/habits/trends`, { params: { user_number: userNumber } }),
-        axios.get(`${apiUrl}/api/journal/journal/trends`, { params: { user_number: userNumber } }),
-      ]);
-
-      if (tasksResponse.status === 'fulfilled') {
-        setMtnTrends(tasksResponse.value.data);
-      } else {
-        throw tasksResponse.reason;
-      }
-
-      setMtnOverlayTrends({
-        habits: habitsResponse.status === 'fulfilled' ? extractTrendChart(habitsResponse.value.data) : [],
-        journal: journalResponse.status === 'fulfilled' ? extractTrendChart(journalResponse.value.data) : [],
+      const response = await axios.get(`${apiUrl}/api/tasks/mtn-trends`, {
+        params: { user_number: userNumber },
       });
-      setMtnOverlayErrors({
-        habits: habitsResponse.status === 'rejected' ? 'request failed' : '',
-        journal: journalResponse.status === 'rejected' ? 'request failed' : '',
-        habitsShape: habitsResponse.status === 'fulfilled' ? responseShape(habitsResponse.value.data) : '',
-        journalShape: journalResponse.status === 'fulfilled' ? responseShape(journalResponse.value.data) : '',
-      });
+      setMtnTrends(response.data);
     } catch (err) {
       console.error('Error fetching MTN trends:', err);
       setMtnTrendsError('Unable to load MTN trends right now.');
@@ -940,11 +920,7 @@ export default function TodoList({ apiUrl, userNumber }) {
         {activeTab === 'trends' && (
           <TrendsErrorBoundary>
             <TaskMtnTrendsTab
-              apiUrl={apiUrl}
-              userNumber={userNumber}
               trends={mtnTrends}
-              overlayTrends={mtnOverlayTrends}
-              overlayErrors={mtnOverlayErrors}
               loading={mtnTrendsLoading}
               error={mtnTrendsError}
             />
@@ -1319,11 +1295,6 @@ const MTN_CHART_WIDTH = 720;
 const MTN_CHART_HEIGHT = 240;
 const MTN_CHART_PADDING = 34;
 const MTN_CHART_BOTTOM_PADDING = 46;
-const TREND_OVERLAY_DEFS = {
-  habits: { label: 'Habits', color: '#16a34a', unit: '%', axisMax: 100 },
-  tasks: { label: 'Tasks', color: '#f97316', unit: 'MTN' },
-  journal: { label: 'Journal', color: '#7c3aed', unit: 'Depth', axisMax: 10 },
-};
 
 const extractTrendChart = (payload) => {
   if (Array.isArray(payload)) return payload;
@@ -1338,33 +1309,6 @@ const extractTrendChart = (payload) => {
   return candidates.find(Array.isArray) || [];
 };
 
-const responseShape = (payload) => {
-  if (Array.isArray(payload)) return 'array';
-  if (!payload || typeof payload !== 'object') return typeof payload;
-  return Object.keys(payload).slice(0, 6).join(', ') || 'object';
-};
-
-const percentile = (values, ratio) => {
-  const sorted = values
-    .filter(value => Number.isFinite(value))
-    .sort((a, b) => a - b);
-  if (!sorted.length) return 0;
-  const index = Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * ratio));
-  return sorted[index];
-};
-
-const buildMtnPath = (points, key, maxValue) => {
-  if (!points.length) return '';
-  return points
-    .map((point, index) => {
-      const x = MTN_CHART_PADDING + (index / Math.max(points.length - 1, 1)) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2);
-      const scaledValue = Math.min(Number(point[key]) || 0, maxValue);
-      const y = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING - (scaledValue / maxValue) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING - MTN_CHART_BOTTOM_PADDING);
-      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .join(' ');
-};
-
 const dateKey = (dateString) => {
   const match = String(dateString || '').match(/\d{4}-\d{2}-\d{2}/);
   return match ? match[0] : '';
@@ -1374,53 +1318,6 @@ const dateToTime = (dateString) => {
   const [year, month, day] = dateKey(dateString).split('-').map(Number);
   if (!year || !month || !day) return null;
   return new Date(year, month - 1, day).getTime();
-};
-
-const buildMtnDatePath = (points, key, maxValue, startTime, endTime) => {
-  if (!points.length || !maxValue || startTime === null || endTime === null) return '';
-  const range = Math.max(endTime - startTime, 1);
-  const plotted = points
-    .map(point => {
-      const pointTime = dateToTime(point.date);
-      if (pointTime === null || pointTime < startTime || pointTime > endTime) return null;
-      const x = MTN_CHART_PADDING + ((pointTime - startTime) / range) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2);
-      const scaledValue = Math.min(Number(point[key]) || 0, maxValue);
-      const y = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING - (scaledValue / maxValue) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING - MTN_CHART_BOTTOM_PADDING);
-      return { x, y };
-    })
-    .filter(Boolean)
-  return plotted
-    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
-    .join(' ');
-};
-
-const buildMtnDateDots = (points, key, maxValue, startTime, endTime) => {
-  if (!points.length || !maxValue || startTime === null || endTime === null) return [];
-  const range = Math.max(endTime - startTime, 1);
-  return points
-    .map(point => {
-      const pointTime = dateToTime(point.date);
-      if (pointTime === null || pointTime < startTime || pointTime > endTime) return null;
-      const x = MTN_CHART_PADDING + ((pointTime - startTime) / range) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2);
-      const scaledValue = Math.min(Number(point[key]) || 0, maxValue);
-      const y = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING - (scaledValue / maxValue) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING - MTN_CHART_BOTTOM_PADDING);
-      return { ...point, x, y, value: Number(point[key]) || 0 };
-    })
-    .filter(point => point && point.value > 0);
-};
-
-const overlayStats = (points, startTime, endTime) => {
-  const inRange = points.filter(point => {
-    const pointTime = dateToTime(point.date);
-    return pointTime !== null && startTime !== null && endTime !== null && pointTime >= startTime && pointTime <= endTime;
-  });
-  return {
-    loaded: points.length,
-    total: inRange.length,
-    nonZero: inRange.filter(point => Number(point.overlay_score || 0) > 0).length,
-    firstDate: points[0]?.date || null,
-    lastDate: points[points.length - 1]?.date || null,
-  };
 };
 
 function formatShortDate(dateString) {
@@ -1436,6 +1333,85 @@ function formatMtnNumber(value) {
   const numeric = Number(value || 0);
   return numeric.toFixed(1);
 }
+
+const dateFromKey = (key) => {
+  const [year, month, day] = dateKey(key).split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
+
+const addDays = (date, days) => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+};
+
+const formatDateKey = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const fillMtnTrendDates = (rows) => {
+  const sortedRows = [...rows].sort((a, b) => dateToTime(a.date) - dateToTime(b.date));
+  const firstDate = dateFromKey(sortedRows[0]?.date);
+  const lastDate = dateFromKey(sortedRows[sortedRows.length - 1]?.date);
+  if (!firstDate || !lastDate) return sortedRows;
+
+  const rowsByDate = new Map(sortedRows.map(row => [row.date, row]));
+  const filled = [];
+
+  for (let cursor = firstDate; cursor <= lastDate; cursor = addDays(cursor, 1)) {
+    const currentKey = formatDateKey(cursor);
+    filled.push(rowsByDate.get(currentKey) || {
+      date: currentKey,
+      mtnScore: 0,
+      rollingAverage: 0,
+      completedTasks: 0,
+    });
+  }
+
+  return filled.map((row, index) => {
+    const rollingValues = filled.slice(Math.max(0, index - 6), index + 1).map(item => Number(item.mtnScore || 0));
+    const rollingAverage = rollingValues.reduce((sum, value) => sum + value, 0) / Math.max(rollingValues.length, 1);
+    return {
+      ...row,
+      rollingAverage,
+    };
+  });
+};
+
+const buildMtnDateTicks = (points) => {
+  if (!points.length) return [];
+  const tickCount = Math.min(6, points.length);
+  const used = new Set();
+
+  return Array.from({ length: tickCount })
+    .map((_, index) => Math.round((index / Math.max(tickCount - 1, 1)) * (points.length - 1)))
+    .filter((pointIndex) => {
+      if (used.has(pointIndex)) return false;
+      used.add(pointIndex);
+      return true;
+    })
+    .map((pointIndex) => ({
+      index: pointIndex,
+      date: points[pointIndex]?.date,
+      x: MTN_CHART_PADDING + (pointIndex / Math.max(points.length - 1, 1)) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2),
+    }));
+};
+
+const buildMtnTrendPath = (points, key, maxValue) => {
+  if (!points.length || !maxValue) return '';
+  return points
+    .map((point, index) => {
+      const x = MTN_CHART_PADDING + (index / Math.max(points.length - 1, 1)) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2);
+      const value = Math.max(0, Math.min(Number(point[key]) || 0, maxValue));
+      const y = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING - (value / maxValue) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING - MTN_CHART_BOTTOM_PADDING);
+      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(' ');
+};
 
 function StatTile({ label, value, detail }) {
   return (
@@ -1481,49 +1457,6 @@ class TrendsErrorBoundary extends Component {
   }
 }
 
-const getTaskOverlayConfig = (overlayKey, overlays) => {
-  if (!overlayKey) return null;
-  const overlayData = overlays || {};
-  const series = {
-    habits: (overlayData.habits || []).map(point => ({ date: dateKey(point.date), overlay_score: Number(point.compliance_rate || 0) })),
-    tasks: (overlayData.tasks || []).map(point => ({ date: dateKey(point.date), overlay_score: Number(point.mtn_score || 0) })),
-    journal: (overlayData.journal || []).map(point => ({
-      date: dateKey(point.date),
-      overlay_score: Number(point.entry_count || 0) > 0 ? Number(point.daily_average || 0) : 0,
-    })),
-  };
-  const points = (series[overlayKey] || [])
-    .filter(point => point.date)
-    .sort((a, b) => dateToTime(a.date) - dateToTime(b.date));
-  const values = points.map(point => Number(point.overlay_score || 0));
-
-  return {
-    axisMax: TREND_OVERLAY_DEFS[overlayKey]?.axisMax || Math.max(1, Math.ceil(Math.max(...values, 0) * 1.2)),
-    points,
-  };
-};
-
-function TrendOverlayButtons({ selected, onSelect }) {
-  return (
-    <div className="flex flex-wrap justify-end gap-2">
-      {Object.entries(TREND_OVERLAY_DEFS).map(([key, item]) => (
-        <button
-          key={key}
-          type="button"
-          onClick={() => onSelect(selected === key ? null : key)}
-          className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
-            selected === key
-              ? 'border-slate-700 bg-slate-900 text-white'
-              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-          }`}
-        >
-          {item.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function TaskMtnTrendChart({ data }) {
   const rows = (Array.isArray(data) ? data : [])
     .filter(item => item && typeof item === 'object' && dateKey(item.date))
@@ -1533,21 +1466,31 @@ function TaskMtnTrendChart({ data }) {
       rollingAverage: Number(item.rolling_average || 0),
       completedTasks: Number(item.completed_tasks || 0),
     }));
-  const visibleRows = rows.slice(-30);
+  const visibleRows = fillMtnTrendDates(rows).slice(-90);
   const maxValue = Math.max(
     1,
-    ...visibleRows.flatMap(item => [item.mtnScore, item.rollingAverage])
+    Math.ceil(Math.max(...visibleRows.flatMap(item => [item.mtnScore, item.rollingAverage]), 0) * 1.15)
   );
+  const dateTicks = buildMtnDateTicks(visibleRows);
+  const dailyPath = buildMtnTrendPath(visibleRows, 'mtnScore', maxValue);
+  const averagePath = buildMtnTrendPath(visibleRows, 'rollingAverage', maxValue);
+  const yAxisValues = [0, maxValue / 4, maxValue / 2, (maxValue * 3) / 4, maxValue];
+  const baselineY = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING;
 
   return (
     <div className="rounded-lg border bg-white p-4">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">MTN Score Trend</h2>
-          <p className="mt-1 text-sm text-slate-500">Last 30 days of task momentum.</p>
+          <p className="mt-1 text-sm text-slate-500">Last {visibleRows.length || 90} days of task momentum.</p>
+          <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> Daily MTN</span>
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> 7-day average</span>
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-500" /> No input</span>
+          </div>
         </div>
         <div className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
-          {rows.length} days
+          {visibleRows.length || rows.length} days
         </div>
       </div>
 
@@ -1556,25 +1499,48 @@ function TaskMtnTrendChart({ data }) {
           No MTN trend data is available yet.
         </div>
       ) : (
-        <div className="mt-5">
-          <div className="flex h-56 items-end gap-1 rounded-md bg-slate-50 px-3 py-4">
-            {visibleRows.map(item => {
-              const barHeight = Math.max(4, Math.round((item.mtnScore / maxValue) * 180));
+        <div className="mt-4 overflow-hidden rounded-md bg-slate-50">
+          <svg viewBox={`0 0 ${MTN_CHART_WIDTH} ${MTN_CHART_HEIGHT}`} className="h-72 w-full">
+            {yAxisValues.map(value => {
+              const y = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING - (value / maxValue) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING - MTN_CHART_BOTTOM_PADDING);
               return (
-                <div key={item.date} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1">
-                  <div
-                    className="w-full rounded-t bg-blue-500"
-                    style={{ height: `${barHeight}px` }}
-                    title={`${formatShortDate(item.date)}: ${formatMtnNumber(item.mtnScore)} MTN from ${item.completedTasks} task(s)`}
-                  />
-                </div>
+                <g key={value}>
+                  <line x1={MTN_CHART_PADDING} x2={MTN_CHART_WIDTH - MTN_CHART_PADDING} y1={y} y2={y} stroke="#e2e8f0" />
+                  <text x={6} y={y + 4} className="fill-slate-400 text-[10px]">{formatMtnNumber(value)}</text>
+                </g>
               );
             })}
-          </div>
-          <div className="mt-2 flex justify-between text-[11px] text-slate-400">
-            <span>{formatShortDate(visibleRows[0]?.date)}</span>
-            <span>{formatShortDate(visibleRows[visibleRows.length - 1]?.date)}</span>
-          </div>
+            <line x1={MTN_CHART_PADDING} x2={MTN_CHART_WIDTH - MTN_CHART_PADDING} y1={baselineY} y2={baselineY} stroke="#cbd5e1" />
+            {dateTicks.map((tick) => (
+              <g key={`${tick.index}-${tick.date}`}>
+                <line x1={tick.x} x2={tick.x} y1={baselineY} y2={baselineY + 4} stroke="#94a3b8" />
+                <text x={tick.x} y={MTN_CHART_HEIGHT - 12} textAnchor="middle" className="fill-slate-400 text-[10px]">
+                  {formatShortDate(tick.date)}
+                </text>
+              </g>
+            ))}
+            <path d={dailyPath} fill="none" stroke="#cbd5e1" strokeWidth="2" />
+            <path d={averagePath} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" />
+            {visibleRows.map((point, index) => {
+              if (point.completedTasks > 0 || point.mtnScore > 0) return null;
+              const x = MTN_CHART_PADDING + (index / Math.max(visibleRows.length - 1, 1)) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2);
+              return (
+                <circle key={`no-input-${point.date}`} cx={x} cy={baselineY} r="2.4" fill="#64748b">
+                  <title>{`${formatShortDate(point.date)}: 0.0 MTN, no input`}</title>
+                </circle>
+              );
+            })}
+            {visibleRows.map((point, index) => {
+              if (point.mtnScore <= 0) return null;
+              const x = MTN_CHART_PADDING + (index / Math.max(visibleRows.length - 1, 1)) * (MTN_CHART_WIDTH - MTN_CHART_PADDING * 2);
+              const y = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING - (Math.min(point.mtnScore, maxValue) / maxValue) * (MTN_CHART_HEIGHT - MTN_CHART_PADDING - MTN_CHART_BOTTOM_PADDING);
+              return (
+                <circle key={`mtn-${point.date}`} cx={x} cy={y} r="2.3" fill="#2563eb">
+                  <title>{`${formatShortDate(point.date)}: ${formatMtnNumber(point.mtnScore)} MTN from ${point.completedTasks} task(s). 7-day average ${formatMtnNumber(point.rollingAverage)}`}</title>
+                </circle>
+              );
+            })}
+          </svg>
         </div>
       )}
     </div>
@@ -1657,7 +1623,7 @@ function TaskMtnHeatmap({ data }) {
   );
 }
 
-function TaskMtnTrendsTab({ trends, overlayTrends = { habits: [], journal: [] }, overlayErrors = {}, loading, error }) {
+function TaskMtnTrendsTab({ trends, loading, error }) {
   if (loading) {
     return (
       <div className="rounded-lg border bg-white p-6 text-sm text-slate-500">
@@ -1681,11 +1647,6 @@ function TaskMtnTrendsTab({ trends, overlayTrends = { habits: [], journal: [] },
   const last90 = summary.last_90_days || {};
   const delta = Number(last7.trend?.delta_vs_30 || 0);
   const sign = delta > 0 ? '+' : '';
-  const overlays = {
-    habits: overlayTrends.habits,
-    tasks: extractTrendChart(trends),
-    journal: overlayTrends.journal,
-  };
 
   return (
     <div className="space-y-5">
@@ -1712,7 +1673,7 @@ function TaskMtnTrendsTab({ trends, overlayTrends = { habits: [], journal: [] },
         />
       </div>
 
-      <TaskMtnTrendChart data={extractTrendChart(trends)} overlays={overlays} overlayErrors={overlayErrors} />
+      <TaskMtnTrendChart data={extractTrendChart(trends)} />
       <TaskMtnHeatmap data={extractTrendChart(trends)} />
 
       <div className="rounded-lg border bg-white p-4">
