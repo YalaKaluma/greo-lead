@@ -137,7 +137,7 @@ async def log_requests(request: Request, call_next):
 
     elapsed_ms = round((time.perf_counter() - start) * 1000)
     logger.info(f"📤 {request.method} {request.url.path} → {response.status_code}")
-    if request.url.path.startswith("/api/"):
+    if _should_record_system_health_event(request.url.path, response.status_code, elapsed_ms):
         _record_system_health_event(
             event_type=_classify_response_event(request.url.path, response.status_code, elapsed_ms),
             severity=_severity_for_response(response.status_code, elapsed_ms),
@@ -152,6 +152,12 @@ async def log_requests(request: Request, call_next):
 
 
 logger.info("✓ Request logging middleware configured")
+
+
+def _should_record_system_health_event(path: str, status_code: int, elapsed_ms: int) -> bool:
+    if not path.startswith("/api/"):
+        return False
+    return status_code >= 400 or elapsed_ms >= 2000
 
 
 def _classify_response_event(path: str, status_code: int, elapsed_ms: int) -> str:

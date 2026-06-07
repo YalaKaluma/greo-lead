@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 
 const UNLOCKED_BELTS = new Set(['yellow', 'green', 'brown', 'black']);
-const BELT_STATUS_TIMEOUT_MS = 8000;
 
 export function useYellowBeltUnlock(apiUrl, userNumber) {
   const [currentBelt, setCurrentBelt] = useState('white');
@@ -21,8 +20,7 @@ export function useYellowBeltUnlock(apiUrl, userNumber) {
       setLoading(true);
       try {
         const response = await axios.get(`${apiUrl}/api/journey/belt-readiness/status`, {
-          params: { user_number: userNumber },
-          timeout: BELT_STATUS_TIMEOUT_MS
+          params: { user_number: userNumber }
         });
         if (!cancelled) {
           setCurrentBelt((response.data?.current_belt || 'white').toLowerCase());

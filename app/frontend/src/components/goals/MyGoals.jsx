@@ -12,9 +12,6 @@ import MyCoachingSessions from '../MyCoachingSessions';
 import { normalizeGoalLevel, isVision } from '../../utils/goalTaxonomy';
 import { useYellowBeltUnlock } from '../../hooks/useYellowBeltUnlock';
 
-const PAGE_LOAD_TIMEOUT_MS = 12000;
-const SECONDARY_LOAD_TIMEOUT_MS = 8000;
-
 /* =========================================================
    HELPER FUNCTIONS
    ========================================================= */
@@ -72,8 +69,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const fetchGoals = async () => {
     try {
       const res = await axios.get(`${apiUrl}/api/journey/goals`, {
-        params: { user_number: userNumber },
-        timeout: PAGE_LOAD_TIMEOUT_MS
+        params: { user_number: userNumber }
       });
       if (res.data && Array.isArray(res.data)) {
         setGoals(res.data);
@@ -86,8 +82,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const fetchAllLinkedTasks = async () => {
     try {
       const res = await axios.get(`${apiUrl}/api/tasks`, {
-        params: { user_number: userNumber },
-        timeout: PAGE_LOAD_TIMEOUT_MS
+        params: { user_number: userNumber }
       });
       
       if (Array.isArray(res.data)) {
@@ -116,8 +111,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const fetchGoalReviews = async () => {
     try {
       const res = await axios.get(`${apiUrl}/api/journey/goal-reviews`, {
-        params: { user_number: userNumber },
-        timeout: SECONDARY_LOAD_TIMEOUT_MS
+        params: { user_number: userNumber }
       });
       
       if (res.data && res.data.sessions) {
@@ -131,8 +125,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const fetchValues = async () => {
     try {
       const res = await axios.get(`${apiUrl}/api/journey/values`, {
-        params: { user_number: userNumber },
-        timeout: SECONDARY_LOAD_TIMEOUT_MS
+        params: { user_number: userNumber }
       });
       setValues(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
@@ -149,8 +142,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
 
     try {
       const res = await axios.get(`${apiUrl}/api/journey/visions/${visionGoalId}/roadmap`, {
-        params: { user_number: userNumber },
-        timeout: SECONDARY_LOAD_TIMEOUT_MS
+        params: { user_number: userNumber }
       });
       const nextStatuses = {};
       (res.data?.waves || []).forEach(wave => {
