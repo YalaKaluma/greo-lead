@@ -68,7 +68,7 @@ class EmailVerifyRequest(BaseModel):
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
     """
     Login endpoint for first-time access via temp password.
-    After successful login, user will be guided through the tour.
+    After successful login, users enter the app directly.
     """
     user = db.query(User).filter(User.id == request.user_id).first()
 
@@ -120,15 +120,13 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
 
     # Verify temp password
     if verify_password(request.password, user.temp_password) or user.temp_password.upper() == request.password.upper():
-        # Generate permanent password or just mark as logged in
-        # For now, we'll accept temp password and start tour
-
-        # Start tour
-        TourManager.start_tour(db, user)
-
         # Update last active
         user.last_login_at = datetime.utcnow()
         user.last_active_at = user.last_login_at
+        user.tour_current_step = None
+        user.tour_completed = True
+        user.onboarding_completed = True
+        user.onboarding_step = 'COMPLETED'
         db.commit()
 
         return LoginResponse(
@@ -137,7 +135,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
             user_number=user.phone_number,
             user_name=user.name,
             trial_days_left=user.days_left_in_trial(),
-            needs_tour=not user.tour_completed
+            needs_tour=False
         )
     else:
         return LoginResponse(
@@ -284,6 +282,12 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
 
     ✅ ENHANCED with comprehensive logging for debugging
     """
+    return {
+        "success": True,
+        "skipped": True,
+        "message": "Deprecated onboarding prefill skipped."
+    }
+
     print(f"\n{'=' * 60}")
     print(f"🎯 DEBUG [process-onboarding-data]: ENDPOINT CALLED")
     print(f"   user_number: {user_number}")

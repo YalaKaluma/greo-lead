@@ -7,14 +7,13 @@ import MyTeam from './components/MyTeam';
 import MyCoachingSessions from './components/MyCoachingSessions'; // NEW: Replace MyJournal
 import MyHabits from './components/MyHabits';
 import MyJournal from './components/MyJournal';
-import TourOverlay from './components/TourOverlay';
+import PageIntroBanner from './components/PageIntroBanner';
 import AlfredChat from './components/AlfredChat';
 import Settings from './components/Settings';
 import { useEffect, useState } from "react";
 import Login from "./Login";
 import Welcome from "./Welcome";
 import Waitlist from "./Waitlist";
-import AutoTour from './components/AutoTour';
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 
 // API URL handling
@@ -37,10 +36,6 @@ const VALID_PAGE_IDS = new Set([
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userNumber, setUserNumber] = useState(null);
-  const [needsTour, setNeedsTour] = useState(false);
-  const [tourComplete, setTourComplete] = useState(false);
-  const [onboardingCompleted, setOnboardingCompleted] = useState(true); // Default true, check DB
-
   const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE); // Start on Vision and goals
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -48,41 +43,12 @@ function App() {
   // 🔍 Check login on app load
   useEffect(() => {
     const storedUser = localStorage.getItem("user_number");
-    const storedTour = localStorage.getItem("needs_tour");
     
     if (storedUser) {
       setUserNumber(storedUser);
       setIsLoggedIn(true);
-      setNeedsTour(storedTour === "true");
-      
-      // Check onboarding status from database
-      checkOnboardingStatus(storedUser);
     }
   }, []);
-
-  // Check onboarding status from database
-  const checkOnboardingStatus = async (userNumber) => {
-    try {
-      const response = await fetch(`${API_URL}/api/onboarding/user/status?user_number=${encodeURIComponent(userNumber)}`);
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Onboarding status from DB:', data);
-        
-        // Only show onboarding/tour if NOT completed in database
-        if (data.onboarding_completed === false) {
-          setOnboardingCompleted(false);
-          setNeedsTour(true);
-        } else {
-          setOnboardingCompleted(true);
-          setNeedsTour(false);
-        }
-      }
-    } catch (error) {
-      console.error('Error checking onboarding status:', error);
-      // If error, assume completed to avoid blocking user
-      setOnboardingCompleted(true);
-    }
-  };
 
   // Handle URL parameters on load
   useEffect(() => {
@@ -137,24 +103,14 @@ function App() {
 
   const handleLogin = (userNumber, requiresTour = false) => {
     localStorage.setItem("user_number", userNumber);
+    localStorage.removeItem("needs_tour");
     setUserNumber(userNumber);
     setIsLoggedIn(true);
-    setNeedsTour(requiresTour);
     
-    // Check onboarding status from database
-    checkOnboardingStatus(userNumber);
-    
-    // If tour is needed, start on goals page
+    // First-time users start on the default page without an automatic tour.
     if (requiresTour) {
       setCurrentPage(DEFAULT_PAGE);
     }
-  };
-
-  const handleTourComplete = () => {
-    setTourComplete(true);
-    setNeedsTour(false);
-    setOnboardingCompleted(true);
-    localStorage.removeItem("needs_tour");
   };
 
   // Waitlist page
@@ -185,22 +141,17 @@ function App() {
     );
   }
 
-  // Main App - Only show tour if onboarding NOT completed in database
+  // Main App
   return (
     <LanguageProvider apiUrl={API_URL} userNumber={userNumber}>
       <MainAppShell
         userNumber={userNumber}
-        needsTour={needsTour}
-        tourComplete={tourComplete}
-        onboardingCompleted={onboardingCompleted}
         currentPage={currentPage}
-        setCurrentPage={setCurrentPage}
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
         isMobile={isMobile}
         handleNavigate={handleNavigate}
         toggleSidebar={toggleSidebar}
-        handleTourComplete={handleTourComplete}
       />
     </LanguageProvider>
   );
@@ -208,17 +159,12 @@ function App() {
 
 function MainAppShell({
   userNumber,
-  needsTour,
-  tourComplete,
-  onboardingCompleted,
   currentPage,
-  setCurrentPage,
   isSidebarOpen,
   setIsSidebarOpen,
   isMobile,
   handleNavigate,
-  toggleSidebar,
-  handleTourComplete
+  toggleSidebar
 }) {
   const { t, language } = useLanguage();
   const pageTitles = {
@@ -251,15 +197,6 @@ function MainAppShell({
 
   return (
     <div className="flex h-screen bg-gray-50">
-      {/* Tour Overlay - Only shows if onboarding NOT completed */}
-      {!onboardingCompleted && needsTour && !tourComplete && (
-        <TourOverlay 
-          userNumber={userNumber}
-          currentPage={currentPage}
-          onTourComplete={handleTourComplete}
-        />
-      )}
-
       {/* Mobile Header */}
       {isMobile && (
         <div className="fixed top-0 left-0 right-0 h-14 bg-white border-b border-gray-200 flex items-center px-4 z-30">
@@ -284,6 +221,8 @@ function MainAppShell({
       />
 
       <main className={`flex-1 overflow-auto ${isMobile ? 'mt-14' : ''}`}>
+        <PageIntroBanner pageId={currentPage} />
+
         {currentPage === 'settings' && (
           <Settings
             apiUrl={API_URL}
@@ -323,27 +262,7 @@ function MainAppShell({
         currentPage={currentPage}
         showLauncher={!isMobile || isSidebarOpen}
         preferredLanguage={language}
-        onTourStep={(action) => {
-          // Handle tour navigation from chat
-          if (action === 'navigate_goals') setCurrentPage('my-goals');
-          if (action === 'navigate_tasks') setCurrentPage('todo-list');
-          if (action === 'navigate_team') setCurrentPage('my-team');
-          if (action === 'navigate_journey') setCurrentPage('my-journey');
-          if (action === 'navigate_habits') setCurrentPage('my-habits');
-          // NEW: Add coaching sessions navigation
-          if (action === 'navigate_coaching') setCurrentPage('coaching-sessions');
-        }}
       />
-
-      {/* Alfred Auto-Tour - Only shows if onboarding NOT completed */}
-      {!onboardingCompleted && needsTour && !tourComplete && (
-        <AutoTour
-          apiUrl={API_URL}
-          userNumber={userNumber}
-          onNavigate={handleNavigate}
-          onComplete={handleTourComplete}
-        />
-      )}
 
       {isMobile && isSidebarOpen && (
         <div

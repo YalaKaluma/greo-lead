@@ -14,7 +14,7 @@ This folder contains the main React UI surfaces for Alfred.
 - `Settings.jsx` renders user preferences for language and timezone.
 - `Sidebar.jsx` controls main navigation.
 - `AlfredChat.jsx` provides in-app chat access.
-- `AutoTour.jsx` and `TourOverlay.jsx` support guided onboarding.
+- `PageIntroBanner.jsx` shows a short first-visit explanation for each page.
 
 ## Shared/Focused Components
 

@@ -326,6 +326,9 @@ See you inside."""
         Process onboarding_data and create actual tasks and goals in their respective tables.
         This is called automatically at the end of WhatsApp onboarding.
         """
+        print(f"INFO [process_data]: Deprecated onboarding prefill skipped for user {user.id}")
+        return
+
         from app.services import journey_service
         from app.models import Task
 
