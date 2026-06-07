@@ -10,6 +10,7 @@ from typing import Optional, List
 from app.services.task_enrichment_service import enrich_task
 from app.services.timezone_service import get_user_timezone, today_for_timezone
 from app.services.task_mtn_trend_service import get_task_mtn_trends
+from app.services.onboarding_seed_service import ensure_starter_tasks_visible_today
 
 router = APIRouter()
 
@@ -303,6 +304,10 @@ def get_tasks(
         print(f"[TASKS API] Fetching tasks for user: {user_number}")
         print(
             f"[TASKS API] Filters - type: {filter_type}, project: {project}, delegate: {delegated_to}, goal_id: {goal_id}")
+        repaired_count = ensure_starter_tasks_visible_today(db, user_number)
+        if repaired_count:
+            db.commit()
+            print(f"[TASKS API] Repaired {repaired_count} starter task due dates for default visibility")
 
         query = db.query(Task).filter(
             Task.user_number == user_number,

@@ -3,7 +3,7 @@ import pageIntroMessages from '../content/pageIntroMessages';
 
 export default function PageIntroBanner({ pageId }) {
   const intro = pageIntroMessages[pageId];
-  const storageKey = intro ? `page_intro_seen:${pageId}` : null;
+  const storageKey = intro ? `page_intro_seen_v2:${pageId}` : null;
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {

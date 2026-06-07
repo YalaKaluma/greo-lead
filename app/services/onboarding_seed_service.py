@@ -6,6 +6,15 @@ from app.models import Habit, JournalEntry, JourneyGoal, JourneyPerson, Message,
 
 
 STARTER_SEED_KEY = "starter_examples_seeded_v1"
+STARTER_TASK_TITLES = [
+    "Migrate my current task list to Alfred",
+    "Define my top 3 goals for this year",
+    "Complete my first journal reflection",
+    "Review my Leadership Journey wheel",
+    "Start preparing for my Yellow Belt",
+    "Create my first recurring habit",
+    "Review and sort my task list for the week",
+]
 
 
 def ensure_starter_examples_seeded(db: Session, user: User) -> bool:
@@ -29,6 +38,27 @@ def ensure_starter_examples_seeded(db: Session, user: User) -> bool:
     }
     user.onboarding_data = onboarding_data
     return True
+
+
+def ensure_starter_tasks_visible_today(db: Session, user_number: str) -> int:
+    """Make previously seeded undated starter tasks visible in the default task view."""
+    if not user_number:
+        return 0
+
+    tasks = db.query(Task).filter(
+        Task.user_number == user_number,
+        Task.status == "open",
+        Task.due_date.is_(None),
+        Task.title.in_(STARTER_TASK_TITLES),
+    ).all()
+
+    now = datetime.utcnow()
+    for task in tasks:
+        task.due_date = now
+        task.current_bucket = task.current_bucket or "today"
+        task.updated_at = now
+
+    return len(tasks)
 
 
 def _seed_goals(db: Session, user_number: str) -> dict[str, JourneyGoal]:
@@ -113,11 +143,13 @@ def _seed_tasks(db: Session, user_number: str, goals: dict[str, JourneyGoal]) ->
         ("Review and sort my task list for the week", None, "medium"),
     ]
 
+    now = datetime.utcnow()
     for index, (title, goal, priority) in enumerate(task_specs):
         db.add(Task(
             user_number=user_number,
             title=title,
             notes=starter_note,
+            due_date=now,
             status="open",
             priority=priority,
             goal_id=goal.id if goal else None,
