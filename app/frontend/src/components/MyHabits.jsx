@@ -3,6 +3,7 @@ import axios from 'axios';
 import HabitTrendsTab from './Habits/HabitTrendsTab';
 import { useLanguage } from '../i18n/LanguageContext';
 import { getTodayET, getETDate, formatDateForInput } from '../utils/taskHelpers';
+import { useYellowBeltUnlock } from '../hooks/useYellowBeltUnlock';
 
 /* =========================================================
    GOAL HELPERS — COPIED 1:1 FROM TodoList.jsx
@@ -202,6 +203,7 @@ function HabitCalendar({ history, frequency, onUpdateDay, timezone }) {
 
 export default function MyHabits({ apiUrl, userNumber }) {
   const { t, timezone } = useLanguage();
+  const { isYellowBeltOrAbove } = useYellowBeltUnlock(apiUrl, userNumber);
   const [habits, setHabits] = useState([]);
   const [goals, setGoals] = useState([]);
   const [activeTab, setActiveTab] = useState('habits');
@@ -279,6 +281,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
   /* ---------------- FETCH HABIT TRENDS ---------------- */
 
   const fetchHabitTrends = async () => {
+    if (!isYellowBeltOrAbove) return;
     setTrendsLoading(true);
     setTrendsError(null);
     try {
@@ -371,10 +374,17 @@ export default function MyHabits({ apiUrl, userNumber }) {
   }, [timezone]);
 
   useEffect(() => {
-    if (activeTab === 'trends' && !trends && !trendsLoading) {
+    if (activeTab === 'trends' && isYellowBeltOrAbove && !trends && !trendsLoading) {
       fetchHabitTrends();
     }
-  }, [activeTab]);
+  }, [activeTab, isYellowBeltOrAbove]);
+
+  useEffect(() => {
+    if (!isYellowBeltOrAbove && activeTab === 'trends') {
+      setActiveTab('habits');
+      setTrends(null);
+    }
+  }, [isYellowBeltOrAbove, activeTab]);
 
   /* ---------------- MODAL CONTROL ---------------- */
 
@@ -524,24 +534,26 @@ export default function MyHabits({ apiUrl, userNumber }) {
             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
           )}
         </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('trends')}
-          className={`relative px-2 pb-3 font-medium transition-colors ${
-            activeTab === 'trends'
-              ? 'text-blue-600'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Trends & Coaching
-          {activeTab === 'trends' && (
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-          )}
-        </button>
+        {isYellowBeltOrAbove && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('trends')}
+            className={`relative px-2 pb-3 font-medium transition-colors ${
+              activeTab === 'trends'
+                ? 'text-blue-600'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Trends & Coaching
+            {activeTab === 'trends' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+            )}
+          </button>
+        )}
         </div>
       </div>
 
-      {activeTab === 'trends' && (
+      {isYellowBeltOrAbove && activeTab === 'trends' && (
         <HabitTrendsTab
           apiUrl={apiUrl}
           userNumber={userNumber}

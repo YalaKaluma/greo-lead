@@ -9,6 +9,7 @@ import FilterSection from './TodoList/FilterSection';
 import { getTodayET, getETDate, formatDateForInput, isOverdueET, getSortedGoals, getLongTermGoals } from '../utils/taskHelpers';
 import { useLanguage } from '../i18n/LanguageContext';
 import { usePriority } from '../hooks/usePriority';
+import { useYellowBeltUnlock } from '../hooks/useYellowBeltUnlock';
 
 /**
  * TodoList Component - Main Task Management Interface
@@ -24,6 +25,7 @@ import { usePriority } from '../hooks/usePriority';
  */
 export default function TodoList({ apiUrl, userNumber }) {
   const { t, timezone } = useLanguage();
+  const { isYellowBeltOrAbove } = useYellowBeltUnlock(apiUrl, userNumber);
   // Task data
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -118,8 +120,18 @@ export default function TodoList({ apiUrl, userNumber }) {
     if (apiUrl == null || !userNumber) return;
     fetchFilters();
     fetchGoals();
-    fetchMtnTrends();
-  }, [apiUrl, userNumber]);
+    if (isYellowBeltOrAbove) {
+      fetchMtnTrends();
+    } else {
+      setMtnTrends(null);
+    }
+  }, [apiUrl, userNumber, isYellowBeltOrAbove]);
+
+  useEffect(() => {
+    if (!isYellowBeltOrAbove && activeTab === 'trends') {
+      setActiveTab('tasks');
+    }
+  }, [isYellowBeltOrAbove, activeTab]);
 
   // Refetch tasks when filters change
   useEffect(() => {
@@ -138,7 +150,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       setTodayKey(previousToday => {
         if (previousToday !== currentToday) {
           fetchTasks();
-          fetchMtnTrends();
+          if (isYellowBeltOrAbove) fetchMtnTrends();
           return currentToday;
         }
         return previousToday;
@@ -146,7 +158,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     }, 60000);
 
     return () => clearInterval(timer);
-  }, [apiUrl, userNumber, timezone]);
+  }, [apiUrl, userNumber, timezone, isYellowBeltOrAbove]);
 
   // ============================================================================
   // DATA FETCHING
@@ -239,7 +251,7 @@ export default function TodoList({ apiUrl, userNumber }) {
 
       if (Number(response.data?.scored || 0) > 0) {
         await fetchTasks({ skipMtnBackfill: true });
-        fetchMtnTrends();
+        if (isYellowBeltOrAbove) fetchMtnTrends();
       }
     } catch (err) {
       console.error('MTN backfill failed:', err);
@@ -248,7 +260,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const fetchMtnTrends = async () => {
-    if (apiUrl == null || !userNumber) return;
+    if (apiUrl == null || !userNumber || !isYellowBeltOrAbove) return;
     setMtnTrendsLoading(true);
     setMtnTrendsError(null);
     try {
@@ -416,7 +428,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       setTimeout(() => {
         setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
         setCompletingTasks(prev => prev.filter(id => id !== taskId));
-        fetchMtnTrends();
+        if (isYellowBeltOrAbove) fetchMtnTrends();
       }, 1500);
     } catch (err) {
       console.error('Error toggling task:', err);
@@ -872,20 +884,22 @@ export default function TodoList({ apiUrl, userNumber }) {
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
                 )}
               </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('trends')}
-                className={`relative px-2 pb-3 font-medium transition-colors ${
-                  activeTab === 'trends'
-                    ? 'text-blue-600'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                Trends
-                {activeTab === 'trends' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-                )}
-              </button>
+              {isYellowBeltOrAbove && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('trends')}
+                  className={`relative px-2 pb-3 font-medium transition-colors ${
+                    activeTab === 'trends'
+                      ? 'text-blue-600'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Trends
+                  {activeTab === 'trends' && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+                  )}
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -917,7 +931,7 @@ export default function TodoList({ apiUrl, userNumber }) {
           </div>
         )}
 
-        {activeTab === 'trends' && (
+        {isYellowBeltOrAbove && activeTab === 'trends' && (
           <TrendsErrorBoundary>
             <TaskMtnTrendsTab
               trends={mtnTrends}

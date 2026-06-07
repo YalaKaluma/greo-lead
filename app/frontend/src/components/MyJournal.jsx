@@ -6,6 +6,7 @@ import VoiceRecorder from './VoiceRecorder';
 import JournalDepthModal from './JournalDepthModal';
 import JournalTrendsTab from './JournalTrendsTab';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useYellowBeltUnlock } from '../hooks/useYellowBeltUnlock';
 import pageIntroMessages from '../content/pageIntroMessages';
 
 // Session stage configurations
@@ -52,6 +53,7 @@ const JOURNAL_EMPTY_PROMPT = 'Every day contains lessons about who you are and h
 
 const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   const { t, language } = useLanguage();
+  const { isYellowBeltOrAbove } = useYellowBeltUnlock(apiUrl, userNumber);
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -109,7 +111,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   };
 
   const fetchReflectionTrends = async () => {
-    if (!userNumber) return;
+    if (!userNumber || !isYellowBeltOrAbove) return;
     setTrendsLoading(true);
     setTrendsError(null);
     try {
@@ -126,10 +128,17 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   };
 
   useEffect(() => {
-    if (activeTab === 'trends' && !trends && !trendsLoading && !trendsError) {
+    if (activeTab === 'trends' && isYellowBeltOrAbove && !trends && !trendsLoading && !trendsError) {
       fetchReflectionTrends();
     }
-  }, [activeTab, trends, trendsLoading, trendsError, userNumber]);
+  }, [activeTab, trends, trendsLoading, trendsError, userNumber, isYellowBeltOrAbove]);
+
+  useEffect(() => {
+    if (!isYellowBeltOrAbove && activeTab === 'trends') {
+      setActiveTab('journal');
+      setTrends(null);
+    }
+  }, [isYellowBeltOrAbove, activeTab]);
 
   const getDepthDetails = (message) => {
     const score = message.reflection_depth_score;
@@ -412,18 +421,20 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
               )}
             </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('trends')}
-              className={`relative px-2 pb-3 font-medium transition-colors ${
-                activeTab === 'trends' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Trends
-              {activeTab === 'trends' && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-              )}
-            </button>
+            {isYellowBeltOrAbove && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('trends')}
+                className={`relative px-2 pb-3 font-medium transition-colors ${
+                  activeTab === 'trends' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Trends
+                {activeTab === 'trends' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+                )}
+              </button>
+            )}
           </div>
         </div>
 
@@ -560,7 +571,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
         )}
       </div>
 
-      {activeTab === 'trends' ? (
+      {isYellowBeltOrAbove && activeTab === 'trends' ? (
         <div className="flex-1 overflow-y-auto bg-slate-50 px-4 pb-6 md:px-10">
           <JournalTrendsTab
             apiUrl={apiUrl}
