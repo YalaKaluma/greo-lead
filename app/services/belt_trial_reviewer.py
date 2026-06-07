@@ -163,7 +163,11 @@ def review_belt_trial(
     try:
         from openai import OpenAI
 
-        client = OpenAI(api_key=OPENAI_API_KEY)
+        client = OpenAI(
+            api_key=OPENAI_API_KEY,
+            timeout=12.0,
+            max_retries=0,
+        )
         response = client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[

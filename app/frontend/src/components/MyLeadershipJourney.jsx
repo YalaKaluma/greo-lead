@@ -3296,7 +3296,7 @@ function TrialModal({ trial, draft, setDraft, saving, onClose, onSave, onSubmit 
             onClick={onSubmit}
             className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            {isRevision ? "Resubmit" : "Submit Exercise"}
+            {saving ? "Alfred is reviewing..." : isRevision ? "Resubmit" : "Submit Exercise"}
           </button>
         </div>
       </div>
