@@ -9,7 +9,8 @@ from pydantic import BaseModel
 from datetime import datetime
 from app.db import get_db
 from app.models import User
-from app.utils.security import verify_password
+from app.services.onboarding_seed_service import ensure_starter_examples_seeded
+from app.utils.security import hash_password, verify_password
 
 router = APIRouter(tags=["auth"])
 
@@ -19,15 +20,24 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+
+
+def _find_user_by_username(db: Session, username: str):
+    return db.query(User).filter(
+        (User.name == username) | (User.email == username) | (User.phone_number == username)
+    ).first()
+
+
 @router.post("/login")
 async def login(credentials: LoginRequest, db: Session = Depends(get_db)):
     """
     Login endpoint - handles both temporary passwords and permanent passwords.
     """
     username = credentials.username.strip()
-    user = db.query(User).filter(
-        (User.name == username) | (User.email == username) | (User.phone_number == username)
-    ).first()
+    user = _find_user_by_username(db, username)
 
     if not user:
         return {
@@ -76,6 +86,49 @@ async def login(credentials: LoginRequest, db: Session = Depends(get_db)):
     return {
         "success": False,
         "message": "Invalid credentials"
+    }
+
+
+@router.post("/register")
+async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+    """
+    Create a self-serve account from the login page.
+    """
+    username = payload.username.strip()
+    password = payload.password.strip()
+
+    if not username:
+        return {"success": False, "message": "Username is required"}
+    if len(password) < 6:
+        return {"success": False, "message": "Password must be at least 6 characters"}
+    if _find_user_by_username(db, username):
+        return {"success": False, "message": "Username already exists"}
+
+    user = User(
+        name=username,
+        email=username if "@" in username else None,
+        password_hash=hash_password(password),
+        is_active=True,
+        onboarding_completed=True,
+        tour_completed=True,
+        tour_current_step=None,
+    )
+    user.start_trial()
+
+    db.add(user)
+    db.flush()
+    user.phone_number = f"local:{user.id}"
+    ensure_starter_examples_seeded(db, user)
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "success": True,
+        "user_number": user.phone_number,
+        "user_name": user.name,
+        "is_admin": bool(getattr(user, "is_admin", False)),
+        "needs_tour": False,
+        "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 21
     }
 
 
