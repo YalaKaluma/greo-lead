@@ -7,7 +7,6 @@ import JournalDepthModal from './JournalDepthModal';
 import JournalTrendsTab from './JournalTrendsTab';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useYellowBeltUnlock } from '../hooks/useYellowBeltUnlock';
-import pageIntroMessages from '../content/pageIntroMessages';
 
 // Session stage configurations
 const GOAL_REVIEW_STAGES = [
@@ -65,7 +64,6 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   const [trends, setTrends] = useState(null);
   const [trendsLoading, setTrendsLoading] = useState(false);
   const [trendsError, setTrendsError] = useState(null);
-  const [showIntro, setShowIntro] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -83,17 +81,6 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   useEffect(() => {
     loadChatHistory();
   }, [userNumber]);
-
-  useEffect(() => {
-    setShowIntro(localStorage.getItem('page_intro_seen_v3:my-journal') !== 'true');
-  }, []);
-
-  const dismissIntro = () => {
-    localStorage.setItem('page_intro_seen_v3:my-journal', 'true');
-    setShowIntro(false);
-  };
-
-
 
   const loadChatHistory = async () => {
     try {
@@ -379,25 +366,6 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   return (
     <div className="h-full flex flex-col bg-gray-50 text-slate-900">
       <div className="bg-gray-50 px-4 pt-5 md:px-10 md:pt-8">
-        {showIntro && (
-          <section className="mb-5 rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-sm font-semibold text-slate-900">About {pageIntroMessages['my-journal'].title}</h2>
-                <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{pageIntroMessages['my-journal'].body}</p>
-              </div>
-              <button
-                type="button"
-                onClick={dismissIntro}
-                className="h-8 w-8 shrink-0 rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
-                aria-label="Dismiss Journal introduction"
-              >
-                X
-              </button>
-            </div>
-          </section>
-        )}
-
         <div className="mb-6">
           <h1 className="text-3xl font-semibold text-slate-950 md:text-4xl">
             {t('journal.title')}

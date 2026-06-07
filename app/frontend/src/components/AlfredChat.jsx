@@ -67,6 +67,16 @@ export default function AlfredChat({ apiUrl, userNumber, currentPage, showLaunch
   }, [userNumber]);
 
   useEffect(() => {
+    const refreshAlfredMessages = () => {
+      loadMessages();
+      loadUnreadCount();
+    };
+
+    window.addEventListener('alfred-messages-refresh', refreshAlfredMessages);
+    return () => window.removeEventListener('alfred-messages-refresh', refreshAlfredMessages);
+  }, [userNumber]);
+
+  useEffect(() => {
     if (isOpen) {
       loadMessages();
       markMessagesRead();

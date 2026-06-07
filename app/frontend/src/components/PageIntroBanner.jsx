@@ -1,21 +1,21 @@
 import { useEffect, useState } from 'react';
 import pageIntroMessages from '../content/pageIntroMessages';
 
-export default function PageIntroBanner({ pageId }) {
+export default function PageIntroBanner({ pageId, userNumber, enabled = true }) {
   const intro = pageIntroMessages[pageId];
-  const storageKey = intro ? `page_intro_seen_v2:${pageId}` : null;
+  const storageKey = intro && userNumber ? `page_intro_seen_v4:${userNumber}:${pageId}` : null;
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    if (!storageKey) {
+    if (!enabled || !storageKey) {
       setIsVisible(false);
       return;
     }
 
     setIsVisible(localStorage.getItem(storageKey) !== 'true');
-  }, [storageKey]);
+  }, [enabled, storageKey]);
 
-  if (!intro || !isVisible) {
+  if (!enabled || !intro || !isVisible) {
     return null;
   }
 

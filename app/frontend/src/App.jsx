@@ -167,6 +167,7 @@ function MainAppShell({
   toggleSidebar
 }) {
   const { t, language } = useLanguage();
+  const [introCardsEnabled, setIntroCardsEnabled] = useState(false);
   const pageTitles = {
     'todo-list': t('page.tasks'),
     'my-goals': t('page.goals'),
@@ -195,6 +196,36 @@ function MainAppShell({
     });
   }, [userNumber, currentPage]);
 
+  useEffect(() => {
+    if (!userNumber) {
+      setIntroCardsEnabled(false);
+      return;
+    }
+
+    fetch(`${API_URL}/api/usage-events/intro-state?user_number=${encodeURIComponent(userNumber)}`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => {
+        setIntroCardsEnabled(Boolean(data?.show_intro_cards));
+      })
+      .catch(() => {
+        setIntroCardsEnabled(false);
+      });
+  }, [userNumber]);
+
+  useEffect(() => {
+    if (!userNumber) return;
+
+    fetch(`${API_URL}/api/usage-events/intro-recap-message?user_number=${encodeURIComponent(userNumber)}`, {
+      method: 'POST'
+    })
+      .then(() => {
+        window.dispatchEvent(new Event('alfred-messages-refresh'));
+      })
+      .catch(() => {
+        // Message-center seeding should never interrupt the app.
+      });
+  }, [userNumber]);
+
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Mobile Header */}
@@ -221,7 +252,11 @@ function MainAppShell({
       />
 
       <main className={`flex-1 overflow-auto ${isMobile ? 'mt-14' : ''}`}>
-        {currentPage !== 'my-journal' && <PageIntroBanner pageId={currentPage} />}
+        <PageIntroBanner
+          pageId={currentPage}
+          userNumber={userNumber}
+          enabled={introCardsEnabled}
+        />
 
         {currentPage === 'settings' && (
           <Settings
