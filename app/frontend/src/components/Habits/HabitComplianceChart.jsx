@@ -1,16 +1,10 @@
-import { useState } from 'react';
-
 const WIDTH = 720;
 const HEIGHT = 220;
 const PADDING = 28;
 const BOTTOM_PADDING = 42;
 
-const OVERLAY_DEFS = {
-  habits: { label: 'Habits', color: '#16a34a', unit: '%', axisMax: 100 },
-  tasks: { label: 'Tasks', color: '#f97316', unit: 'MTN' },
-  journal: { label: 'Journal', color: '#7c3aed', unit: 'Depth', axisMax: 10 },
-  energy: { label: 'Energy', color: '#0f766e', unit: 'Level', axisMax: 5 },
-};
+const ENERGY_AXIS_MAX = 5;
+const ENERGY_COLOR = '#0f766e';
 
 const buildPath = (points, key) => {
   if (!points.length) return '';
@@ -67,20 +61,6 @@ const buildDateDots = (points, key, maxValue, startTime, endTime) => {
     .filter(point => point && point.value > 0);
 };
 
-const overlayStats = (points, startTime, endTime) => {
-  const inRange = points.filter(point => {
-    const pointTime = dateToTime(point.date);
-    return pointTime !== null && startTime !== null && endTime !== null && pointTime >= startTime && pointTime <= endTime;
-  });
-  return {
-    loaded: points.length,
-    total: inRange.length,
-    nonZero: inRange.filter(point => Number(point.overlay_score || 0) > 0).length,
-    firstDate: points[0]?.date || null,
-    lastDate: points[points.length - 1]?.date || null,
-  };
-};
-
 const formatShortDate = (dateString) => {
   if (!dateString) return '';
   const date = new Date(`${dateString}T00:00:00`);
@@ -106,104 +86,36 @@ const buildDateTicks = (points) => {
     }));
 };
 
-const getOverlayConfig = (overlayKey, overlays) => {
-  if (!overlayKey) return null;
-  const overlayData = overlays || {};
-  const series = {
-    habits: (overlayData.habits || []).map(point => ({ date: dateKey(point.date), overlay_score: Number(point.compliance_rate || 0) })),
-    tasks: (overlayData.tasks || []).map(point => ({ date: dateKey(point.date), overlay_score: Number(point.mtn_score || 0) })),
-    journal: (overlayData.journal || []).map(point => ({
-      date: dateKey(point.date),
-      overlay_score: Number(point.entry_count || 0) > 0 ? Number(point.daily_average || 0) : 0,
-    })),
-    energy: (overlayData.energy || []).map(point => ({
-      date: dateKey(point.date),
-      overlay_score: point.energy_level === null || point.energy_level === undefined ? 0 : Number(point.energy_level || 0),
-    })),
-  };
-  const points = (series[overlayKey] || [])
-    .filter(point => point.date)
-    .sort((a, b) => dateToTime(a.date) - dateToTime(b.date));
-  const values = points.map(point => Number(point.overlay_score || 0));
-  const axisMax = OVERLAY_DEFS[overlayKey]?.axisMax || Math.max(1, Math.ceil(Math.max(...values, 0) * 1.2));
+const getEnergyPoints = (energyData) => (Array.isArray(energyData) ? energyData : [])
+  .map(point => ({
+    date: dateKey(point.date),
+    energyLevel: point.energy_level === null || point.energy_level === undefined ? 0 : Number(point.energy_level || 0),
+  }))
+  .filter(point => point.date)
+  .sort((a, b) => dateToTime(a.date) - dateToTime(b.date));
 
-  return {
-    axisMax,
-    points,
-  };
-};
-
-function OverlayButtons({ selected, onSelect }) {
-  return (
-    <div className="flex flex-wrap justify-end gap-2">
-      {Object.entries(OVERLAY_DEFS).map(([key, item]) => (
-        <button
-          key={key}
-          type="button"
-          onClick={() => onSelect(selected === key ? null : key)}
-          className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
-            selected === key
-              ? 'border-slate-700 bg-slate-900 text-white'
-              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-          }`}
-        >
-          {item.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-export default function HabitComplianceChart({ data, overlays, overlayErrors = {} }) {
+export default function HabitComplianceChart({ data, energyData }) {
   const points = Array.isArray(data) ? data : [];
-  const [selectedOverlay, setSelectedOverlay] = useState(null);
   const dailyPath = buildPath(points, 'compliance_rate');
   const rollingPath = buildPath(points, 'rolling_average');
-  const overlayConfig = getOverlayConfig(selectedOverlay, overlays);
-  const overlayPoints = selectedOverlay && overlayConfig ? overlayConfig.points : [];
+  const energyPoints = getEnergyPoints(energyData);
   const startTime = points.length ? dateToTime(points[0].date) : null;
   const endTime = points.length ? dateToTime(points[points.length - 1].date) : null;
-  const overlayDots = overlayConfig
-    ? buildDateDots(overlayPoints, 'overlay_score', overlayConfig.axisMax, startTime, endTime)
-    : [];
+  const energyDots = buildDateDots(energyPoints, 'energyLevel', ENERGY_AXIS_MAX, startTime, endTime);
   const dateTicks = buildDateTicks(points);
-  const overlayAxisValues = overlayConfig
-    ? [0, overlayConfig.axisMax / 4, overlayConfig.axisMax / 2, (overlayConfig.axisMax * 3) / 4, overlayConfig.axisMax]
-    : [];
-  const selectedOverlayLabel = selectedOverlay ? OVERLAY_DEFS[selectedOverlay].label : '';
-  const selectedOverlayStats = selectedOverlay && overlayConfig ? overlayStats(overlayPoints, startTime, endTime) : null;
-  const overlayStatus = selectedOverlay && overlayErrors[selectedOverlay]
-    ? `${selectedOverlayLabel} data could not be loaded.`
-    : selectedOverlayStats && selectedOverlayStats.loaded === 0
-      ? `${selectedOverlayLabel}: endpoint returned 0 days. Response: ${overlayErrors[`${selectedOverlay}Shape`] || 'unknown'}.`
-      : selectedOverlayStats && selectedOverlayStats.total === 0
-        ? `${selectedOverlayLabel}: ${selectedOverlayStats.loaded} days loaded (${formatShortDate(selectedOverlayStats.firstDate)}-${formatShortDate(selectedOverlayStats.lastDate)}), none overlap this chart.`
-      : selectedOverlayStats
-        ? `${selectedOverlayLabel}: ${selectedOverlayStats.total} days loaded, ${selectedOverlayStats.nonZero} non-zero.`
-        : '';
+  const energyAxisValues = [0, 1, 2, 3, 4, 5];
 
   return (
     <div className="rounded-lg border bg-white p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div>
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Compliance Trend</h2>
           <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> Daily</span>
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> 7-day average</span>
-            {selectedOverlay && (
-              <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: OVERLAY_DEFS[selectedOverlay].color }} />
-                {OVERLAY_DEFS[selectedOverlay].label}
-              </span>
-            )}
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: ENERGY_COLOR }} /> Energy</span>
           </div>
-          {overlayStatus && (
-            <div className={`mt-1 text-[11px] ${overlayErrors[selectedOverlay] ? 'text-rose-600' : 'text-slate-400'}`}>
-              {overlayStatus}
-            </div>
-          )}
         </div>
-        <OverlayButtons selected={selectedOverlay} onSelect={setSelectedOverlay} />
       </div>
 
       <div className="mt-4 overflow-hidden rounded-md bg-slate-50">
@@ -217,11 +129,11 @@ export default function HabitComplianceChart({ data, overlays, overlayErrors = {
               </g>
             );
           })}
-          {overlayAxisValues.map(value => {
-            const y = HEIGHT - BOTTOM_PADDING - (value / overlayConfig.axisMax) * (HEIGHT - PADDING - BOTTOM_PADDING);
+          {energyAxisValues.map(value => {
+            const y = HEIGHT - BOTTOM_PADDING - (value / ENERGY_AXIS_MAX) * (HEIGHT - PADDING - BOTTOM_PADDING);
             return (
-              <text key={`overlay-axis-${value}`} x={WIDTH - PADDING + 6} y={y + 4} className="fill-slate-400 text-[10px]">
-                {value.toFixed(selectedOverlay === 'journal' ? 1 : 0)}
+              <text key={`energy-axis-${value}`} x={WIDTH - PADDING + 6} y={y + 4} className="fill-slate-400 text-[10px]">
+                {value}
               </text>
             );
           })}
@@ -237,21 +149,17 @@ export default function HabitComplianceChart({ data, overlays, overlayErrors = {
           ))}
           <path d={dailyPath} fill="none" stroke="#cbd5e1" strokeWidth="2" />
           <path d={rollingPath} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" />
-          {selectedOverlay && overlayConfig && (
-            <>
-              <path
-                d={buildDatePath(overlayPoints, 'overlay_score', overlayConfig.axisMax, startTime, endTime)}
-                fill="none"
-                stroke={OVERLAY_DEFS[selectedOverlay].color}
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeDasharray="5 4"
-              />
-              {overlayDots.map(point => (
-                <circle key={`${selectedOverlay}-${point.date}`} cx={point.x} cy={point.y} r="2.2" fill={OVERLAY_DEFS[selectedOverlay].color} />
-              ))}
-            </>
-          )}
+          <path
+            d={buildDatePath(energyPoints, 'energyLevel', ENERGY_AXIS_MAX, startTime, endTime)}
+            fill="none"
+            stroke={ENERGY_COLOR}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeDasharray="5 4"
+          />
+          {energyDots.map(point => (
+            <circle key={`energy-${point.date}`} cx={point.x} cy={point.y} r="2.2" fill={ENERGY_COLOR} />
+          ))}
         </svg>
       </div>
     </div>

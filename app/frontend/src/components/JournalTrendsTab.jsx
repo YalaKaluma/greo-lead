@@ -1,15 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import axios from 'axios';
-
 const WIDTH = 720;
 const HEIGHT = 240;
 const PADDING = 32;
-
-const OVERLAY_DEFS = {
-  habits: { label: 'Habits', color: '#16a34a', unit: '%', axisMax: 100 },
-  tasks: { label: 'Tasks', color: '#f97316', unit: 'MTN' },
-  journal: { label: 'Journal', color: '#7c3aed', unit: 'Depth', axisMax: 10 },
-};
 
 const extractTrendChart = (payload) => {
   if (Array.isArray(payload)) return payload;
@@ -22,12 +13,6 @@ const extractTrendChart = (payload) => {
     payload?.trends?.trendChart,
   ];
   return candidates.find(Array.isArray) || [];
-};
-
-const responseShape = (payload) => {
-  if (Array.isArray(payload)) return 'array';
-  if (!payload || typeof payload !== 'object') return typeof payload;
-  return Object.keys(payload).slice(0, 6).join(', ') || 'object';
 };
 
 const formatShortDate = (dateString) => {
@@ -66,53 +51,6 @@ const dateToTime = (dateString) => {
   const [year, month, day] = dateKey(dateString).split('-').map(Number);
   if (!year || !month || !day) return null;
   return new Date(year, month - 1, day).getTime();
-};
-
-const buildDatePath = (points, key, maxValue, startTime, endTime) => {
-  if (!points.length || !maxValue || startTime === null || endTime === null) return '';
-  const range = Math.max(endTime - startTime, 1);
-  const plotted = points
-    .map(point => {
-      const pointTime = dateToTime(point.date);
-      if (pointTime === null || pointTime < startTime || pointTime > endTime) return null;
-      const x = PADDING + ((pointTime - startTime) / range) * (WIDTH - PADDING * 2);
-      const scaledValue = Math.min(Number(point[key]) || 0, maxValue);
-      const y = HEIGHT - PADDING - (scaledValue / maxValue) * (HEIGHT - PADDING * 2);
-      return { x, y };
-    })
-    .filter(Boolean)
-  return plotted
-    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
-    .join(' ');
-};
-
-const buildDateDots = (points, key, maxValue, startTime, endTime) => {
-  if (!points.length || !maxValue || startTime === null || endTime === null) return [];
-  const range = Math.max(endTime - startTime, 1);
-  return points
-    .map(point => {
-      const pointTime = dateToTime(point.date);
-      if (pointTime === null || pointTime < startTime || pointTime > endTime) return null;
-      const x = PADDING + ((pointTime - startTime) / range) * (WIDTH - PADDING * 2);
-      const scaledValue = Math.min(Number(point[key]) || 0, maxValue);
-      const y = HEIGHT - PADDING - (scaledValue / maxValue) * (HEIGHT - PADDING * 2);
-      return { ...point, x, y, value: Number(point[key]) || 0 };
-    })
-    .filter(point => point && point.value > 0);
-};
-
-const overlayStats = (points, startTime, endTime) => {
-  const inRange = points.filter(point => {
-    const pointTime = dateToTime(point.date);
-    return pointTime !== null && startTime !== null && endTime !== null && pointTime >= startTime && pointTime <= endTime;
-  });
-  return {
-    loaded: points.length,
-    total: inRange.length,
-    nonZero: inRange.filter(point => Number(point.overlay_score || 0) > 0).length,
-    firstDate: points[0]?.date || null,
-    lastDate: points[points.length - 1]?.date || null,
-  };
 };
 
 const buildDateTicks = (points) => {
@@ -160,84 +98,19 @@ function KpiCard({ label, value, detail, tone = 'slate' }) {
   );
 }
 
-const getOverlayConfig = (overlayKey, overlays) => {
-  if (!overlayKey) return null;
-  const overlayData = overlays || {};
-  const series = {
-    habits: (overlayData.habits || []).map(point => ({ date: dateKey(point.date), overlay_score: Number(point.compliance_rate || 0) })),
-    tasks: (overlayData.tasks || []).map(point => ({ date: dateKey(point.date), overlay_score: Number(point.mtn_score || 0) })),
-    journal: (overlayData.journal || []).map(point => ({
-      date: dateKey(point.date),
-      overlay_score: Number(point.entry_count || 0) > 0 ? Number(point.daily_average || 0) : 0,
-    })),
-  };
-  const points = (series[overlayKey] || [])
-    .filter(point => point.date)
-    .sort((a, b) => dateToTime(a.date) - dateToTime(b.date));
-  const values = points.map(point => Number(point.overlay_score || 0));
-
-  return {
-    axisMax: OVERLAY_DEFS[overlayKey]?.axisMax || Math.max(1, Math.ceil(Math.max(...values, 0) * 1.2)),
-    points,
-  };
-};
-
-function OverlayButtons({ selected, onSelect }) {
-  return (
-    <div className="flex flex-wrap justify-end gap-2">
-      {Object.entries(OVERLAY_DEFS).map(([key, item]) => (
-        <button
-          key={key}
-          type="button"
-          onClick={() => onSelect(selected === key ? null : key)}
-          className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors ${
-            selected === key
-              ? 'border-slate-700 bg-slate-900 text-white'
-              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-          }`}
-        >
-          {item.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function DepthTrendChart({ data, overlays, overlayErrors = {} }) {
+function DepthTrendChart({ data }) {
   const points = (Array.isArray(data) ? data : []).map(point => ({
     ...point,
     daily_plot_score: Number(point.entry_count || 0) > 0 ? point.daily_average : 0,
   }));
-  const [selectedOverlay, setSelectedOverlay] = useState(null);
   const dailyPath = buildPath(points, 'daily_plot_score');
   const weeklyPath = buildPath(points, 'weekly_average');
   const rollingPath = buildPath(points, 'rolling_30_day_average');
   const dateTicks = buildDateTicks(points);
-  const overlayConfig = getOverlayConfig(selectedOverlay, overlays);
-  const overlayPoints = selectedOverlay && overlayConfig ? overlayConfig.points : [];
-  const startTime = points.length ? dateToTime(points[0].date) : null;
-  const endTime = points.length ? dateToTime(points[points.length - 1].date) : null;
-  const overlayDots = overlayConfig
-    ? buildDateDots(overlayPoints, 'overlay_score', overlayConfig.axisMax, startTime, endTime)
-    : [];
-  const overlayAxisValues = overlayConfig
-    ? [0, overlayConfig.axisMax / 4, overlayConfig.axisMax / 2, (overlayConfig.axisMax * 3) / 4, overlayConfig.axisMax]
-    : [];
-  const selectedOverlayLabel = selectedOverlay ? OVERLAY_DEFS[selectedOverlay].label : '';
-  const selectedOverlayStats = selectedOverlay && overlayConfig ? overlayStats(overlayPoints, startTime, endTime) : null;
-  const overlayStatus = selectedOverlay && overlayErrors[selectedOverlay]
-    ? `${selectedOverlayLabel} data could not be loaded.`
-    : selectedOverlayStats && selectedOverlayStats.loaded === 0
-      ? `${selectedOverlayLabel}: endpoint returned 0 days. Response: ${overlayErrors[`${selectedOverlay}Shape`] || 'unknown'}.`
-      : selectedOverlayStats && selectedOverlayStats.total === 0
-        ? `${selectedOverlayLabel}: ${selectedOverlayStats.loaded} days loaded (${formatShortDate(selectedOverlayStats.firstDate)}-${formatShortDate(selectedOverlayStats.lastDate)}), none overlap this chart.`
-      : selectedOverlayStats
-        ? `${selectedOverlayLabel}: ${selectedOverlayStats.total} days loaded, ${selectedOverlayStats.nonZero} non-zero.`
-        : '';
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div>
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Reflection Depth Trend</h2>
           <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
@@ -245,20 +118,8 @@ function DepthTrendChart({ data, overlays, overlayErrors = {} }) {
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-500" /> No input</span>
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> Weekly</span>
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-600" /> 30-day</span>
-            {selectedOverlay && (
-              <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: OVERLAY_DEFS[selectedOverlay].color }} />
-                {OVERLAY_DEFS[selectedOverlay].label}
-              </span>
-            )}
           </div>
-          {overlayStatus && (
-            <div className={`mt-1 text-[11px] ${overlayErrors[selectedOverlay] ? 'text-rose-600' : 'text-slate-400'}`}>
-              {overlayStatus}
-            </div>
-          )}
         </div>
-        <OverlayButtons selected={selectedOverlay} onSelect={setSelectedOverlay} />
       </div>
 
       <div className="mt-4 overflow-hidden rounded-md bg-slate-50">
@@ -272,16 +133,7 @@ function DepthTrendChart({ data, overlays, overlayErrors = {} }) {
               </g>
             );
           })}
-          {overlayAxisValues.map(value => {
-            const y = HEIGHT - PADDING - (value / overlayConfig.axisMax) * (HEIGHT - PADDING * 2);
-            return (
-              <text key={`overlay-axis-${value}`} x={WIDTH - PADDING + 6} y={y + 4} className="fill-slate-400 text-[10px]">
-                {value.toFixed(selectedOverlay === 'journal' ? 1 : 0)}
-              </text>
-            );
-          })}
           <line x1={PADDING} x2={WIDTH - PADDING} y1={HEIGHT - PADDING} y2={HEIGHT - PADDING} stroke="#cbd5e1" />
-          <line x1={WIDTH - PADDING} x2={WIDTH - PADDING} y1={PADDING} y2={HEIGHT - PADDING} stroke="#cbd5e1" />
           {dateTicks.map((tick) => (
             <g key={`${tick.index}-${tick.date}`}>
               <line x1={tick.x} x2={tick.x} y1={HEIGHT - PADDING} y2={HEIGHT - PADDING + 4} stroke="#94a3b8" />
@@ -308,21 +160,6 @@ function DepthTrendChart({ data, overlays, overlayErrors = {} }) {
               </circle>
             );
           })}
-          {selectedOverlay && overlayConfig && (
-            <>
-              <path
-                d={buildDatePath(overlayPoints, 'overlay_score', overlayConfig.axisMax, startTime, endTime)}
-                fill="none"
-                stroke={OVERLAY_DEFS[selectedOverlay].color}
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeDasharray="5 4"
-              />
-              {overlayDots.map(point => (
-                <circle key={`${selectedOverlay}-${point.date}`} cx={point.x} cy={point.y} r="2.2" fill={OVERLAY_DEFS[selectedOverlay].color} />
-              ))}
-            </>
-          )}
         </svg>
       </div>
     </div>
@@ -399,51 +236,7 @@ function ReflectionDepthHeatmap({ data }) {
   );
 }
 
-export default function JournalTrendsTab({ apiUrl, userNumber, trends, loading, error }) {
-  const [overlayTrends, setOverlayTrends] = useState({ habits: [], tasks: [] });
-  const [overlayErrors, setOverlayErrors] = useState({});
-
-  useEffect(() => {
-    if (!apiUrl || !userNumber) return;
-    let cancelled = false;
-
-    const fetchOverlays = async () => {
-      try {
-        const [habitsResponse, tasksResponse] = await Promise.allSettled([
-          axios.get(`${apiUrl}/api/habits/trends`, { params: { user_number: userNumber } }),
-          axios.get(`${apiUrl}/api/tasks/mtn-trends`, { params: { user_number: userNumber } }),
-        ]);
-        if (cancelled) return;
-        setOverlayTrends({
-          habits: habitsResponse.status === 'fulfilled' ? extractTrendChart(habitsResponse.value.data) : [],
-          tasks: tasksResponse.status === 'fulfilled' ? extractTrendChart(tasksResponse.value.data) : [],
-        });
-        setOverlayErrors({
-          habits: habitsResponse.status === 'rejected' ? 'request failed' : '',
-          tasks: tasksResponse.status === 'rejected' ? 'request failed' : '',
-          habitsShape: habitsResponse.status === 'fulfilled' ? responseShape(habitsResponse.value.data) : '',
-          tasksShape: tasksResponse.status === 'fulfilled' ? responseShape(tasksResponse.value.data) : '',
-        });
-      } catch (fetchError) {
-        if (!cancelled) {
-          setOverlayTrends({ habits: [], tasks: [] });
-          setOverlayErrors({ habits: 'request failed', tasks: 'request failed' });
-        }
-      }
-    };
-
-    fetchOverlays();
-    return () => {
-      cancelled = true;
-    };
-  }, [apiUrl, userNumber]);
-
-  const overlays = useMemo(() => ({
-    habits: overlayTrends.habits,
-    tasks: overlayTrends.tasks,
-    journal: extractTrendChart(trends),
-  }), [overlayTrends, trends]);
-
+export default function JournalTrendsTab({ trends, loading, error }) {
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center text-slate-500">
@@ -489,7 +282,7 @@ export default function JournalTrendsTab({ apiUrl, userNumber, trends, loading, 
         />
       </div>
 
-      <DepthTrendChart data={extractTrendChart(trends)} overlays={overlays} overlayErrors={overlayErrors} />
+      <DepthTrendChart data={extractTrendChart(trends)} />
       <ReflectionDepthHeatmap data={extractTrendChart(trends)} />
 
       <div className="rounded-lg border border-slate-200 bg-white p-4">
