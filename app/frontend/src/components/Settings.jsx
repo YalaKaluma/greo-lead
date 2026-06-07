@@ -925,8 +925,9 @@ function AdminSystemHealthPanel({ apiUrl, userNumber }) {
         apiUrl={apiUrl}
         userNumber={userNumber}
         briefingType="operations"
-        buttonLabel="Analyze Operations"
+        buttonLabel="Generate Codex Brief"
         emptyText="No operations intelligence generated yet."
+        enableCodexTask
       />
 
       <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
@@ -1055,10 +1056,12 @@ function AdminSystemHealthPanel({ apiUrl, userNumber }) {
   );
 }
 
-function AdminAIBriefingBox({ apiUrl, userNumber, briefingType, buttonLabel, emptyText }) {
+function AdminAIBriefingBox({ apiUrl, userNumber, briefingType, buttonLabel, emptyText, enableCodexTask = false }) {
   const [briefing, setBriefing] = useState(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [addingTask, setAddingTask] = useState(false);
+  const [taskCreated, setTaskCreated] = useState(false);
   const [error, setError] = useState('');
   const adminParams = { user_number: userNumber };
 
@@ -1085,10 +1088,41 @@ function AdminAIBriefingBox({ apiUrl, userNumber, briefingType, buttonLabel, emp
         { params: adminParams }
       );
       setBriefing(response.data.briefing || null);
+      setTaskCreated(false);
     } catch (err) {
       setError(err.response?.data?.detail || 'AI briefing could not be generated.');
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const todayISO = () => {
+    const today = new Date();
+    const offsetDate = new Date(today.getTime() - today.getTimezoneOffset() * 60000);
+    return offsetDate.toISOString().split('T')[0];
+  };
+
+  const addCodexBriefToTasks = async () => {
+    if (!briefing?.codex_brief) return;
+    setAddingTask(true);
+    setError('');
+    try {
+      await axios.post(
+        `${apiUrl}/api/tasks/`,
+        {
+          title: `Codex: ${briefing.title || 'Investigate Railway operations'}`,
+          notes: briefing.codex_brief,
+          due_date: todayISO(),
+          priority: 'High',
+          project: 'Admin / Operations'
+        },
+        { params: { user_number: userNumber } }
+      );
+      setTaskCreated(true);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Codex brief could not be added to the to-do list.');
+    } finally {
+      setAddingTask(false);
     }
   };
 
@@ -1133,6 +1167,27 @@ function AdminAIBriefingBox({ apiUrl, userNumber, briefingType, buttonLabel, emp
               ))}
             </ol>
           </div>
+          {enableCodexTask && briefing.codex_brief && (
+            <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Brief For Codex</div>
+                  <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{briefing.codex_brief}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={addCodexBriefToTasks}
+                  disabled={addingTask || taskCreated}
+                  className="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                >
+                  {taskCreated ? 'Added' : addingTask ? 'Adding...' : 'Add To-Do'}
+                </button>
+              </div>
+              {taskCreated && (
+                <p className="mt-3 text-sm text-emerald-700">Added to today&apos;s to-do list.</p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

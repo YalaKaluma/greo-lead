@@ -90,6 +90,7 @@ def ensure_admin_schema_and_seed() -> None:
         """))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_admin_ai_briefings_type_created ON admin_ai_briefings(briefing_type, created_at)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS idx_admin_ai_briefings_admin_created ON admin_ai_briefings(admin_user_id, created_at)"))
+        conn.execute(text("ALTER TABLE admin_ai_briefings ADD COLUMN IF NOT EXISTS codex_brief TEXT"))
 
         admin_count = conn.execute(text("SELECT COUNT(*) FROM users WHERE is_admin = TRUE")).scalar() or 0
         if admin_count > 0:

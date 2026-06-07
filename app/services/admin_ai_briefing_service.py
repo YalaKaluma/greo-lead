@@ -61,8 +61,9 @@ class AdminAIBriefingService:
                     "content": (
                         "You are Alfred's admin intelligence analyst. Be concise, specific, and operational. "
                         "Use only the provided data. If data is thin, say so plainly. "
-                        "Return JSON with keys: title, summary, top_recommendations. "
-                        "top_recommendations must be an array of exactly three short actionable strings."
+                        "Return JSON with keys: title, summary, top_recommendations, codex_brief. "
+                        "top_recommendations must be an array of exactly three short actionable strings. "
+                        "codex_brief should be null unless the user asks for operational/Railway analysis."
                     ),
                 },
                 {"role": "user", "content": prompt},
@@ -75,6 +76,7 @@ class AdminAIBriefingService:
             admin_user_id=admin_user.id,
             title=parsed["title"],
             summary_text=parsed["summary"],
+            codex_brief=parsed.get("codex_brief"),
             top_recommendations=parsed["top_recommendations"],
             source_snapshot=snapshot,
             model=model,
@@ -211,7 +213,9 @@ class AdminAIBriefingService:
         else:
             task = (
                 "Analyze operational health. Use Alfred API events and Railway logs to identify the top three "
-                "operational issues to investigate. Focus on reliability, errors, response time, and deployment signals."
+                "operational issues to investigate. Focus on reliability, errors, response time, and deployment signals. "
+                "Also produce codex_brief: a practical implementation brief for Codex with context, observed evidence, "
+                "files/areas likely involved if inferable, acceptance criteria, and a concise ordered investigation plan."
             )
         return f"{task}\n\nData snapshot:\n{data}"
 
@@ -227,6 +231,7 @@ class AdminAIBriefingService:
                 "title": "Admin Intelligence",
                 "summary": content.strip(),
                 "top_recommendations": [],
+                "codex_brief": None,
             }
         recommendations = parsed.get("top_recommendations") or []
         if not isinstance(recommendations, list):
@@ -234,10 +239,19 @@ class AdminAIBriefingService:
         recommendations = [str(item).strip() for item in recommendations if str(item).strip()][:3]
         while len(recommendations) < 3:
             recommendations.append("Collect more data before making a major change.")
+        raw_codex_brief = parsed.get("codex_brief")
+        if isinstance(raw_codex_brief, (dict, list)):
+            codex_brief = json.dumps(raw_codex_brief, indent=2)
+        elif raw_codex_brief is None:
+            codex_brief = None
+        else:
+            codex_brief = str(raw_codex_brief).strip() or None
+
         return {
             "title": str(parsed.get("title") or "Admin Intelligence")[:160],
             "summary": str(parsed.get("summary") or "").strip() or "No summary returned.",
             "top_recommendations": recommendations,
+            "codex_brief": codex_brief,
         }
 
     def _validate_type(self, briefing_type: str) -> None:

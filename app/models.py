@@ -127,6 +127,7 @@ class AdminAIBriefing(Base):
     admin_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     title = Column(String(160), nullable=False)
     summary_text = Column(Text, nullable=False)
+    codex_brief = Column(Text, nullable=True)
     top_recommendations = Column(JSONB, nullable=True)
     source_snapshot = Column(JSONB, nullable=True)
     model = Column(String(80), nullable=True)
