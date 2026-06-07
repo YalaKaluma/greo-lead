@@ -45,13 +45,16 @@ async def login(credentials: LoginRequest, db: Session = Depends(get_db)):
     if user.temp_password and verify_password(credentials.password, user.temp_password):
         user.last_login_at = datetime.utcnow()
         user.last_active_at = user.last_login_at
+        user.tour_current_step = None
+        user.tour_completed = True
+        user.onboarding_completed = True
         db.commit()
         return {
             "success": True,
             "user_number": user.phone_number,
             "user_name": user.name,
             "is_admin": bool(getattr(user, "is_admin", False)),
-            "needs_tour": not user.tour_completed,
+            "needs_tour": False,
             "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 21
         }
 

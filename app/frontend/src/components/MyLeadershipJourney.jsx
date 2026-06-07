@@ -1252,6 +1252,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   const selectedState = dimensionStates[selectedDimension.id];
   const journeyCurrentBelt = getBeltById(readinessStatus?.current_belt || latestAssessment?.target_belt || selectedState.currentBeltId);
   const journeyNextBelt = getBeltById(readinessStatus?.target_belt || getNextBeltId(journeyCurrentBelt.id));
+  const isAssessmentLockedUntilYellow = readinessStatus?.assessment_locked_until_yellow || readinessStatus?.current_belt === "white";
   const viewedBelt = getBeltById(selectedTrialBeltId || journeyCurrentBelt.id);
   const viewedNextBelt = getBeltById(getNextBeltId(viewedBelt.id));
   const viewedBeltRequirements = getBeltRequirementsFromConfig(
@@ -1423,7 +1424,11 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           </div>
 
           <div className="flex flex-col gap-2 sm:items-end">
-            {readinessStatus?.is_eligible_to_submit ? (
+            {isAssessmentLockedUntilYellow ? (
+              <p className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
+                Assessment unlocks at Yellow Belt
+              </p>
+            ) : readinessStatus?.is_eligible_to_submit ? (
               <button
                 type="button"
                 onClick={() => setShowAssessmentConfirm(true)}
@@ -2067,6 +2072,19 @@ function firstHeatmapSelection(wheelScores) {
 function BeltAssessmentTab({ readinessStatus, latestAssessment, assessmentHistory, acceptingPromotion, error, onSubmit, onAcceptPromotion }) {
   const [selectedHeatmapSubdomain, setSelectedHeatmapSubdomain] = useState(null);
   const [selectedAssessmentId, setSelectedAssessmentId] = useState(null);
+  const isLockedUntilYellow = readinessStatus?.assessment_locked_until_yellow || readinessStatus?.current_belt === "white";
+
+  if (isLockedUntilYellow) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Leadership Assessment</p>
+        <h2 className="mt-2 text-2xl font-semibold text-slate-950">Leadership Assessment</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+          Your leadership assessment becomes available once you reach Yellow Belt. Complete your early Journey exercises, gather evidence through real actions, and Alfred will unlock your first assessment when you are ready.
+        </p>
+      </div>
+    );
+  }
 
   if (!latestAssessment) {
     return (

@@ -6,6 +6,7 @@ Onboarding Service - Executive Onboarding Flow
 
 from sqlalchemy.orm import Session
 from app.models import User, OnboardingStep, EmailVerification
+from app.services.onboarding_seed_service import ensure_starter_examples_seeded
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
 import re
@@ -41,6 +42,8 @@ class OnboardingConversation:
                 onboarding_data={},
             )
             db.add(user)
+            db.flush()
+            ensure_starter_examples_seeded(db, user)
             db.commit()
             db.refresh(user)
             is_new = True

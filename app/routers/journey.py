@@ -1083,6 +1083,19 @@ def get_belt_readiness_status(
 ):
     config = load_journey_trials_config()
     status = get_current_belt_status(db, user_number, config)
+    if status.get("current_belt") == "white":
+        status["assessment_locked_until_yellow"] = True
+        status["is_assessment_available"] = False
+        status["is_eligible_to_submit"] = False
+        status["assessment_lock_title"] = "Leadership Assessment"
+        status["assessment_lock_message"] = (
+            "Your leadership assessment becomes available once you reach Yellow Belt. "
+            "Complete your early Journey exercises, gather evidence through real actions, "
+            "and Alfred will unlock your first assessment when you are ready."
+        )
+    else:
+        status["assessment_locked_until_yellow"] = False
+        status["is_assessment_available"] = True
     latest_assessment = db.query(BeltAssessment).filter(
         BeltAssessment.user_number == user_number,
         BeltAssessment.current_belt == status["current_belt"],
@@ -1122,6 +1135,14 @@ def submit_belt_assessment(
 ):
     config = load_journey_trials_config()
     readiness = get_current_belt_status(db, user_number, config)
+    if readiness.get("current_belt") == "white":
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Leadership assessment becomes available once you reach Yellow Belt.",
+                "readiness": readiness,
+            },
+        )
     if request.current_belt != readiness["current_belt"] or request.target_belt != readiness["target_belt"]:
         raise HTTPException(status_code=400, detail="Requested belt pair does not match current Journey readiness.")
     if not readiness["is_eligible_to_submit"]:

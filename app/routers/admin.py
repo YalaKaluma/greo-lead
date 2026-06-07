@@ -28,6 +28,7 @@ from app.models import (
 from app.utils.security import generate_temporary_password, hash_password
 from app.services.admin_system_health_service import AdminSystemHealthService
 from app.services.admin_ai_briefing_service import AdminAIBriefingService
+from app.services.onboarding_seed_service import ensure_starter_examples_seeded
 
 
 router = APIRouter(tags=["admin"])
@@ -359,6 +360,7 @@ def create_user(
 
     db.add(user)
     db.flush()
+    ensure_starter_examples_seeded(db, user)
     _log_admin_action(
         db,
         admin_user,
