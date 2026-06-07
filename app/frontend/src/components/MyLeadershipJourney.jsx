@@ -1424,11 +1424,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           </div>
 
           <div className="flex flex-col gap-2 sm:items-end">
-            {isAssessmentLockedUntilYellow ? (
-              <p className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
-                Assessment unlocks at Yellow Belt
-              </p>
-            ) : readinessStatus?.is_eligible_to_submit ? (
+            {!isAssessmentLockedUntilYellow && readinessStatus?.is_eligible_to_submit ? (
               <button
                 type="button"
                 onClick={() => setShowAssessmentConfirm(true)}
@@ -1436,7 +1432,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
               >
                 Submit for Belt Assessment
               </button>
-            ) : readinessStatus?.required_trials ? (
+            ) : !isAssessmentLockedUntilYellow && readinessStatus?.required_trials ? (
               <p className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
                 {Math.max((readinessStatus.required_trials || 0) - (readinessStatus.completed_trials || 0), 0)} trials remaining before {journeyNextBelt.name} assessment
               </p>
@@ -1557,13 +1553,15 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           </section>
 
           <section className="space-y-5">
-            <DimensionDeepDive
-              dimension={selectedDimension}
-              dimensionState={selectedState}
-              belt={journeyCurrentBelt}
-              nextBelt={journeyNextBelt}
-              latestAssessment={latestAssessment}
-            />
+            {!isAssessmentLockedUntilYellow && (
+              <DimensionDeepDive
+                dimension={selectedDimension}
+                dimensionState={selectedState}
+                belt={journeyCurrentBelt}
+                nextBelt={journeyNextBelt}
+                latestAssessment={latestAssessment}
+              />
+            )}
 
             <PathToNextBeltPanel
               dimension={selectedDimension}
