@@ -11,6 +11,9 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { usePriority } from '../hooks/usePriority';
 import { useYellowBeltUnlock } from '../hooks/useYellowBeltUnlock';
 
+const PAGE_LOAD_TIMEOUT_MS = 12000;
+const SECONDARY_LOAD_TIMEOUT_MS = 8000;
+
 /**
  * TodoList Component - Main Task Management Interface
  * 
@@ -168,7 +171,8 @@ export default function TodoList({ apiUrl, userNumber }) {
     if (apiUrl == null || !userNumber) return;
     try {
       const response = await axios.get(`${apiUrl}/api/tasks/filters`, {
-        params: { user_number: userNumber }
+        params: { user_number: userNumber },
+        timeout: SECONDARY_LOAD_TIMEOUT_MS
       });
       if (response.data) {
         setProjects(response.data.projects || []);
@@ -183,7 +187,8 @@ export default function TodoList({ apiUrl, userNumber }) {
     if (apiUrl == null || !userNumber) return;
     try {
       const response = await axios.get(`${apiUrl}/api/journey/goals`, {
-        params: { user_number: userNumber }
+        params: { user_number: userNumber },
+        timeout: SECONDARY_LOAD_TIMEOUT_MS
       });
       if (response.data && Array.isArray(response.data)) {
         setGoals(response.data);
@@ -210,7 +215,10 @@ export default function TodoList({ apiUrl, userNumber }) {
       if (selectedDelegate) params.delegated_to = selectedDelegate;
       if (selectedGoal) params.goal_id = parseInt(selectedGoal);
 
-      const response = await axios.get(`${apiUrl}/api/tasks/`, { params });
+      const response = await axios.get(`${apiUrl}/api/tasks/`, {
+        params,
+        timeout: PAGE_LOAD_TIMEOUT_MS
+      });
       const taskList = Array.isArray(response.data) ? response.data : [];
       const openTasks = taskList.filter(task => String(task.status || '').toLowerCase() !== 'completed');
       setTasks(openTasks);

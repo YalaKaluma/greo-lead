@@ -12,6 +12,9 @@ import MyCoachingSessions from '../MyCoachingSessions';
 import { normalizeGoalLevel, isVision } from '../../utils/goalTaxonomy';
 import { useYellowBeltUnlock } from '../../hooks/useYellowBeltUnlock';
 
+const PAGE_LOAD_TIMEOUT_MS = 12000;
+const SECONDARY_LOAD_TIMEOUT_MS = 8000;
+
 /* =========================================================
    HELPER FUNCTIONS
    ========================================================= */
@@ -69,7 +72,8 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const fetchGoals = async () => {
     try {
       const res = await axios.get(`${apiUrl}/api/journey/goals`, {
-        params: { user_number: userNumber }
+        params: { user_number: userNumber },
+        timeout: PAGE_LOAD_TIMEOUT_MS
       });
       if (res.data && Array.isArray(res.data)) {
         setGoals(res.data);
@@ -82,7 +86,8 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const fetchAllLinkedTasks = async () => {
     try {
       const res = await axios.get(`${apiUrl}/api/tasks`, {
-        params: { user_number: userNumber }
+        params: { user_number: userNumber },
+        timeout: PAGE_LOAD_TIMEOUT_MS
       });
       
       if (Array.isArray(res.data)) {
@@ -111,7 +116,8 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const fetchGoalReviews = async () => {
     try {
       const res = await axios.get(`${apiUrl}/api/journey/goal-reviews`, {
-        params: { user_number: userNumber }
+        params: { user_number: userNumber },
+        timeout: SECONDARY_LOAD_TIMEOUT_MS
       });
       
       if (res.data && res.data.sessions) {
@@ -119,15 +125,14 @@ export default function MyGoals({ apiUrl, userNumber }) {
       }
     } catch (err) {
       console.error('Error fetching goal reviews:', err);
-    } finally {
-      setLoading(false);
     }
   };
 
   const fetchValues = async () => {
     try {
       const res = await axios.get(`${apiUrl}/api/journey/values`, {
-        params: { user_number: userNumber }
+        params: { user_number: userNumber },
+        timeout: SECONDARY_LOAD_TIMEOUT_MS
       });
       setValues(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
@@ -144,7 +149,8 @@ export default function MyGoals({ apiUrl, userNumber }) {
 
     try {
       const res = await axios.get(`${apiUrl}/api/journey/visions/${visionGoalId}/roadmap`, {
-        params: { user_number: userNumber }
+        params: { user_number: userNumber },
+        timeout: SECONDARY_LOAD_TIMEOUT_MS
       });
       const nextStatuses = {};
       (res.data?.waves || []).forEach(wave => {
@@ -162,18 +168,31 @@ export default function MyGoals({ apiUrl, userNumber }) {
   };
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadData = async () => {
-      await fetchGoals();
-      await fetchValues();
-      await fetchAllLinkedTasks();
-      if (isYellowBeltOrAbove) {
-        await fetchGoalReviews();
-      } else {
+      setLoading(true);
+      await Promise.allSettled([
+        fetchGoals(),
+        fetchValues(),
+        fetchAllLinkedTasks(),
+        isYellowBeltOrAbove ? fetchGoalReviews() : Promise.resolve()
+      ]);
+
+      if (!isYellowBeltOrAbove) {
         setReviewSessions([]);
+      }
+
+      if (!cancelled) {
         setLoading(false);
       }
     };
+
     loadData();
+
+    return () => {
+      cancelled = true;
+    };
   }, [userNumber, isYellowBeltOrAbove]);
 
   useEffect(() => {

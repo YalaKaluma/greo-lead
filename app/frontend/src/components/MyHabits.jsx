@@ -5,6 +5,9 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { getTodayET, getETDate, formatDateForInput } from '../utils/taskHelpers';
 import { useYellowBeltUnlock } from '../hooks/useYellowBeltUnlock';
 
+const PAGE_LOAD_TIMEOUT_MS = 12000;
+const SECONDARY_LOAD_TIMEOUT_MS = 8000;
+
 /* =========================================================
    GOAL HELPERS — COPIED 1:1 FROM TodoList.jsx
    ========================================================= */
@@ -232,7 +235,8 @@ export default function MyHabits({ apiUrl, userNumber }) {
   const fetchHabits = async () => {
     try {
       const res = await axios.get(`${apiUrl}/api/habits`, {
-        params: { user_number: userNumber }
+        params: { user_number: userNumber },
+        timeout: PAGE_LOAD_TIMEOUT_MS
       });
       if (Array.isArray(res.data)) {
         // Filter based on weekday/weekend
@@ -249,7 +253,8 @@ export default function MyHabits({ apiUrl, userNumber }) {
   const fetchGoals = async () => {
     try {
       const res = await axios.get(`${apiUrl}/api/journey/goals`, {
-        params: { user_number: userNumber }
+        params: { user_number: userNumber },
+        timeout: SECONDARY_LOAD_TIMEOUT_MS
       });
       if (res.data && Array.isArray(res.data)) {
         setGoals(res.data);
@@ -267,7 +272,8 @@ export default function MyHabits({ apiUrl, userNumber }) {
         params: { 
           user_number: userNumber,
           days: 14  // Last 2 weeks
-        }
+        },
+        timeout: SECONDARY_LOAD_TIMEOUT_MS
       });
       if (Array.isArray(res.data)) {
         setHabitHistory(res.data);
@@ -286,7 +292,8 @@ export default function MyHabits({ apiUrl, userNumber }) {
     setTrendsError(null);
     try {
       const res = await axios.get(`${apiUrl}/api/habits/trends`, {
-        params: { user_number: userNumber }
+        params: { user_number: userNumber },
+        timeout: PAGE_LOAD_TIMEOUT_MS
       });
       setTrends(res.data);
     } catch (err) {

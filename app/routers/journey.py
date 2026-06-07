@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from app.db import get_db
 from app.models import (
     JourneyGoal,
@@ -59,7 +59,6 @@ from app.services.yellow_belt_validator import (
 from app.services.vision_progress_review_service import VisionProgressReviewService
 from app.services.belt_trial_reviewer import review_belt_trial
 from app.services.onboarding_seed_service import (
-    ensure_starter_goal_samples_compacted,
     ensure_starter_roadmaps_seeded,
 )
 
@@ -2092,13 +2091,15 @@ def get_goals(
         db: Session = Depends(get_db)
 ):
     """Get all goals for a user"""
-    user = db.query(User).filter(User.phone_number == user_number).first()
-    if user and ensure_starter_goal_samples_compacted(db, user):
-        db.commit()
-
-    goals = db.query(JourneyGoal).filter(
-        JourneyGoal.user_number == user_number
-    ).order_by(JourneyGoal.sort_order, JourneyGoal.first_seen_at.desc()).all()
+    goals = (
+        db.query(JourneyGoal)
+        .options(
+            selectinload(JourneyGoal.value_links).selectinload(JourneyGoalValue.value)
+        )
+        .filter(JourneyGoal.user_number == user_number)
+        .order_by(JourneyGoal.sort_order, JourneyGoal.first_seen_at.desc())
+        .all()
+    )
 
     return [serialize_goal(goal) for goal in goals]
 
