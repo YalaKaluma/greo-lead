@@ -576,6 +576,16 @@ function getStoredTrial(trialRecords, dimensionId, targetBeltId, trialType) {
   );
 }
 
+function getLatestTrialReview(trial) {
+  const history = Array.isArray(trial?.evidence?.feedback_history) ? trial.evidence.feedback_history : [];
+  return trial?.evidence?.latest_review || history[history.length - 1] || {};
+}
+
+function getLatestTrialScore(trial) {
+  const latestReview = getLatestTrialReview(trial);
+  return latestReview?.score ?? trial?.score ?? null;
+}
+
 function getPrimaryFieldForTopic(topic) {
   if (topic?.id === "team_composition") {
     return { name: "name" };
@@ -904,6 +914,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   const [activeTrial, setActiveTrial] = useState(null);
   const [trialDraft, setTrialDraft] = useState("");
   const [savingTrial, setSavingTrial] = useState(false);
+  const [trialSaveError, setTrialSaveError] = useState("");
   const [readinessStatus, setReadinessStatus] = useState(null);
   const [latestAssessment, setLatestAssessment] = useState(null);
   const [assessmentHistory, setAssessmentHistory] = useState([]);
@@ -1314,12 +1325,14 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
 
     setActiveTrial(trial);
     setTrialDraft(trial.response_text || "");
+    setTrialSaveError("");
   };
 
   const saveTrialResponse = async (status) => {
     if (!activeTrial || !trialDraft.trim()) return;
 
     setSavingTrial(true);
+    setTrialSaveError("");
     try {
       const payload = {
         user_number: userNumber,
@@ -1376,7 +1389,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
       }
     } catch (error) {
       console.error("Failed to submit belt trial", error);
-      alert("Alfred could not save this exercise yet. Your text is still on screen; please try again.");
+      setTrialSaveError(error.response?.data?.detail?.message || error.response?.data?.detail || "Alfred could not save this exercise yet. Your text is still on screen; please try again.");
     } finally {
       setSavingTrial(false);
     }
@@ -1638,9 +1651,11 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           draft={trialDraft}
           setDraft={setTrialDraft}
           saving={savingTrial}
+          error={trialSaveError}
           onClose={() => {
             setActiveTrial(null);
             setTrialDraft("");
+            setTrialSaveError("");
           }}
           onSave={handleSaveTrial}
           onSubmit={handleSubmitTrial}
@@ -3110,7 +3125,7 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
       footer: safeRequirements.reflection.completion_hint,
       status: formatTrialStatus(reflectionTrial?.status),
       feedback: reflectionTrial?.ai_feedback,
-      score: reflectionTrial?.score,
+      score: getLatestTrialScore(reflectionTrial),
       buttonLabel: isViewingCurrentBelt
         ? normalizeStatus(reflectionTrial?.status) === "needs_revision"
           ? "Resubmit"
@@ -3127,7 +3142,7 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
       status: formatTrialStatus(realWorldStatus),
       statusDetail: normalizeStatus(realWorldStatus) !== "not_started" ? realWorldProgressDetail : null,
       feedback: realWorldTrial?.ai_feedback,
-      score: realWorldTrial?.score,
+      score: getLatestTrialScore(realWorldTrial),
       buttonLabel: isViewingCurrentBelt
         ? normalizeStatus(realWorldTrial?.status) === "needs_revision"
           ? "Resubmit"
@@ -3236,7 +3251,7 @@ function RequirementCard({ number, title, body, footer, status, statusDetail, fe
   );
 }
 
-function TrialModal({ trial, draft, setDraft, saving, onClose, onSave, onSubmit }) {
+function TrialModal({ trial, draft, setDraft, saving, error, onClose, onSave, onSubmit }) {
   const isReflection = trial.trial_type === "reflection";
   const targetBelt = getBeltById(trial.target_belt || "yellow");
   const title = isReflection ? "Reflection Trial" : "Real-World Trial";
@@ -3244,6 +3259,11 @@ function TrialModal({ trial, draft, setDraft, saving, onClose, onSave, onSubmit 
     ? "Write honestly. Alfred will review depth, ownership, and pattern recognition as soon as you submit."
     : "Log what you tried, what happened, what you noticed emotionally, and what you would change next time.";
   const isRevision = normalizeStatus(trial.status) === "needs_revision";
+  const feedbackHistory = Array.isArray(trial.evidence?.feedback_history) ? trial.evidence.feedback_history : [];
+  const latestReview = getLatestTrialReview(trial);
+  const reviewScore = getLatestTrialScore(trial);
+  const attemptNumber = latestReview.attempt_number || feedbackHistory.length || null;
+  const reviewedAt = trial.reviewed_at || feedbackHistory[feedbackHistory.length - 1]?.reviewed_at;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
@@ -3293,13 +3313,25 @@ function TrialModal({ trial, draft, setDraft, saving, onClose, onSave, onSubmit 
                 <p className={`text-xs font-semibold uppercase tracking-[0.16em] ${isRevision ? "text-amber-800" : "text-green-700"}`}>
                   Alfred Feedback
                 </p>
-                {trial.score ? (
+                {reviewScore ? (
                   <span className="rounded-full border border-white/70 bg-white/70 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                    {trial.score}/5
+                    {reviewScore}/5
                   </span>
                 ) : null}
               </div>
+              {(attemptNumber || reviewedAt || trial.status) && (
+                <p className="mt-2 text-xs font-semibold text-slate-500">
+                  {attemptNumber ? `Attempt ${attemptNumber}` : "Latest review"}
+                  {reviewedAt ? ` · Reviewed ${formatDateTime(reviewedAt)}` : ""}
+                  {trial.status ? ` · ${formatTrialStatus(trial.status)}` : ""}
+                </p>
+              )}
               <p className="mt-2 text-sm leading-6 text-slate-700">{trial.ai_feedback}</p>
+            </div>
+          )}
+          {error && (
+            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm leading-6 text-red-700">
+              {typeof error === "string" ? error : "Alfred could not save this exercise yet. Your text is still on screen; please try again."}
             </div>
           )}
         </div>
