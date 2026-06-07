@@ -54,6 +54,7 @@ from app.services.yellow_belt_validator import (
     validate_yellow_belt_trial_type,
 )
 from app.services.vision_progress_review_service import VisionProgressReviewService
+from app.services.belt_trial_reviewer import review_belt_trial
 
 STRUCTURAL_LEVEL_ALIASES = {
     "long": "vision",
@@ -269,7 +270,61 @@ def normalize_trial_status(status: Optional[str]) -> str:
 
 
 def is_requirement_complete(status: Optional[str]) -> bool:
-    return normalize_trial_status(status) in {"submitted", "passed"}
+    return normalize_trial_status(status) == "passed"
+
+
+def get_trial_requirement(config: dict, dimension_id: str, belt_id: str, trial_type: str) -> dict:
+    return config.get("dimensions", {}).get(dimension_id, {}).get("belts", {}).get(belt_id, {}).get(trial_type, {}) or {}
+
+
+def get_belt_requirement(config: dict, dimension_id: str, belt_id: str) -> dict:
+    return config.get("dimensions", {}).get(dimension_id, {}).get("belts", {}).get(belt_id, {}) or {}
+
+
+def append_trial_feedback_history(trial: JourneyBeltTrial, review: dict[str, Any], response_text: str) -> dict[str, Any]:
+    evidence = dict(trial.evidence or {})
+    history = evidence.get("feedback_history")
+    if not isinstance(history, list):
+        history = []
+
+    history.append({
+        "reviewed_at": datetime.now().isoformat(),
+        "status": "passed" if review.get("passed") else "needs_revision",
+        "score": review.get("score"),
+        "response_text": response_text,
+        "feedback": review.get("feedback"),
+        "strengths": review.get("strengths") or [],
+        "growth_edges": review.get("growth_edges") or [],
+        "required_improvements": review.get("required_improvements") or [],
+        "review_source": review.get("review_source") or "ai",
+    })
+
+    evidence["feedback_history"] = history[-10:]
+    evidence["latest_review"] = review
+    return evidence
+
+
+def apply_trial_review(db: Session, trial: JourneyBeltTrial, config: dict) -> JourneyBeltTrial:
+    dimension = JOURNEY_DIMENSIONS.get(trial.dimension_id, {})
+    belt_requirement = get_belt_requirement(config, trial.dimension_id, trial.target_belt)
+    requirement = get_trial_requirement(config, trial.dimension_id, trial.target_belt, trial.trial_type)
+    review = review_belt_trial(
+        domain_name=dimension.get("name", trial.dimension_id.title()),
+        target_belt=trial.target_belt,
+        trial_type=trial.trial_type,
+        trial_title=requirement.get("title") or trial.trial_type.replace("_", " ").title(),
+        belt_objective=requirement.get("criteria") or belt_requirement.get("criteria") or requirement.get("completion_hint"),
+        prompt=trial.prompt,
+        response_text=trial.response_text or "",
+    )
+    trial.status = "passed" if review.get("passed") else "needs_revision"
+    trial.score = review.get("score")
+    trial.ai_feedback = review.get("feedback")
+    trial.evidence = append_trial_feedback_history(trial, review, trial.response_text or "")
+    trial.reviewed_at = datetime.now()
+    trial.updated_at = datetime.now()
+    db.add(trial)
+    return trial
 
 
 def active_trial_types_for_dimension(config: dict, dimension_id: str, belt_id: str) -> list[str]:
@@ -369,14 +424,14 @@ def get_behavioral_trial_status(db: Session, user_number: str, dimension_id: str
             return "not_started"
         completed = sum(1 for topic in topics if topic_has_filled_evidence(db, user_number, topic))
         if completed == len(topics):
-            return "submitted"
+            return "passed"
         if completed > 0:
             return "in_progress"
 
     if belt_id in BELT_DIMENSION_SIGNALS:
         result = validate_belt_trial_type(db, user_number, belt_id, dimension_id, "behavioral")
         if result["passed"]:
-            return "submitted"
+            return "passed"
         if any(signal["actual"] > 0 for signal in result["signals"]):
             return "in_progress"
         if stored and stored.status:
@@ -393,7 +448,7 @@ def get_observable_real_world_trial_status(db: Session, user_number: str, dimens
     if not result["signals"]:
         return None
     if result["passed"]:
-        return "submitted"
+        return "passed"
     if any(signal["actual"] > 0 for signal in result["signals"]):
         return "in_progress"
     return None
@@ -1269,6 +1324,7 @@ def start_belt_trial(
         trial_data: BeltTrialCreate,
         db: Session = Depends(get_db)
 ):
+    config = load_journey_trials_config()
     existing = db.query(JourneyBeltTrial).filter(
         JourneyBeltTrial.user_number == trial_data.user_number,
         JourneyBeltTrial.dimension_id == trial_data.dimension_id,
@@ -1283,6 +1339,7 @@ def start_belt_trial(
             existing.updated_at = datetime.now()
             if existing.status == "submitted":
                 existing.submitted_at = datetime.now()
+                apply_trial_review(db, existing, config)
             db.commit()
             db.refresh(existing)
         return existing
@@ -1299,6 +1356,9 @@ def start_belt_trial(
         submitted_at=datetime.now() if trial_data.status == "submitted" else None,
         updated_at=datetime.now(),
     )
+    if trial.status == "submitted":
+        trial.submitted_at = datetime.now()
+        apply_trial_review(db, trial, config)
     db.add(trial)
     db.commit()
     db.refresh(trial)
@@ -1324,8 +1384,11 @@ def submit_belt_trial(
     trial.status = trial_data.status or "submitted"
     if trial_data.prompt is not None:
         trial.prompt = trial_data.prompt
-    trial.submitted_at = datetime.now()
     trial.updated_at = datetime.now()
+    if normalize_trial_status(trial.status) == "submitted":
+        trial.submitted_at = datetime.now()
+        config = load_journey_trials_config()
+        apply_trial_review(db, trial, config)
     db.commit()
     db.refresh(trial)
     return trial

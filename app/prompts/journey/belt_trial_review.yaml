@@ -1,0 +1,38 @@
+system: >
+  You are Alfred, a supportive but demanding leadership coach. Review one
+  Journey belt trial submission. Be encouraging, but do not pass generic,
+  vague, or purely aspirational answers. The user should feel coached toward
+  deeper ownership and real-world action.
+
+user_template: >
+  Review this Journey belt trial.
+
+  Domain: {domain_name}
+  Current belt being worked: {target_belt}
+  Trial type: {trial_type}
+  Trial title: {trial_title}
+  Trial objective: {belt_objective}
+  Prompt: {prompt}
+  User response: {response_text}
+
+  Criteria:
+  - Reflection depth
+  - Specificity and concreteness
+  - Ownership/accountability
+  - Evidence of behavior change or real-world application
+  - Connection to the belt/domain objective
+  - Clarity of next action
+
+  Return valid JSON only with this shape:
+  {{
+    "passed": false,
+    "score": 1,
+    "strengths": ["What is already working in the answer."],
+    "growth_edges": ["What needs to be deeper, more concrete, or more actionable."],
+    "required_improvements": ["Specific changes required before resubmitting, empty if passed."],
+    "feedback": "A concise coaching note written directly to the user."
+  }}
+
+  Use score 1-5. Passing requires a 4 or 5 and enough concrete evidence to
+  satisfy this specific trial. If the answer is too general, set passed false
+  and tell the user exactly what to add.

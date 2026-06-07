@@ -539,6 +539,7 @@ function getStatusProgress(status) {
 
   if (normalized === "passed") return 1;
   if (normalized === "submitted") return 0.6;
+  if (normalized === "needs_revision") return 0.45;
   if (normalized === "needs_deeper_reflection") return 0.45;
   if (normalized === "in_progress") return 0.25;
   if (normalized === "needs evidence") return 0.25;
@@ -606,7 +607,7 @@ function getWhiteBehavioralEvidenceStatus(dimensionId, topicData) {
   if (!dimension?.topics?.length) return "not_started";
 
   const filledCount = dimension.topics.filter((topic) => hasFilledTopicEvidence(topic, topicData)).length;
-  if (filledCount === dimension.topics.length) return "submitted";
+  if (filledCount === dimension.topics.length) return "passed";
   if (filledCount > 0) return "in_progress";
   return "not_started";
 }
@@ -614,7 +615,7 @@ function getWhiteBehavioralEvidenceStatus(dimensionId, topicData) {
 function getYellowValidationBehavioralStatus(dimensionId, validation) {
   const dimensionValidation = validation?.dimensions?.find((item) => item.dimension === dimensionId);
   if (!dimensionValidation?.signals?.length) return null;
-  if (dimensionValidation.passed) return "submitted";
+  if (dimensionValidation.passed) return "passed";
   if (dimensionValidation.signals.some((signal) => Number(signal.actual || 0) > 0)) return "in_progress";
   return "not_started";
 }
@@ -733,7 +734,7 @@ function getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryA
   const validationStatus = trialValidation
     ? (
         trialValidation.passed || trialValidation.signals.every((signal) => isSignalComplete(signal))
-          ? "submitted"
+          ? "passed"
           : trialValidation.signals.some((signal) => getSignalActual(signal) > 0)
             ? "in_progress"
             : "not_started"
@@ -760,7 +761,7 @@ function getBehavioralStatus(dimensionId, targetBeltId, trialRecords, telemetryA
 function getRealWorldStatus(dimensionId, targetBeltId, storedTrial, beltValidations) {
   const trialValidation = getTrialTypeValidation(dimensionId, targetBeltId, "real_world", beltValidations);
   if (trialValidation?.signals?.length) {
-    if (trialValidation.passed) return "submitted";
+    if (trialValidation.passed) return "passed";
     if (trialValidation.signals.some((signal) => Number(signal.actual || 0) > 0)) return "in_progress";
   }
   return normalizeStatus(storedTrial?.status);
@@ -3055,6 +3056,7 @@ function formatTrialStatus(status) {
     not_started: "Not Started",
     in_progress: "In Progress",
     submitted: "Submitted",
+    needs_revision: "Needs Revision",
     needs_deeper_reflection: "Needs Deeper Reflection",
     passed: "Passed",
   };
@@ -3084,7 +3086,15 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
       body: safeRequirements.reflection.prompt,
       footer: safeRequirements.reflection.completion_hint,
       status: formatTrialStatus(reflectionTrial?.status),
-      buttonLabel: isViewingCurrentBelt ? (reflectionTrial ? "Continue Reflection" : "Start Reflection") : null,
+      feedback: reflectionTrial?.ai_feedback,
+      score: reflectionTrial?.score,
+      buttonLabel: isViewingCurrentBelt
+        ? normalizeStatus(reflectionTrial?.status) === "needs_revision"
+          ? "Resubmit"
+          : reflectionTrial
+            ? "Continue Reflection"
+            : "Start Reflection"
+        : null,
       onClick: () => onStartTrial("reflection", safeRequirements.reflection.prompt),
     },
     isRequirementActive(safeRequirements.real_world) && {
@@ -3093,7 +3103,15 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
       footer: safeRequirements.real_world.completion_hint,
       status: formatTrialStatus(realWorldStatus),
       statusDetail: normalizeStatus(realWorldStatus) !== "not_started" ? realWorldProgressDetail : null,
-      buttonLabel: isViewingCurrentBelt ? (realWorldTrial ? "Log Trial" : "Start Trial") : null,
+      feedback: realWorldTrial?.ai_feedback,
+      score: realWorldTrial?.score,
+      buttonLabel: isViewingCurrentBelt
+        ? normalizeStatus(realWorldTrial?.status) === "needs_revision"
+          ? "Resubmit"
+          : realWorldTrial
+            ? "Log Trial"
+            : "Start Trial"
+        : null,
       onClick: () => onStartTrial("real_world", safeRequirements.real_world.prompt),
     },
     isRequirementActive(safeRequirements.behavioral) && {
@@ -3136,6 +3154,8 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
             footer={card.footer}
             status={card.status}
             statusDetail={card.statusDetail}
+            feedback={card.feedback}
+            score={card.score}
             buttonLabel={card.buttonLabel}
             disabled={savingTrial}
             onClick={card.onClick}
@@ -3146,7 +3166,7 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
   );
 }
 
-function RequirementCard({ number, title, body, footer, status, statusDetail, buttonLabel, disabled, onClick }) {
+function RequirementCard({ number, title, body, footer, status, statusDetail, feedback, score, buttonLabel, disabled, onClick }) {
   return (
     <article className="rounded-lg border border-slate-200 bg-[#fbfaf7] p-4">
       <div className="flex items-start gap-3">
@@ -3162,6 +3182,21 @@ function RequirementCard({ number, title, body, footer, status, statusDetail, bu
           <p className="mt-4 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500">
             {footer}
           </p>
+          {feedback && (
+            <div className={`mt-4 rounded-lg border p-3 ${status === "Passed" ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${status === "Passed" ? "text-green-700" : "text-amber-800"}`}>
+                  Alfred Feedback
+                </p>
+                {score ? (
+                  <span className="rounded-full border border-white/70 bg-white/70 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                    {score}/5
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-2 text-xs leading-5 text-slate-700">{feedback}</p>
+            </div>
+          )}
           {buttonLabel && (
             <button
               type="button"
@@ -3183,8 +3218,9 @@ function TrialModal({ trial, draft, setDraft, saving, onClose, onSave, onSubmit 
   const targetBelt = getBeltById(trial.target_belt || "yellow");
   const title = isReflection ? "Reflection Trial" : "Real-World Trial";
   const helperText = isReflection
-    ? "Write honestly. Alfred will eventually evaluate depth, ownership, and pattern recognition, not polish."
+    ? "Write honestly. Alfred will review depth, ownership, and pattern recognition as soon as you submit."
     : "Log what you tried, what happened, what you noticed emotionally, and what you would change next time.";
+  const isRevision = normalizeStatus(trial.status) === "needs_revision";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
@@ -3228,6 +3264,21 @@ function TrialModal({ trial, draft, setDraft, saving, onClose, onSave, onSubmit 
             placeholder={isReflection ? "Start with what happened, then what it revealed..." : "Describe the action, the outcome, and what you learned..."}
           />
           <p className="mt-2 text-xs leading-5 text-slate-500">{helperText}</p>
+          {trial.ai_feedback && (
+            <div className={`mt-4 rounded-lg border p-4 ${isRevision ? "border-amber-200 bg-amber-50" : "border-green-200 bg-green-50"}`}>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className={`text-xs font-semibold uppercase tracking-[0.16em] ${isRevision ? "text-amber-800" : "text-green-700"}`}>
+                  Alfred Feedback
+                </p>
+                {trial.score ? (
+                  <span className="rounded-full border border-white/70 bg-white/70 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                    {trial.score}/5
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-700">{trial.ai_feedback}</p>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:justify-end">
@@ -3245,7 +3296,7 @@ function TrialModal({ trial, draft, setDraft, saving, onClose, onSave, onSubmit 
             onClick={onSubmit}
             className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            Submit Exercise
+            {isRevision ? "Resubmit" : "Submit Exercise"}
           </button>
         </div>
       </div>
@@ -3558,6 +3609,8 @@ function StatusPill({ status, detail }) {
   const styles = {
     Passed: "border-green-200 bg-green-50 text-green-700",
     Submitted: "border-blue-200 bg-blue-50 text-blue-700",
+    "Needs Revision": "border-amber-200 bg-amber-50 text-amber-800",
+    "Needs Deeper Reflection": "border-amber-200 bg-amber-50 text-amber-800",
     "In Progress": "border-amber-200 bg-amber-50 text-amber-700",
     "Needs Evidence": "border-slate-200 bg-slate-100 text-slate-700",
     "Not Started": "border-slate-200 bg-white text-slate-500",
