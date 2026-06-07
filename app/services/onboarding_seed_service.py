@@ -17,6 +17,7 @@ from app.models import (
 
 STARTER_SEED_KEY = "starter_examples_seeded_v1"
 ROADMAP_SEED_KEY = "starter_roadmaps_seeded_v1"
+COMPACT_GOAL_SAMPLE_KEY = "starter_goal_samples_compacted_v1"
 STARTER_TASK_TITLES = [
     "Migrate my current task list to Alfred",
     "Define my top 3 goals for this year",
@@ -75,10 +76,8 @@ SAMPLE_GOAL_SPECS = [
                 "target": "Months 1-2",
                 "pillar": "Build a First MVP",
                 "outcomes": [
-                    "Validate customer problem",
-                    "Interview 20 potential users",
-                    "Define target audience",
-                    "Prioritize MVP features",
+                    "Validate a real customer problem",
+                    "Define MVP scope",
                 ],
             },
             {
@@ -87,10 +86,9 @@ SAMPLE_GOAL_SPECS = [
                 "target": "Months 3-4",
                 "pillar": "Build a First MVP",
                 "outcomes": [
-                    "Design MVP",
-                    "Build MVP",
+                    "Build the first usable MVP",
                     "Launch beta version",
-                    "Collect user feedback",
+                    "Collect feedback from first users",
                 ],
             },
             {
@@ -99,10 +97,11 @@ SAMPLE_GOAL_SPECS = [
                 "target": "Months 5-6",
                 "pillar": "Acquire First Paying Customers",
                 "outcomes": [
-                    "Launch outreach campaign",
-                    "Run demos",
-                    "Close first customer",
-                    "Reach 10 active users",
+                    "Define ideal customer profile",
+                    "Build outreach list",
+                    "Run first customer interviews",
+                    "Sign first customer",
+                    "Reach 10 active paying customers",
                 ],
             },
             {
@@ -111,10 +110,10 @@ SAMPLE_GOAL_SPECS = [
                 "target": "Months 7-12",
                 "pillar": "Build a Repeatable Growth Engine",
                 "outcomes": [
-                    "Website",
-                    "Content strategy",
-                    "Customer onboarding",
-                    "Analytics dashboard",
+                    "Create website and positioning",
+                    "Build content strategy",
+                    "Launch acquisition channels",
+                    "Create customer onboarding process",
                     "Reach $1,000 MRR",
                 ],
             },
@@ -163,21 +162,21 @@ SAMPLE_GOAL_SPECS = [
                 "goal": "Build the running rhythm that makes the marathon possible.",
                 "target": "Months 1-2",
                 "pillar": "Build Endurance",
-                "outcomes": ["Run 3x per week", "Complete 5K"],
+                "outcomes": ["Run consistently 3x per week", "Complete first 5K"],
             },
             {
                 "title": "Wave 2 - Build Endurance",
                 "goal": "Extend distance while keeping training sustainable.",
                 "target": "Months 3-4",
                 "pillar": "Build Endurance",
-                "outcomes": ["Complete 10K", "Increase weekly mileage"],
+                "outcomes": ["Complete first 10K"],
             },
             {
                 "title": "Wave 3 - Half Marathon",
                 "goal": "Turn endurance into race-ready confidence.",
                 "target": "Months 5-6",
                 "pillar": "Build Endurance",
-                "outcomes": ["Complete Half Marathon", "Refine pacing strategy"],
+                "outcomes": ["Complete first Half Marathon"],
             },
             {
                 "title": "Wave 4 - Marathon Preparation",
@@ -185,8 +184,9 @@ SAMPLE_GOAL_SPECS = [
                 "target": "Months 7-12",
                 "pillar": "Complete Marathon",
                 "outcomes": [
-                    "Complete marathon training block",
-                    "Run 30K long run",
+                    "Select race",
+                    "Complete training plan",
+                    "Complete 30K long run",
                     "Complete Marathon",
                 ],
             },
@@ -230,6 +230,15 @@ def ensure_starter_examples_seeded(db: Session, user: User) -> bool:
             }
             seeded_anything = True
 
+    if not onboarding_data.get(COMPACT_GOAL_SAMPLE_KEY):
+        _compact_sample_goal_hierarchy(db, user.phone_number, created_goals)
+        _seed_roadmaps(db, user.phone_number, created_goals, sync_existing=True)
+        onboarding_data[COMPACT_GOAL_SAMPLE_KEY] = {
+            "seeded_at": datetime.utcnow().isoformat(),
+            "version": 1,
+        }
+        seeded_anything = True
+
     user.onboarding_data = onboarding_data
     return seeded_anything
 
@@ -252,6 +261,31 @@ def ensure_starter_roadmaps_seeded(db: Session, user: User) -> bool:
         return False
 
     onboarding_data[ROADMAP_SEED_KEY] = {
+        "seeded_at": datetime.utcnow().isoformat(),
+        "version": 1,
+    }
+    user.onboarding_data = onboarding_data
+    return True
+
+
+def ensure_starter_goal_samples_compacted(db: Session, user: User) -> bool:
+    """Trim the starter goal examples back to curated outcomes per pillar."""
+    if not user or not user.id or not user.phone_number:
+        return False
+
+    onboarding_data = dict(user.onboarding_data or {})
+    if onboarding_data.get(COMPACT_GOAL_SAMPLE_KEY):
+        return False
+
+    has_starter_context = bool(onboarding_data.get(STARTER_SEED_KEY)) or _has_sample_visions(db, user.phone_number)
+    if not has_starter_context:
+        return False
+
+    goals = _seed_goals(db, user.phone_number, allow_missing_visions=False)
+    _compact_sample_goal_hierarchy(db, user.phone_number, goals)
+    _seed_roadmaps(db, user.phone_number, goals, sync_existing=True)
+
+    onboarding_data[COMPACT_GOAL_SAMPLE_KEY] = {
         "seeded_at": datetime.utcnow().isoformat(),
         "version": 1,
     }
@@ -331,7 +365,12 @@ def _seed_goals(db: Session, user_number: str, allow_missing_visions: bool) -> d
     return seeded
 
 
-def _seed_roadmaps(db: Session, user_number: str, seeded_goals: dict[str, dict]) -> bool:
+def _seed_roadmaps(
+        db: Session,
+        user_number: str,
+        seeded_goals: dict[str, dict],
+        sync_existing: bool = False,
+) -> bool:
     seeded_any = False
     today = date.today()
     target_windows = [
@@ -347,27 +386,37 @@ def _seed_roadmaps(db: Session, user_number: str, seeded_goals: dict[str, dict])
             continue
 
         vision = goal_entry["vision"]
-        existing_wave = db.query(VisionRoadmapWave).filter(
+        existing_waves = db.query(VisionRoadmapWave).filter(
             VisionRoadmapWave.user_number == user_number,
             VisionRoadmapWave.vision_goal_id == vision.id,
-        ).first()
-        if existing_wave:
+        ).order_by(VisionRoadmapWave.sequence_order, VisionRoadmapWave.created_at).all()
+        if existing_waves and not sync_existing:
             continue
+        existing_by_order = {wave.sequence_order: wave for wave in existing_waves}
 
         for index, wave_spec in enumerate(spec["roadmap"]):
             start_offset, end_offset = target_windows[min(index, len(target_windows) - 1)]
-            wave = VisionRoadmapWave(
-                user_number=user_number,
-                vision_goal_id=vision.id,
-                title=wave_spec["title"],
-                description=f"{wave_spec['goal']}\n\nTarget: {wave_spec['target']}",
-                sequence_order=index,
-                status="not_started",
-                target_start_date=today + timedelta(days=start_offset),
-                target_end_date=today + timedelta(days=end_offset),
-            )
-            db.add(wave)
-            db.flush()
+            wave = existing_by_order.get(index)
+            if wave:
+                wave.title = wave_spec["title"]
+                wave.description = f"{wave_spec['goal']}\n\nTarget: {wave_spec['target']}"
+                wave.target_start_date = wave.target_start_date or today + timedelta(days=start_offset)
+                wave.target_end_date = wave.target_end_date or today + timedelta(days=end_offset)
+                wave.updated_at = datetime.utcnow()
+                db.query(WaveGoal).filter(WaveGoal.wave_id == wave.id).delete(synchronize_session=False)
+            else:
+                wave = VisionRoadmapWave(
+                    user_number=user_number,
+                    vision_goal_id=vision.id,
+                    title=wave_spec["title"],
+                    description=f"{wave_spec['goal']}\n\nTarget: {wave_spec['target']}",
+                    sequence_order=index,
+                    status="not_started",
+                    target_start_date=today + timedelta(days=start_offset),
+                    target_end_date=today + timedelta(days=end_offset),
+                )
+                db.add(wave)
+                db.flush()
 
             for goal_index, outcome_title in enumerate(wave_spec["outcomes"]):
                 outcome = goal_entry["outcomes"].get(outcome_title)
@@ -383,6 +432,68 @@ def _seed_roadmaps(db: Session, user_number: str, seeded_goals: dict[str, dict])
             seeded_any = True
 
     return seeded_any
+
+
+def _compact_sample_goal_hierarchy(db: Session, user_number: str, seeded_goals: dict[str, dict]) -> None:
+    for spec in SAMPLE_GOAL_SPECS:
+        goal_entry = seeded_goals.get(spec["key"])
+        if not goal_entry:
+            continue
+
+        for pillar_spec in spec["pillars"]:
+            pillar = goal_entry["pillars"].get(pillar_spec["title"])
+            if not pillar:
+                continue
+
+            allowed_titles = {_normalize_title(title) for title in pillar_spec["outcomes"]}
+            removable_titles = _starter_extra_outcome_titles()
+            outcomes = db.query(JourneyGoal).filter(
+                JourneyGoal.user_number == user_number,
+                JourneyGoal.parent_goal_id == pillar.id,
+                JourneyGoal.time_horizon == "outcome",
+            ).all()
+
+            for outcome in outcomes:
+                normalized_title = _normalize_title(outcome.title)
+                if normalized_title in allowed_titles or normalized_title not in removable_titles:
+                    continue
+                db.query(WaveGoal).filter(WaveGoal.goal_id == outcome.id).delete(synchronize_session=False)
+                db.delete(outcome)
+
+
+def _starter_extra_outcome_titles() -> set[str]:
+    extras = {
+        "Launch the first usable MVP",
+        "Sign the first 10 active users or customers",
+        "Reach the first $1,000 in monthly recurring revenue",
+        "Run a 10K comfortably",
+        "Complete a half marathon",
+        "Complete the full marathon",
+        "Validate customer problem",
+        "Interview 20 potential users",
+        "Define target audience",
+        "Prioritize MVP features",
+        "Design MVP",
+        "Build MVP",
+        "Collect user feedback",
+        "Launch outreach campaign",
+        "Run demos",
+        "Close first customer",
+        "Reach 10 active users",
+        "Website",
+        "Content strategy",
+        "Customer onboarding",
+        "Analytics dashboard",
+        "Run 3x per week",
+        "Complete 5K",
+        "Complete 10K",
+        "Increase weekly mileage",
+        "Complete Half Marathon",
+        "Refine pacing strategy",
+        "Complete marathon training block",
+        "Run 30K long run",
+    }
+    return {_normalize_title(title) for title in extras}
 
 
 def _ensure_roadmap_outcome_goals(

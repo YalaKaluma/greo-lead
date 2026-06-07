@@ -58,7 +58,10 @@ from app.services.yellow_belt_validator import (
 )
 from app.services.vision_progress_review_service import VisionProgressReviewService
 from app.services.belt_trial_reviewer import review_belt_trial
-from app.services.onboarding_seed_service import ensure_starter_roadmaps_seeded
+from app.services.onboarding_seed_service import (
+    ensure_starter_goal_samples_compacted,
+    ensure_starter_roadmaps_seeded,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -2089,6 +2092,10 @@ def get_goals(
         db: Session = Depends(get_db)
 ):
     """Get all goals for a user"""
+    user = db.query(User).filter(User.phone_number == user_number).first()
+    if user and ensure_starter_goal_samples_compacted(db, user):
+        db.commit()
+
     goals = db.query(JourneyGoal).filter(
         JourneyGoal.user_number == user_number
     ).order_by(JourneyGoal.sort_order, JourneyGoal.first_seen_at.desc()).all()
@@ -2291,9 +2298,12 @@ def get_vision_roadmap(
         raise HTTPException(status_code=400, detail="Roadmaps can only be created for visions")
 
     user = db.query(User).filter(User.phone_number == user_number).first()
-    if user and ensure_starter_roadmaps_seeded(db, user):
-        db.commit()
-        db.refresh(vision)
+    if user:
+        seeded_roadmaps = ensure_starter_roadmaps_seeded(db, user)
+        compacted_samples = ensure_starter_goal_samples_compacted(db, user)
+        if seeded_roadmaps or compacted_samples:
+            db.commit()
+            db.refresh(vision)
 
     waves = db.query(VisionRoadmapWave).filter(
         VisionRoadmapWave.user_number == user_number,
