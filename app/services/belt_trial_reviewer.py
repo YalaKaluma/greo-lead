@@ -9,14 +9,14 @@ import yaml
 from app.config import OPENAI_API_KEY, OPENAI_MODEL
 
 
-PASSING_SCORE = 4
+PASSING_SCORE = 3
 logger = logging.getLogger(__name__)
 
 
 DEFAULT_PROMPT = {
     "system": (
-        "You are Alfred, a supportive but demanding leadership coach. Review one belt trial submission. "
-        "Encourage what is real, name what is still too generic, and decide whether this specific trial is sufficient."
+        "You are Alfred, a supportive, encouraging, and growth-oriented leadership coach. "
+        "Challenge users to go deeper when appropriate, but reward sincere effort and progress rather than seeking perfection."
     ),
     "user_template": (
         "Review this Journey belt trial.\n\n"
@@ -43,7 +43,9 @@ DEFAULT_PROMPT = {
         '  "required_improvements": ["..."],\n'
         '  "feedback": "A direct coaching note written to the user."\n'
         "}}\n"
-        "Use score 1-5. Passing requires a 4 or 5 and enough concrete evidence to satisfy this trial."
+        "Score 1 is superficial and needs revision. Score 2 is emerging understanding and needs revision. "
+        "Score 3 is sufficient for progression and passes. Score 4 is strong reflection and passes. "
+        "Score 5 is transformational reflection and passes."
     ),
 }
 
@@ -101,7 +103,7 @@ def fallback_review(response_text: str, attempt_number: int = 1) -> dict[str, An
     ])
     has_ownership_marker = any(marker in lower_response for marker in ["i own", "my part", "i should", "i could", "i learned"])
     has_next_action = any(marker in lower_response for marker in ["i will", "next", "this week", "from now on"])
-    score = 4 if words >= 120 and has_specific_marker else 3 if words >= 80 else 2
+    score = 4 if words >= 120 and has_specific_marker else 3 if words >= 60 and has_specific_marker else 2
     if score == 3 and has_specific_marker and has_ownership_marker and has_next_action:
         score = 4
     passed = score >= PASSING_SCORE
@@ -110,8 +112,8 @@ def fallback_review(response_text: str, attempt_number: int = 1) -> dict[str, An
         "and how you will apply it next. Keep carrying this into the next trial."
         if passed else
         f"Review {attempt_number}: Good start. The answer is not yet concrete enough to pass this trial. "
-        f"You wrote about {words} words; Alfred still needs a real situation, the pattern you noticed, your ownership in it, "
-        "and one behavior you will change before resubmitting."
+        f"You wrote about {words} words; Alfred still needs at least one relevant personal example, a clearer insight, "
+        "or one action you will take before resubmitting."
     )
     return {
         "passed": passed,
@@ -130,7 +132,7 @@ def fallback_review(response_text: str, attempt_number: int = 1) -> dict[str, An
 
 def normalize_review(raw: dict[str, Any], response_text: str, attempt_number: int = 1) -> dict[str, Any]:
     score = clean_score(raw.get("score"))
-    passed = bool(raw.get("passed")) and score >= PASSING_SCORE
+    passed = score >= PASSING_SCORE
     feedback = str(raw.get("feedback") or "").strip()
     if not feedback:
         feedback = fallback_review(response_text, attempt_number)["feedback"]
