@@ -289,6 +289,7 @@ def append_trial_feedback_history(trial: JourneyBeltTrial, review: dict[str, Any
 
     history.append({
         "reviewed_at": datetime.now().isoformat(),
+        "attempt_number": review.get("attempt_number") or len(history) + 1,
         "status": "passed" if review.get("passed") else "needs_revision",
         "score": review.get("score"),
         "response_text": response_text,
@@ -308,6 +309,9 @@ def apply_trial_review(db: Session, trial: JourneyBeltTrial, config: dict) -> Jo
     dimension = JOURNEY_DIMENSIONS.get(trial.dimension_id, {})
     belt_requirement = get_belt_requirement(config, trial.dimension_id, trial.target_belt)
     requirement = get_trial_requirement(config, trial.dimension_id, trial.target_belt, trial.trial_type)
+    evidence = dict(trial.evidence or {})
+    history = evidence.get("feedback_history") if isinstance(evidence.get("feedback_history"), list) else []
+    attempt_number = len(history) + 1
     review = review_belt_trial(
         domain_name=dimension.get("name", trial.dimension_id.title()),
         target_belt=trial.target_belt,
@@ -316,6 +320,7 @@ def apply_trial_review(db: Session, trial: JourneyBeltTrial, config: dict) -> Jo
         belt_objective=requirement.get("criteria") or belt_requirement.get("criteria") or requirement.get("completion_hint"),
         prompt=trial.prompt,
         response_text=trial.response_text or "",
+        attempt_number=attempt_number,
     )
     trial.status = "passed" if review.get("passed") else "needs_revision"
     trial.score = review.get("score")

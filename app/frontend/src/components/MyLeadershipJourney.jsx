@@ -1349,8 +1349,13 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           ? current.map((trial) => (trial.id === updatedTrial.id ? updatedTrial : trial))
           : [updatedTrial, ...current]
       );
-      setActiveTrial(null);
-      setTrialDraft("");
+      if (status === "submitted") {
+        setActiveTrial(updatedTrial);
+        setTrialDraft(updatedTrial.response_text || trialDraft.trim());
+      } else {
+        setActiveTrial(null);
+        setTrialDraft("");
+      }
     } catch (error) {
       console.error("Failed to submit belt trial", error);
       alert("Alfred could not save this exercise yet. Your text is still on screen; please try again.");

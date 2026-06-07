@@ -84,9 +84,10 @@ def listify(value: Any) -> list[str]:
     return []
 
 
-def fallback_review(response_text: str) -> dict[str, Any]:
+def fallback_review(response_text: str, attempt_number: int = 1) -> dict[str, Any]:
     words = len((response_text or "").split())
-    has_specific_marker = any(marker in (response_text or "").lower() for marker in [
+    lower_response = (response_text or "").lower()
+    has_specific_marker = any(marker in lower_response for marker in [
         "for example",
         "last week",
         "yesterday",
@@ -95,14 +96,19 @@ def fallback_review(response_text: str) -> dict[str, Any]:
         "next time",
         "this week",
     ])
+    has_ownership_marker = any(marker in lower_response for marker in ["i own", "my part", "i should", "i could", "i learned"])
+    has_next_action = any(marker in lower_response for marker in ["i will", "next", "this week", "from now on"])
     score = 4 if words >= 120 and has_specific_marker else 3 if words >= 80 else 2
+    if score == 3 and has_specific_marker and has_ownership_marker and has_next_action:
+        score = 4
     passed = score >= PASSING_SCORE
     feedback = (
-        "Strong work. Your answer gives enough concrete evidence for Alfred to see what happened, what you learned, "
+        f"Review {attempt_number}: Strong work. Your answer gives enough concrete evidence for Alfred to see what happened, what you learned, "
         "and how you will apply it next. Keep carrying this into the next trial."
         if passed else
-        "Good start. The answer is not yet concrete enough to pass this trial. Add one real situation, name the pattern "
-        "you noticed, own your part in it, and describe one behavior you will change before resubmitting."
+        f"Review {attempt_number}: Good start. The answer is not yet concrete enough to pass this trial. "
+        f"You wrote about {words} words; Alfred still needs a real situation, the pattern you noticed, your ownership in it, "
+        "and one behavior you will change before resubmitting."
     )
     return {
         "passed": passed,
@@ -119,12 +125,12 @@ def fallback_review(response_text: str) -> dict[str, Any]:
     }
 
 
-def normalize_review(raw: dict[str, Any], response_text: str) -> dict[str, Any]:
+def normalize_review(raw: dict[str, Any], response_text: str, attempt_number: int = 1) -> dict[str, Any]:
     score = clean_score(raw.get("score"))
     passed = bool(raw.get("passed")) and score >= PASSING_SCORE
     feedback = str(raw.get("feedback") or "").strip()
     if not feedback:
-        feedback = fallback_review(response_text)["feedback"]
+        feedback = fallback_review(response_text, attempt_number)["feedback"]
     return {
         "passed": passed,
         "score": score,
@@ -133,6 +139,7 @@ def normalize_review(raw: dict[str, Any], response_text: str) -> dict[str, Any]:
         "required_improvements": listify(raw.get("required_improvements")),
         "feedback": feedback,
         "review_source": raw.get("review_source") or "ai",
+        "attempt_number": attempt_number,
     }
 
 
@@ -145,9 +152,10 @@ def review_belt_trial(
     belt_objective: Optional[str],
     prompt: str,
     response_text: str,
+    attempt_number: int = 1,
 ) -> dict[str, Any]:
     if not OPENAI_API_KEY:
-        return normalize_review(fallback_review(response_text), response_text)
+        return normalize_review(fallback_review(response_text, attempt_number), response_text, attempt_number)
 
     prompt_config = load_trial_review_prompt()
     user_prompt = prompt_config["user_template"].format(
@@ -159,13 +167,18 @@ def review_belt_trial(
         prompt=prompt,
         response_text=response_text,
     )
+    user_prompt = (
+        f"Review attempt number: {attempt_number}\n"
+        "This may be a resubmission. Review only the current response below; do not reuse prior feedback.\n\n"
+        f"{user_prompt}"
+    )
 
     try:
         from openai import OpenAI
 
         client = OpenAI(
             api_key=OPENAI_API_KEY,
-            timeout=12.0,
+            timeout=25.0,
             max_retries=0,
         )
         response = client.chat.completions.create(
@@ -178,7 +191,7 @@ def review_belt_trial(
             max_tokens=900,
         )
         raw_text = response.choices[0].message.content or "{}"
-        return normalize_review(parse_review_response(raw_text), response_text)
+        return normalize_review(parse_review_response(raw_text), response_text, attempt_number)
     except Exception as error:
         print(f"Error reviewing belt trial: {error}")
-        return normalize_review(fallback_review(response_text), response_text)
+        return normalize_review(fallback_review(response_text, attempt_number), response_text, attempt_number)
