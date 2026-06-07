@@ -221,7 +221,7 @@ function MainAppShell({
       />
 
       <main className={`flex-1 overflow-auto ${isMobile ? 'mt-14' : ''}`}>
-        <PageIntroBanner pageId={currentPage} />
+        {currentPage !== 'my-journal' && <PageIntroBanner pageId={currentPage} />}
 
         {currentPage === 'settings' && (
           <Settings
