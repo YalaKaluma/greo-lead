@@ -280,7 +280,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
   /* ---------------- FETCH HABIT TRENDS ---------------- */
 
   const fetchHabitTrends = async () => {
-    if (!apiUrl || !userNumber) return;
+    if (apiUrl == null || !userNumber) return;
     setTrendsLoading(true);
     setTrendsError(null);
     try {
