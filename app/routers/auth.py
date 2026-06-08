@@ -7,12 +7,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from datetime import datetime
+import logging
 from app.db import get_db
 from app.models import User
 from app.services.onboarding_seed_service import ensure_starter_examples_seeded
 from app.utils.security import hash_password, verify_password
 
 router = APIRouter(tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 class LoginRequest(BaseModel):
@@ -118,9 +120,15 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     db.add(user)
     db.flush()
     user.phone_number = f"local:{user.id}"
-    ensure_starter_examples_seeded(db, user)
     db.commit()
     db.refresh(user)
+
+    try:
+        ensure_starter_examples_seeded(db, user)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Starter example seeding failed for user_id=%s", user.id)
 
     return {
         "success": True,
