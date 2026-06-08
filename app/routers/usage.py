@@ -6,7 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import Message, UsageEvent, User
-from app.services.intro_cards import INTRO_RECAP_MARKER, build_intro_cards_recap
+from app.services.intro_cards import (
+    INTRO_RECAP_MARKER,
+    LEGACY_INTRO_RECAP_MARKER,
+    build_intro_cards_recap,
+)
 from app.services.message_service import save_message
 
 router = APIRouter(tags=["usage"])
@@ -120,7 +124,10 @@ def send_intro_recap_message(
         Message.user_number == user_number,
         Message.sender == "assistant",
         Message.conversation_type == "messages",
-        Message.content.contains(INTRO_RECAP_MARKER),
+        (
+            Message.content.contains(INTRO_RECAP_MARKER)
+            | Message.content.contains(LEGACY_INTRO_RECAP_MARKER)
+        ),
     ).first()
 
     if existing:

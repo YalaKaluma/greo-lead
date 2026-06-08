@@ -15,6 +15,7 @@ from app.services.message_service import (
     save_message,
 )
 from app.services.language import normalize_language
+from app.services.intro_cards import build_intro_cards_recap
 
 router = APIRouter()
 
@@ -399,6 +400,8 @@ What would you like to work on today?"""
 I'm Alfred, your AI Chief of Staff. I'm here to guide you through your first steps.
 
 Ready to explore? Let's start with your goals!"""
+
+    welcome = build_intro_cards_recap()
 
     return {
         "message": welcome,
