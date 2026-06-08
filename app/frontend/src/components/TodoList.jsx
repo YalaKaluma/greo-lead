@@ -9,7 +9,6 @@ import FilterSection from './TodoList/FilterSection';
 import { getTodayET, getETDate, formatDateForInput, isOverdueET, getSortedGoals, getLongTermGoals } from '../utils/taskHelpers';
 import { useLanguage } from '../i18n/LanguageContext';
 import { usePriority } from '../hooks/usePriority';
-import { useYellowBeltUnlock } from '../hooks/useYellowBeltUnlock';
 
 /**
  * TodoList Component - Main Task Management Interface
@@ -25,7 +24,7 @@ import { useYellowBeltUnlock } from '../hooks/useYellowBeltUnlock';
  */
 export default function TodoList({ apiUrl, userNumber }) {
   const { t, timezone } = useLanguage();
-  const { isYellowBeltOrAbove } = useYellowBeltUnlock(apiUrl, userNumber);
+  const showTaskTrends = true;
   // Task data
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -120,18 +119,8 @@ export default function TodoList({ apiUrl, userNumber }) {
     if (apiUrl == null || !userNumber) return;
     fetchFilters();
     fetchGoals();
-    if (isYellowBeltOrAbove) {
-      fetchMtnTrends();
-    } else {
-      setMtnTrends(null);
-    }
-  }, [apiUrl, userNumber, isYellowBeltOrAbove]);
-
-  useEffect(() => {
-    if (!isYellowBeltOrAbove && activeTab === 'trends') {
-      setActiveTab('tasks');
-    }
-  }, [isYellowBeltOrAbove, activeTab]);
+    fetchMtnTrends();
+  }, [apiUrl, userNumber]);
 
   // Refetch tasks when filters change
   useEffect(() => {
@@ -150,7 +139,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       setTodayKey(previousToday => {
         if (previousToday !== currentToday) {
           fetchTasks();
-          if (isYellowBeltOrAbove) fetchMtnTrends();
+          fetchMtnTrends();
           return currentToday;
         }
         return previousToday;
@@ -158,7 +147,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     }, 60000);
 
     return () => clearInterval(timer);
-  }, [apiUrl, userNumber, timezone, isYellowBeltOrAbove]);
+  }, [apiUrl, userNumber, timezone]);
 
   // ============================================================================
   // DATA FETCHING
@@ -251,7 +240,7 @@ export default function TodoList({ apiUrl, userNumber }) {
 
       if (Number(response.data?.scored || 0) > 0) {
         await fetchTasks({ skipMtnBackfill: true });
-        if (isYellowBeltOrAbove) fetchMtnTrends();
+        if (showTaskTrends) fetchMtnTrends();
       }
     } catch (err) {
       console.error('MTN backfill failed:', err);
@@ -260,7 +249,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const fetchMtnTrends = async () => {
-    if (apiUrl == null || !userNumber || !isYellowBeltOrAbove) return;
+    if (apiUrl == null || !userNumber) return;
     setMtnTrendsLoading(true);
     setMtnTrendsError(null);
     try {
@@ -428,7 +417,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       setTimeout(() => {
         setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
         setCompletingTasks(prev => prev.filter(id => id !== taskId));
-        if (isYellowBeltOrAbove) fetchMtnTrends();
+        fetchMtnTrends();
       }, 1500);
     } catch (err) {
       console.error('Error toggling task:', err);
@@ -884,7 +873,7 @@ export default function TodoList({ apiUrl, userNumber }) {
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
                 )}
               </button>
-              {isYellowBeltOrAbove && (
+              {showTaskTrends && (
                 <button
                   type="button"
                   onClick={() => setActiveTab('trends')}
@@ -931,7 +920,7 @@ export default function TodoList({ apiUrl, userNumber }) {
           </div>
         )}
 
-        {isYellowBeltOrAbove && activeTab === 'trends' && (
+        {showTaskTrends && activeTab === 'trends' && (
           <TrendsErrorBoundary>
             <TaskMtnTrendsTab
               trends={mtnTrends}
