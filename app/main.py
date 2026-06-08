@@ -345,6 +345,7 @@ if static_path.exists():
             # Count asset files
             asset_files = list(assets_path.glob("*"))
             logger.info(f"  ✓ Assets mounted at /assets ({len(asset_files)} files)")
+            logger.info(f"  Frontend JS assets: {[asset.name for asset in asset_files if asset.suffix == '.js']}")
         except Exception as e:
             logger.error(f"  ✗ Failed to mount assets: {e}")
     else:

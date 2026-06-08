@@ -1265,13 +1265,30 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   const journeyCurrentBelt = getBeltById(readinessStatus?.current_belt || latestAssessment?.target_belt || selectedState.currentBeltId);
   const journeyNextBelt = getBeltById(readinessStatus?.target_belt || getNextBeltId(journeyCurrentBelt.id));
   const isAssessmentLockedUntilYellow = readinessStatus?.assessment_locked_until_yellow || readinessStatus?.current_belt === "white";
+  const availableTrialBelts = BELTS.filter(
+    (belt) => getBeltIndexById(belt.id) >= getBeltIndexById(journeyCurrentBelt.id)
+  );
+
+  useEffect(() => {
+    if (
+      selectedTrialBeltId &&
+      getBeltIndexById(selectedTrialBeltId) < getBeltIndexById(journeyCurrentBelt.id)
+    ) {
+      setSelectedTrialBeltId(null);
+    }
+  }, [journeyCurrentBelt.id, selectedTrialBeltId]);
+
   useEffect(() => {
     if (isAssessmentLockedUntilYellow && activeJourneyTab === "assessment") {
       setActiveJourneyTab("journey");
     }
   }, [isAssessmentLockedUntilYellow, activeJourneyTab]);
 
-  const viewedBelt = getBeltById(selectedTrialBeltId || journeyCurrentBelt.id);
+  const effectiveSelectedTrialBeltId = (
+    selectedTrialBeltId &&
+    getBeltIndexById(selectedTrialBeltId) >= getBeltIndexById(journeyCurrentBelt.id)
+  ) ? selectedTrialBeltId : null;
+  const viewedBelt = getBeltById(effectiveSelectedTrialBeltId || journeyCurrentBelt.id);
   const viewedNextBelt = getBeltById(getNextBeltId(viewedBelt.id));
   const viewedBeltRequirements = getBeltRequirementsFromConfig(
     trialConfig,
@@ -1528,7 +1545,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
             ) : null}
             <div className="flex flex-wrap items-center justify-end gap-2">
               <div className="flex flex-wrap justify-end gap-2">
-                {BELTS.map((belt) => (
+                {availableTrialBelts.map((belt) => (
                   <button
                     key={belt.name}
                     type="button"
