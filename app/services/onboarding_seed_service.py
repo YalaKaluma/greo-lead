@@ -239,8 +239,9 @@ def ensure_starter_examples_seeded(db: Session, user: User) -> bool:
 
         if not onboarding_data.get(COMPACT_GOAL_SAMPLE_KEY):
             logger.info("Starter seed: compacting sample goals for user_id=%s", user.id)
-            _compact_sample_goal_hierarchy(db, user.phone_number, created_goals)
-            _seed_roadmaps(db, user.phone_number, created_goals, sync_existing=True)
+            if not is_new_starter_seed:
+                _compact_sample_goal_hierarchy(db, user.phone_number, created_goals)
+                _seed_roadmaps(db, user.phone_number, created_goals, sync_existing=True)
             onboarding_data[COMPACT_GOAL_SAMPLE_KEY] = {
                 "seeded_at": datetime.utcnow().isoformat(),
                 "version": 1,
@@ -447,10 +448,12 @@ def _seed_roadmaps(
                 db.add(wave)
                 db.flush()
 
+            linked_goal_ids = set()
             for goal_index, outcome_title in enumerate(wave_spec["outcomes"]):
                 outcome = goal_entry["outcomes"].get(outcome_title)
-                if not outcome:
+                if not outcome or outcome.id in linked_goal_ids:
                     continue
+                linked_goal_ids.add(outcome.id)
                 db.add(WaveGoal(
                     wave_id=wave.id,
                     goal_id=outcome.id,
