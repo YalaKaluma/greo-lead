@@ -53,9 +53,10 @@ def record_usage_event(
     db.add(event)
     db.commit()
 
-    if event.feature == "journey_belt_view_state":
+    if event.feature in {"journey_belt_view_state", "yellow_belt_unlock_state"}:
         logger.info(
-            "[journey_belt_view_state] user_number=%s user_id=%s page=%s metadata=%s event_id=%s",
+            "[%s] user_number=%s user_id=%s page=%s metadata=%s event_id=%s",
+            event.feature,
             request.user_number,
             user.id if user else None,
             event.page,
