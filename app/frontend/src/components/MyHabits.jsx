@@ -299,6 +299,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
   const refreshHabitCoaching = async () => {
     setCoachingRefreshState({ loading: true, message: '', error: '' });
     try {
+      await fetchHabitTrends();
       const res = await axios.post(`${apiUrl}/api/habits/coaching/refresh`, null, {
         params: { user_number: userNumber }
       });
@@ -446,7 +447,10 @@ export default function MyHabits({ apiUrl, userNumber }) {
         { params: { user_number: userNumber } }
       );
       setTrends(null);
-      fetchHabits();
+      await fetchHabits();
+      if (activeTab === 'trends') {
+        await fetchHabitTrends();
+      }
     } catch (err) {
       console.error('Error toggling habit:', err);
     }
@@ -465,7 +469,10 @@ export default function MyHabits({ apiUrl, userNumber }) {
       // Refresh history
       await fetchHabitHistory(habitId);
       setTrends(null);
-      fetchHabits(); // Also refresh main list to update streak
+      await fetchHabits(); // Also refresh main list to update streak
+      if (activeTab === 'trends') {
+        await fetchHabitTrends();
+      }
     } catch (err) {
       console.error('Error updating day:', err);
     }

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import date, timedelta
 from pydantic import BaseModel
 
 from app.db import get_db
-from app.models import DailyEnergyCheckin, Habit, HabitCompletion, JourneyGoal
+from app.models import DailyEnergyCheckin, Habit, HabitCompletion, JourneyGoal, User
 from app.services.timezone_service import get_user_timezone, today_for_timezone
 from app.services.habit_coaching_service import (
     get_latest_habit_coaching_review,
@@ -15,6 +16,7 @@ from app.services.habit_coaching_service import (
 from app.services.habits.habit_trend_service import get_habit_trends
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------
@@ -58,6 +60,23 @@ class DayUpdate(BaseModel):
 # ---------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------
+
+def get_user_identifiers(db: Session, user_number: str) -> list[str]:
+    identifiers = {str(user_number or "").strip()}
+    identifiers.discard("")
+
+    user = db.query(User).filter(
+        (User.phone_number == user_number) | (User.email == user_number)
+    ).first()
+    if user:
+        identifiers.update(
+            value.strip()
+            for value in [user.phone_number, user.email]
+            if value and value.strip()
+        )
+
+    return list(identifiers)
+
 
 def calculate_streak(completions: list, frequency: str, today: date) -> int:
     """
@@ -262,8 +281,24 @@ def save_energy_checkin(payload: EnergyCheckinRequest, db: Session = Depends(get
 def get_trends(user_number: str, db: Session = Depends(get_db)):
     """Get historical habit trends, scorecards, and coaching context."""
 
-    trends = get_habit_trends(user_number, db, get_user_timezone(db, user_number))
+    identifiers = get_user_identifiers(db, user_number)
+    trends = get_habit_trends(
+        user_number,
+        db,
+        get_user_timezone(db, user_number),
+        user_identifiers=identifiers,
+    )
     trends["latest_coaching_review"] = get_latest_habit_coaching_review(db, user_number)
+    logger.info(
+        "[habit_trends] user_number=%s identifiers=%s habit_count=%s leaderboard_count=%s trend_points=%s last_90_expected=%s last_90_completed=%s",
+        user_number,
+        identifiers,
+        trends.get("coaching_context", {}).get("habit_count"),
+        len(trends.get("leaderboard") or []),
+        len(trends.get("trend_chart") or []),
+        trends.get("summary", {}).get("last_90_days", {}).get("expected"),
+        trends.get("summary", {}).get("last_90_days", {}).get("completed"),
+    )
     return trends
 
 

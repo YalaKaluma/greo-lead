@@ -272,14 +272,20 @@ def _build_coaching(summary: dict[str, Any], leaderboard: list[dict[str, Any]], 
     )
 
 
-def get_habit_trends(user_number: str, db: Session, timezone_name: str = DEFAULT_TIMEZONE) -> dict[str, Any]:
+def get_habit_trends(
+    user_number: str,
+    db: Session,
+    timezone_name: str = DEFAULT_TIMEZONE,
+    user_identifiers: list[str] | None = None,
+) -> dict[str, Any]:
     end_date = get_today(timezone_name)
     start_date = end_date - timedelta(days=89)
     query_start_date = end_date - timedelta(days=179)
+    identifiers = user_identifiers or [user_number]
 
     habits = (
         db.query(Habit)
-        .filter(Habit.user_number == user_number, Habit.is_active == True)
+        .filter(Habit.user_number.in_(identifiers), Habit.is_active == True)
         .all()
     )
     habit_ids = [habit.id for habit in habits]
@@ -300,7 +306,7 @@ def get_habit_trends(user_number: str, db: Session, timezone_name: str = DEFAULT
     energy_checkins = (
         db.query(DailyEnergyCheckin)
         .filter(
-            DailyEnergyCheckin.user_number == user_number,
+            DailyEnergyCheckin.user_number.in_(identifiers),
             DailyEnergyCheckin.date >= start_date,
             DailyEnergyCheckin.date <= end_date,
         )
