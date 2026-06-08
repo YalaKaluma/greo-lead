@@ -59,6 +59,7 @@ from app.services.yellow_belt_validator import (
 from app.services.vision_progress_review_service import VisionProgressReviewService
 from app.services.belt_trial_reviewer import review_belt_trial
 from app.services.onboarding_seed_service import (
+    ensure_starter_examples_for_empty_user,
     ensure_starter_roadmaps_seeded,
 )
 
@@ -2091,6 +2092,10 @@ def get_goals(
         db: Session = Depends(get_db)
 ):
     """Get all goals for a user"""
+    user = db.query(User).filter((User.phone_number == user_number) | (User.email == user_number)).first()
+    if user and ensure_starter_examples_for_empty_user(db, user):
+        db.commit()
+
     goals = (
         db.query(JourneyGoal)
         .options(

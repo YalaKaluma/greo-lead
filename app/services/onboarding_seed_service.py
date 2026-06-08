@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+import logging
 
 from sqlalchemy.orm import Session
 
@@ -14,6 +15,8 @@ from app.models import (
     WaveGoal,
 )
 
+
+logger = logging.getLogger(__name__)
 
 STARTER_SEED_KEY = "starter_examples_seeded_v1"
 ROADMAP_SEED_KEY = "starter_roadmaps_seeded_v1"
@@ -204,40 +207,48 @@ def ensure_starter_examples_seeded(db: Session, user: User) -> bool:
     seeded_anything = False
     is_new_starter_seed = not onboarding_data.get(STARTER_SEED_KEY)
 
-    created_goals = _seed_goals(
-        db,
-        user.phone_number,
-        allow_missing_visions=is_new_starter_seed,
-    )
+    try:
+        logger.info("Starter seed: building goals for user_id=%s user_number=%s", user.id, user.phone_number)
+        created_goals = _seed_goals(
+            db,
+            user.phone_number,
+            allow_missing_visions=is_new_starter_seed,
+        )
 
-    if is_new_starter_seed:
-        _seed_tasks(db, user.phone_number, created_goals)
-        _seed_habits(db, user.phone_number)
-        _seed_journal_examples(db, user)
-        _seed_people(db, user.phone_number)
+        if is_new_starter_seed:
+            logger.info("Starter seed: building starter tables for user_id=%s", user.id)
+            _seed_tasks(db, user.phone_number, created_goals)
+            _seed_habits(db, user.phone_number)
+            _seed_journal_examples(db, user)
+            _seed_people(db, user.phone_number)
 
-        onboarding_data[STARTER_SEED_KEY] = {
-            "seeded_at": datetime.utcnow().isoformat(),
-            "version": 1,
-        }
-        seeded_anything = True
-
-    if not onboarding_data.get(ROADMAP_SEED_KEY):
-        if _seed_roadmaps(db, user.phone_number, created_goals):
-            onboarding_data[ROADMAP_SEED_KEY] = {
+            onboarding_data[STARTER_SEED_KEY] = {
                 "seeded_at": datetime.utcnow().isoformat(),
                 "version": 1,
             }
             seeded_anything = True
 
-    if not onboarding_data.get(COMPACT_GOAL_SAMPLE_KEY):
-        _compact_sample_goal_hierarchy(db, user.phone_number, created_goals)
-        _seed_roadmaps(db, user.phone_number, created_goals, sync_existing=True)
-        onboarding_data[COMPACT_GOAL_SAMPLE_KEY] = {
-            "seeded_at": datetime.utcnow().isoformat(),
-            "version": 1,
-        }
-        seeded_anything = True
+        if not onboarding_data.get(ROADMAP_SEED_KEY):
+            logger.info("Starter seed: building roadmaps for user_id=%s", user.id)
+            if _seed_roadmaps(db, user.phone_number, created_goals):
+                onboarding_data[ROADMAP_SEED_KEY] = {
+                    "seeded_at": datetime.utcnow().isoformat(),
+                    "version": 1,
+                }
+                seeded_anything = True
+
+        if not onboarding_data.get(COMPACT_GOAL_SAMPLE_KEY):
+            logger.info("Starter seed: compacting sample goals for user_id=%s", user.id)
+            _compact_sample_goal_hierarchy(db, user.phone_number, created_goals)
+            _seed_roadmaps(db, user.phone_number, created_goals, sync_existing=True)
+            onboarding_data[COMPACT_GOAL_SAMPLE_KEY] = {
+                "seeded_at": datetime.utcnow().isoformat(),
+                "version": 1,
+            }
+            seeded_anything = True
+    except Exception:
+        logger.exception("Starter seed failed for user_id=%s user_number=%s", user.id, user.phone_number)
+        raise
 
     user.onboarding_data = onboarding_data
     return seeded_anything
@@ -291,6 +302,24 @@ def ensure_starter_goal_samples_compacted(db: Session, user: User) -> bool:
     }
     user.onboarding_data = onboarding_data
     return True
+
+
+def ensure_starter_examples_for_empty_user(db: Session, user: User) -> bool:
+    """Repair self-serve accounts that were created before starter seeding completed."""
+    if not user or not user.id or not user.phone_number:
+        return False
+
+    onboarding_data = dict(user.onboarding_data or {})
+    if onboarding_data.get(STARTER_SEED_KEY):
+        return False
+
+    has_goals = db.query(JourneyGoal.id).filter(
+        JourneyGoal.user_number == user.phone_number,
+    ).first()
+    if has_goals:
+        return False
+
+    return ensure_starter_examples_seeded(db, user)
 
 
 def ensure_starter_tasks_visible_today(db: Session, user_number: str) -> int:

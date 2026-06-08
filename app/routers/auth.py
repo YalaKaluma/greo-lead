@@ -120,8 +120,6 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     db.add(user)
     db.flush()
     user.phone_number = f"local:{user.id}"
-    db.commit()
-    db.refresh(user)
 
     try:
         ensure_starter_examples_seeded(db, user)
@@ -129,6 +127,12 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     except Exception:
         db.rollback()
         logger.exception("Starter example seeding failed for user_id=%s", user.id)
+        return {
+            "success": False,
+            "message": "Account setup failed. Please try again."
+        }
+
+    db.refresh(user)
 
     return {
         "success": True,
