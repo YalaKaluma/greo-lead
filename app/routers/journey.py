@@ -274,6 +274,23 @@ def get_next_belt_id(current_belt: str) -> str:
     return BELT_IDS[min(current_index + 1, len(BELT_IDS) - 1)]
 
 
+def get_user_identifiers(db: Session, user_number: str) -> list[str]:
+    identifiers = {str(user_number or "").strip()}
+    identifiers.discard("")
+
+    user = db.query(User).filter(
+        (User.phone_number == user_number) | (User.email == user_number)
+    ).first()
+    if user:
+        identifiers.update(
+            value.strip()
+            for value in [user.phone_number, user.email]
+            if value and value.strip()
+        )
+
+    return list(identifiers)
+
+
 def normalize_trial_status(status: Optional[str]) -> str:
     return (status or "not_started").strip().lower()
 
@@ -541,8 +558,9 @@ def get_belt_completion_for_dimension(db: Session, user_number: str, config: dic
 
 
 def get_current_belt_status(db: Session, user_number: str, config: dict) -> dict:
+    user_identifiers = get_user_identifiers(db, user_number)
     accepted_assessment = db.query(BeltAssessment).filter(
-        BeltAssessment.user_number == user_number,
+        BeltAssessment.user_number.in_(user_identifiers),
         BeltAssessment.accepted_at.isnot(None),
     ).order_by(BeltAssessment.accepted_at.desc()).first()
     current_belt = accepted_assessment.target_belt if accepted_assessment else "white"
@@ -1198,7 +1216,7 @@ def get_belt_readiness_status(
         status["assessment_locked_until_yellow"] = False
         status["is_assessment_available"] = True
     latest_assessment = db.query(BeltAssessment).filter(
-        BeltAssessment.user_number == user_number,
+        BeltAssessment.user_number.in_(get_user_identifiers(db, user_number)),
         BeltAssessment.current_belt == status["current_belt"],
         BeltAssessment.target_belt == status["target_belt"],
     ).order_by(BeltAssessment.created_at.desc()).first()
@@ -1214,7 +1232,7 @@ def get_latest_belt_assessment(
         db: Session = Depends(get_db)
 ):
     return db.query(BeltAssessment).filter(
-        BeltAssessment.user_number == user_number
+        BeltAssessment.user_number.in_(get_user_identifiers(db, user_number))
     ).order_by(BeltAssessment.created_at.desc()).first()
 
 
@@ -1224,7 +1242,7 @@ def get_belt_assessments(
         db: Session = Depends(get_db)
 ):
     return db.query(BeltAssessment).filter(
-        BeltAssessment.user_number == user_number
+        BeltAssessment.user_number.in_(get_user_identifiers(db, user_number))
     ).order_by(BeltAssessment.created_at.desc()).all()
 
 
@@ -1334,7 +1352,7 @@ def accept_belt_promotion(
 ):
     assessment = db.query(BeltAssessment).filter(
         BeltAssessment.id == assessment_id,
-        BeltAssessment.user_number == user_number,
+        BeltAssessment.user_number.in_(get_user_identifiers(db, user_number)),
     ).first()
     if not assessment:
         raise HTTPException(status_code=404, detail="Belt assessment not found")

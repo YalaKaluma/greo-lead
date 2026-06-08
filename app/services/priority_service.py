@@ -23,9 +23,7 @@ from app.models import (
     TaskPriorityRecommendation,
     TaskPriorityDecision
 )
-from app.services.timezone_service import DEFAULT_TIMEZONE, get_user_timezone
-
-ET = pytz.timezone(DEFAULT_TIMEZONE)
+from app.services.timezone_service import get_user_timezone
 
 GOAL_LEVEL_ALIASES = {
     "long": ["long", "long_term", "vision"],
@@ -217,12 +215,12 @@ class PriorityService:
         )
 
     def _today_window(self, user_number: str) -> Tuple[datetime, datetime]:
-        """Return the user's local start/end timestamps for today."""
+        """Return today's UTC bounds for the user's configured local day."""
         user_tz = self._timezone_for_user(user_number)
         now = datetime.now(user_tz)
         start = user_tz.localize(datetime.combine(now.date(), time.min))
         end = user_tz.localize(datetime.combine(now.date(), time.max))
-        return start, end
+        return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
 
     def get_latest_scores_for_today(
             self,
@@ -287,7 +285,7 @@ class PriorityService:
             tokens_used=llm_result["tokens_used"]
         )
         recommendation = self.generate_recommendations(context_id=context.id, scores=scores)
-        self.persist_mtn_results_to_tasks(scores, recommendation)
+        self.persist_mtn_results_to_tasks(user_number, scores, recommendation)
 
         return context, recommendation, scores, llm_result["tokens_used"]
 
@@ -390,6 +388,7 @@ class PriorityService:
 
     def persist_mtn_results_to_tasks(
             self,
+            user_number: str,
             scores: List[TaskPriorityScore],
             recommendation: Optional[TaskPriorityRecommendation]
     ) -> None:
@@ -397,7 +396,7 @@ class PriorityService:
         if not scores:
             return
 
-        now = datetime.now(ET)
+        now = datetime.now(self._timezone_for_user(user_number))
         sorted_scores = sorted(scores, key=lambda s: s.top10_likelihood, reverse=True)
         top_ids_by_position = {score.task_id: idx + 1 for idx, score in enumerate(sorted_scores[:10])}
 
@@ -657,7 +656,7 @@ class PriorityService:
         Returns:
             Summary of changes applied
         """
-        now = datetime.now(ET)
+        now = datetime.now(self._timezone_for_user(user_number))
 
         # Remove approved removals
         if approved_removes:
