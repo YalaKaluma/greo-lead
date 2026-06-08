@@ -60,6 +60,7 @@ from app.services.vision_progress_review_service import VisionProgressReviewServ
 from app.services.belt_trial_reviewer import review_belt_trial
 from app.services.onboarding_seed_service import (
     ensure_starter_examples_for_empty_user,
+    ensure_starter_goal_samples_compacted,
     ensure_starter_roadmaps_seeded,
 )
 
