@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 import logging
 
 from sqlalchemy.orm import Session
@@ -14,6 +14,7 @@ from app.models import (
     VisionRoadmapWave,
     WaveGoal,
 )
+from app.services.timezone_service import get_user_timezone, today_for_timezone
 
 
 logger = logging.getLogger(__name__)
@@ -331,17 +332,32 @@ def ensure_starter_tasks_visible_today(db: Session, user_number: str) -> int:
     tasks = db.query(Task).filter(
         Task.user_number == user_number,
         Task.status == "open",
-        Task.due_date.is_(None),
         Task.title.in_(STARTER_TASK_TITLES),
     ).all()
 
     now = datetime.utcnow()
+    local_due_at = _starter_due_datetime(db, user_number)
+    local_today = local_due_at.date()
+    repaired_count = 0
     for task in tasks:
-        task.due_date = now
+        task_due_day = task.due_date.date() if isinstance(task.due_date, datetime) else task.due_date
+        should_repair = (
+            task.due_date is None
+            or (
+                task_due_day
+                and task_due_day > local_today
+                and (task.current_bucket in ("today", "this_week", None))
+            )
+        )
+        if not should_repair:
+            continue
+
+        task.due_date = local_due_at
         task.current_bucket = task.current_bucket or "today"
         task.updated_at = now
+        repaired_count += 1
 
-    return len(tasks)
+    return repaired_count
 
 
 def _seed_goals(db: Session, user_number: str, allow_missing_visions: bool) -> dict[str, dict]:
@@ -663,18 +679,25 @@ def _seed_tasks(db: Session, user_number: str, goals: dict[str, dict]) -> None:
     ]
 
     now = datetime.utcnow()
+    due_at = _starter_due_datetime(db, user_number)
     for index, (title, goal, priority) in enumerate(task_specs):
         db.add(Task(
             user_number=user_number,
             title=title,
             notes=starter_note,
-            due_date=now,
+            due_date=due_at,
             status="open",
             priority=priority,
             goal_id=goal.id if goal else None,
             current_bucket="today" if index < 3 else "this_week",
             sort_order=index,
         ))
+
+
+def _starter_due_datetime(db: Session, user_number: str) -> datetime:
+    user_timezone = get_user_timezone(db, user_number)
+    user_today = today_for_timezone(user_timezone)
+    return datetime.combine(user_today, time.min)
 
 
 def _seed_habits(db: Session, user_number: str) -> None:
