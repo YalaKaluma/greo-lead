@@ -1308,6 +1308,52 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
     topicData
   );
 
+  useEffect(() => {
+    if (apiUrl == null || !userNumber || !readinessStatus) return;
+
+    axios.post(`${apiUrl}/api/usage-events`, {
+      user_number: userNumber,
+      event_type: "diagnostic",
+      page: "my-journey",
+      feature: "journey_belt_view_state",
+      metadata: {
+        readiness_current_belt: readinessStatus?.current_belt || null,
+        readiness_target_belt: readinessStatus?.target_belt || null,
+        latest_assessment_target_belt: latestAssessment?.target_belt || null,
+        selected_trial_belt_id: selectedTrialBeltId || null,
+        selected_dimension_id: selectedDimension.id,
+        active_topic: activeTopic,
+        journey_current_belt_id: journeyCurrentBelt.id,
+        journey_next_belt_id: journeyNextBelt.id,
+        viewed_belt_id: viewedBelt.id,
+        viewed_next_belt_id: viewedNextBelt.id,
+        assessment_locked_until_yellow: Boolean(isAssessmentLockedUntilYellow),
+        is_assessment_available: Boolean(readinessStatus?.is_assessment_available),
+        is_eligible_to_submit: Boolean(readinessStatus?.is_eligible_to_submit),
+        completed_trials: readinessStatus?.completed_trials ?? null,
+        required_trials: readinessStatus?.required_trials ?? null,
+        missing_trials_count: Array.isArray(readinessStatus?.missing_trials)
+          ? readinessStatus.missing_trials.length
+          : null,
+      },
+    }).catch(() => {
+      // Diagnostic logging should never affect the Journey experience.
+    });
+  }, [
+    apiUrl,
+    userNumber,
+    readinessStatus,
+    latestAssessment,
+    selectedTrialBeltId,
+    selectedDimension.id,
+    activeTopic,
+    journeyCurrentBelt.id,
+    journeyNextBelt.id,
+    viewedBelt.id,
+    viewedNextBelt.id,
+    isAssessmentLockedUntilYellow,
+  ]);
+
   const handleStartTrial = async (trialType, prompt) => {
     const existing = trialRecords.find(
       (trial) =>

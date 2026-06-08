@@ -1,4 +1,5 @@
 from typing import Any, Optional
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -14,6 +15,7 @@ from app.services.intro_cards import (
 from app.services.message_service import save_message
 
 router = APIRouter(tags=["usage"])
+logger = logging.getLogger(__name__)
 
 ADVANCED_PAGE_VIEW_THRESHOLD = 12
 ADVANCED_DISTINCT_PAGE_THRESHOLD = 5
@@ -50,6 +52,16 @@ def record_usage_event(
     )
     db.add(event)
     db.commit()
+
+    if event.feature == "journey_belt_view_state":
+        logger.info(
+            "[journey_belt_view_state] user_number=%s user_id=%s page=%s metadata=%s event_id=%s",
+            request.user_number,
+            user.id if user else None,
+            event.page,
+            request.metadata or {},
+            event.id,
+        )
 
     return {"success": True, "event_id": event.id}
 

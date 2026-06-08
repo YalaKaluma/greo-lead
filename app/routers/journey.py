@@ -583,6 +583,22 @@ def get_current_belt_status(db: Session, user_number: str, config: dict) -> dict
         totals["required"] += progress["required"]
         totals["missing"].extend(progress["missing"])
 
+    logger.info(
+        "[belt_readiness_status] user_number=%s identifiers=%s accepted_assessment_id=%s accepted_current=%s accepted_target=%s accepted_at=%s current_belt=%s target_belt=%s completed=%s required=%s missing_count=%s missing_sample=%s",
+        user_number,
+        user_identifiers,
+        accepted_assessment.id if accepted_assessment else None,
+        accepted_assessment.current_belt if accepted_assessment else None,
+        accepted_assessment.target_belt if accepted_assessment else None,
+        accepted_assessment.accepted_at.isoformat() if accepted_assessment and accepted_assessment.accepted_at else None,
+        current_belt,
+        target_belt,
+        totals["completed"],
+        totals["required"],
+        len(totals["missing"]),
+        totals["missing"][:5],
+    )
+
     return {
         "current_belt": current_belt,
         "target_belt": target_belt,
@@ -1223,6 +1239,17 @@ def get_belt_readiness_status(
 
     status["latest_assessment_status"] = latest_assessment.status if latest_assessment else None
     status["latest_assessment_id"] = latest_assessment.id if latest_assessment else None
+    logger.info(
+        "[belt_readiness_response] user_number=%s current_belt=%s target_belt=%s assessment_locked_until_yellow=%s is_assessment_available=%s is_eligible_to_submit=%s latest_assessment_id=%s latest_assessment_status=%s",
+        user_number,
+        status.get("current_belt"),
+        status.get("target_belt"),
+        status.get("assessment_locked_until_yellow"),
+        status.get("is_assessment_available"),
+        status.get("is_eligible_to_submit"),
+        status.get("latest_assessment_id"),
+        status.get("latest_assessment_status"),
+    )
     return status
 
 
