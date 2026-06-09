@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import TrendRangeToggle from './TrendRangeToggle';
+
 const WIDTH = 720;
 const HEIGHT = 240;
 const PADDING = 32;
@@ -99,10 +102,11 @@ function KpiCard({ label, value, detail, tone = 'slate' }) {
 }
 
 function DepthTrendChart({ data }) {
+  const [rangeDays, setRangeDays] = useState(21);
   const points = (Array.isArray(data) ? data : []).map(point => ({
     ...point,
     daily_plot_score: Number(point.entry_count || 0) > 0 ? point.daily_average : 0,
-  }));
+  })).slice(-rangeDays);
   const dailyPath = buildPath(points, 'daily_plot_score');
   const weeklyPath = buildPath(points, 'weekly_average');
   const rollingPath = buildPath(points, 'rolling_30_day_average');
@@ -110,9 +114,10 @@ function DepthTrendChart({ data }) {
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Reflection Depth Trend</h2>
+          <p className="mt-1 text-sm text-slate-500">Last {rangeDays} days of reflection depth.</p>
           <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> Daily</span>
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-500" /> No input</span>
@@ -120,6 +125,7 @@ function DepthTrendChart({ data }) {
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-600" /> 30-day</span>
           </div>
         </div>
+        <TrendRangeToggle value={rangeDays} onChange={setRangeDays} label="Journal trend range" />
       </div>
 
       <div className="mt-4 overflow-hidden rounded-md bg-slate-50">

@@ -6,6 +6,7 @@ import TaskItem from './TodoList/TaskItem';
 import TaskModal from './TodoList/TaskModal';
 import BulkActionModal from './TodoList/BulkActionModal';
 import FilterSection from './TodoList/FilterSection';
+import TrendRangeToggle from './TrendRangeToggle';
 import { getTodayET, getETDate, formatDateForInput, isOverdueET, getSortedGoals, getLongTermGoals } from '../utils/taskHelpers';
 import { useLanguage } from '../i18n/LanguageContext';
 import { usePriority } from '../hooks/usePriority';
@@ -1558,6 +1559,7 @@ class TrendsErrorBoundary extends Component {
 }
 
 function TaskMtnTrendChart({ data }) {
+  const [rangeDays, setRangeDays] = useState(21);
   const rows = (Array.isArray(data) ? data : [])
     .filter(item => item && typeof item === 'object' && dateKey(item.date))
     .map(item => ({
@@ -1566,7 +1568,7 @@ function TaskMtnTrendChart({ data }) {
       rollingAverage: Number(item.rolling_average || 0),
       completedTasks: Number(item.completed_tasks || 0),
     }));
-  const visibleRows = fillMtnTrendDates(rows).slice(-90);
+  const visibleRows = fillMtnTrendDates(rows).slice(-rangeDays);
   const maxValue = Math.max(
     1,
     Math.ceil(Math.max(...visibleRows.flatMap(item => [item.mtnScore, item.rollingAverage]), 0) * 1.15)
@@ -1582,16 +1584,14 @@ function TaskMtnTrendChart({ data }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">MTN Score Trend</h2>
-          <p className="mt-1 text-sm text-slate-500">Last {visibleRows.length || 90} days of task momentum.</p>
+          <p className="mt-1 text-sm text-slate-500">Last {rangeDays} days of task momentum.</p>
           <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> Daily MTN</span>
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> 7-day average</span>
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-500" /> No input</span>
           </div>
         </div>
-        <div className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
-          {visibleRows.length || rows.length} days
-        </div>
+        <TrendRangeToggle value={rangeDays} onChange={setRangeDays} label="Task trend range" />
       </div>
 
       {visibleRows.length === 0 ? (
