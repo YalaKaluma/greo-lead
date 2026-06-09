@@ -76,8 +76,11 @@ else:
 # --------------------------------------
 logger.info("💾 Initializing Database...")
 try:
-    Base.metadata.create_all(bind=engine)
-    ensure_admin_schema_and_seed()
+    if os.getenv("SKIP_DB_INIT", "").lower() in {"1", "true", "yes"}:
+        logger.info("Database initialization skipped by SKIP_DB_INIT")
+    else:
+        Base.metadata.create_all(bind=engine)
+        ensure_admin_schema_and_seed()
     logger.info("✓ Database tables created/verified successfully")
     logger.info(f"  Database engine: {engine.url.drivername}")
     logger.info(f"  Database host: {engine.url.host}")
@@ -411,6 +414,9 @@ else:
 
 @app.on_event("startup")
 def start_email():
+    if os.getenv("SKIP_STARTUP_TASKS", "").lower() in {"1", "true", "yes"}:
+        logger.info("Startup background tasks skipped by SKIP_STARTUP_TASKS")
+        return
     thread = threading.Thread(target=run_email_loop, daemon=True)
     thread.start()
 
