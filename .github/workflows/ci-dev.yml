@@ -43,7 +43,7 @@ jobs:
 
       - name: Run backend tests
         run: |
-          if [ -d tests ]; then pytest -q; else echo "No tests directory found"; fi
+          if [ -d tests ]; then pytest -q tests; else echo "No tests directory found"; fi
 
       - name: Set up Node
         uses: actions/setup-node@v4
