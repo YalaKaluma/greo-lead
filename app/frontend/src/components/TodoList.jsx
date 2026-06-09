@@ -745,6 +745,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   const todayMtnTasks = Array.isArray(mtnTrends?.summary?.today?.tasks)
     ? mtnTrends.summary.today.tasks
     : [];
+  const mtnBenchmark = buildDailyMtnBenchmark(mtnTrends);
 
   // ============================================================================
   // RENDER
@@ -782,6 +783,7 @@ export default function TodoList({ apiUrl, userNumber }) {
               <DailyMtnNeedle
                 score={todayMtnScore}
                 completedTasks={todayCompletedTasks}
+                benchmark={mtnBenchmark}
                 onClick={() => setShowMtnBreakdown(true)}
               />
             </div>
@@ -1194,28 +1196,43 @@ export default function TodoList({ apiUrl, userNumber }) {
   );
 }
 
-function DailyMtnNeedle({ score, completedTasks, onClick }) {
-  const cappedScore = Math.max(0, Math.min(Number(score || 0), 20));
-  const needleLeft = 7 + (cappedScore / 20) * 86;
+function DailyMtnNeedle({ score, completedTasks, benchmark, onClick }) {
+  const scaleMax = Math.max(Number(benchmark?.effectiveMax || 20), 1);
+  const cappedScore = Math.max(0, Math.min(Number(score || 0), scaleMax));
+  const needleLeft = 7 + (cappedScore / scaleMax) * 86;
+  const performanceLabel = benchmark?.todayLabel || 'MTN today';
+  const comparison = benchmark?.isDynamic
+    ? describeMtnAverageComparison(score, benchmark.avgMtn)
+    : 'Building your 30-day benchmark';
   const label = completedTasks > 0
-    ? `${formatMtnNumber(score)} MTN from ${completedTasks} done`
-    : `${formatMtnNumber(score)} MTN today`;
+    ? `${formatMtnNumber(score)} MTN from ${completedTasks} done - ${performanceLabel}`
+    : `${formatMtnNumber(score)} MTN today - ${performanceLabel}`;
+  const title = benchmark?.isDynamic
+    ? `Today's MTN: ${formatMtnNumber(score)}\n${performanceLabel} Day\n${comparison}`
+    : `${label}\nStatic scale until 7 active MTN days`;
+  const segments = benchmark?.segments?.length ? benchmark.segments : STATIC_MTN_SEGMENTS;
+  const ticks = benchmark?.ticks?.length ? benchmark.ticks : STATIC_MTN_TICKS;
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className="w-64 max-w-[68vw] rounded-md px-1 py-0.5 text-left transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-      title={label}
-      aria-label={label}
+      className="w-72 max-w-[76vw] rounded-md px-1 py-0.5 text-left transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      title={title}
+      aria-label={title}
     >
       <div className="relative h-5">
-        <div className="absolute inset-x-0 top-2 grid h-2 grid-cols-5 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
-          <span className="bg-blue-100" />
-          <span className="bg-blue-200" />
-          <span className="bg-blue-300" />
-          <span className="bg-blue-500" />
-          <span className="bg-blue-700" />
+        <div className="absolute inset-x-0 top-2 flex h-2 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
+          {segments.map(segment => (
+            <span
+              key={segment.label}
+              style={{
+                backgroundColor: segment.color,
+                flexGrow: segment.range,
+                flexBasis: 0,
+              }}
+            />
+          ))}
         </div>
         <div
           className="absolute top-0 h-5 w-0.5 rounded-full bg-slate-900 shadow-sm transition-all"
@@ -1224,12 +1241,21 @@ function DailyMtnNeedle({ score, completedTasks, onClick }) {
           <span className="absolute -left-[5px] -top-1 h-0 w-0 border-l-[5px] border-r-[5px] border-t-[6px] border-l-transparent border-r-transparent border-t-slate-900" />
         </div>
       </div>
-      <div className="flex justify-between text-[10px] text-slate-400">
-        <span>0</span>
-        <span>5</span>
-        <span>10</span>
-        <span>15</span>
-        <span>20+</span>
+      <div className="relative h-4 text-[10px] text-slate-400">
+        {ticks.map(tick => (
+          <span
+            key={`${tick.label}-${tick.position}`}
+            className="absolute top-0 -translate-x-1/2 whitespace-nowrap first:translate-x-0 last:-translate-x-full"
+            style={{ left: `${tick.position}%` }}
+          >
+            {tick.label}
+          </span>
+        ))}
+      </div>
+      <div className="mt-0.5 flex justify-between text-[10px] font-medium text-slate-500">
+        {segments.map(segment => (
+          <span key={`${segment.label}-legend`}>{segment.label}</span>
+        ))}
       </div>
     </button>
   );
@@ -1336,6 +1362,138 @@ function formatMtnNumber(value) {
   const numeric = Number(value || 0);
   return numeric.toFixed(1);
 }
+
+const MTN_BRACKET_COLORS = {
+  Low: '#DC2626',
+  Base: '#F97316',
+  Good: '#FACC15',
+  Strong: '#84CC16',
+  Peak: '#16A34A',
+};
+
+const STATIC_MTN_SEGMENTS = [
+  { label: 'Low', start: 0, end: 4, range: 4, color: MTN_BRACKET_COLORS.Low },
+  { label: 'Base', start: 4, end: 8, range: 4, color: MTN_BRACKET_COLORS.Base },
+  { label: 'Good', start: 8, end: 12, range: 4, color: MTN_BRACKET_COLORS.Good },
+  { label: 'Strong', start: 12, end: 16, range: 4, color: MTN_BRACKET_COLORS.Strong },
+  { label: 'Peak', start: 16, end: 20, range: 4, color: MTN_BRACKET_COLORS.Peak },
+];
+
+const STATIC_MTN_TICKS = [
+  { label: '0', position: 0 },
+  { label: '5', position: 25 },
+  { label: '10', position: 50 },
+  { label: '15', position: 75 },
+  { label: '20+', position: 100 },
+];
+
+const formatMtnTick = (value, suffix = '') => {
+  const numeric = Number(value || 0);
+  const formatted = Math.abs(numeric - Math.round(numeric)) < 0.05
+    ? String(Math.round(numeric))
+    : numeric.toFixed(1);
+  return `${formatted}${suffix}`;
+};
+
+const getMtnSegmentLabel = (score, segments) => {
+  const numeric = Number(score || 0);
+  const match = segments.find((segment, index) => (
+    index === segments.length - 1
+      ? numeric >= segment.start
+      : numeric >= segment.start && numeric < segment.end
+  ));
+  return match?.label || segments[0]?.label || 'Low';
+};
+
+const buildMtnTicks = (values, effectiveMax) => {
+  const maxValue = Math.max(Number(effectiveMax || 0), 1);
+  const labels = values.map((value, index) => ({
+    label: formatMtnTick(value, index === values.length - 1 ? '+' : ''),
+    position: Math.max(0, Math.min(100, (Number(value || 0) / maxValue) * 100)),
+  }));
+
+  return labels.filter((tick, index, all) => (
+    index === 0 || index === all.length - 1 || Math.abs(tick.position - all[index - 1].position) >= 7
+  ));
+};
+
+const buildDailyMtnBenchmark = (mtnTrends) => {
+  const todayDate = mtnTrends?.summary?.today?.date;
+  const rows = extractTrendChart(mtnTrends)
+    .map(row => ({
+      date: dateKey(row.date),
+      mtnScore: Number(row.mtn_score ?? row.mtnScore ?? 0),
+      completedTasks: Number(row.completed_tasks ?? row.completedTasks ?? 0),
+    }))
+    .filter(row => row.date);
+
+  const previousRows = todayDate
+    ? rows.filter(row => row.date < todayDate)
+    : rows.slice(0, -1);
+  const historyRows = previousRows.slice(-30);
+  const activeHistoryDays = historyRows.filter(row => row.completedTasks > 0 || row.mtnScore > 0).length;
+  const todayScore = Number(mtnTrends?.summary?.today?.mtn_score || 0);
+
+  if (activeHistoryDays < 7) {
+    return {
+      isDynamic: false,
+      avgMtn: 0,
+      effectiveMax: 20,
+      activeHistoryDays,
+      segments: STATIC_MTN_SEGMENTS,
+      ticks: STATIC_MTN_TICKS,
+      todayLabel: getMtnSegmentLabel(todayScore, STATIC_MTN_SEGMENTS),
+    };
+  }
+
+  const dailyScores = historyRows.map(row => row.mtnScore);
+  const avgMtn = dailyScores.reduce((sum, value) => sum + value, 0) / Math.max(dailyScores.length, 1);
+  const maxMtn = Math.max(...dailyScores, 0);
+  const effectiveMax = Math.max(maxMtn, avgMtn + 5, 1);
+  const range = effectiveMax - avgMtn;
+  const boundaries = [
+    0,
+    avgMtn * 0.5,
+    avgMtn,
+    avgMtn + range * 0.33,
+    avgMtn + range * 0.66,
+    effectiveMax,
+  ];
+  const labels = ['Low', 'Base', 'Good', 'Strong', 'Peak'];
+  const segments = labels.map((label, index) => {
+    const start = boundaries[index];
+    const end = Math.max(boundaries[index + 1], start);
+    return {
+      label,
+      start,
+      end,
+      range: Math.max(end - start, 0.1),
+      color: MTN_BRACKET_COLORS[label],
+    };
+  });
+
+  return {
+    isDynamic: true,
+    avgMtn,
+    maxMtn,
+    effectiveMax,
+    activeHistoryDays,
+    segments,
+    ticks: buildMtnTicks(boundaries, effectiveMax),
+    todayLabel: getMtnSegmentLabel(todayScore, segments),
+  };
+};
+
+const describeMtnAverageComparison = (score, average) => {
+  const numericScore = Number(score || 0);
+  const numericAverage = Number(average || 0);
+  if (numericAverage <= 0) return 'Your 30-day average is still forming';
+
+  const percent = Math.round(((numericScore - numericAverage) / numericAverage) * 100);
+  if (percent > 0) return `${percent}% above your 30-day average`;
+  if (percent < 0) return `${Math.abs(percent)}% below your 30-day average`;
+  return 'Right at your 30-day average';
+};
 
 const dateFromKey = (key) => {
   const [year, month, day] = dateKey(key).split('-').map(Number);
