@@ -10,6 +10,7 @@ jobs:
     name: Lightweight checks
     runs-on: ubuntu-latest
     env:
+      PYTHONPATH: ${{ github.workspace }}
       DATABASE_URL: sqlite:///./ci.db
       SKIP_DB_INIT: "1"
       SKIP_STARTUP_TASKS: "1"
