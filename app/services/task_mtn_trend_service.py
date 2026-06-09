@@ -103,6 +103,18 @@ def _trend_label(delta: float) -> str:
     return "Stable"
 
 
+def _rank_procrastinated_tasks(tasks: list[Task], limit: int = 3) -> list[Task]:
+    return sorted(
+        tasks,
+        key=lambda task: (
+            task.times_postponed or 0,
+            _normalize_mtn_score(task.move_the_needle_score),
+            task.updated_at or datetime.min,
+        ),
+        reverse=True,
+    )[:limit]
+
+
 def get_task_mtn_trends(
     user_number: str,
     db: Session,
@@ -112,17 +124,16 @@ def get_task_mtn_trends(
     start_date = end_date - timedelta(days=89)
 
     query_start = datetime.combine(start_date - timedelta(days=1), datetime.min.time())
-    procrastination_ranking = (
+    postponed_tasks = (
         db.query(Task)
         .filter(
             Task.user_number == user_number,
             Task.status != "archived",
             Task.times_postponed > 0,
         )
-        .order_by(Task.times_postponed.desc(), Task.updated_at.desc())
-        .limit(10)
         .all()
     )
+    procrastination_ranking = _rank_procrastinated_tasks(postponed_tasks, limit=3)
     tasks = (
         db.query(Task)
         .filter(
@@ -198,6 +209,7 @@ def get_task_mtn_trends(
                 "id": task.id,
                 "title": task.title,
                 "times_postponed": task.times_postponed or 0,
+                "mtn_score": round(_normalize_mtn_score(task.move_the_needle_score), 1),
                 "status": task.status,
                 "due_date": task.due_date.isoformat() if task.due_date else None,
                 "project": task.project,

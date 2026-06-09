@@ -1707,7 +1707,7 @@ function ProcrastinationRanking({ tasks }) {
           </p>
         </div>
         <div className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
-          Top {Math.min(rankedTasks.length, 10)}
+          Top {Math.min(rankedTasks.length, 3)}
         </div>
       </div>
 
@@ -1725,6 +1725,7 @@ function ProcrastinationRanking({ tasks }) {
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                   {task.project && <span>{task.project}</span>}
                   {task.due_date && <span>Due {formatShortDate(dateKey(task.due_date))}</span>}
+                  {task.mtn_score !== undefined && <span>MTN {formatMtnNumber(task.mtn_score)}</span>}
                   {task.status && <span className="capitalize">{task.status}</span>}
                 </div>
               </div>
