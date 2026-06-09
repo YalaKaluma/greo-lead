@@ -3644,7 +3644,7 @@ def serialize_procrastination_pattern(pattern: Any) -> dict[str, Any]:
             "user_number": pattern.get("user_number"),
             "title": pattern.get("title"),
             "pattern_text": pattern.get("pattern_text"),
-            "underlying_reason": pattern.get("underlying_reason") or pattern.get("trigger"),
+            "underlying_reason": pattern.get("underlying_reason") or pattern.get("trigger_text") or pattern.get("trigger"),
             "strategy": pattern.get("strategy") or pattern.get("mitigation"),
             "first_seen_at": pattern.get("first_seen_at") or pattern.get("updated_at") or now,
             "updated_at": pattern.get("updated_at") or pattern.get("first_seen_at") or now,
@@ -3655,8 +3655,8 @@ def serialize_procrastination_pattern(pattern: Any) -> dict[str, Any]:
         "user_number": pattern.user_number,
         "title": pattern.title,
         "pattern_text": pattern.pattern_text,
-        "underlying_reason": pattern.trigger,
-        "strategy": pattern.mitigation,
+        "underlying_reason": pattern.underlying_reason,
+        "strategy": pattern.strategy,
         "first_seen_at": pattern.first_seen_at,
         "updated_at": pattern.updated_at,
     }
@@ -3674,6 +3674,7 @@ def get_procrastination_pattern_rows(db: Session, user_number: str) -> list[dict
         "pattern_text",
         "underlying_reason",
         "strategy",
+        "trigger_text",
         "trigger",
         "mitigation",
         "first_seen_at",
@@ -3719,7 +3720,15 @@ def write_procrastination_pattern(
         "pattern_id": pattern_id,
     }
 
-    reason_column = "underlying_reason" if "underlying_reason" in columns else "trigger" if "trigger" in columns else None
+    reason_column = (
+        "underlying_reason"
+        if "underlying_reason" in columns
+        else "trigger_text"
+        if "trigger_text" in columns
+        else "trigger"
+        if "trigger" in columns
+        else None
+    )
     strategy_column = "strategy" if "strategy" in columns else "mitigation" if "mitigation" in columns else None
 
     if pattern_id is None:

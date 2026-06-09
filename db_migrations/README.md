@@ -34,6 +34,8 @@ This folder contains SQL migrations for Neon/PostgreSQL.
 - `2026-06-06_admin_user_management.sql` adds admin role/status fields and admin audit logging.
 - `2026-06-06_admin_feedback_review.sql` adds admin review status fields to message feedback.
 - `2026-06-07_add_user_auth_registration_fields.sql` backfills user auth, onboarding, trial, and tour fields required by self-serve registration.
+- `2026-06-08_add_synthetic_user_flags.sql` adds synthetic-user markers and lookup index.
+- `2026-06-09_resync_production_schema.sql` converges production schema drift, backfills procrastination pattern reason/strategy fields, and removes legacy duplicate columns.
 
 ## Migration Conventions
 

@@ -519,8 +519,8 @@ class JourneyProcrastinationPattern(Base):
     user_number = Column(String, index=True)
     title = Column(String(200), nullable=True)
     pattern_text = Column(Text, nullable=False)
-    trigger = Column(Text, nullable=True)
-    mitigation = Column(Text, nullable=True)
+    underlying_reason = Column(Text, nullable=True)
+    strategy = Column(Text, nullable=True)
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

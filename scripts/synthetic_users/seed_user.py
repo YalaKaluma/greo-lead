@@ -103,18 +103,38 @@ class SyntheticUserSeeder:
         return self.user
 
     def ensure_schema(self) -> None:
-        self.db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_synthetic_user BOOLEAN NOT NULL DEFAULT FALSE"))
-        self.db.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS synthetic_user_type VARCHAR"))
-        self.db.execute(text("ALTER TABLE journey_procrastination_patterns ADD COLUMN IF NOT EXISTS trigger TEXT"))
-        self.db.execute(text("ALTER TABLE journey_procrastination_patterns ADD COLUMN IF NOT EXISTS mitigation TEXT"))
-        self.db.execute(text("ALTER TABLE journey_energy_drains ADD COLUMN IF NOT EXISTS mitigation TEXT"))
-        self.db.execute(text("ALTER TABLE journey_execution_systems ADD COLUMN IF NOT EXISTS effectiveness VARCHAR"))
-        self.db.execute(text("ALTER TABLE journey_inspiration ADD COLUMN IF NOT EXISTS approach TEXT"))
-        self.db.execute(text("ALTER TABLE journey_inspiration ADD COLUMN IF NOT EXISTS effectiveness VARCHAR"))
-        self.db.execute(text("ALTER TABLE journey_coaching_moments ADD COLUMN IF NOT EXISTS outcome TEXT"))
-        self.db.execute(text("ALTER TABLE journey_coaching_moments ADD COLUMN IF NOT EXISTS learning TEXT"))
-        self.db.execute(text("ALTER TABLE journey_team_composition ADD COLUMN IF NOT EXISTS dynamics TEXT"))
-        self.db.commit()
+        required_columns = {
+            "users": {"is_synthetic_user", "synthetic_user_type"},
+            "journey_procrastination_patterns": {"underlying_reason", "strategy"},
+            "journey_energy_drains": {"mitigation"},
+            "journey_execution_systems": {"effectiveness"},
+            "journey_inspiration": {"approach", "effectiveness"},
+            "journey_coaching_moments": {"outcome", "learning"},
+            "journey_team_composition": {"dynamics"},
+        }
+        missing: list[str] = []
+        for table_name, expected_columns in required_columns.items():
+            existing_columns = set(
+                self.db.execute(
+                    text(
+                        """
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_schema = current_schema()
+                          AND table_name = :table_name
+                        """
+                    ),
+                    {"table_name": table_name},
+                ).scalars().all()
+            )
+            for column_name in sorted(expected_columns - existing_columns):
+                missing.append(f"{table_name}.{column_name}")
+
+        if missing:
+            raise RuntimeError(
+                "Synthetic user schema is missing columns. Run db_migrations before seeding: "
+                + ", ".join(missing)
+            )
 
     def load_user(self) -> User:
         user_spec = self.persona["user"]
@@ -607,7 +627,7 @@ class SyntheticUserSeeder:
         for item in evidence.get("recovery_methods") or []:
             self.db.add(JourneyRecoveryMethod(user_number=self.user_number, title=item.get("title"), method_text=item["text"], category=item.get("category"), frequency=item.get("frequency")))
         for item in evidence.get("procrastination_patterns") or []:
-            self.db.add(JourneyProcrastinationPattern(user_number=self.user_number, title=item.get("title"), pattern_text=item["text"], trigger=item.get("trigger"), mitigation=item.get("mitigation")))
+            self.db.add(JourneyProcrastinationPattern(user_number=self.user_number, title=item.get("title"), pattern_text=item["text"], underlying_reason=item.get("trigger") or item.get("underlying_reason"), strategy=item.get("mitigation") or item.get("strategy")))
         for item in evidence.get("execution_systems") or []:
             self.db.add(JourneyExecutionSystem(user_number=self.user_number, title=item.get("title"), system_text=item["text"], category=item.get("category"), effectiveness=item.get("effectiveness")))
         for item in evidence.get("inspiration") or []:
