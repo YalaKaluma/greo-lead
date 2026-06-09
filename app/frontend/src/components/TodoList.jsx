@@ -1200,29 +1200,27 @@ function DailyMtnNeedle({ score, completedTasks, benchmark, onClick }) {
   const scaleMax = Math.max(Number(benchmark?.effectiveMax || 20), 1);
   const cappedScore = Math.max(0, Math.min(Number(score || 0), scaleMax));
   const needleLeft = 7 + (cappedScore / scaleMax) * 86;
-  const performanceLabel = benchmark?.todayLabel || 'MTN today';
   const comparison = benchmark?.isDynamic
     ? describeMtnAverageComparison(score, benchmark.avgMtn)
     : 'Building your 30-day benchmark';
   const label = completedTasks > 0
-    ? `${formatMtnNumber(score)} MTN from ${completedTasks} done - ${performanceLabel}`
-    : `${formatMtnNumber(score)} MTN today - ${performanceLabel}`;
+    ? `${formatMtnNumber(score)} MTN from ${completedTasks} done`
+    : `${formatMtnNumber(score)} MTN today`;
   const title = benchmark?.isDynamic
-    ? `Today's MTN: ${formatMtnNumber(score)}\n${performanceLabel} Day\n${comparison}`
+    ? `Today's MTN: ${formatMtnNumber(score)}\n${comparison}`
     : `${label}\nStatic scale until 7 active MTN days`;
   const segments = benchmark?.segments?.length ? benchmark.segments : STATIC_MTN_SEGMENTS;
-  const ticks = benchmark?.ticks?.length ? benchmark.ticks : STATIC_MTN_TICKS;
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className="w-72 max-w-[76vw] rounded-md px-1 py-0.5 text-left transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      className="w-96 max-w-[82vw] rounded-md px-1 py-1 text-left transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
       title={title}
       aria-label={title}
     >
-      <div className="relative h-5">
-        <div className="absolute inset-x-0 top-2 flex h-2 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
+      <div className="relative h-8">
+        <div className="absolute inset-x-0 top-3 flex h-3 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
           {segments.map(segment => (
             <span
               key={segment.label}
@@ -1235,27 +1233,11 @@ function DailyMtnNeedle({ score, completedTasks, benchmark, onClick }) {
           ))}
         </div>
         <div
-          className="absolute top-0 h-5 w-0.5 rounded-full bg-slate-900 shadow-sm transition-all"
+          className="absolute top-0 h-8 w-1 rounded-full bg-slate-900 shadow-sm transition-all"
           style={{ left: `${needleLeft}%` }}
         >
-          <span className="absolute -left-[5px] -top-1 h-0 w-0 border-l-[5px] border-r-[5px] border-t-[6px] border-l-transparent border-r-transparent border-t-slate-900" />
+          <span className="absolute -left-[5px] -top-1 h-0 w-0 border-l-[7px] border-r-[7px] border-t-[8px] border-l-transparent border-r-transparent border-t-slate-900" />
         </div>
-      </div>
-      <div className="relative h-4 text-[10px] text-slate-400">
-        {ticks.map(tick => (
-          <span
-            key={`${tick.label}-${tick.position}`}
-            className="absolute top-0 -translate-x-1/2 whitespace-nowrap first:translate-x-0 last:-translate-x-full"
-            style={{ left: `${tick.position}%` }}
-          >
-            {tick.label}
-          </span>
-        ))}
-      </div>
-      <div className="mt-0.5 flex justify-between text-[10px] font-medium text-slate-500">
-        {segments.map(segment => (
-          <span key={`${segment.label}-legend`}>{segment.label}</span>
-        ))}
       </div>
     </button>
   );
@@ -1379,44 +1361,6 @@ const STATIC_MTN_SEGMENTS = [
   { label: 'Peak', start: 16, end: 20, range: 4, color: MTN_BRACKET_COLORS.Peak },
 ];
 
-const STATIC_MTN_TICKS = [
-  { label: '0', position: 0 },
-  { label: '5', position: 25 },
-  { label: '10', position: 50 },
-  { label: '15', position: 75 },
-  { label: '20+', position: 100 },
-];
-
-const formatMtnTick = (value, suffix = '') => {
-  const numeric = Number(value || 0);
-  const formatted = Math.abs(numeric - Math.round(numeric)) < 0.05
-    ? String(Math.round(numeric))
-    : numeric.toFixed(1);
-  return `${formatted}${suffix}`;
-};
-
-const getMtnSegmentLabel = (score, segments) => {
-  const numeric = Number(score || 0);
-  const match = segments.find((segment, index) => (
-    index === segments.length - 1
-      ? numeric >= segment.start
-      : numeric >= segment.start && numeric < segment.end
-  ));
-  return match?.label || segments[0]?.label || 'Low';
-};
-
-const buildMtnTicks = (values, effectiveMax) => {
-  const maxValue = Math.max(Number(effectiveMax || 0), 1);
-  const labels = values.map((value, index) => ({
-    label: formatMtnTick(value, index === values.length - 1 ? '+' : ''),
-    position: Math.max(0, Math.min(100, (Number(value || 0) / maxValue) * 100)),
-  }));
-
-  return labels.filter((tick, index, all) => (
-    index === 0 || index === all.length - 1 || Math.abs(tick.position - all[index - 1].position) >= 7
-  ));
-};
-
 const buildDailyMtnBenchmark = (mtnTrends) => {
   const todayDate = mtnTrends?.summary?.today?.date;
   const rows = extractTrendChart(mtnTrends)
@@ -1432,7 +1376,6 @@ const buildDailyMtnBenchmark = (mtnTrends) => {
     : rows.slice(0, -1);
   const historyRows = previousRows.slice(-30);
   const activeHistoryDays = historyRows.filter(row => row.completedTasks > 0 || row.mtnScore > 0).length;
-  const todayScore = Number(mtnTrends?.summary?.today?.mtn_score || 0);
 
   if (activeHistoryDays < 7) {
     return {
@@ -1441,8 +1384,6 @@ const buildDailyMtnBenchmark = (mtnTrends) => {
       effectiveMax: 20,
       activeHistoryDays,
       segments: STATIC_MTN_SEGMENTS,
-      ticks: STATIC_MTN_TICKS,
-      todayLabel: getMtnSegmentLabel(todayScore, STATIC_MTN_SEGMENTS),
     };
   }
 
@@ -1479,8 +1420,6 @@ const buildDailyMtnBenchmark = (mtnTrends) => {
     effectiveMax,
     activeHistoryDays,
     segments,
-    ticks: buildMtnTicks(boundaries, effectiveMax),
-    todayLabel: getMtnSegmentLabel(todayScore, segments),
   };
 };
 
