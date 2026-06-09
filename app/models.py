@@ -859,6 +859,8 @@ class User(Base):
     temp_password_expires = Column(DateTime, nullable=True)
     is_admin = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    is_synthetic_user = Column(Boolean, default=False, nullable=False)
+    synthetic_user_type = Column(String, nullable=True)
 
     # Onboarding state
     onboarding_step = Column(SQLEnum(OnboardingStep), default=OnboardingStep.INITIAL)

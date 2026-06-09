@@ -1,0 +1,157 @@
+user:
+  email: mike@example.com
+  first_name: Mike
+  last_name: Thompson
+  phone_number: synthetic:marathon_mike
+  profession: Product Manager
+
+metadata:
+  synthetic_type: training
+  created_over_months: 12
+  focus:
+    - Marathon
+    - Nutrition
+    - Consistency
+    - Habit building
+
+vision:
+  title: Become a Consistent, Healthy Athlete
+  description: Use marathon training as the anchor for a broader personal transformation.
+
+pillars:
+  - title: Marathon
+    outcomes:
+      - Complete First Marathon
+      - Build Weekly Mileage
+      - Improve Long Run Confidence
+  - title: Nutrition
+    outcomes:
+      - Plan Weekday Meals
+      - Reduce Late-Night Snacking
+      - Practice Race Fueling
+  - title: Consistency
+    outcomes:
+      - Build Morning Routine
+      - Recover After Setbacks
+      - Track Energy Honestly
+  - title: Work-Life
+    outcomes:
+      - Protect Training Calendar
+      - Communicate Boundaries
+
+habits:
+  - name: Morning Run or Mobility
+    completion_rate: 0.78
+    goal: Build Morning Routine
+  - name: Log Meals
+    completion_rate: 0.66
+    goal: Plan Weekday Meals
+  - name: Evening Reflection
+    completion_rate: 0.57
+  - name: Sleep Before 10:30
+    completion_rate: 0.61
+    goal: Track Energy Honestly
+
+tasks:
+  - title: Register for marathon
+    status: completed
+    goal: Complete First Marathon
+  - title: Build 16-week training plan
+    status: completed
+    goal: Build Weekly Mileage
+  - title: Buy replacement running shoes
+    status: active
+    goal: Improve Long Run Confidence
+  - title: Plan Sunday long-run route
+    status: active
+    goal: Improve Long Run Confidence
+  - title: Prep weekday lunches
+    status: active
+    goal: Plan Weekday Meals
+  - title: Test gels on next long run
+    status: active
+    goal: Practice Race Fueling
+  - title: Tell team about Tuesday training block
+    status: completed
+    goal: Communicate Boundaries
+  - title: Review missed-run triggers
+    status: active
+    goal: Recover After Setbacks
+  - title: Schedule sports massage
+    status: active
+    goal: Complete First Marathon
+
+journal:
+  - title: Starting again
+    body: I am tired of restarting every few months. I know what to do, but consistency breaks when work gets loud.
+    depth_score: 2
+  - title: Missed run pattern
+    body: I miss runs after late work nights, then I treat one missed run like proof that the whole plan failed. That all-or-nothing loop is bigger than running.
+    depth_score: 5
+  - title: Smaller promises
+    body: The breakthrough this week was doing twenty minutes instead of skipping. I am starting to trust the identity of someone who keeps a promise at smaller scale.
+    depth_score: 7
+  - title: Transformation beyond the race
+    body: Marathon training is becoming a mirror. The goal is the finish line, but the deeper change is learning to recover, recommit, and stop making setbacks mean I am back at zero.
+    depth_score: 8.7
+
+people:
+  - name: Rachel Thompson
+    relation: Partner
+    strengths:
+      - Encouragement
+      - Honest perspective
+    growth_areas:
+      - Needs clearer visibility into training schedule
+    aspirations:
+      - Wants weekends to feel planned instead of consumed by training.
+    relationship_health: 4
+  - name: Coach Daniel Brooks
+    relation: Mentor
+    strengths:
+      - Training structure
+      - Calm accountability
+    growth_areas:
+      - Limited time for nutrition details
+    aspirations:
+      - Help Mike reach the starting line healthy.
+    relationship_health: 5
+  - name: Lena Ortiz
+    relation: Peer
+    strengths:
+      - Consistency
+      - Practical encouragement
+    growth_areas:
+      - Can be overly competitive
+    aspirations:
+      - Run a personal best this season.
+    relationship_health: 4
+
+leadership_journey:
+  current_belt: orange
+  dimensions:
+    - vision
+    - execution
+    - energy
+    - learning
+  coaching_sessions:
+    - quadrant: time_energy
+      situation: Mike loses consistency when work stress spikes.
+      reflection: He treats disruption as failure instead of information.
+      pattern: All-or-nothing thinking collapses the routine.
+      experiment: Define a minimum viable workout before each week begins.
+      development_level: 3
+      insights: Recovery is part of identity, not a pause from it.
+      practice: Keep the smallest promise on difficult days.
+
+opportunities:
+  - title: Create minimum viable workout plan
+    domain: habits
+    goal: Recover After Setbacks
+    mtn_score: 0.92
+  - title: Schedule mentoring session with coach
+    domain: marathon
+    goal: Improve Long Run Confidence
+  - title: Clarify weekly training boundaries
+    domain: work-life
+    goal: Communicate Boundaries

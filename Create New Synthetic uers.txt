@@ -1,0 +1,47 @@
+Going forward, you have two simple paths.
+
+To relaunch/rebuild Alex:
+
+```powershell
+.\venv\Scripts\python.exe .\scripts\synthetic_users\seed_user.py executive_alex
+```
+
+That deletes the existing synthetic Alex account and recreates it cleanly from:
+
+```text
+scripts/synthetic_users/personas/executive_alex.yaml
+```
+
+To create another use case:
+
+1. Copy an existing persona file:
+
+```powershell
+Copy-Item .\scripts\synthetic_users\personas\executive_alex.yaml .\scripts\synthetic_users\personas\vp_sales_sam.yaml
+```
+
+2. Edit the new YAML:
+   - user email/name/phone
+   - visions
+   - pillars/outcomes
+   - roadmap waves
+   - tasks
+   - habits
+   - journal entries
+   - people
+   - journey evidence/trials
+   - opportunities
+
+3. Run:
+
+```powershell
+.\venv\Scripts\python.exe .\scripts\synthetic_users\seed_user.py vp_sales_sam
+```
+
+To remove a synthetic user:
+
+```powershell
+.\venv\Scripts\python.exe .\scripts\synthetic_users\reset_user.py alex@example.com
+```
+
+Important: the script writes to whatever database your `.env` `DATABASE_URL` points to. Use dev for testing; only point to prod when you intentionally want the live app changed.

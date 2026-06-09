@@ -1,0 +1,160 @@
+user:
+  email: emma@example.com
+  first_name: Emma
+  last_name: Rivera
+  phone_number: synthetic:entrepreneur_emma
+  profession: Founder and CEO
+
+metadata:
+  synthetic_type: qa
+  created_over_months: 8
+  focus:
+    - Product launch
+    - Fundraising
+    - Customer discovery
+
+vision:
+  title: Build a Category-Defining Company
+  description: Launch a focused product, prove customer pull, and grow as a founder without burning out.
+
+pillars:
+  - title: Product
+    outcomes:
+      - Launch Beta
+      - Improve Activation Rate
+      - Define Product Strategy
+  - title: Fundraising
+    outcomes:
+      - Build Investor Pipeline
+      - Close Seed Round
+      - Sharpen Founder Narrative
+  - title: Customer Discovery
+    outcomes:
+      - Interview 50 Customers
+      - Validate Pricing
+      - Build Advisory Circle
+  - title: Founder Energy
+    outcomes:
+      - Protect Deep Work
+      - Restore Sleep Rhythm
+
+habits:
+  - name: Customer Conversation
+    completion_rate: 0.73
+    frequency: weekdays
+    goal: Interview 50 Customers
+  - name: Founder Journal
+    completion_rate: 0.62
+  - name: Investor Follow-up Block
+    completion_rate: 0.58
+    frequency: weekdays
+    goal: Build Investor Pipeline
+  - name: Shutdown Ritual
+    completion_rate: 0.51
+    goal: Restore Sleep Rhythm
+
+tasks:
+  - title: Send beta invite batch
+    status: completed
+    goal: Launch Beta
+    priority: high
+  - title: Rewrite investor memo opening
+    status: active
+    goal: Sharpen Founder Narrative
+    mtn_score: 0.9
+  - title: Interview design partners
+    status: active
+    goal: Interview 50 Customers
+  - title: Decide onboarding success metric
+    status: active
+    goal: Improve Activation Rate
+  - title: Build investor target list
+    status: completed
+    goal: Build Investor Pipeline
+  - title: Price sensitivity survey
+    status: active
+    goal: Validate Pricing
+  - title: Ask Maya to join advisory circle
+    status: active
+    goal: Build Advisory Circle
+  - title: Remove two low-value roadmap items
+    status: completed
+    goal: Define Product Strategy
+  - title: Block two deep-work mornings
+    status: active
+    goal: Protect Deep Work
+
+journal:
+  - title: Too many directions
+    body: Everything feels important: product, investors, customers, hiring. I keep switching contexts and ending the day unsure what moved.
+    depth_score: 2.5
+  - title: Customer truth
+    body: The calls are clarifying. When I listen instead of pitching, the problem sounds sharper and the product gets smaller in a good way.
+    depth_score: 5
+  - title: Fundraising fear
+    body: I noticed I polish the deck when I am afraid to ask directly. The work looks productive, but the real move is sending the memo and inviting a no.
+    depth_score: 7
+  - title: Founder operating system
+    body: I am learning that focus is emotional, not just strategic. When I choose one customer segment, I also have to let go of imagined approval from everyone else.
+    depth_score: 8.2
+
+people:
+  - name: Noah Kim
+    relation: Co-founder
+    strengths:
+      - Product taste
+      - Fast prototyping
+    growth_areas:
+      - Communicating tradeoffs earlier
+    aspirations:
+      - Wants to become a stronger product leader.
+    relationship_health: 4
+  - name: Maya Chen
+    relation: Mentor
+    strengths:
+      - Fundraising pattern recognition
+      - Clear feedback
+    growth_areas:
+      - Pushes pace aggressively
+    aspirations:
+      - Help Emma tell a sharper founder story.
+    relationship_health: 5
+  - name: Jordan Ellis
+    relation: Peer
+    strengths:
+      - Growth experiments
+      - Founder empathy
+    growth_areas:
+      - Can over-index on tactics
+    aspirations:
+      - Build a founder community around practical support.
+    relationship_health: 4
+
+leadership_journey:
+  current_belt: orange
+  dimensions:
+    - vision
+    - execution
+    - learning
+    - energy
+  coaching_sessions:
+    - quadrant: vision_goals
+      situation: Emma is trying to serve too many customer profiles.
+      reflection: The broad market story feels safer than a narrow wedge.
+      pattern: Avoiding focus delays real rejection.
+      experiment: Use one design partner segment for the next 30 days.
+      development_level: 3
+      insights: Narrowing is a courage practice.
+      practice: Decide the customer before deciding the feature.
+
+opportunities:
+  - title: Clarify beta success metric
+    domain: product
+    goal: Improve Activation Rate
+    mtn_score: 0.88
+  - title: Schedule five investor asks
+    domain: fundraising
+    goal: Build Investor Pipeline
+  - title: Cut roadmap scope
+    domain: execution
+    goal: Define Product Strategy
