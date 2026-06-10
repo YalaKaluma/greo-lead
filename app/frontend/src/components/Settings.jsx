@@ -925,7 +925,8 @@ function AdminSystemHealthPanel({ apiUrl, userNumber }) {
         apiUrl={apiUrl}
         userNumber={userNumber}
         briefingType="operations"
-        buttonLabel="Generate Codex Brief"
+        buttonLabel="Refresh Data"
+        busyLabel="Refreshing..."
         emptyText="No operations intelligence generated yet."
         enableCodexTask
       />
@@ -1056,7 +1057,7 @@ function AdminSystemHealthPanel({ apiUrl, userNumber }) {
   );
 }
 
-function AdminAIBriefingBox({ apiUrl, userNumber, briefingType, buttonLabel, emptyText, enableCodexTask = false }) {
+function AdminAIBriefingBox({ apiUrl, userNumber, briefingType, buttonLabel, emptyText, busyLabel = 'Generating...', enableCodexTask = false }) {
   const [briefing, setBriefing] = useState(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -1197,7 +1198,7 @@ function AdminAIBriefingBox({ apiUrl, userNumber, briefingType, buttonLabel, emp
           disabled={generating}
           className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300"
         >
-          {generating ? 'Generating...' : buttonLabel}
+          {generating ? busyLabel : buttonLabel}
         </button>
       </div>
 
