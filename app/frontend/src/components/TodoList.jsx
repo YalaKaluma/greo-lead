@@ -53,6 +53,11 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [opportunityActions, setOpportunityActions] = useState({});
   const [showDeferModal, setShowDeferModal] = useState(false);
   const [deferLoading, setDeferLoading] = useState(false);
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [selectedFollowUpTask, setSelectedFollowUpTask] = useState(null);
+  const [followUpDate, setFollowUpDate] = useState('');
+  const [followUpError, setFollowUpError] = useState('');
+  const [followUpSaving, setFollowUpSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('tasks');
   const [mtnTrends, setMtnTrends] = useState(null);
   const [mtnTrendsLoading, setMtnTrendsLoading] = useState(false);
@@ -470,6 +475,52 @@ export default function TodoList({ apiUrl, userNumber }) {
     } catch (err) {
       console.error('Error adding task:', err);
       alert('Failed to add task');
+    }
+  };
+
+  const openFollowUpModal = (task) => {
+    setSelectedFollowUpTask(task);
+    setFollowUpDate('');
+    setFollowUpError('');
+    setShowFollowUpModal(true);
+  };
+
+  const closeFollowUpModal = () => {
+    if (followUpSaving) return;
+    setShowFollowUpModal(false);
+    setSelectedFollowUpTask(null);
+    setFollowUpDate('');
+    setFollowUpError('');
+  };
+
+  const createFollowUp = async () => {
+    if (!selectedFollowUpTask) return;
+    if (!followUpDate) {
+      setFollowUpError('Please select a follow-up date.');
+      return;
+    }
+
+    setFollowUpSaving(true);
+    setFollowUpError('');
+    try {
+      await axios.post(
+        `${apiUrl}/api/tasks/${selectedFollowUpTask.id}/follow-up`,
+        { follow_up_date: followUpDate },
+        { params: { user_number: userNumber } }
+      );
+      setTasks(prevTasks => prevTasks.filter(task => task.id !== selectedFollowUpTask.id));
+      setSortOrder(prevOrder => prevOrder.filter(id => id !== selectedFollowUpTask.id));
+      setShowFollowUpModal(false);
+      setSelectedFollowUpTask(null);
+      setFollowUpDate('');
+      await fetchTasks();
+      await fetchFilters();
+      fetchMtnTrends();
+    } catch (err) {
+      console.error('Error creating follow-up task:', err);
+      setFollowUpError(err.response?.data?.detail || 'Unable to create follow-up task. Please try again.');
+    } finally {
+      setFollowUpSaving(false);
     }
   };
 
@@ -968,6 +1019,7 @@ export default function TodoList({ apiUrl, userNumber }) {
                         }}
                         onLongPress={() => enterSelectionMode(task.id)}
                         onSelectToggle={() => toggleTaskSelection(task.id)}
+                        onFollowUp={() => openFollowUpModal(task)}
                         goals={goals}
                         priorityMode={priorityMode || Boolean(scoreData)}
                         priorityScore={scoreData}
@@ -1038,6 +1090,18 @@ export default function TodoList({ apiUrl, userNumber }) {
           delegates={delegates}
           goals={getLongTermGoals(goals)}
           timezone={timezone}
+        />
+      )}
+
+      {showFollowUpModal && selectedFollowUpTask && (
+        <FollowUpModal
+          task={selectedFollowUpTask}
+          followUpDate={followUpDate}
+          setFollowUpDate={setFollowUpDate}
+          error={followUpError}
+          saving={followUpSaving}
+          onCancel={closeFollowUpModal}
+          onConfirm={createFollowUp}
         />
       )}
 
@@ -1833,6 +1897,84 @@ function ProcrastinationRanking({ tasks }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function FollowUpModal({
+  task,
+  followUpDate,
+  setFollowUpDate,
+  error,
+  saving,
+  onCancel,
+  onConfirm
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/40 flex items-center justify-center px-4 py-6">
+      <div className="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Create Follow-Up</h2>
+            <p className="text-sm text-slate-500 mt-1">Done for now. Remind me later.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="text-slate-500 hover:text-slate-800 p-1 rounded hover:bg-slate-100 disabled:opacity-50"
+            aria-label="Close follow-up"
+          >
+            <CloseIcon />
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          <div>
+            <p className="text-sm font-medium text-slate-700">Follow up on:</p>
+            <p className="mt-1 text-base font-semibold text-slate-900 break-words">{task.title}</p>
+          </div>
+
+          <div>
+            <label htmlFor="follow-up-date" className="block text-sm font-medium text-slate-700 mb-1">
+              Follow-up date
+            </label>
+            <input
+              id="follow-up-date"
+              type="date"
+              value={followUpDate}
+              onChange={(event) => setFollowUpDate(event.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+              autoFocus
+            />
+          </div>
+
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-4 flex items-center justify-end gap-2 bg-slate-50">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg font-medium transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={saving}
+            className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Creating...' : 'OK'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

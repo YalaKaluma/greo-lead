@@ -123,6 +123,15 @@ class BulkDeferNonTop10Request(BaseModel):
     target_date: date
 
 
+class TaskFollowUpRequest(BaseModel):
+    follow_up_date: date
+
+
+class TaskFollowUpResponse(BaseModel):
+    original_task: TaskResponse
+    follow_up_task: TaskResponse
+
+
 # Priority order for sorting
 PRIORITY_ORDER = {"High": 1, "Medium": 2, "Low": 3}
 WEEKDAY_BY_NAME = {
@@ -623,6 +632,70 @@ def bulk_defer_non_top_10(
         "kept_today": len(request.task_ids_to_keep_today),
         "target_date": request.target_date.isoformat()
     }
+
+
+@router.post("/{task_id}/follow-up", response_model=TaskFollowUpResponse)
+def create_follow_up_task(
+        task_id: int,
+        user_number: str,
+        request: TaskFollowUpRequest,
+        db: Session = Depends(get_db)
+):
+    """
+    Create a follow-up task and complete the original task in one transaction.
+    """
+    task = db.query(Task).filter(
+        Task.id == task_id,
+        Task.user_number == user_number
+    ).first()
+
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    try:
+        now = datetime.now()
+        follow_up_task = Task(
+            user_number=task.user_number,
+            title=f"Follow up: {task.title}",
+            notes=task.notes,
+            project=task.project,
+            delegated_to=task.delegated_to,
+            due_date=request.follow_up_date,
+            status="open",
+            priority=task.priority,
+            goal_id=task.goal_id,
+            strategic_intent=task.strategic_intent,
+            move_the_needle_score=task.move_the_needle_score,
+            estimated_effort=task.estimated_effort,
+            suggested_subtasks=task.suggested_subtasks,
+            alfred_help=task.alfred_help,
+            enhanced_title=task.enhanced_title,
+            ai_enriched=task.ai_enriched,
+            originating_opportunity_id=task.originating_opportunity_id,
+            is_recurring=False,
+            created_at=now,
+            updated_at=now,
+        )
+
+        db.add(follow_up_task)
+        task.status = "completed"
+        task.updated_at = now
+
+        db.commit()
+        db.refresh(task)
+        db.refresh(follow_up_task)
+
+        return {
+            "original_task": task,
+            "follow_up_task": follow_up_task,
+        }
+    except Exception as exc:
+        db.rollback()
+        print(f"[TASKS API] Failed to create follow-up task: {exc}")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to create follow-up task. Please try again."
+        )
 
 
 @router.patch("/{task_id}/toggle", response_model=TaskResponse)

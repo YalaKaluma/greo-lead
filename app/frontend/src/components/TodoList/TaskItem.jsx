@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Draggable } from 'react-beautiful-dnd';
 import { getPriorityIcon, formatDueDate, getDueDateColor } from '../../utils/taskHelpers';
@@ -24,6 +24,7 @@ export default function TaskItem({
   onStartEdit,
   onLongPress,
   onSelectToggle,
+  onFollowUp,
   goals,
   priorityMode = false,
   priorityScore = null,
@@ -33,6 +34,9 @@ export default function TaskItem({
   const [swipeDistance, setSwipeDistance] = useState(0);
   const [touchStartX, setTouchStartX] = useState(0);
   const [longPressTimer, setLongPressTimer] = useState(null);
+  const cardRef = useRef(null);
+  const swipeDistanceRef = useRef(0);
+  const suppressClickRef = useRef(false);
 
   const onTouchStart = (e) => {
     setTouchStartX(e.touches[0].clientX);
@@ -56,7 +60,12 @@ export default function TaskItem({
 
     const currentX = e.touches[0].clientX;
     const distance = Math.max(0, touchStartX - currentX);
-    setSwipeDistance(Math.min(distance, 100));
+    const nextDistance = Math.min(distance, 120);
+    swipeDistanceRef.current = nextDistance;
+    if (nextDistance > 10) {
+      suppressClickRef.current = true;
+    }
+    setSwipeDistance(nextDistance);
   };
 
   const onTouchEnd = () => {
@@ -64,7 +73,19 @@ export default function TaskItem({
       clearTimeout(longPressTimer);
       setLongPressTimer(null);
     }
+    const width = cardRef.current?.offsetWidth || 0;
+    const threshold = Math.min(120, Math.max(80, width * 0.25));
+    const shouldOpenFollowUp = !selectionMode && swipeDistanceRef.current >= threshold;
+    swipeDistanceRef.current = 0;
     setSwipeDistance(0);
+
+    if (shouldOpenFollowUp && onFollowUp) {
+      onFollowUp();
+    }
+
+    window.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 250);
   };
 
   return (
@@ -86,11 +107,14 @@ export default function TaskItem({
           onStartEdit={onStartEdit}
           onLongPress={onLongPress}
           onSelectToggle={onSelectToggle}
+          onFollowUp={onFollowUp}
           goals={goals}
           priorityMode={priorityMode}
           priorityScore={priorityScore}
           onMtnFeedback={onMtnFeedback}
           timezone={timezone}
+          cardRef={cardRef}
+          suppressClickRef={suppressClickRef}
         />
       )}
     </Draggable>
@@ -113,11 +137,14 @@ function TaskCard({
   onStartEdit,
   onLongPress,
   onSelectToggle,
+  onFollowUp,
   goals,
   priorityMode,
   priorityScore,
   onMtnFeedback,
-  timezone
+  timezone,
+  cardRef,
+  suppressClickRef
 }) {
   const [showMtnFeedback, setShowMtnFeedback] = useState(false);
   const [mtnRating, setMtnRating] = useState(0);
@@ -147,6 +174,12 @@ function TaskCard({
   };
 
   const handleClick = (e) => {
+    if (suppressClickRef?.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
       e.stopPropagation();
@@ -207,24 +240,55 @@ function TaskCard({
       id={`task-${task.id}`}
       ref={provided.innerRef}
       {...provided.draggableProps}
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
       style={{
         ...provided.draggableProps.style,
-        transform: `${provided.draggableProps.style?.transform || ''} translateX(-${swipeDistance}px)`,
       }}
-      className={`
-        bg-white border-2 rounded px-3 py-2
-        hover:border-gray-300 transition-all
-        ${snapshot.isDragging ? 'opacity-50 scale-98 shadow-lg' : ''}
-        ${isCompleting ? 'opacity-60' : ''}
-        ${index >= 10 ? 'opacity-40' : ''}
-        ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}
-        cursor-pointer
-      `}
-      onClick={handleClick}
+      className="relative overflow-hidden rounded"
     >
+      {!selectionMode && (
+        <div className="absolute inset-y-0 right-0 flex w-32 items-center justify-end bg-slate-800 pr-4 text-white sm:hidden">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold">
+            <ClockReturnIcon />
+            Follow Up
+          </span>
+        </div>
+      )}
+
+      <div
+        ref={cardRef}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{
+          transform: `translateX(-${swipeDistance}px)`,
+        }}
+        className={`
+          relative bg-white border-2 rounded px-3 py-2 sm:pr-10
+          hover:border-gray-300 transition-all
+          ${snapshot.isDragging ? 'opacity-50 scale-98 shadow-lg' : ''}
+          ${isCompleting ? 'opacity-60' : ''}
+          ${index >= 10 ? 'opacity-40' : ''}
+          ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}
+          cursor-pointer
+        `}
+        onClick={handleClick}
+      >
+      {!selectionMode && (
+        <button
+          type="button"
+          onClick={(e) => {
+            if (handleSelectionShortcut(e)) return;
+            e.stopPropagation();
+            onFollowUp?.();
+          }}
+          className="absolute right-2 top-2 hidden h-7 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 sm:inline-flex"
+          title="Create follow-up"
+          aria-label="Create follow-up"
+        >
+          <ClockReturnIcon />
+        </button>
+      )}
+
       <div className={`flex items-start gap-2 ${isCompleting ? 'line-through' : ''}`}>
         {isSelected && (
           <div className="flex-shrink-0 mt-0.5">
@@ -361,6 +425,7 @@ function TaskCard({
           onClose={() => setShowMtnFeedback(false)}
         />
       )}
+      </div>
     </div>
   );
 }
@@ -372,6 +437,17 @@ function RepeatIcon() {
       <path d="M3 11V9a4 4 0 0 1 4-4h14" />
       <path d="m7 22-4-4 4-4" />
       <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+    </svg>
+  );
+}
+
+function ClockReturnIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+      <path d="M8 18H4v-4" />
+      <path d="M4 18a8 8 0 0 0 5 2.7" />
     </svg>
   );
 }
