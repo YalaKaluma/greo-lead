@@ -37,12 +37,16 @@ export default function TaskItem({
   const cardRef = useRef(null);
   const swipeDistanceRef = useRef(0);
   const suppressClickRef = useRef(false);
+  const longPressFiredRef = useRef(false);
 
   const onTouchStart = (e) => {
     setTouchStartX(e.touches[0].clientX);
+    longPressFiredRef.current = false;
 
     const timer = setTimeout(() => {
       if (!selectionMode) {
+        longPressFiredRef.current = true;
+        suppressClickRef.current = true;
         onLongPress();
         if (navigator.vibrate) {
           navigator.vibrate(50);
@@ -75,7 +79,7 @@ export default function TaskItem({
     }
     const width = cardRef.current?.offsetWidth || 0;
     const threshold = Math.min(120, Math.max(80, width * 0.25));
-    const shouldOpenFollowUp = !selectionMode && swipeDistanceRef.current >= threshold;
+    const shouldOpenFollowUp = !selectionMode && !longPressFiredRef.current && swipeDistanceRef.current >= threshold;
     swipeDistanceRef.current = 0;
     setSwipeDistance(0);
 
@@ -85,6 +89,7 @@ export default function TaskItem({
 
     window.setTimeout(() => {
       suppressClickRef.current = false;
+      longPressFiredRef.current = false;
     }, 250);
   };
 
@@ -199,6 +204,17 @@ function TaskCard({
     }
 
     onStartEdit();
+  };
+
+  const handleSelectionModeClick = (e) => {
+    if (!selectionMode) {
+      return false;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    onSelectToggle();
+    return true;
   };
 
   const handleSelectionShortcut = (e) => {
@@ -340,6 +356,7 @@ function TaskCard({
               className="font-medium text-slate-800 text-base break-words leading-tight cursor-pointer hover:text-blue-600 transition-colors"
               onClick={(e) => {
                 if (handleSelectionShortcut(e)) return;
+                if (handleSelectionModeClick(e)) return;
                 e.stopPropagation();
                 onStartEdit();
               }}
@@ -362,6 +379,7 @@ function TaskCard({
               {priorityMode && priorityScore && (
                 <button
                   onClick={(e) => {
+                    if (handleSelectionModeClick(e)) return;
                     e.stopPropagation();
                     setShowMtnFeedback(true);
                   }}
@@ -397,6 +415,7 @@ function TaskCard({
           <div className="hidden flex-shrink-0 ml-3 sm:flex items-center gap-2">
             <button
               onClick={(e) => {
+                if (handleSelectionModeClick(e)) return;
                 e.stopPropagation();
                 setShowMtnFeedback(true);
               }}
