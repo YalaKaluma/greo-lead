@@ -318,6 +318,7 @@ def _display_ai_briefing(briefing: AdminAIBriefing | None) -> dict[str, Any] | N
         "summary_text": briefing.summary_text,
         "codex_brief": briefing.codex_brief,
         "top_recommendations": briefing.top_recommendations or [],
+        "source_snapshot": briefing.source_snapshot or {},
         "model": briefing.model,
         "created_at": briefing.created_at.isoformat() if briefing.created_at else None,
         "admin_user_id": briefing.admin_user_id,

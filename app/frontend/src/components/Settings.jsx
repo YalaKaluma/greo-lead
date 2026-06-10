@@ -1060,8 +1060,9 @@ function AdminAIBriefingBox({ apiUrl, userNumber, briefingType, buttonLabel, emp
   const [briefing, setBriefing] = useState(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [addingTask, setAddingTask] = useState(false);
-  const [taskCreated, setTaskCreated] = useState(false);
+  const [expandedBriefIndex, setExpandedBriefIndex] = useState(null);
+  const [addingTaskIndex, setAddingTaskIndex] = useState(null);
+  const [createdTaskIndexes, setCreatedTaskIndexes] = useState({});
   const [error, setError] = useState('');
   const adminParams = { user_number: userNumber };
 
@@ -1071,6 +1072,8 @@ function AdminAIBriefingBox({ apiUrl, userNumber, briefingType, buttonLabel, emp
     try {
       const response = await axios.get(`${apiUrl}/api/admin/ai-briefings/${briefingType}`, { params: adminParams });
       setBriefing(response.data.briefing || null);
+      setExpandedBriefIndex(null);
+      setCreatedTaskIndexes({});
     } catch (err) {
       setError(err.response?.data?.detail || 'AI briefing could not be loaded.');
     } finally {
@@ -1088,7 +1091,8 @@ function AdminAIBriefingBox({ apiUrl, userNumber, briefingType, buttonLabel, emp
         { params: adminParams }
       );
       setBriefing(response.data.briefing || null);
-      setTaskCreated(false);
+      setExpandedBriefIndex(null);
+      setCreatedTaskIndexes({});
     } catch (err) {
       setError(err.response?.data?.detail || 'AI briefing could not be generated.');
     } finally {
@@ -1102,27 +1106,75 @@ function AdminAIBriefingBox({ apiUrl, userNumber, briefingType, buttonLabel, emp
     return offsetDate.toISOString().split('T')[0];
   };
 
-  const addCodexBriefToTasks = async () => {
-    if (!briefing?.codex_brief) return;
-    setAddingTask(true);
+  const formatOperationalLogsForTask = () => {
+    const snapshot = briefing?.source_snapshot || {};
+    const lines = [];
+    const recentErrors = Array.isArray(snapshot.recent_errors) ? snapshot.recent_errors.slice(0, 8) : [];
+    const railwayLogs = Array.isArray(snapshot.railway_error_logs) ? snapshot.railway_error_logs.slice(0, 8) : [];
+
+    if (snapshot.status) lines.push(`Status: ${snapshot.status}`);
+    if (snapshot.database?.status) {
+      lines.push(`Database: ${snapshot.database.status}${snapshot.database.response_time_ms ? ` (${snapshot.database.response_time_ms} ms)` : ''}`);
+    }
+    if (snapshot.deployment_status?.status) {
+      lines.push(`Railway: ${snapshot.deployment_status.status}${snapshot.deployment_status.message ? ` - ${snapshot.deployment_status.message}` : ''}`);
+    }
+    if (snapshot.deployment_status?.recent_deployments?.[0]?.status) {
+      lines.push(`Latest deployment: ${snapshot.deployment_status.recent_deployments[0].status}`);
+    }
+
+    if (recentErrors.length) {
+      lines.push('', 'Recent API errors:');
+      recentErrors.forEach((item, index) => {
+        const when = item.created_at || item.timestamp || 'unknown time';
+        const path = item.path || item.event_type || 'unknown path';
+        const message = item.error_message || item.message || item.status_code || 'No message';
+        lines.push(`${index + 1}. ${when} - ${path} - ${message}`);
+      });
+    }
+
+    if (railwayLogs.length) {
+      lines.push('', 'Railway error logs:');
+      railwayLogs.forEach((item, index) => {
+        const when = item.timestamp || 'unknown time';
+        const severity = item.severity || 'error';
+        const message = item.message || 'No message';
+        lines.push(`${index + 1}. ${when} - ${severity} - ${message}`);
+      });
+    }
+
+    return lines.join('\n') || 'No operational logs were attached to this briefing.';
+  };
+
+  const buildRecommendationTaskNotes = (recommendation) => {
+    return [
+      `Recommendation:\n${recommendation}`,
+      `Codex brief:\n${briefing?.codex_brief || 'No Codex brief was generated for this briefing.'}`,
+      `Logs and evidence:\n${formatOperationalLogsForTask()}`
+    ].join('\n\n');
+  };
+
+  const addRecommendationToTasks = async (recommendation, index) => {
+    if (!recommendation || createdTaskIndexes[index]) return;
+    setAddingTaskIndex(index);
     setError('');
     try {
       await axios.post(
         `${apiUrl}/api/tasks/`,
         {
-          title: `Codex: ${briefing.title || 'Investigate Railway operations'}`,
-          notes: briefing.codex_brief,
+          title: `Codex: ${recommendation}`,
+          notes: buildRecommendationTaskNotes(recommendation),
           due_date: todayISO(),
           priority: 'High',
           project: 'Admin / Operations'
         },
         { params: { user_number: userNumber } }
       );
-      setTaskCreated(true);
+      setCreatedTaskIndexes((current) => ({ ...current, [index]: true }));
     } catch (err) {
-      setError(err.response?.data?.detail || 'Codex brief could not be added to the to-do list.');
+      setError(err.response?.data?.detail || 'Recommendation could not be added to the to-do list.');
     } finally {
-      setAddingTask(false);
+      setAddingTaskIndex(null);
     }
   };
 
@@ -1161,33 +1213,52 @@ function AdminAIBriefingBox({ apiUrl, userNumber, briefingType, buttonLabel, emp
           <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{briefing.summary_text}</p>
           <div className="mt-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top Recommendations</div>
-            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-slate-700">
-              {(briefing.top_recommendations || []).map((item, index) => (
-                <li key={`${item}-${index}`}>{item}</li>
-              ))}
+            <ol className="mt-2 list-decimal space-y-3 pl-5 text-sm text-slate-700">
+              {(briefing.top_recommendations || []).map((item, index) => {
+                const isExpanded = expandedBriefIndex === index;
+                const isAdding = addingTaskIndex === index;
+                const isCreated = Boolean(createdTaskIndexes[index]);
+
+                return (
+                  <li key={`${item}-${index}`} className="pl-1">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <span className="leading-6">{item}</span>
+                      {enableCodexTask && (
+                        <div className="flex shrink-0 flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedBriefIndex(isExpanded ? null : index)}
+                            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                          >
+                            {isExpanded ? 'Hide Codex Brief' : 'See Codex Brief'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => addRecommendationToTasks(item, index)}
+                            disabled={isAdding || isCreated}
+                            className="rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300"
+                          >
+                            {isCreated ? 'Added' : isAdding ? 'Adding...' : 'Add to To-Do List'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {isExpanded && (
+                      <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Brief For Codex</div>
+                        <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">
+                          {briefing.codex_brief || 'No Codex brief was generated for this briefing.'}
+                        </p>
+                      </div>
+                    )}
+                    {isCreated && (
+                      <p className="mt-2 text-sm text-emerald-700">Added to today&apos;s to-do list with the Codex brief and logs.</p>
+                    )}
+                  </li>
+                );
+              })}
             </ol>
           </div>
-          {enableCodexTask && briefing.codex_brief && (
-            <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Brief For Codex</div>
-                  <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{briefing.codex_brief}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={addCodexBriefToTasks}
-                  disabled={addingTask || taskCreated}
-                  className="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-                >
-                  {taskCreated ? 'Added' : addingTask ? 'Adding...' : 'Add To-Do'}
-                </button>
-              </div>
-              {taskCreated && (
-                <p className="mt-3 text-sm text-emerald-700">Added to today&apos;s to-do list.</p>
-              )}
-            </div>
-          )}
         </div>
       )}
     </div>
