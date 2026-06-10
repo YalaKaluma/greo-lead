@@ -154,6 +154,7 @@ function TaskCard({
   const [showMtnFeedback, setShowMtnFeedback] = useState(false);
   const [mtnRating, setMtnRating] = useState(0);
   const [mtnFeedback, setMtnFeedback] = useState('');
+  const [mtnSelectedTag, setMtnSelectedTag] = useState('');
   const [mtnSaving, setMtnSaving] = useState(false);
   const [mtnSaved, setMtnSaved] = useState(false);
 
@@ -233,6 +234,13 @@ function TaskCard({
   };
 
   const mtnLabel = priorityScore ? getMtnLabel(priorityScore.score) : '';
+  const activeMtnTag = mtnSelectedTag || mtnLabel;
+
+  const openMtnFeedback = () => {
+    setMtnSelectedTag(previousTag => previousTag || mtnLabel);
+    setShowMtnFeedback(true);
+  };
+
   const submitMtnFeedback = async () => {
     if (!mtnRating || !onMtnFeedback) return;
 
@@ -240,7 +248,7 @@ function TaskCard({
     const result = await onMtnFeedback(
       mtnRating,
       mtnFeedback.trim() || null,
-      mtnLabel,
+      activeMtnTag,
       priorityScore.recommendation_id
     );
     setMtnSaving(false);
@@ -381,12 +389,12 @@ function TaskCard({
                   onClick={(e) => {
                     if (handleSelectionModeClick(e)) return;
                     e.stopPropagation();
-                    setShowMtnFeedback(true);
+                    openMtnFeedback();
                   }}
                   className={`max-w-full truncate whitespace-nowrap text-xs px-2 py-0.5 rounded border font-medium sm:hidden ${getMtnStyle(priorityScore.score)}`}
-                  title="Review MTN reasoning"
+                  title="Review prioritization reasoning"
                 >
-                  MTN: {mtnLabel}
+                  {activeMtnTag}
                 </button>
               )}
 
@@ -417,12 +425,12 @@ function TaskCard({
               onClick={(e) => {
                 if (handleSelectionModeClick(e)) return;
                 e.stopPropagation();
-                setShowMtnFeedback(true);
+                openMtnFeedback();
               }}
               className={`whitespace-nowrap text-xs px-2 py-0.5 rounded border font-medium ${getMtnStyle(priorityScore.score)}`}
-              title="Review MTN reasoning"
+              title="Review prioritization reasoning"
             >
-              MTN: {mtnLabel}
+              {activeMtnTag}
             </button>
             {mtnSaved && (
               <span className="text-xs text-emerald-700">Saved</span>
@@ -434,6 +442,8 @@ function TaskCard({
       {priorityMode && priorityScore && showMtnFeedback && (
         <MtnFeedbackModal
           tag={mtnLabel}
+          selectedTag={activeMtnTag}
+          setSelectedTag={setMtnSelectedTag}
           score={priorityScore}
           rating={mtnRating}
           setRating={setMtnRating}
@@ -473,6 +483,8 @@ function ClockReturnIcon() {
 
 function MtnFeedbackModal({
   tag,
+  selectedTag,
+  setSelectedTag,
   score,
   rating,
   setRating,
@@ -482,6 +494,8 @@ function MtnFeedbackModal({
   onSubmit,
   onClose
 }) {
+  const tagOptions = ['Transformational', 'Strategic', 'Important', 'Maintenance', 'Low Leverage'];
+
   return createPortal(
     <div
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4"
@@ -494,8 +508,8 @@ function MtnFeedbackModal({
       >
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
-            <p className="text-xs uppercase text-slate-500 font-semibold">MTN Tag</p>
-            <h3 className="text-xl font-semibold text-slate-800">{tag}</h3>
+            <p className="text-xs uppercase text-slate-500 font-semibold">Tag</p>
+            <h3 className="text-xl font-semibold text-slate-800">{selectedTag || tag}</h3>
           </div>
           <button
             onClick={onClose}
@@ -507,6 +521,22 @@ function MtnFeedbackModal({
         </div>
 
         <div className="space-y-3 mb-5">
+          <div>
+            <label htmlFor="mtn-tag-select" className="text-sm font-medium text-slate-700 mb-1 block">
+              Change tag
+            </label>
+            <select
+              id="mtn-tag-select"
+              value={selectedTag || tag}
+              onChange={(e) => setSelectedTag(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {tagOptions.map(option => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <p className="text-sm font-medium text-slate-700 mb-1">Why Alfred tagged it this way</p>
             <p className="text-sm text-slate-600">
@@ -523,7 +553,7 @@ function MtnFeedbackModal({
         </div>
 
         <div className="mb-4">
-          <p className="text-sm font-medium text-slate-700 mb-2">How useful is this MTN tag?</p>
+          <p className="text-sm font-medium text-slate-700 mb-2">How useful is this tag?</p>
           <div className="flex gap-1">
             {[1, 2, 3, 4, 5].map(value => (
               <button
