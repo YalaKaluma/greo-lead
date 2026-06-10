@@ -1,5 +1,5 @@
 // frontend/src/components/TodoList/FilterSection.jsx
-import { getSortedGoals, getGoalIndentation } from '../../utils/taskHelpers';
+import { getLongTermGoals } from '../../utils/taskHelpers';
 
 /**
  * FilterSection Component
@@ -8,7 +8,7 @@ import { getSortedGoals, getGoalIndentation } from '../../utils/taskHelpers';
  * - Due date filter (due today, tomorrow, next 7 days, all)
  * - Project filter
  * - Delegate filter
- * - Goal filter with hierarchical display
+ * - Goal filter with Vision/long-term goals
  * - Clear all filters button
  */
 export default function FilterSection({
@@ -96,11 +96,10 @@ export default function FilterSection({
                   className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
                   <option value="">All Goals</option>
-                  {getSortedGoals(goals).map(g => {
+                  {getLongTermGoals(goals).map(g => {
                     const displayText = g.title || g.goal_text;
                     const truncatedText = displayText.length > 30 ? displayText.substring(0, 30) + '...' : displayText;
-                    const indentation = getGoalIndentation(g.time_horizon);
-                    return <option key={g.id} value={g.id}>{indentation}{truncatedText}</option>;
+                    return <option key={g.id} value={g.id}>{truncatedText}</option>;
                   })}
                 </select>
               </div>
