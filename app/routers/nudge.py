@@ -18,7 +18,7 @@ Key Features:
 - Excel logging for systematic prompt tuning
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from twilio.rest import Client
@@ -558,6 +558,8 @@ def normalize_nudge_user_number(user_number: str) -> str:
 
     WhatsApp users use `whatsapp:+123...`; synthetic/dev users use `synthetic:name`.
     """
+    user_number = user_number.strip()
+
     if user_number.startswith("synthetic:"):
         return user_number
 
@@ -1011,12 +1013,53 @@ def run_single_nudge(
     }
 
 
+NUDGE_USER_QUERY_ALIASES = (
+    "user_number",
+    "userNumber",
+    "target_user",
+    "target",
+    "user",
+    "to",
+)
+
+
+def get_requested_nudge_user_number(
+        user_number: Optional[str],
+        request: Request,
+        nudge_type: str,
+) -> Optional[str]:
+    """Resolve the nudge target from supported query parameter names."""
+    query_params = dict(request.query_params)
+    logger.info(
+        "[nudge_request] nudge_type=%s path=%s query_params=%s",
+        nudge_type,
+        request.url.path,
+        query_params,
+    )
+
+    if user_number:
+        return user_number.strip()
+
+    for alias in NUDGE_USER_QUERY_ALIASES:
+        value = request.query_params.get(alias)
+        if value:
+            logger.info(
+                "[nudge_request] nudge_type=%s target_alias=%s",
+                nudge_type,
+                alias,
+            )
+            return value.strip()
+
+    return None
+
+
 # -------------------------------------------------
 # Single User Nudge Endpoints
 # -------------------------------------------------
 
 @router.get("/nudge/morning")
 def morning_nudge(
+        request: Request,
         user_number: Optional[str] = Query(None, description="WhatsApp number (e.g., 'whatsapp:+1234567890')"),
         db: Session = Depends(get_db)
 ):
@@ -1029,7 +1072,8 @@ def morning_nudge(
     nudge_type = "morning"
     logger.info(f"🌅 {nudge_type.upper()} nudge endpoint invoked")
 
-    result = run_single_nudge(user_number, nudge_type, db)
+    requested_user_number = get_requested_nudge_user_number(user_number, request, nudge_type)
+    result = run_single_nudge(requested_user_number, nudge_type, db)
 
     logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
     return {
@@ -1041,6 +1085,7 @@ def morning_nudge(
 
 @router.get("/nudge/evening")
 def evening_nudge(
+        request: Request,
         user_number: Optional[str] = Query(None, description="WhatsApp number"),
         db: Session = Depends(get_db)
 ):
@@ -1053,7 +1098,8 @@ def evening_nudge(
     nudge_type = "evening"
     logger.info(f"🌙 {nudge_type.upper()} nudge endpoint invoked")
 
-    result = run_single_nudge(user_number, nudge_type, db)
+    requested_user_number = get_requested_nudge_user_number(user_number, request, nudge_type)
+    result = run_single_nudge(requested_user_number, nudge_type, db)
 
     logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
     return {
@@ -1065,6 +1111,7 @@ def evening_nudge(
 
 @router.get("/nudge/weekly")
 def weekly_nudge(
+        request: Request,
         user_number: Optional[str] = Query(None, description="WhatsApp number"),
         db: Session = Depends(get_db)
 ):
@@ -1077,7 +1124,8 @@ def weekly_nudge(
     nudge_type = "weekly"
     logger.info(f"🎯 {nudge_type.upper()} coaching nudge endpoint invoked")
 
-    result = run_single_nudge(user_number, nudge_type, db)
+    requested_user_number = get_requested_nudge_user_number(user_number, request, nudge_type)
+    result = run_single_nudge(requested_user_number, nudge_type, db)
 
     logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
     return {
@@ -1089,6 +1137,7 @@ def weekly_nudge(
 
 @router.get("/nudge/sunday_review")
 def sunday_review_nudge(
+        request: Request,
         user_number: Optional[str] = Query(None, description="WhatsApp number"),
         db: Session = Depends(get_db)
 ):
@@ -1101,7 +1150,8 @@ def sunday_review_nudge(
     nudge_type = "sunday_review"
     logger.info(f"📋 {nudge_type.upper()} goal setting endpoint invoked")
 
-    result = run_single_nudge(user_number, nudge_type, db)
+    requested_user_number = get_requested_nudge_user_number(user_number, request, nudge_type)
+    result = run_single_nudge(requested_user_number, nudge_type, db)
 
     logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
     return {
