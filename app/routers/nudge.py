@@ -36,7 +36,7 @@ from app.db import get_db
 from app.services.journey_context import build_journey_context
 from app.services.message_service import load_conversation_history, save_message
 from app.services.timezone_service import get_user_timezone, today_for_timezone
-from app.models import Task, Habit, HabitCompletion, JourneyGoal, Message
+from app.models import Task, Habit, HabitCompletion, JourneyGoal, Message, User
 from app.services.habit_coaching_service import refresh_habit_coaching_review
 from app.services.vision_progress_review_service import VisionProgressReviewService
 from app.config import (
@@ -547,7 +547,7 @@ def _missing_user_number_error(environment: str) -> HTTPException:
             "status": "error",
             "error": "missing_user_number",
             "environment": environment,
-            "message": "user_number is required for nudge endpoints outside production.",
+            "message": "user_number is required for single-user nudge sends.",
         },
     )
 
@@ -583,8 +583,7 @@ def resolve_nudge_user_number(
     """
     Resolve the target user for a scheduled nudge.
 
-    Non-production cron jobs must explicitly provide user_number so dev/staging
-    jobs cannot silently target the production default user.
+    Single-user nudge sends require an explicit target outside production.
     """
     environment = (environment or get_runtime_environment()).strip().lower() or "development"
 
@@ -805,7 +804,7 @@ def save_message_safe(db: Session, user_number: str, text: str) -> None:
 
 def get_all_active_users(db: Session) -> List[str]:
     """
-    Get list of all unique user numbers who have messages in the system.
+    Get list of all active users who should receive scheduled nudges.
 
     Args:
         db: Database session
@@ -814,9 +813,24 @@ def get_all_active_users(db: Session) -> List[str]:
         List of unique user phone numbers
     """
     try:
-        users = db.query(Message.user_number).distinct().all()
-        user_numbers = [user[0] for user in users if user[0]]
-        logger.info(f"Found {len(user_numbers)} active users")
+        user_rows = (
+            db.query(User.phone_number)
+            .filter(
+                User.is_active == True,
+                User.phone_number.isnot(None),
+                User.phone_number != "",
+            )
+            .order_by(User.id)
+            .all()
+        )
+        user_numbers = [row[0] for row in user_rows if row[0]]
+
+        if not user_numbers:
+            message_rows = db.query(Message.user_number).distinct().all()
+            user_numbers = [row[0] for row in message_rows if row[0]]
+
+        user_numbers = list(dict.fromkeys(user_numbers))
+        logger.info(f"Found {len(user_numbers)} active nudge users")
         return user_numbers
     except Exception as e:
         logger.error(f"Failed to get active users: {e}")
@@ -1013,6 +1027,52 @@ def run_single_nudge(
     }
 
 
+def run_batch_nudge(
+        nudge_type: str,
+        db: Session,
+) -> Dict:
+    """Send one scheduled nudge to every active user in this environment."""
+    start_time = datetime.utcnow()
+    environment = get_runtime_environment()
+    users = get_all_active_users(db)
+
+    logger.info(
+        "[nudge_targeting] nudge_type=%s environment=%s source=all_active_users total_users=%s",
+        nudge_type,
+        environment,
+        len(users),
+    )
+
+    results = [send_nudge_for_user(user_number, nudge_type, db) for user_number in users]
+
+    duration = (datetime.utcnow() - start_time).total_seconds()
+    successful = len([r for r in results if r["status"] == "success"])
+    failed = len([r for r in results if r["status"] == "failed"])
+
+    logger.info(
+        "[nudge_result] nudge_type=%s environment=%s status=batch_complete total_users=%s successful=%s failed=%s duration_seconds=%.2f",
+        nudge_type,
+        environment,
+        len(users),
+        successful,
+        failed,
+        duration,
+    )
+
+    return {
+        "status": "batch_complete",
+        "nudge_type": nudge_type,
+        "environment": environment,
+        "target_source": "all_active_users",
+        "total_users": len(users),
+        "successful": successful,
+        "failed": failed,
+        "duration_seconds": duration,
+        "timestamp": datetime.utcnow().isoformat(),
+        "results": results,
+    }
+
+
 NUDGE_USER_QUERY_ALIASES = (
     "user_number",
     "userNumber",
@@ -1073,7 +1133,11 @@ def morning_nudge(
     logger.info(f"🌅 {nudge_type.upper()} nudge endpoint invoked")
 
     requested_user_number = get_requested_nudge_user_number(user_number, request, nudge_type)
-    result = run_single_nudge(requested_user_number, nudge_type, db)
+    result = (
+        run_single_nudge(requested_user_number, nudge_type, db)
+        if requested_user_number
+        else run_batch_nudge(nudge_type, db)
+    )
 
     logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
     return {
@@ -1099,7 +1163,11 @@ def evening_nudge(
     logger.info(f"🌙 {nudge_type.upper()} nudge endpoint invoked")
 
     requested_user_number = get_requested_nudge_user_number(user_number, request, nudge_type)
-    result = run_single_nudge(requested_user_number, nudge_type, db)
+    result = (
+        run_single_nudge(requested_user_number, nudge_type, db)
+        if requested_user_number
+        else run_batch_nudge(nudge_type, db)
+    )
 
     logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
     return {
@@ -1125,7 +1193,11 @@ def weekly_nudge(
     logger.info(f"🎯 {nudge_type.upper()} coaching nudge endpoint invoked")
 
     requested_user_number = get_requested_nudge_user_number(user_number, request, nudge_type)
-    result = run_single_nudge(requested_user_number, nudge_type, db)
+    result = (
+        run_single_nudge(requested_user_number, nudge_type, db)
+        if requested_user_number
+        else run_batch_nudge(nudge_type, db)
+    )
 
     logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
     return {
@@ -1151,7 +1223,11 @@ def sunday_review_nudge(
     logger.info(f"📋 {nudge_type.upper()} goal setting endpoint invoked")
 
     requested_user_number = get_requested_nudge_user_number(user_number, request, nudge_type)
-    result = run_single_nudge(requested_user_number, nudge_type, db)
+    result = (
+        run_single_nudge(requested_user_number, nudge_type, db)
+        if requested_user_number
+        else run_batch_nudge(nudge_type, db)
+    )
 
     logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
     return {

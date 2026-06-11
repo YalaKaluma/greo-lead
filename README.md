@@ -89,20 +89,26 @@ The backend exposes `/api/health` for runtime checks and `/docs` for FastAPI's g
 
 ## Nudge Cron Jobs
 
-Production can intentionally use the configured default user:
+Cron URLs stay environment-level. When no `user_number` is supplied, each endpoint sends a tailored nudge to every active user in that environment:
 
 ```text
 https://<prod-domain>/api/nudge/morning
 ```
 
-Development and staging cron jobs must include an explicit `user_number` so they do not accidentally target the production/default WhatsApp user:
+Development and staging use the same clean endpoint against their own Railway/database environment:
+
+```text
+https://<dev-domain>/api/nudge/morning
+https://<staging-domain>/api/nudge/morning
+```
+
+Add `user_number` only for a manual single-user test:
 
 ```text
 https://<dev-domain>/api/nudge/morning?user_number=synthetic%3Aexecutive_alex
-https://<staging-domain>/api/nudge/morning?user_number=synthetic%3Aexecutive_alex
 ```
 
-Set `APP_ENV`, `ENVIRONMENT`, or `RAILWAY_ENVIRONMENT_NAME` to `production`, `development`, or `staging`. Outside production, nudge endpoints return a clear 400 error when `user_number` is missing.
+Set `APP_ENV`, `ENVIRONMENT`, or `RAILWAY_ENVIRONMENT_NAME` to `production`, `development`, or `staging` so logs clearly show which environment is sending nudges.
 
 ## Database
 
