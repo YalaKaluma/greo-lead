@@ -19,16 +19,17 @@ Key Features:
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 from openai import OpenAI, OpenAIError
 import logging
+import os
 import yaml
 import pandas as pd
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, NamedTuple
 from datetime import datetime, date, timedelta
 
 from app.db import get_db
@@ -522,6 +523,105 @@ ACTIVE HABITS:
 # Helper Functions
 # -------------------------------------------------
 
+class NudgeTarget(NamedTuple):
+    user_number: str
+    environment: str
+    source: str
+
+
+def get_runtime_environment() -> str:
+    """Return the configured runtime environment, defaulting to development."""
+    environment = (
+        os.getenv("APP_ENV")
+        or os.getenv("ENVIRONMENT")
+        or os.getenv("RAILWAY_ENVIRONMENT_NAME")
+        or "development"
+    )
+    return environment.strip().lower() or "development"
+
+
+def _missing_user_number_error(environment: str) -> HTTPException:
+    return HTTPException(
+        status_code=400,
+        detail={
+            "status": "error",
+            "error": "missing_user_number",
+            "environment": environment,
+            "message": "user_number is required for nudge endpoints outside production.",
+        },
+    )
+
+
+def normalize_nudge_user_number(user_number: str) -> str:
+    """
+    Normalize supported nudge targets.
+
+    WhatsApp users use `whatsapp:+123...`; synthetic/dev users use `synthetic:name`.
+    """
+    if user_number.startswith("synthetic:"):
+        return user_number
+
+    if user_number.startswith("+"):
+        return f"whatsapp:{user_number}"
+
+    if user_number.startswith("whatsapp:+"):
+        return user_number
+
+    raise HTTPException(
+        status_code=400,
+        detail=f"Invalid user_number format: {user_number}. Expected 'whatsapp:+1234567890' or 'synthetic:user_name'"
+    )
+
+
+def resolve_nudge_user_number(
+        requested_user_number: Optional[str],
+        nudge_type: str,
+        environment: Optional[str] = None,
+) -> NudgeTarget:
+    """
+    Resolve the target user for a scheduled nudge.
+
+    Non-production cron jobs must explicitly provide user_number so dev/staging
+    jobs cannot silently target the production default user.
+    """
+    environment = (environment or get_runtime_environment()).strip().lower() or "development"
+
+    if requested_user_number:
+        target = NudgeTarget(
+            user_number=normalize_nudge_user_number(requested_user_number),
+            environment=environment,
+            source="query_param",
+        )
+    elif environment == "production":
+        if not DEFAULT_USER_NUMBER:
+            logger.error("No user_number provided and DEFAULT_USER_NUMBER not configured")
+            raise HTTPException(
+                status_code=400,
+                detail="user_number parameter is required when DEFAULT_USER_NUMBER is not set"
+            )
+        target = NudgeTarget(
+            user_number=normalize_nudge_user_number(DEFAULT_USER_NUMBER),
+            environment=environment,
+            source="default",
+        )
+    else:
+        logger.warning(
+            "[nudge_targeting] nudge_type=%s environment=%s source=missing user_number=missing",
+            nudge_type,
+            environment,
+        )
+        raise _missing_user_number_error(environment)
+
+    logger.info(
+        "[nudge_targeting] nudge_type=%s environment=%s source=%s user_number=%s",
+        nudge_type,
+        target.environment,
+        target.source,
+        target.user_number,
+    )
+    return target
+
+
 def validate_user_number(user_number: Optional[str]) -> str:
     """
     Validate and normalize user number.
@@ -545,19 +645,9 @@ def validate_user_number(user_number: Optional[str]) -> str:
         user_number = DEFAULT_USER_NUMBER
         logger.info(f"Using DEFAULT_USER_NUMBER: {user_number}")
 
-    # Validate format
-    if not user_number.startswith('whatsapp:+'):
-        logger.warning(f"User number missing 'whatsapp:+' prefix: {user_number}")
-        if user_number.startswith('+'):
-            user_number = f"whatsapp:{user_number}"
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid user_number format: {user_number}. Expected 'whatsapp:+1234567890'"
-            )
-
-    logger.debug(f"Validated user_number: {user_number}")
-    return user_number
+    normalized = normalize_nudge_user_number(user_number)
+    logger.debug(f"Validated user_number: {normalized}")
+    return normalized
 
 
 def generate_ai_message(
@@ -885,7 +975,46 @@ def send_nudge_for_user(
             "status": "failed",
             "user_number": user_number,
             "error": str(e),
+            "duration_seconds": (datetime.utcnow() - start_time).total_seconds(),
         }
+
+
+def run_single_nudge(
+        requested_user_number: Optional[str],
+        nudge_type: str,
+        db: Session,
+) -> Dict:
+    """Resolve targeting, send one nudge, and return cron-friendly metadata."""
+    try:
+        target = resolve_nudge_user_number(requested_user_number, nudge_type)
+    except HTTPException as exc:
+        if isinstance(exc.detail, dict) and exc.detail.get("error") == "missing_user_number":
+            return JSONResponse(status_code=exc.status_code, content=exc.detail)
+        raise
+
+    result = send_nudge_for_user(target.user_number, nudge_type, db)
+    status = result.get("status", "error")
+    duration = result.get("duration_seconds", 0)
+
+    logger.info(
+        "[nudge_result] nudge_type=%s environment=%s user_number=%s status=%s duration_seconds=%.2f",
+        nudge_type,
+        target.environment,
+        target.user_number,
+        status,
+        duration,
+    )
+
+    return {
+        "nudge_type": nudge_type,
+        "status": status,
+        "environment": target.environment,
+        "user_number": target.user_number,
+        "target_source": target.source,
+        "duration_seconds": duration,
+        "timestamp": datetime.utcnow().isoformat(),
+        **{key: value for key, value in result.items() if key not in {"status", "user_number", "duration_seconds"}},
+    }
 
 
 # -------------------------------------------------
@@ -906,8 +1035,7 @@ def morning_nudge(
     nudge_type = "morning"
     logger.info(f"🌅 {nudge_type.upper()} nudge endpoint invoked")
 
-    user_number = validate_user_number(user_number)
-    result = send_nudge_for_user(user_number, nudge_type, db)
+    result = run_single_nudge(user_number, nudge_type, db)
 
     logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
     return {
@@ -931,8 +1059,7 @@ def evening_nudge(
     nudge_type = "evening"
     logger.info(f"🌙 {nudge_type.upper()} nudge endpoint invoked")
 
-    user_number = validate_user_number(user_number)
-    result = send_nudge_for_user(user_number, nudge_type, db)
+    result = run_single_nudge(user_number, nudge_type, db)
 
     logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
     return {
@@ -956,8 +1083,7 @@ def weekly_nudge(
     nudge_type = "weekly"
     logger.info(f"🎯 {nudge_type.upper()} coaching nudge endpoint invoked")
 
-    user_number = validate_user_number(user_number)
-    result = send_nudge_for_user(user_number, nudge_type, db)
+    result = run_single_nudge(user_number, nudge_type, db)
 
     logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
     return {
@@ -981,8 +1107,7 @@ def sunday_review_nudge(
     nudge_type = "sunday_review"
     logger.info(f"📋 {nudge_type.upper()} goal setting endpoint invoked")
 
-    user_number = validate_user_number(user_number)
-    result = send_nudge_for_user(user_number, nudge_type, db)
+    result = run_single_nudge(user_number, nudge_type, db)
 
     logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
     return {

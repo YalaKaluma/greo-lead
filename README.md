@@ -48,6 +48,7 @@ DATABASE_URL=postgresql://...
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-4o
 DEFAULT_USER_NUMBER=...
+APP_ENV=development
 TWILIO_SID=...
 TWILIO_AUTH_TOKEN=...
 TWILIO_WHATSAPP_NUMBER=...
@@ -85,6 +86,23 @@ npm run build
 ```
 
 The backend exposes `/api/health` for runtime checks and `/docs` for FastAPI's generated API documentation.
+
+## Nudge Cron Jobs
+
+Production can intentionally use the configured default user:
+
+```text
+https://<prod-domain>/api/nudge/morning
+```
+
+Development and staging cron jobs must include an explicit `user_number` so they do not accidentally target the production/default WhatsApp user:
+
+```text
+https://<dev-domain>/api/nudge/morning?user_number=synthetic%3Aexecutive_alex
+https://<staging-domain>/api/nudge/morning?user_number=synthetic%3Aexecutive_alex
+```
+
+Set `APP_ENV`, `ENVIRONMENT`, or `RAILWAY_ENVIRONMENT_NAME` to `production`, `development`, or `staging`. Outside production, nudge endpoints return a clear 400 error when `user_number` is missing.
 
 ## Database
 
