@@ -7,6 +7,7 @@ import logging
 import sys
 import os
 import time
+from urllib.parse import parse_qsl, urlencode
 from datetime import datetime
 from app.db import Base, engine, SessionLocal
 from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits, waitlist, onboarding, chat, priority, leadership_coaching_router, audio, message_feedback, opportunities, message_signals, settings, admin, usage
@@ -117,10 +118,38 @@ logger.info("✓ CORS middleware configured (allowing all origins)")
 # --------------------------------------
 # Request logging middleware
 # --------------------------------------
+SENSITIVE_QUERY_KEYS = {
+    "token",
+    "access_token",
+    "refresh_token",
+    "code",
+    "password",
+    "secret",
+    "api_key",
+    "key",
+    "authorization",
+}
+
+
+def _request_log_target(request: Request) -> str:
+    if not request.url.query:
+        return request.url.path
+
+    safe_params = []
+    for key, value in parse_qsl(request.url.query, keep_blank_values=True):
+        if key.lower() in SENSITIVE_QUERY_KEYS:
+            safe_params.append((key, "[REDACTED]"))
+        else:
+            safe_params.append((key, value))
+
+    return f"{request.url.path}?{urlencode(safe_params)}"
+
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start = time.perf_counter()
-    logger.info(f"📥 {request.method} {request.url.path}")
+    log_target = _request_log_target(request)
+    logger.info(f"📥 {request.method} {log_target}")
     try:
         response = await call_next(request)
     except Exception as exc:
@@ -135,11 +164,11 @@ async def log_requests(request: Request, call_next):
             response_time_ms=elapsed_ms,
             message=str(exc)[:500],
         )
-        logger.exception(f"📤 {request.method} {request.url.path} → 500")
+        logger.exception(f"📤 {request.method} {log_target} → 500")
         raise
 
     elapsed_ms = round((time.perf_counter() - start) * 1000)
-    logger.info(f"📤 {request.method} {request.url.path} → {response.status_code}")
+    logger.info(f"📤 {request.method} {log_target} → {response.status_code}")
     if _should_record_system_health_event(request.url.path, response.status_code, elapsed_ms):
         _record_system_health_event(
             event_type=_classify_response_event(request.url.path, response.status_code, elapsed_ms),

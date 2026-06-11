@@ -19,7 +19,7 @@ Key Features:
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
@@ -985,13 +985,7 @@ def run_single_nudge(
         db: Session,
 ) -> Dict:
     """Resolve targeting, send one nudge, and return cron-friendly metadata."""
-    try:
-        target = resolve_nudge_user_number(requested_user_number, nudge_type)
-    except HTTPException as exc:
-        if isinstance(exc.detail, dict) and exc.detail.get("error") == "missing_user_number":
-            return JSONResponse(status_code=exc.status_code, content=exc.detail)
-        raise
-
+    target = resolve_nudge_user_number(requested_user_number, nudge_type)
     result = send_nudge_for_user(target.user_number, nudge_type, db)
     status = result.get("status", "error")
     duration = result.get("duration_seconds", 0)
