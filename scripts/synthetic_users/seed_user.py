@@ -60,7 +60,7 @@ from scripts.synthetic_users.reset_user import reset_synthetic_user
 
 
 DEFAULT_PASSWORD = "DemoPass123!"
-BELT_ORDER = ["white", "yellow", "orange", "green", "brown", "black"]
+BELT_ORDER = ["white", "yellow", "green", "brown", "black"]
 JOURNEY_DIMENSIONS = ["vision", "people", "execute", "energy", "learning"]
 
 
@@ -504,13 +504,21 @@ class SyntheticUserSeeder:
     def load_journey(self) -> None:
         spec = self.persona.get("leadership_journey") or {}
         self.load_journey_evidence(spec.get("evidence") or {})
-        current_belt = (spec.get("current_belt") or "orange").lower()
+        current_belt = (spec.get("current_belt") or "yellow").lower()
         completed_belts = [belt for belt in BELT_ORDER if BELT_ORDER.index(belt) < BELT_ORDER.index(current_belt)] if current_belt in BELT_ORDER else ["white", "yellow"]
-        for index, belt in enumerate(completed_belts):
+        promotion_targets = [
+            belt
+            for belt in BELT_ORDER
+            if current_belt in BELT_ORDER
+            and BELT_ORDER.index(belt) <= BELT_ORDER.index(current_belt)
+            and belt != "white"
+        ]
+        for index, belt in enumerate(promotion_targets):
             accepted = self._dt_months_ago(max(1, self.months - index * 2))
+            previous_belt = BELT_ORDER[max(0, BELT_ORDER.index(belt) - 1)] if belt in BELT_ORDER else "white"
             self.db.add(BeltAssessment(
                 user_number=self.user_number,
-                current_belt=BELT_ORDER[max(0, BELT_ORDER.index(belt) - 1)] if belt in BELT_ORDER else "white",
+                current_belt=previous_belt,
                 target_belt=belt,
                 status="accepted",
                 readiness_score=82 + index * 4,
@@ -523,6 +531,25 @@ class SyntheticUserSeeder:
                 created_at=accepted - timedelta(days=2),
                 updated_at=accepted,
             ))
+
+        for dim_index, dimension in enumerate(spec.get("dimensions") or JOURNEY_DIMENSIONS):
+            for trial_type in ["reflection", "behavioral"]:
+                started = datetime.utcnow() - timedelta(days=80 - dim_index * 3)
+                self.db.add(JourneyBeltTrial(
+                    user_number=self.user_number,
+                    dimension_id=dimension,
+                    target_belt="white",
+                    trial_type=trial_type,
+                    prompt=f"Synthetic white {trial_type} trial for {dimension}.",
+                    response_text=self._trial_response("white", dimension, trial_type),
+                    status="passed",
+                    ai_feedback="Passed: the response gives enough specific evidence for White Belt awareness.",
+                    score=5,
+                    evidence={"synthetic": True, "persona": self.persona_name},
+                    started_at=started,
+                    submitted_at=started + timedelta(days=1),
+                    reviewed_at=started + timedelta(days=2),
+                ))
 
         active_belt = current_belt
         for dim_index, dimension in enumerate(spec.get("dimensions") or JOURNEY_DIMENSIONS):
@@ -538,7 +565,7 @@ class SyntheticUserSeeder:
                     response_text=self._trial_response(active_belt, dimension, trial_type),
                     status=status,
                     ai_feedback="Passed: specific evidence, honest pattern recognition, and a concrete behavior change." if status == "passed" else "Submitted and awaiting a stronger final pass with one more concrete example.",
-                    score=8 if status == "passed" else 6,
+                    score=5 if status == "passed" else 3,
                     evidence={"synthetic": True, "persona": self.persona_name},
                     started_at=started,
                     submitted_at=started + timedelta(days=2),

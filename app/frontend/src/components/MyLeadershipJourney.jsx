@@ -12,7 +12,6 @@ const R_BELT = 412;
 const BELTS = [
   { id: "white", name: "White Belt", shortName: "White", meaning: "Awareness", color: "#F8FAFC", text: "#111827" },
   { id: "yellow", name: "Yellow Belt", shortName: "Yellow", meaning: "Self-understanding", color: "#FACC15", text: "#111827" },
-  { id: "orange", name: "Orange Belt", shortName: "Orange", meaning: "Deliberate practice", color: "#F97316", text: "#ffffff" },
   { id: "green", name: "Green Belt", shortName: "Green", meaning: "Integration", color: "#22C55E", text: "#ffffff" },
   { id: "brown", name: "Brown Belt", shortName: "Brown", meaning: "Multiplication", color: "#92400E", text: "#ffffff" },
   { id: "black", name: "Black Belt", shortName: "Black", meaning: "Transformation", color: "#111827", text: "#ffffff" },
@@ -41,14 +40,6 @@ const BELT_GUIDE = [
     ],
     objective: "Self-understanding",
     keyQuestion: "Why do these pieces matter, and how do they affect me?",
-  },
-  {
-    id: "orange",
-    statement: "I practice the pieces.",
-    description: "At Orange Belt, you turn understanding into deliberate behavioral experiments.",
-    focus: ["Focused practice", "Visible repetitions", "Real-world feedback", "Specific next actions"],
-    objective: "Practice",
-    keyQuestion: "What am I practicing now, and what evidence shows it is changing my behavior?",
   },
   {
     id: "green",
