@@ -3,12 +3,13 @@ import { getLongTermGoals } from '../../utils/taskHelpers';
 
 /**
  * FilterSection Component
- * 
+ *
  * Collapsible filter panel for tasks:
  * - Due date filter (due today, tomorrow, next 7 days, all)
  * - Project filter
  * - Delegate filter
  * - Goal filter with Vision/long-term goals
+ * - MTN tag multi-select filter
  * - Clear all filters button
  */
 export default function FilterSection({
@@ -22,6 +23,9 @@ export default function FilterSection({
   setSelectedDelegate,
   selectedGoal,
   setSelectedGoal,
+  selectedMtnTags,
+  mtnTagOptions,
+  toggleMtnTagFilter,
   projects,
   delegates,
   goals,
@@ -35,9 +39,9 @@ export default function FilterSection({
         className="w-full px-4 py-3 flex items-center justify-between text-slate-700 hover:bg-slate-50 transition-colors rounded-lg"
       >
         <span className="font-semibold">Filters</span>
-        <span className="text-xl">{filtersCollapsed ? '▼' : '▲'}</span>
+        <span className="text-xl">{filtersCollapsed ? 'v' : '^'}</span>
       </button>
-      
+
       {!filtersCollapsed && (
         <div className="border-t border-gray-200 p-4">
           <div className="flex flex-wrap items-center gap-3">
@@ -105,13 +109,39 @@ export default function FilterSection({
               </div>
             )}
 
+            {mtnTagOptions.length > 0 && (
+              <div className="min-w-[280px] flex-1">
+                <label className="text-xs font-medium text-slate-600 mb-1 block">MTN Tag</label>
+                <div className="flex flex-wrap gap-2">
+                  {mtnTagOptions.map(tag => {
+                    const isSelected = selectedMtnTags.includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => toggleMtnTagFilter(tag)}
+                        aria-pressed={isSelected}
+                        className={`h-9 rounded-lg border px-3 text-sm font-medium transition-colors ${
+                          isSelected
+                            ? 'border-blue-600 bg-blue-50 text-blue-700'
+                            : 'border-gray-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50'
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {hasActiveFilters && (
               <div className="flex-shrink-0 mt-auto">
                 <button
                   onClick={clearFilters}
                   className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
                 >
-                  ✕ Clear Filters
+                  x Clear Filters
                 </button>
               </div>
             )}

@@ -7,7 +7,7 @@ import TaskModal from './TodoList/TaskModal';
 import BulkActionModal from './TodoList/BulkActionModal';
 import FilterSection from './TodoList/FilterSection';
 import TrendRangeToggle from './TrendRangeToggle';
-import { getTodayET, getETDate, formatDateForInput, isOverdueET, getSortedGoals, getLongTermGoals } from '../utils/taskHelpers';
+import { getTodayET, getETDate, formatDateForInput, isOverdueET, getSortedGoals, getLongTermGoals, getMtnLabel, MTN_TAG_OPTIONS } from '../utils/taskHelpers';
 import { useLanguage } from '../i18n/LanguageContext';
 import { usePriority } from '../hooks/usePriority';
 
@@ -36,6 +36,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [selectedProject, setSelectedProject] = useState('');
   const [selectedDelegate, setSelectedDelegate] = useState('');
   const [selectedGoal, setSelectedGoal] = useState('');
+  const [selectedMtnTags, setSelectedMtnTags] = useState([]);
   const [projects, setProjects] = useState([]);
   const [delegates, setDelegates] = useState([]);
   const [goals, setGoals] = useState([]);
@@ -88,6 +89,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       setSelectedProject('');
       setSelectedDelegate('');
       setSelectedGoal('');
+      setSelectedMtnTags([]);
       setSelectedTasks([]);
       setSelectionMode(false);
     };
@@ -298,8 +300,19 @@ export default function TodoList({ apiUrl, userNumber }) {
     return getTaskScore(task.id) || getStoredTaskScore(task);
   };
 
+  const taskMatchesSelectedMtnTags = (task) => {
+    if (selectedMtnTags.length === 0) return true;
+    const scoreData = getVisibleTaskScore(task);
+    if (!scoreData) return false;
+    return selectedMtnTags.includes(getMtnLabel(scoreData.score));
+  };
+
+  const getVisibleTasks = () => {
+    return tasks.filter(taskMatchesSelectedMtnTags);
+  };
+
   const hasStoredMtnScoring = () => {
-    return tasks.some(task => Boolean(getVisibleTaskScore(task)));
+    return getVisibleTasks().some(task => Boolean(getVisibleTaskScore(task)));
   };
 
   const saveSortOrder = (order) => {
@@ -315,10 +328,12 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const getSortedTasks = () => {
+    const visibleTasks = getVisibleTasks();
+
     // Manual drag-and-drop order should always win once it exists. MTN scores
     // still render as labels, but they should not lock the list order.
     if (sortOrder.length > 0) {
-      return [...tasks].sort((a, b) => {
+      return [...visibleTasks].sort((a, b) => {
         const indexA = sortOrder.indexOf(a.id);
         const indexB = sortOrder.indexOf(b.id);
         
@@ -331,12 +346,12 @@ export default function TodoList({ apiUrl, userNumber }) {
       });
     }
 
-    const persistedOrderValues = tasks
+    const persistedOrderValues = visibleTasks
       .map(task => task.sort_order)
       .filter(order => order !== null && order !== undefined);
     const hasPersistedTaskOrder = new Set(persistedOrderValues).size > 1;
     if (hasPersistedTaskOrder) {
-      return [...tasks].sort((a, b) => {
+      return [...visibleTasks].sort((a, b) => {
         const orderA = a.sort_order ?? 999999;
         const orderB = b.sort_order ?? 999999;
         if (orderA !== orderB) return orderA - orderB;
@@ -345,7 +360,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
 
     if (hasStoredMtnScoring()) {
-      return [...tasks].sort((a, b) => {
+      return [...visibleTasks].sort((a, b) => {
         const scoreA = getVisibleTaskScore(a);
         const scoreB = getVisibleTaskScore(b);
 
@@ -362,7 +377,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
     
     // Default sorting: Top 10 first, then by priority (High > Medium > Low)
-    return [...tasks].sort((a, b) => {
+    return [...visibleTasks].sort((a, b) => {
       // 1. Top 10 tasks always come first
       if (a.in_top10 && !b.in_top10) return -1;
       if (!a.in_top10 && b.in_top10) return 1;
@@ -616,6 +631,15 @@ export default function TodoList({ apiUrl, userNumber }) {
     setSelectedProject('');
     setSelectedDelegate('');
     setSelectedGoal('');
+    setSelectedMtnTags([]);
+  };
+
+  const toggleMtnTagFilter = (tag) => {
+    setSelectedMtnTags(previousTags =>
+      previousTags.includes(tag)
+        ? previousTags.filter(currentTag => currentTag !== tag)
+        : [...previousTags, tag]
+    );
   };
 
   const resetSortOrder = () => {
@@ -790,7 +814,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   // COMPUTED VALUES
   // ============================================================================
 
-  const hasActiveFilters = selectedProject || selectedDelegate || selectedGoal || filterType !== 'due_today';
+  const hasActiveFilters = selectedProject || selectedDelegate || selectedGoal || selectedMtnTags.length > 0 || filterType !== 'due_today';
   const sortedTasks = getSortedTasks();
   const todayMtnScore = Number(mtnTrends?.summary?.today?.mtn_score || 0);
   const todayCompletedTasks = Number(mtnTrends?.summary?.today?.completed_tasks || 0);
@@ -960,6 +984,9 @@ export default function TodoList({ apiUrl, userNumber }) {
             setSelectedDelegate={setSelectedDelegate}
             selectedGoal={selectedGoal}
             setSelectedGoal={setSelectedGoal}
+            selectedMtnTags={selectedMtnTags}
+            mtnTagOptions={MTN_TAG_OPTIONS}
+            toggleMtnTagFilter={toggleMtnTagFilter}
             projects={projects}
             delegates={delegates}
             goals={goals}
