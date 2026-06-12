@@ -6,6 +6,7 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onC
   const { t } = useLanguage();
 
   const menuItems = [
+    { id: 'home', label: t('nav.home'), disabled: false },
     { id: 'my-goals', label: t('nav.goals'), disabled: false },
     { id: 'my-journey', label: t('nav.journey'), disabled: false },
     { id: 'todo-list', label: t('nav.tasks'), disabled: false },

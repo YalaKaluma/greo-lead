@@ -1,4 +1,5 @@
 import Sidebar from './components/Sidebar';
+import Home from './components/Home';
 import TodoList from './components/TodoList';
 //import MyGoals from './components/MyGoals';
 import MyGoals from './components/goals/MyGoals'
@@ -10,7 +11,7 @@ import MyJournal from './components/MyJournal';
 import PageIntroBanner from './components/PageIntroBanner';
 import AlfredChat from './components/AlfredChat';
 import Settings from './components/Settings';
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Login from "./Login";
 import Welcome from "./Welcome";
 import Waitlist from "./Waitlist";
@@ -21,10 +22,13 @@ const API_URL = import.meta.env.PROD
   ? ''
   : (import.meta.env.VITE_API_URL || 'http://localhost:8000');
 
-const DEFAULT_PAGE = 'my-goals';
+const HOME_PAGE = 'home';
+const NEW_USER_DEFAULT_PAGE = 'my-goals';
+const DEFAULT_PAGE = HOME_PAGE;
 const VALID_PAGE_IDS = new Set([
+  HOME_PAGE,
   'todo-list',
-  DEFAULT_PAGE,
+  NEW_USER_DEFAULT_PAGE,
   'my-team',
   'my-journey',
   'my-habits',
@@ -36,9 +40,10 @@ const VALID_PAGE_IDS = new Set([
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userNumber, setUserNumber] = useState(null);
-  const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE); // Start on Vision and goals
+  const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const hasDeepLinkedRef = useRef(false);
 
   // 🔍 Check login on app load
   useEffect(() => {
@@ -65,6 +70,7 @@ function App() {
     
     // Deep links can open a specific page once, but refreshes should return to the default page.
     if (page && isLoggedIn && VALID_PAGE_IDS.has(page)) {
+      hasDeepLinkedRef.current = true;
       setCurrentPage(page);
       const nextParams = new URLSearchParams(window.location.search);
       nextParams.delete('page');
@@ -74,6 +80,35 @@ function App() {
       window.history.replaceState({}, '', nextUrl);
     }
   }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !userNumber || hasDeepLinkedRef.current) return;
+
+    let cancelled = false;
+    const safeJson = (url) => fetch(url).then((response) => response.ok ? response.json() : null).catch(() => null);
+    const encodedUser = encodeURIComponent(userNumber);
+
+    Promise.all([
+      safeJson(`${API_URL}/api/journey/goals?user_number=${encodedUser}`),
+      safeJson(`${API_URL}/api/tasks/?user_number=${encodedUser}&filter_type=all`),
+      safeJson(`${API_URL}/api/habits?user_number=${encodedUser}`),
+      safeJson(`${API_URL}/api/journal/journal/trends?user_number=${encodedUser}`),
+      safeJson(`${API_URL}/api/journey/belt-trials?user_number=${encodedUser}`)
+    ]).then(([goals, tasks, habits, journal, trials]) => {
+      if (cancelled || hasDeepLinkedRef.current) return;
+      const hasGoalOrTasks = (Array.isArray(goals) && goals.length >= 1) || (Array.isArray(tasks) && tasks.length >= 3);
+      const hasHabit = Array.isArray(habits) && habits.length >= 1;
+      const completedTrial = Array.isArray(trials) && trials.some((trial) => ['passed', 'completed'].includes(String(trial.status || '').toLowerCase()));
+      const hasJournalOrTrial = Number(journal?.summary?.total_journal_entries || 0) >= 1 || completedTrial;
+      setCurrentPage(hasGoalOrTasks && hasHabit && hasJournalOrTrial ? HOME_PAGE : NEW_USER_DEFAULT_PAGE);
+    }).catch(() => {
+      if (!cancelled) setCurrentPage(NEW_USER_DEFAULT_PAGE);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn, userNumber]);
 
   // Handle responsive layout
   useEffect(() => {
@@ -109,7 +144,7 @@ function App() {
     
     // First-time users start on the default page without an automatic tour.
     if (requiresTour) {
-      setCurrentPage(DEFAULT_PAGE);
+      setCurrentPage(NEW_USER_DEFAULT_PAGE);
     }
   };
 
@@ -169,6 +204,7 @@ function MainAppShell({
   const { t, language } = useLanguage();
   const [introCardsEnabled, setIntroCardsEnabled] = useState(false);
   const pageTitles = {
+    home: t('page.home'),
     'todo-list': t('page.tasks'),
     'my-goals': t('page.goals'),
     'my-team': t('page.team'),
@@ -264,6 +300,9 @@ function MainAppShell({
             userNumber={userNumber}
             onBack={() => handleNavigate('my-goals')}
           />
+        )}
+        {currentPage === 'home' && (
+          <Home apiUrl={API_URL} userNumber={userNumber} onNavigate={handleNavigate} />
         )}
         {currentPage === 'todo-list' && (
           <TodoList apiUrl={API_URL} userNumber={userNumber} />
