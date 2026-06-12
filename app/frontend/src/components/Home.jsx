@@ -40,26 +40,41 @@ const heatColor = (score) => {
   return '#e0f2fe';
 };
 
-function MetricCard({ eyebrow, title, value, detail, delta, status, sparkline, children }) {
+function CardHeader({ eyebrow, title, status }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{eyebrow}</p>
+        <h2 className="mt-1 text-base font-semibold text-slate-900">{title}</h2>
+      </div>
+      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">{status}</span>
+    </div>
+  );
+}
+
+function ScoreCircle({ value, label, color = '#0f766e' }) {
+  return (
+    <div className="flex h-24 w-24 shrink-0 flex-col items-center justify-center rounded-full border-[8px] bg-white" style={{ borderColor: color }}>
+      <div className="text-2xl font-semibold text-slate-950">{value}</div>
+      {label && <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>}
+    </div>
+  );
+}
+
+function MtnScoreCard({ metric }) {
+  const delta = scoreDelta(metric?.delta);
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{eyebrow}</p>
-          <h2 className="mt-1 text-base font-semibold text-slate-900">{title}</h2>
-        </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">{status}</span>
-      </div>
-      <div className="mt-5 flex items-end justify-between gap-4">
-        <div>
-          <div className="text-4xl font-semibold text-slate-950">{value}</div>
-          <p className="mt-2 text-sm text-slate-600">{detail}</p>
-          <p className={`mt-3 text-sm font-semibold ${String(delta).startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
-            {delta} vs last week
+      <CardHeader eyebrow="Weekly leadership output" title="MTN Score" status={metric?.status || 'Stable'} />
+      <div className="mt-5 flex items-center justify-between gap-4">
+        <ScoreCircle value={toNumber(metric?.score, 0).toFixed(1)} label="score" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-slate-600">{toNumber(metric?.completed_tasks, 0)} completed high-leverage tasks</p>
+          <p className={`mt-3 text-sm font-semibold ${delta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
+            {delta} vs 4-week average
           </p>
         </div>
-        {sparkline}
-        {children}
+        <MiniSparkline points={metric?.sparkline || []} />
       </div>
     </section>
   );
@@ -93,6 +108,49 @@ function ProgressRing({ value }) {
       <circle cx="44" cy="44" r={radius} stroke="#0f766e" strokeWidth="9" fill="none" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={offset} transform="rotate(-90 44 44)" />
       <text x="44" y="49" textAnchor="middle" className="fill-slate-900 text-lg font-semibold">{Math.round(value)}%</text>
     </svg>
+  );
+}
+
+function HabitsMetricCard({ metric }) {
+  const delta = pointDelta(metric?.delta);
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <CardHeader eyebrow="Behavioral consistency" title="Habits Compliance" status={metric?.status || 'Stable'} />
+      <div className="mt-5 flex items-center justify-between gap-5">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-slate-600">{toNumber(metric?.completed, 0)} completed / {toNumber(metric?.expected, 0)} planned</p>
+          <p className={`mt-3 text-sm font-semibold ${delta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
+            {delta} vs 4-week average
+          </p>
+        </div>
+        <ProgressRing value={toNumber(metric?.compliance_rate, 0)} />
+      </div>
+    </section>
+  );
+}
+
+function JournalMetricCard({ metric }) {
+  const delta = scoreDelta(metric?.delta_depth_5);
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <CardHeader eyebrow="Reflection quality" title="Journal Performance" status={metric?.status || 'Needs more depth'} />
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        <div className="rounded-lg bg-slate-50 p-4 text-center">
+          <div className="text-3xl font-semibold text-slate-950">{toNumber(metric?.entries_this_week, 0)}</div>
+          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Entries</p>
+        </div>
+        <div className="rounded-lg bg-slate-50 p-4 text-center">
+          <div className="text-3xl font-semibold text-slate-950">{toNumber(metric?.average_depth_5, 0).toFixed(1)}</div>
+          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Depth / 5</p>
+        </div>
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-4">
+        <p className={`text-sm font-semibold ${delta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
+          {delta} depth vs 4-week average
+        </p>
+        <MiniSparkline points={metric?.sparkline || []} color="#7c3aed" />
+      </div>
+    </section>
   );
 }
 
@@ -139,8 +197,8 @@ function CombinedTrendChart({ trends }) {
           <span className="px-3 py-1 text-slate-400">90</span>
         </div>
       </div>
-      <div className="mt-4 overflow-x-auto">
-        <svg className="min-w-[620px] max-w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Combined leadership trend chart">
+      <div className="mt-4">
+        <svg className="h-auto w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Combined leadership trend chart">
           {[0, 25, 50, 75, 100].map((tick) => {
             const y = padding.top + (1 - tick / 100) * innerHeight;
             return (
@@ -207,7 +265,7 @@ function WheelHeatmap({ wheel }) {
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Leadership wheel heatmap</p>
       <h2 className="mt-1 text-lg font-semibold text-slate-950">Leadership depth map</h2>
       <div className="mt-5 flex justify-center">
-        <svg className="h-[280px] w-[280px] max-w-full" viewBox="0 0 420 420" role="img" aria-label="Leadership wheel heatmap">
+        <svg className="h-[340px] w-full max-w-[360px]" viewBox="0 0 420 420" role="img" aria-label="Leadership wheel heatmap">
           <circle cx="210" cy="210" r="58" fill="#06111f" />
           <text x="210" y="205" textAnchor="middle" className="fill-white text-base font-semibold">Alfred</text>
           <text x="210" y="224" textAnchor="middle" className="fill-teal-100 text-xs">Assessment</text>
@@ -268,7 +326,6 @@ function TaskStack({ title, eyebrow, tasks, emptyText, onToggle, timezone, showP
                   <span className="rounded bg-slate-100 px-2 py-1">{task.due_date ? formatDueDate(task.due_date, timezone) : 'No due date'}</span>
                   {task.goal_title && <span className="rounded bg-teal-50 px-2 py-1 text-teal-800">{task.goal_title}</span>}
                   {showPostponed && <span className="rounded bg-rose-50 px-2 py-1 text-rose-800">Postponed {task.times_postponed}x</span>}
-                  <span className="rounded bg-slate-900 px-2 py-1 text-white">MTN {toNumber(task.mtn_score, 0).toFixed(1)}</span>
                 </div>
               </div>
             </div>
@@ -384,11 +441,9 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
         )}
 
         <div className="grid gap-5 xl:grid-cols-3">
-          <MetricCard eyebrow="Weekly leadership output" title="MTN Score" value={toNumber(metrics.mtn?.score, 0).toFixed(1)} detail={`${toNumber(metrics.mtn?.completed_tasks, 0)} completed high-leverage tasks`} delta={scoreDelta(metrics.mtn?.delta)} status={metrics.mtn?.status || 'Stable'} sparkline={<MiniSparkline points={metrics.mtn?.sparkline || []} />} />
-          <MetricCard eyebrow="Behavioral consistency" title="Habits Compliance" value={`${Math.round(toNumber(metrics.habits?.compliance_rate, 0))}%`} detail={`${toNumber(metrics.habits?.completed, 0)} completed / ${toNumber(metrics.habits?.expected, 0)} planned`} delta={pointDelta(metrics.habits?.delta)} status={metrics.habits?.status || 'Stable'}>
-            <ProgressRing value={toNumber(metrics.habits?.compliance_rate, 0)} />
-          </MetricCard>
-          <MetricCard eyebrow="Reflection quality" title="Journal Performance" value={`${toNumber(metrics.journal?.entries_this_week, 0)} entries`} detail={`Avg depth: ${toNumber(metrics.journal?.average_depth_5, 0).toFixed(1)} / 5`} delta={scoreDelta(metrics.journal?.delta_depth_5)} status={metrics.journal?.status || 'Needs more depth'} sparkline={<MiniSparkline points={metrics.journal?.sparkline || []} color="#7c3aed" />} />
+          <MtnScoreCard metric={metrics.mtn || {}} />
+          <HabitsMetricCard metric={metrics.habits || {}} />
+          <JournalMetricCard metric={metrics.journal || {}} />
         </div>
 
         <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)_minmax(320px,0.8fr)]">
