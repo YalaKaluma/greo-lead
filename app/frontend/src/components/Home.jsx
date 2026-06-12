@@ -40,6 +40,14 @@ const heatColor = (score) => {
   return '#e0f2fe';
 };
 
+const heatLegend = [
+  { label: 'Deep', color: '#07803c' },
+  { label: 'Strong', color: '#16a34a' },
+  { label: 'Solid', color: '#6ee7a8' },
+  { label: 'Building', color: '#bbf7d0' },
+  { label: 'Emerging', color: '#e0f2fe' },
+];
+
 function CardHeader({ eyebrow, title, status }) {
   return (
     <div className="flex items-start justify-between gap-4">
@@ -65,36 +73,17 @@ function MtnScoreCard({ metric }) {
   const delta = scoreDelta(metric?.delta);
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <CardHeader eyebrow="Weekly leadership output" title="MTN Score" status={metric?.status || 'Stable'} />
+      <CardHeader eyebrow="Weekly leadership output" title="Move-the-needle Index" status={metric?.status || 'Stable'} />
       <div className="mt-5 flex items-center justify-between gap-4">
-        <ScoreCircle value={toNumber(metric?.score, 0).toFixed(1)} label="score" />
+        <ScoreCircle value={toNumber(metric?.score, 0).toFixed(1)} label="index" />
         <div className="min-w-0 flex-1">
           <p className="text-sm text-slate-600">{toNumber(metric?.completed_tasks, 0)} completed high-leverage tasks</p>
           <p className={`mt-3 text-sm font-semibold ${delta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
-            {delta} vs 4-week average
+            {delta} vs month average
           </p>
         </div>
-        <MiniSparkline points={metric?.sparkline || []} />
       </div>
     </section>
-  );
-}
-
-function MiniSparkline({ points = [], color = '#0f766e' }) {
-  const values = points.map((item) => toNumber(item)).filter((item) => Number.isFinite(item));
-  if (values.length < 2) return <div className="h-12 w-24 rounded bg-slate-50" />;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const coordinates = values.map((value, index) => {
-    const x = (index / (values.length - 1)) * 96;
-    const y = 44 - ((value - min) / range) * 36;
-    return `${x},${y}`;
-  });
-  return (
-    <svg className="h-12 w-24 overflow-visible" viewBox="0 0 96 48" role="img" aria-label="Recent trend">
-      <polyline fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points={coordinates.join(' ')} />
-    </svg>
   );
 }
 
@@ -120,7 +109,7 @@ function HabitsMetricCard({ metric }) {
         <div className="min-w-0 flex-1">
           <p className="text-sm text-slate-600">{toNumber(metric?.completed, 0)} completed / {toNumber(metric?.expected, 0)} planned</p>
           <p className={`mt-3 text-sm font-semibold ${delta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
-            {delta} vs 4-week average
+            {delta} vs month average
           </p>
         </div>
         <ProgressRing value={toNumber(metric?.compliance_rate, 0)} />
@@ -146,9 +135,8 @@ function JournalMetricCard({ metric }) {
       </div>
       <div className="mt-4 flex items-center justify-between gap-4">
         <p className={`text-sm font-semibold ${delta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
-          {delta} depth vs 4-week average
+          {delta} depth vs month average
         </p>
-        <MiniSparkline points={metric?.sparkline || []} color="#7c3aed" />
       </div>
     </section>
   );
@@ -168,7 +156,7 @@ function CombinedTrendChart({ trends }) {
   const byDate = (items) => new Map(items.map((item) => [item.date, item]));
   const maps = { mtn: byDate(mtn), habits: byDate(habits), journal: byDate(journal), energy: byDate(energy) };
   const series = [
-    { label: 'MTN score', color: '#0f766e', points: dates.map((date) => ({ date, value: clamp(toNumber(maps.mtn.get(date)?.rolling_average, 0) * 10) })) },
+    { label: 'Move-the-needle', color: '#0f766e', points: dates.map((date) => ({ date, value: clamp(toNumber(maps.mtn.get(date)?.rolling_average, 0) * 10) })) },
     { label: 'Habits', color: '#2563eb', points: dates.map((date) => ({ date, value: clamp(toNumber(maps.habits.get(date)?.rolling_average, 0)) })) },
     { label: 'Journal depth', color: '#7c3aed', points: dates.map((date) => ({ date, value: clamp(toNumber(maps.journal.get(date)?.weekly_average, 0) * 10) })) },
     { label: 'Energy', color: '#ea580c', points: dates.map((date) => ({ date, value: maps.energy.get(date)?.energy_level ? clamp((toNumber(maps.energy.get(date)?.energy_level) / 5) * 100) : null })) },
@@ -300,6 +288,14 @@ function WheelHeatmap({ wheel }) {
           })}
         </svg>
       </div>
+      <div className="mt-4 flex flex-wrap justify-center gap-3">
+        {heatLegend.map((item) => (
+          <div key={item.label} className="flex items-center gap-2 text-xs font-medium text-slate-600">
+            <span className="h-2.5 w-2.5 rounded-full border border-white shadow-sm" style={{ backgroundColor: item.color }} />
+            {item.label}
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
@@ -349,7 +345,7 @@ function NextTrialCard({ trial, onNavigate }) {
           </div>
           <p className="mt-1 text-sm text-slate-600">{trial?.reason}</p>
         </div>
-        <button onClick={() => onNavigate('my-journey')} className="shrink-0 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+        <button onClick={() => onNavigate('my-journey')} className="shrink-0 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">
           {trial?.cta || 'Start Trial'}
         </button>
       </div>
@@ -418,8 +414,7 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
       <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
         <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-teal-700">Executive leadership dashboard</p>
-            <h1 className="mt-2 text-3xl font-semibold text-slate-950">Home</h1>
+            <h1 className="text-3xl font-semibold text-slate-950">My Executive Operating System</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-600">Weekly performance, behavioral momentum, execution focus, and Journey readiness in one operating view.</p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
@@ -451,7 +446,7 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
 
         <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)_minmax(320px,0.8fr)]">
           <CombinedTrendChart trends={payload.trends || {}} />
-          <TaskStack title="Top 3 MTN Tasks" eyebrow="Execution focus" tasks={payload.top_tasks || []} emptyText="Add tasks to give Alfred an execution focus." onToggle={handleTaskToggle} timezone={timezone} />
+          <TaskStack title="Top Tasks" eyebrow="Execution focus" tasks={payload.top_tasks || []} emptyText="Add tasks to give Alfred an execution focus." onToggle={handleTaskToggle} timezone={timezone} />
           <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended MTN actions</p>
             <h2 className="mt-1 text-lg font-semibold text-slate-950">Move the needle next</h2>
@@ -466,7 +461,7 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
                     <div className="mt-3 flex items-center justify-between gap-3">
                       <span className="rounded bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-800">MTN {toNumber(item.mtn_score, 0).toFixed(1)}</span>
                       <div className="flex gap-2">
-                        <button onClick={() => handleOpportunity(item.id, 'accept')} className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700" disabled={Boolean(state)}>{state === 'accepted' ? 'Added' : 'Add to Tasks'}</button>
+                        <button onClick={() => handleOpportunity(item.id, 'accept')} className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50" disabled={Boolean(state)}>{state === 'accepted' ? 'Added' : 'Add to Tasks'}</button>
                         <button onClick={() => handleOpportunity(item.id, 'decline')} className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" disabled={Boolean(state)}>{state === 'dismissed' ? 'Dismissed' : 'Dismiss'}</button>
                       </div>
                     </div>
