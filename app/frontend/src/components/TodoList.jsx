@@ -1461,7 +1461,6 @@ function TaskColumnHeader({ columnSort, onSort }) {
         onSort={onSort}
         className="col-start-1 justify-self-start"
       />
-      <div className="col-start-2">Task</div>
       <SortHeaderButton
         label="Importance"
         sortKey="importance"
