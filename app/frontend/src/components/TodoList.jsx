@@ -60,6 +60,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [followUpError, setFollowUpError] = useState('');
   const [followUpSaving, setFollowUpSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('tasks');
+  const [columnSort, setColumnSort] = useState(null);
   const [mtnTrends, setMtnTrends] = useState(null);
   const [mtnTrendsLoading, setMtnTrendsLoading] = useState(false);
   const [mtnTrendsError, setMtnTrendsError] = useState(null);
@@ -327,8 +328,50 @@ export default function TodoList({ apiUrl, userNumber }) {
     });
   };
 
+  const prioritySortValue = (priority) => {
+    const priorityOrder = { high: 0, medium: 1, low: 2 };
+    return priorityOrder[String(priority || '').toLowerCase()] ?? 3;
+  };
+
+  const mtnSortValue = (task) => {
+    const scoreData = getVisibleTaskScore(task);
+    if (!scoreData) return 999;
+    const labelOrder = {
+      Transformational: 0,
+      Strategic: 1,
+      Important: 2,
+      Maintenance: 3,
+      'Low Leverage': 4
+    };
+    return labelOrder[getMtnLabel(scoreData.score)] ?? 999;
+  };
+
+  const compareTasksByColumn = (a, b) => {
+    if (!columnSort) return 0;
+
+    const direction = columnSort.direction === 'asc' ? -1 : 1;
+    const valueA = columnSort.key === 'urgency' ? prioritySortValue(a.priority) : mtnSortValue(a);
+    const valueB = columnSort.key === 'urgency' ? prioritySortValue(b.priority) : mtnSortValue(b);
+    if (valueA !== valueB) return (valueA - valueB) * direction;
+
+    const titleCompare = String(a.title || '').localeCompare(String(b.title || ''));
+    if (titleCompare !== 0) return titleCompare;
+    return (a.id ?? 0) - (b.id ?? 0);
+  };
+
+  const toggleColumnSort = (key) => {
+    setColumnSort(previousSort => {
+      if (previousSort?.key !== key) return { key, direction: 'desc' };
+      return { key, direction: previousSort.direction === 'desc' ? 'asc' : 'desc' };
+    });
+  };
+
   const getSortedTasks = () => {
     const visibleTasks = getVisibleTasks();
+
+    if (columnSort) {
+      return [...visibleTasks].sort(compareTasksByColumn);
+    }
 
     // Manual drag-and-drop order should always win once it exists. MTN scores
     // still render as labels, but they should not lock the list order.
@@ -417,6 +460,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     items.splice(result.destination.index, 0, reorderedItem);
 
     const newOrder = items.map(task => task.id);
+    setColumnSort(null);
     saveSortOrder(newOrder);
   };
 
@@ -1020,46 +1064,54 @@ export default function TodoList({ apiUrl, userNumber }) {
             </p>
           </div>
         ) : activeTab === 'tasks' ? (
-          <DragDropContext onDragEnd={handleDragEnd}>
-            <Droppable droppableId="tasks">
-              {(provided) => (
-                <div
-                  {...provided.droppableProps}
-                  ref={provided.innerRef}
-                  className="space-y-1"
-                >
-                  {sortedTasks.map((task, index) => {
-                    const scoreData = getVisibleTaskScore(task);
+          <>
+            {!selectionMode && (
+              <TaskColumnHeader
+                columnSort={columnSort}
+                onSort={toggleColumnSort}
+              />
+            )}
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <Droppable droppableId="tasks">
+                {(provided) => (
+                  <div
+                    {...provided.droppableProps}
+                    ref={provided.innerRef}
+                    className="space-y-1"
+                  >
+                    {sortedTasks.map((task, index) => {
+                      const scoreData = getVisibleTaskScore(task);
 
-                    return (
-                      <TaskItem
-                        key={task.id}
-                        task={task}
-                        index={index}
-                        isCompleting={completingTasks.includes(task.id)}
-                        isSelected={selectedTasks.includes(task.id)}
-                        selectionMode={selectionMode}
-                        onToggle={() => toggleTaskComplete(task.id)}
-                        onStartEdit={() => {
-                          setEditingTask(task);
-                          setShowTaskModal(true);
-                        }}
-                        onLongPress={() => enterSelectionMode(task.id)}
-                        onSelectToggle={() => toggleTaskSelection(task.id)}
-                        onFollowUp={() => openFollowUpModal(task)}
-                        goals={goals}
-                        priorityMode={priorityMode || Boolean(scoreData)}
-                        priorityScore={scoreData}
-                        onMtnFeedback={(rating, feedback, tag, recommendationId) => handleMtnFeedback(task.id, rating, feedback, tag, recommendationId)}
-                        timezone={timezone}
-                      />
-                    );
-                  })}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          </DragDropContext>
+                      return (
+                        <TaskItem
+                          key={task.id}
+                          task={task}
+                          index={index}
+                          isCompleting={completingTasks.includes(task.id)}
+                          isSelected={selectedTasks.includes(task.id)}
+                          selectionMode={selectionMode}
+                          onToggle={() => toggleTaskComplete(task.id)}
+                          onStartEdit={() => {
+                            setEditingTask(task);
+                            setShowTaskModal(true);
+                          }}
+                          onLongPress={() => enterSelectionMode(task.id)}
+                          onSelectToggle={() => toggleTaskSelection(task.id)}
+                          onFollowUp={() => openFollowUpModal(task)}
+                          goals={goals}
+                          priorityMode={priorityMode || Boolean(scoreData)}
+                          priorityScore={scoreData}
+                          onMtnFeedback={(rating, feedback, tag, recommendationId) => handleMtnFeedback(task.id, rating, feedback, tag, recommendationId)}
+                          timezone={timezone}
+                        />
+                      );
+                    })}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </DragDropContext>
+          </>
         ) : null}
       </div>
 
@@ -1398,6 +1450,51 @@ const MTN_CHART_WIDTH = 720;
 const MTN_CHART_HEIGHT = 240;
 const MTN_CHART_PADDING = 34;
 const MTN_CHART_BOTTOM_PADDING = 46;
+
+function TaskColumnHeader({ columnSort, onSort }) {
+  return (
+    <div className="hidden sm:grid grid-cols-[3.75rem_minmax(0,1fr)_10rem_1.75rem] items-center px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <SortHeaderButton
+        label="Urgency"
+        sortKey="urgency"
+        columnSort={columnSort}
+        onSort={onSort}
+        className="col-start-1 justify-self-start"
+      />
+      <div className="col-start-2">Task</div>
+      <SortHeaderButton
+        label="Importance"
+        sortKey="importance"
+        columnSort={columnSort}
+        onSort={onSort}
+        className="col-start-3 justify-self-end"
+      />
+    </div>
+  );
+}
+
+function SortHeaderButton({ label, sortKey, columnSort, onSort, className = '' }) {
+  const active = columnSort?.key === sortKey;
+  const direction = active ? columnSort.direction : 'desc';
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      className={`inline-flex items-center gap-1 transition-colors hover:text-slate-600 ${active ? 'text-slate-700' : ''} ${className}`}
+      title={`Sort by ${label.toLowerCase()}`}
+      aria-label={`Sort by ${label.toLowerCase()}`}
+    >
+      <span>{label}</span>
+      <span
+        className={`h-0 w-0 border-x-[3.5px] border-x-transparent transition-transform ${
+          active ? 'border-b-[5px] border-b-slate-600' : 'border-b-[5px] border-b-slate-300'
+        } ${direction === 'asc' ? 'rotate-180' : ''}`}
+        aria-hidden="true"
+      />
+    </button>
+  );
+}
 
 const extractTrendChart = (payload) => {
   if (Array.isArray(payload)) return payload;
