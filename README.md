@@ -97,6 +97,17 @@ gitleaks detect --source . --redact
 
 Do not commit `.env` files or runtime secrets, including `OPENAI_API_KEY`, `DATABASE_URL`, `TWILIO_AUTH_TOKEN`, `MAILGUN_API_KEY`, `JWT_SECRET`, Railway secrets, or Neon credentials. GitHub Actions also runs Gitleaks as part of the CI/release checks.
 
+## Dependency Security Scanning
+
+Install the security tools and scan Python dependencies before release:
+
+```bash
+pip install -r requirements-security.txt
+pip-audit -r requirements.txt
+```
+
+Known vulnerabilities should fail CI unless the ignore has a documented reason. Do not upgrade production dependencies blindly; run backend tests and the frontend build after any dependency change.
+
 ## Nudge Cron Jobs
 
 Cron URLs stay environment-level. When no `user_number` is supplied, each endpoint sends a tailored nudge to every active user in that environment:

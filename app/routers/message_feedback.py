@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import Message, MessageFeedback, User
+from app.services.audit_log_service import write_audit_log
 
 router = APIRouter()
 
@@ -42,6 +43,19 @@ def submit_message_feedback(
     db.add(feedback)
     db.commit()
     db.refresh(feedback)
+    write_audit_log(
+        db,
+        user_id=user.id if user else None,
+        event_type="message_feedback_submitted",
+        object_type="message_feedback",
+        object_id=feedback.id,
+        metadata={
+            "feedback_id": feedback.id,
+            "message_id": payload.message_id,
+            "source_context": payload.source_context,
+            "rating": payload.rating,
+        },
+    )
 
     return {
         "success": True,

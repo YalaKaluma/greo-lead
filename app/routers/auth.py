@@ -3,13 +3,14 @@ Auth Router - Handle user authentication
 app/routers/auth.py
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from datetime import datetime
 import logging
 from app.db import get_db
 from app.models import User
+from app.services.audit_log_service import write_audit_log
 from app.services.onboarding_seed_service import ensure_starter_examples_seeded
 from app.utils.security import hash_password, verify_password
 
@@ -34,7 +35,7 @@ def _find_user_by_username(db: Session, username: str):
 
 
 @router.post("/login")
-async def login(credentials: LoginRequest, db: Session = Depends(get_db)):
+async def login(credentials: LoginRequest, request: Request, db: Session = Depends(get_db)):
     """
     Login endpoint - handles both temporary passwords and permanent passwords.
     """
@@ -42,12 +43,29 @@ async def login(credentials: LoginRequest, db: Session = Depends(get_db)):
     user = _find_user_by_username(db, username)
 
     if not user:
+        write_audit_log(
+            db,
+            user_id=None,
+            event_type="user_login_failure",
+            object_type="user",
+            metadata={"username_present": bool(username), "reason": "user_not_found"},
+            request=request,
+        )
         return {
             "success": False,
             "message": "Invalid credentials"
         }
 
     if not getattr(user, "is_active", True):
+        write_audit_log(
+            db,
+            user_id=user.id,
+            event_type="user_login_failure",
+            object_type="user",
+            object_id=user.id,
+            metadata={"reason": "account_inactive"},
+            request=request,
+        )
         return {
             "success": False,
             "message": "Account inactive"
@@ -61,6 +79,15 @@ async def login(credentials: LoginRequest, db: Session = Depends(get_db)):
         user.tour_completed = True
         user.onboarding_completed = True
         db.commit()
+        write_audit_log(
+            db,
+            user_id=user.id,
+            event_type="user_login_success",
+            object_type="user",
+            object_id=user.id,
+            metadata={"credential_type": "temporary_password"},
+            request=request,
+        )
         return {
             "success": True,
             "user_number": user.phone_number,
@@ -75,6 +102,15 @@ async def login(credentials: LoginRequest, db: Session = Depends(get_db)):
         user.last_login_at = datetime.utcnow()
         user.last_active_at = user.last_login_at
         db.commit()
+        write_audit_log(
+            db,
+            user_id=user.id,
+            event_type="user_login_success",
+            object_type="user",
+            object_id=user.id,
+            metadata={"credential_type": "password"},
+            request=request,
+        )
         return {
             "success": True,
             "user_number": user.phone_number,
@@ -85,6 +121,15 @@ async def login(credentials: LoginRequest, db: Session = Depends(get_db)):
         }
 
     # Neither password matched
+    write_audit_log(
+        db,
+        user_id=user.id,
+        event_type="user_login_failure",
+        object_type="user",
+        object_id=user.id,
+        metadata={"reason": "invalid_password"},
+        request=request,
+    )
     return {
         "success": False,
         "message": "Invalid credentials"
@@ -92,7 +137,7 @@ async def login(credentials: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/register")
-async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+async def register(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)):
     """
     Create a self-serve account from the login page.
     """
@@ -133,6 +178,15 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         }
 
     db.refresh(user)
+    write_audit_log(
+        db,
+        user_id=user.id,
+        event_type="account_created",
+        object_type="user",
+        object_id=user.id,
+        metadata={"registration": "self_serve"},
+        request=request,
+    )
 
     return {
         "success": True,
@@ -145,11 +199,21 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/logout")
-async def logout():
+async def logout(request: Request, user_number: str | None = None, db: Session = Depends(get_db)):
     """
     Logout endpoint - just returns success since we're using simple auth.
     In production, this would invalidate session tokens.
     """
+    user = _find_user_by_username(db, user_number.strip()) if user_number else None
+    write_audit_log(
+        db,
+        user_id=user.id if user else None,
+        event_type="user_logout",
+        object_type="user",
+        object_id=user.id if user else None,
+        metadata={"status": "logged_out"},
+        request=request,
+    )
     return {"success": True, "message": "Logged out successfully"}
 
 

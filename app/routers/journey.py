@@ -63,6 +63,7 @@ from app.services.onboarding_seed_service import (
     ensure_starter_goal_samples_compacted,
     ensure_starter_roadmaps_seeded,
 )
+from app.services.audit_log_service import user_id_for_identifier, write_audit_log
 
 logger = logging.getLogger(__name__)
 
@@ -1369,6 +1370,19 @@ def submit_belt_assessment(
     db.add(assessment)
     db.commit()
     db.refresh(assessment)
+    write_audit_log(
+        db,
+        user_id=user_id_for_identifier(db, user_number),
+        event_type="belt_assessment_submitted",
+        object_type="belt_assessment",
+        object_id=assessment.id,
+        metadata={
+            "assessment_id": assessment.id,
+            "current_belt": request.current_belt,
+            "target_belt": request.target_belt,
+            "recommendation": assessment.recommendation,
+        },
+    )
     return assessment
 
 
@@ -1391,6 +1405,19 @@ def accept_belt_promotion(
     assessment.updated_at = datetime.now()
     db.commit()
     db.refresh(assessment)
+    write_audit_log(
+        db,
+        user_id=user_id_for_identifier(db, user_number),
+        event_type="belt_promotion_accepted",
+        object_type="belt_assessment",
+        object_id=assessment.id,
+        metadata={
+            "assessment_id": assessment.id,
+            "current_belt": assessment.current_belt,
+            "target_belt": assessment.target_belt,
+            "status": "accepted",
+        },
+    )
     return assessment
 
 
@@ -1478,6 +1505,21 @@ def start_belt_trial(
                 apply_trial_review(db, existing, config, trace_id=trace_id)
             db.commit()
             db.refresh(existing)
+            if normalize_trial_status(existing.status) == "submitted":
+                write_audit_log(
+                    db,
+                    user_id=user_id_for_identifier(db, trial_data.user_number),
+                    event_type="journey_trial_submitted",
+                    object_type="journey_belt_trial",
+                    object_id=existing.id,
+                    metadata={
+                        "trial_id": existing.id,
+                        "dimension_id": existing.dimension_id,
+                        "target_belt": existing.target_belt,
+                        "trial_type": existing.trial_type,
+                        "status": existing.status,
+                    },
+                )
             logger.info(
                 "[belt_trial_create:%s] existing saved trial_id=%s final_status=%s final_score=%s reviewed_at=%s",
                 trace_id,
@@ -1506,6 +1548,21 @@ def start_belt_trial(
     db.add(trial)
     db.commit()
     db.refresh(trial)
+    if normalize_trial_status(trial.status) == "submitted":
+        write_audit_log(
+            db,
+            user_id=user_id_for_identifier(db, trial_data.user_number),
+            event_type="journey_trial_submitted",
+            object_type="journey_belt_trial",
+            object_id=trial.id,
+            metadata={
+                "trial_id": trial.id,
+                "dimension_id": trial.dimension_id,
+                "target_belt": trial.target_belt,
+                "trial_type": trial.trial_type,
+                "status": trial.status,
+            },
+        )
     logger.info(
         "[belt_trial_create:%s] created trial_id=%s final_status=%s final_score=%s reviewed_at=%s",
         trace_id,
@@ -1564,6 +1621,21 @@ def submit_belt_trial(
         apply_trial_review(db, trial, config, trace_id=trace_id)
     db.commit()
     db.refresh(trial)
+    if normalize_trial_status(trial.status) == "submitted":
+        write_audit_log(
+            db,
+            user_id=user_id_for_identifier(db, user_number),
+            event_type="journey_trial_submitted",
+            object_type="journey_belt_trial",
+            object_id=trial.id,
+            metadata={
+                "trial_id": trial.id,
+                "dimension_id": trial.dimension_id,
+                "target_belt": trial.target_belt,
+                "trial_type": trial.trial_type,
+                "status": trial.status,
+            },
+        )
     logger.info(
         "[belt_trial_submit:%s] saved trial_id=%s final_status=%s final_score=%s reviewed_at=%s response_hash=%s history_count=%s",
         trace_id,
@@ -2189,6 +2261,19 @@ def create_goal(
     sync_goal_values(db, new_goal, user_number, goal_data.value_ids if time_horizon == "vision" else [])
     db.commit()
     db.refresh(new_goal)
+    write_audit_log(
+        db,
+        user_id=user_id_for_identifier(db, user_number),
+        event_type="goal_created",
+        object_type="journey_goal",
+        object_id=new_goal.id,
+        metadata={
+            "goal_id": new_goal.id,
+            "time_horizon": new_goal.time_horizon,
+            "parent_goal_id": new_goal.parent_goal_id,
+            "status": "created",
+        },
+    )
     return serialize_goal(new_goal)
 
 
@@ -2335,6 +2420,14 @@ def delete_goal(
     # Delete goal
     db.delete(goal)
     db.commit()
+    write_audit_log(
+        db,
+        user_id=user_id_for_identifier(db, user_number),
+        event_type="goal_deleted",
+        object_type="journey_goal",
+        object_id=goal_id,
+        metadata={"goal_id": goal_id, "status": "deleted"},
+    )
 
 
     return {"success": True, "message": "Goal deleted"}

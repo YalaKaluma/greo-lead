@@ -11,6 +11,7 @@ from app.services.task_enrichment_service import enrich_task
 from app.services.timezone_service import get_user_timezone, today_for_timezone
 from app.services.task_mtn_trend_service import get_task_mtn_trends
 from app.services.onboarding_seed_service import ensure_starter_tasks_visible_today
+from app.services.audit_log_service import user_id_for_identifier, write_audit_log
 
 router = APIRouter()
 
@@ -769,6 +770,14 @@ def delete_task(
 
     db.delete(task)
     db.commit()
+    write_audit_log(
+        db,
+        user_id=user_id_for_identifier(db, user_number),
+        event_type="task_deleted",
+        object_type="task",
+        object_id=task_id,
+        metadata={"task_id": task_id, "status": "deleted"},
+    )
 
     return {"success": True, "message": "Task deleted"}
 
