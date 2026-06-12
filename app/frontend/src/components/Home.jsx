@@ -1,17 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { formatDueDate, getTodayET, isOverdueET, isTodayET } from '../utils/taskHelpers';
+import { formatDueDate, getTodayET } from '../utils/taskHelpers';
 import { useLanguage } from '../i18n/LanguageContext';
-
-const DOMAIN_LABELS = {
-  vision: 'Vision & Goals',
-  people: 'People',
-  execute: 'Prioritize & Execute',
-  energy: 'Time & Energy',
-  learning: 'Learning & Development',
-};
-
-const DOMAIN_ORDER = ['vision', 'people', 'execute', 'energy', 'learning'];
 
 const emptyStateActions = [
   { label: 'Create your first goal', page: 'my-goals' },
@@ -26,19 +16,7 @@ const toNumber = (value, fallback = 0) => {
   return Number.isFinite(number) ? number : fallback;
 };
 
-const normalizeMtn = (value) => {
-  const score = toNumber(value, 0);
-  return score <= 1 ? score * 10 : score;
-};
-
 const clamp = (value, min = 0, max = 100) => Math.max(min, Math.min(max, value));
-
-const pctDelta = (value) => {
-  const number = toNumber(value, 0);
-  if (number > 0) return `+${Math.round(number)} pts`;
-  if (number < 0) return `${Math.round(number)} pts`;
-  return '0 pts';
-};
 
 const scoreDelta = (value) => {
   const number = toNumber(value, 0);
@@ -47,37 +25,22 @@ const scoreDelta = (value) => {
   return '0.0';
 };
 
-const formatBelt = (value) => {
-  if (!value) return 'White Belt';
-  return `${String(value).charAt(0).toUpperCase()}${String(value).slice(1)} Belt`;
+const pointDelta = (value) => {
+  const number = toNumber(value, 0);
+  if (number > 0) return `+${Math.round(number)} pts`;
+  if (number < 0) return `${Math.round(number)} pts`;
+  return '0 pts';
 };
 
-const getGoalTitle = (goalsById, goalId) => {
-  if (!goalId) return null;
-  const goal = goalsById.get(Number(goalId));
-  return goal?.title || goal?.goal_text || null;
+const heatColor = (score) => {
+  if (score >= 4.5) return '#07803c';
+  if (score >= 3.8) return '#16a34a';
+  if (score >= 3) return '#6ee7a8';
+  if (score >= 2.2) return '#bbf7d0';
+  return '#e0f2fe';
 };
 
-const readinessFromValidation = (validation) => {
-  if (!validation) return 'Building evidence';
-  if (validation.is_complete || validation.is_eligible) return 'Ready';
-  const completed = toNumber(validation.completed_signals ?? validation.completed ?? validation.met, 0);
-  const required = toNumber(validation.required_signals ?? validation.required ?? validation.total, 0);
-  if (required > 0 && completed >= required) return 'Ready';
-  if (completed > 0) return 'In progress';
-  return 'Needs evidence';
-};
-
-const progressFromValidation = (validation) => {
-  if (!validation) return 0;
-  if (validation.progress_percent != null) return clamp(toNumber(validation.progress_percent));
-  if (validation.is_complete || validation.is_eligible) return 100;
-  const completed = toNumber(validation.completed_signals ?? validation.completed ?? validation.met, 0);
-  const required = toNumber(validation.required_signals ?? validation.required ?? validation.total, 0);
-  return required ? clamp(Math.round((completed / required) * 100)) : 0;
-};
-
-function MetricCard({ eyebrow, title, value, detail, delta, status, children, sparkline }) {
+function MetricCard({ eyebrow, title, value, detail, delta, status, sparkline, children }) {
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
@@ -103,11 +66,8 @@ function MetricCard({ eyebrow, title, value, detail, delta, status, children, sp
 }
 
 function MiniSparkline({ points = [], color = '#0f766e' }) {
-  const values = points.slice(-14).map((item) => toNumber(item));
-  if (values.length < 2) {
-    return <div className="h-12 w-24 rounded bg-slate-50" />;
-  }
-
+  const values = points.map((item) => toNumber(item)).filter((item) => Number.isFinite(item));
+  if (values.length < 2) return <div className="h-12 w-24 rounded bg-slate-50" />;
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
@@ -116,7 +76,6 @@ function MiniSparkline({ points = [], color = '#0f766e' }) {
     const y = 44 - ((value - min) / range) * 36;
     return `${x},${y}`;
   });
-
   return (
     <svg className="h-12 w-24 overflow-visible" viewBox="0 0 96 48" role="img" aria-label="Recent trend">
       <polyline fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points={coordinates.join(' ')} />
@@ -131,30 +90,31 @@ function ProgressRing({ value }) {
   return (
     <svg className="h-24 w-24 shrink-0" viewBox="0 0 88 88" role="img" aria-label={`${value}% complete`}>
       <circle cx="44" cy="44" r={radius} stroke="#e2e8f0" strokeWidth="9" fill="none" />
-      <circle
-        cx="44"
-        cy="44"
-        r={radius}
-        stroke="#0f766e"
-        strokeWidth="9"
-        fill="none"
-        strokeLinecap="round"
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        transform="rotate(-90 44 44)"
-      />
+      <circle cx="44" cy="44" r={radius} stroke="#0f766e" strokeWidth="9" fill="none" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={offset} transform="rotate(-90 44 44)" />
       <text x="44" y="49" textAnchor="middle" className="fill-slate-900 text-lg font-semibold">{Math.round(value)}%</text>
     </svg>
   );
 }
 
-function CombinedTrendChart({ series }) {
+function CombinedTrendChart({ trends }) {
   const width = 680;
   const height = 260;
   const padding = { top: 18, right: 18, bottom: 32, left: 38 };
-  const dates = series[0]?.points?.map((point) => point.date) || [];
+  const mtn = (trends?.mtn || []).slice(-30);
+  const habits = (trends?.habits || []).slice(-30);
+  const journal = (trends?.journal || []).slice(-30);
+  const energy = (trends?.energy || []).slice(-30);
+  const dates = Array.from(new Set([...mtn, ...habits, ...journal, ...energy].map((item) => item.date))).sort().slice(-30);
   const innerWidth = width - padding.left - padding.right;
   const innerHeight = height - padding.top - padding.bottom;
+  const byDate = (items) => new Map(items.map((item) => [item.date, item]));
+  const maps = { mtn: byDate(mtn), habits: byDate(habits), journal: byDate(journal), energy: byDate(energy) };
+  const series = [
+    { label: 'MTN score', color: '#0f766e', points: dates.map((date) => ({ date, value: clamp(toNumber(maps.mtn.get(date)?.rolling_average, 0) * 10) })) },
+    { label: 'Habits', color: '#2563eb', points: dates.map((date) => ({ date, value: clamp(toNumber(maps.habits.get(date)?.rolling_average, 0)) })) },
+    { label: 'Journal depth', color: '#7c3aed', points: dates.map((date) => ({ date, value: clamp(toNumber(maps.journal.get(date)?.weekly_average, 0) * 10) })) },
+    { label: 'Energy', color: '#ea580c', points: dates.map((date) => ({ date, value: maps.energy.get(date)?.energy_level ? clamp((toNumber(maps.energy.get(date)?.energy_level) / 5) * 100) : null })) },
+  ];
 
   const pathFor = (points) => {
     const usable = points.filter((point) => point.value != null);
@@ -179,7 +139,6 @@ function CombinedTrendChart({ series }) {
           <span className="px-3 py-1 text-slate-400">90</span>
         </div>
       </div>
-
       <div className="mt-4 overflow-x-auto">
         <svg className="min-w-[620px] max-w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Combined leadership trend chart">
           {[0, 25, 50, 75, 100].map((tick) => {
@@ -191,11 +150,7 @@ function CombinedTrendChart({ series }) {
               </g>
             );
           })}
-          {series.map((item) => (
-            <path key={item.label} d={pathFor(item.points)} fill="none" stroke={item.color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <title>{item.label}</title>
-            </path>
-          ))}
+          {series.map((item) => <path key={item.label} d={pathFor(item.points)} fill="none" stroke={item.color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />)}
           {dates.length > 0 && [0, Math.floor((dates.length - 1) / 2), dates.length - 1].map((index) => (
             <text key={`${dates[index]}-${index}`} x={padding.left + (index / Math.max(dates.length - 1, 1)) * innerWidth} y={height - 8} textAnchor={index === 0 ? 'start' : index === dates.length - 1 ? 'end' : 'middle'} className="fill-slate-400 text-xs">
               {new Date(`${dates[index]}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -203,7 +158,6 @@ function CombinedTrendChart({ series }) {
           ))}
         </svg>
       </div>
-
       <div className="mt-4 flex flex-wrap gap-3">
         {series.map((item) => (
           <div key={item.label} className="flex items-center gap-2 text-sm text-slate-600">
@@ -216,256 +170,173 @@ function CombinedTrendChart({ series }) {
   );
 }
 
+function polarToCartesian(cx, cy, radius, angle) {
+  const radians = ((angle - 90) * Math.PI) / 180;
+  return { x: cx + radius * Math.cos(radians), y: cy + radius * Math.sin(radians) };
+}
+
+function ringSegmentPath(cx, cy, innerRadius, outerRadius, startAngle, endAngle) {
+  const outerStart = polarToCartesian(cx, cy, outerRadius, endAngle);
+  const outerEnd = polarToCartesian(cx, cy, outerRadius, startAngle);
+  const innerStart = polarToCartesian(cx, cy, innerRadius, startAngle);
+  const innerEnd = polarToCartesian(cx, cy, innerRadius, endAngle);
+  const largeArc = endAngle - startAngle <= 180 ? 0 : 1;
+  return [
+    `M ${outerStart.x} ${outerStart.y}`,
+    `A ${outerRadius} ${outerRadius} 0 ${largeArc} 0 ${outerEnd.x} ${outerEnd.y}`,
+    `L ${innerStart.x} ${innerStart.y}`,
+    `A ${innerRadius} ${innerRadius} 0 ${largeArc} 1 ${innerEnd.x} ${innerEnd.y}`,
+    'Z',
+  ].join(' ');
+}
+
+function textPosition(cx, cy, radius, startAngle, endAngle) {
+  return polarToCartesian(cx, cy, radius, (startAngle + endAngle) / 2);
+}
+
+function WheelHeatmap({ wheel }) {
+  const segments = wheel?.segments || [];
+  const domains = Array.from(new Set(segments.map((item) => item.domain)));
+  const domainAngles = new Map(domains.map((domain, index) => {
+    const start = index * (360 / Math.max(domains.length, 1));
+    return [domain, { start, end: start + (360 / Math.max(domains.length, 1)) }];
+  }));
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Leadership wheel heatmap</p>
+      <h2 className="mt-1 text-lg font-semibold text-slate-950">Where your Journey work is deep, and where it needs more depth</h2>
+      <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(280px,420px)_minmax(260px,1fr)]">
+        <div className="flex justify-center">
+          <svg className="h-[340px] w-[340px] max-w-full" viewBox="0 0 420 420" role="img" aria-label="Leadership wheel heatmap">
+            <circle cx="210" cy="210" r="58" fill="#06111f" />
+            <text x="210" y="205" textAnchor="middle" className="fill-white text-base font-semibold">Alfred</text>
+            <text x="210" y="224" textAnchor="middle" className="fill-teal-100 text-xs">Assessment</text>
+            {domains.map((domain) => {
+              const angle = domainAngles.get(domain);
+              const pos = textPosition(210, 210, 96, angle.start, angle.end);
+              return (
+                <g key={domain}>
+                  <path d={ringSegmentPath(210, 210, 62, 132, angle.start + 1, angle.end - 1)} fill="#ecfdf5" stroke="#ffffff" strokeWidth="2" />
+                  <text x={pos.x} y={pos.y} textAnchor="middle" dominantBaseline="middle" className="fill-slate-900 text-[10px] font-semibold">
+                    {domain.split(' ').slice(0, 2).join(' ')}
+                  </text>
+                </g>
+              );
+            })}
+            {segments.map((segment, index) => {
+              const siblings = segments.filter((item) => item.domain === segment.domain);
+              const siblingIndex = siblings.findIndex((item) => item.label === segment.label);
+              const angle = domainAngles.get(segment.domain);
+              const span = (angle.end - angle.start) / Math.max(siblings.length, 1);
+              const start = angle.start + siblingIndex * span;
+              const end = start + span;
+              const pos = textPosition(210, 210, 164, start, end);
+              return (
+                <g key={`${segment.domain}-${segment.label}-${index}`}>
+                  <path d={ringSegmentPath(210, 210, 134, 194, start + 1, end - 1)} fill={heatColor(toNumber(segment.score, 3))} stroke="#ffffff" strokeWidth="2" />
+                  <text x={pos.x} y={pos.y} textAnchor="middle" dominantBaseline="middle" className="fill-slate-900 text-[9px] font-semibold">
+                    {segment.label.split(' ').slice(0, 2).join(' ')}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {segments.map((segment) => (
+            <div key={`${segment.domain}-${segment.label}`} className="rounded-lg border border-slate-200 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-950">{segment.label}</h3>
+                  <p className="mt-1 text-xs text-slate-500">{segment.domain}</p>
+                </div>
+                <span className="rounded px-2 py-1 text-xs font-semibold text-slate-950" style={{ backgroundColor: heatColor(toNumber(segment.score, 3)) }}>
+                  {toNumber(segment.score, 0).toFixed(1)}
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-slate-600">{segment.status}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TaskStack({ title, eyebrow, tasks, emptyText, onToggle, timezone, showPostponed = false }) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{eyebrow}</p>
+        <h2 className="mt-1 text-lg font-semibold text-slate-950">{title}</h2>
+      </div>
+      <div className="mt-4 space-y-3">
+        {tasks.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600">{emptyText}</div>
+        ) : tasks.map((task) => (
+          <article key={task.id} className="rounded-lg border border-slate-200 p-4">
+            <div className="flex gap-3">
+              {!showPostponed && (
+                <button onClick={() => onToggle(task.id)} className="mt-0.5 h-5 w-5 shrink-0 rounded border border-slate-300 hover:border-teal-600" aria-label={`Complete ${task.title}`} />
+              )}
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-semibold text-slate-950">{task.title}</h3>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
+                  <span className="rounded bg-slate-100 px-2 py-1">{task.due_date ? formatDueDate(task.due_date, timezone) : 'No due date'}</span>
+                  {task.goal_title && <span className="rounded bg-teal-50 px-2 py-1 text-teal-800">{task.goal_title}</span>}
+                  {showPostponed && <span className="rounded bg-rose-50 px-2 py-1 text-rose-800">Postponed {task.times_postponed}x</span>}
+                  <span className="rounded bg-slate-900 px-2 py-1 text-white">MTN {toNumber(task.mtn_score, 0).toFixed(1)}</span>
+                </div>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function Home({ apiUrl, userNumber, onNavigate }) {
   const { timezone } = useLanguage();
-  const [data, setData] = useState({
-    tasks: [],
-    goals: [],
-    habits: [],
-    mtn: null,
-    habitTrends: null,
-    journal: null,
-    readiness: null,
-    assessment: null,
-    trials: [],
-    opportunities: [],
-  });
+  const [snapshot, setSnapshot] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [opportunityActions, setOpportunityActions] = useState({});
-  const [completingTaskIds, setCompletingTaskIds] = useState(new Set());
 
-  const loadHome = async () => {
+  useEffect(() => {
     if (apiUrl == null || !userNumber) return;
     setLoading(true);
     setError('');
-
-    const safeGet = (url, params) => axios.get(url, { params }).then((response) => response.data).catch(() => null);
-    const safePost = (url, body) => axios.post(url, body).then((response) => response.data).catch(() => null);
-
-    const [
-      tasks,
-      goals,
-      habits,
-      mtn,
-      habitTrends,
-      journal,
-      readiness,
-      assessment,
-      trials,
-      opportunities,
-    ] = await Promise.all([
-      safeGet(`${apiUrl}/api/tasks/`, { user_number: userNumber, filter_type: 'all' }),
-      safeGet(`${apiUrl}/api/journey/goals`, { user_number: userNumber }),
-      safeGet(`${apiUrl}/api/habits`, { user_number: userNumber }),
-      safeGet(`${apiUrl}/api/tasks/mtn-trends`, { user_number: userNumber }),
-      safeGet(`${apiUrl}/api/habits/trends`, { user_number: userNumber }),
-      safeGet(`${apiUrl}/api/journal/journal/trends`, { user_number: userNumber }),
-      safeGet(`${apiUrl}/api/journey/belt-readiness/status`, { user_number: userNumber }),
-      safeGet(`${apiUrl}/api/journey/belt-assessments/latest`, { user_number: userNumber }),
-      safeGet(`${apiUrl}/api/journey/belt-trials`, { user_number: userNumber }),
-      safePost(`${apiUrl}/api/opportunities/generate`, {
-        user_number: userNumber,
-        surface: 'home',
-        type: 'task',
-        limit: 3,
-      }),
-    ]);
-
-    setData({
-      tasks: Array.isArray(tasks) ? tasks : [],
-      goals: Array.isArray(goals) ? goals : [],
-      habits: Array.isArray(habits) ? habits : [],
-      mtn,
-      habitTrends,
-      journal,
-      readiness,
-      assessment,
-      trials: Array.isArray(trials) ? trials : [],
-      opportunities: opportunities?.opportunities || [],
-    });
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    loadHome().catch(() => {
-      setError('Home needs a moment to gather your leadership signals.');
-      setLoading(false);
-    });
+    axios.get(`${apiUrl}/api/home/dashboard`, { params: { user_number: userNumber } })
+      .then((response) => setSnapshot(response.data))
+      .catch(() => setError('Home needs a moment to load your cached leadership dashboard.'))
+      .finally(() => setLoading(false));
   }, [apiUrl, userNumber]);
 
-  const goalsById = useMemo(() => new Map(data.goals.map((goal) => [Number(goal.id), goal])), [data.goals]);
+  const payload = snapshot?.payload || {};
+  const metrics = payload.metrics || {};
   const today = getTodayET(timezone);
 
-  const metrics = useMemo(() => {
-    const mtnSummary = data.mtn?.summary || {};
-    const currentMtn = toNumber(mtnSummary.last_7_days?.average_score, 0);
-    const mtnDelta = toNumber(mtnSummary.last_7_days?.trend?.delta_vs_30, 0);
-    const habitWeek = data.habitTrends?.summary?.last_7_days || {};
-    const habitPrevious = data.habitTrends?.summary?.last_21_days || {};
-    const habitDelta = toNumber(habitWeek.compliance_rate, 0) - toNumber(habitPrevious.compliance_rate, 0);
-    const journalChart = data.journal?.trend_chart || [];
-    const journalWeek = journalChart.slice(-7);
-    const journalPrevious = journalChart.slice(-14, -7);
-    const entriesThisWeek = journalWeek.reduce((sum, item) => sum + toNumber(item.entry_count, 0), 0);
-    const weeklyDepthValues = journalWeek.filter((item) => item.daily_average > 0).map((item) => item.daily_average);
-    const previousDepthValues = journalPrevious.filter((item) => item.daily_average > 0).map((item) => item.daily_average);
-    const avgDepth10 = weeklyDepthValues.length ? weeklyDepthValues.reduce((sum, item) => sum + item, 0) / weeklyDepthValues.length : 0;
-    const previousDepth10 = previousDepthValues.length ? previousDepthValues.reduce((sum, item) => sum + item, 0) / previousDepthValues.length : 0;
-
-    return {
-      currentMtn,
-      mtnDelta,
-      mtnStatus: mtnDelta > 0.2 ? 'Strong momentum' : mtnDelta < -0.2 ? 'Needs attention' : 'Stable',
-      habitRate: toNumber(habitWeek.compliance_rate, 0),
-      habitCompleted: toNumber(habitWeek.completed, 0),
-      habitExpected: toNumber(habitWeek.expected, 0),
-      habitDelta,
-      habitStatus: habitDelta >= 5 ? 'Improving' : habitDelta <= -5 ? 'Needs attention' : 'Stable',
-      entriesThisWeek,
-      avgDepth5: avgDepth10 / 2,
-      depthDelta5: (avgDepth10 - previousDepth10) / 2,
-      journalStatus: avgDepth10 >= 7 ? 'Deep reflection' : entriesThisWeek >= 3 ? 'Consistent' : 'Needs more depth',
-    };
-  }, [data]);
-
-  const trendSeries = useMemo(() => {
-    const mtnChart = (data.mtn?.trend_chart || []).slice(-30);
-    const habitChart = (data.habitTrends?.trend_chart || []).slice(-30);
-    const journalChart = (data.journal?.trend_chart || []).slice(-30);
-    const energyChart = (data.habitTrends?.energy_trend || []).slice(-30);
-    const dates = Array.from(new Set([...mtnChart, ...habitChart, ...journalChart, ...energyChart].map((item) => item.date))).sort().slice(-30);
-    const byDate = (items) => new Map(items.map((item) => [item.date, item]));
-
-    const mtnMap = byDate(mtnChart);
-    const habitMap = byDate(habitChart);
-    const journalMap = byDate(journalChart);
-    const energyMap = byDate(energyChart);
-
-    return [
-      {
-        label: 'MTN score',
-        color: '#0f766e',
-        points: dates.map((date) => ({ date, value: clamp(toNumber(mtnMap.get(date)?.rolling_average, 0) * 10) })),
-      },
-      {
-        label: 'Habits',
-        color: '#2563eb',
-        points: dates.map((date) => ({ date, value: clamp(toNumber(habitMap.get(date)?.rolling_average, 0)) })),
-      },
-      {
-        label: 'Journal depth',
-        color: '#7c3aed',
-        points: dates.map((date) => ({ date, value: clamp(toNumber(journalMap.get(date)?.weekly_average, 0) * 10) })),
-      },
-      {
-        label: 'Energy',
-        color: '#ea580c',
-        points: dates.map((date) => {
-          const level = energyMap.get(date)?.energy_level;
-          return { date, value: level ? clamp((toNumber(level) / 5) * 100) : null };
-        }),
-      },
-    ];
-  }, [data]);
-
-  const activationReady = (
-    (data.goals.length >= 1 || data.tasks.length >= 3) &&
-    data.habits.length >= 1 &&
-    (toNumber(data.journal?.summary?.total_journal_entries, 0) >= 1 || data.trials.some((trial) => ['passed', 'completed'].includes(String(trial.status).toLowerCase())))
-  );
-
-  const topTasks = useMemo(() => {
-    return data.tasks
-      .filter((task) => String(task.status || '').toLowerCase() !== 'completed')
-      .sort((a, b) => {
-        const aMtn = normalizeMtn(a.mtn_score_today ?? a.move_the_needle_score);
-        const bMtn = normalizeMtn(b.mtn_score_today ?? b.move_the_needle_score);
-        const aUrgent = isOverdueET(a.due_date, timezone) || isTodayET(a.due_date, timezone) ? 1 : 0;
-        const bUrgent = isOverdueET(b.due_date, timezone) || isTodayET(b.due_date, timezone) ? 1 : 0;
-        const aAligned = a.goal_id ? 1 : 0;
-        const bAligned = b.goal_id ? 1 : 0;
-        const priority = { high: 3, medium: 2, low: 1 };
-        return (
-          bMtn - aMtn ||
-          bUrgent - aUrgent ||
-          bAligned - aAligned ||
-          (priority[String(b.priority || '').toLowerCase()] || 0) - (priority[String(a.priority || '').toLowerCase()] || 0)
-        );
-      })
-      .slice(0, 5);
-  }, [data.tasks, timezone]);
-
-  const wheelDomains = useMemo(() => {
-    const dimensionScores = data.assessment?.journey_depth_scores || data.assessment?.developmental_dimension_scores || data.assessment?.dimension_scores || {};
-    const missingTrials = Array.isArray(data.readiness?.missing_trials) ? data.readiness.missing_trials : [];
-    const currentBelt = data.readiness?.current_belt || 'white';
-    return DOMAIN_ORDER.map((domain) => {
-      const missing = missingTrials.filter((trial) => trial.dimension_id === domain).length;
-      const passed = data.trials.filter((trial) => (
-        trial.dimension_id === domain &&
-        (trial.target_belt || currentBelt) === currentBelt &&
-        ['passed', 'completed'].includes(String(trial.status || '').toLowerCase())
-      )).length;
-      const required = passed + missing;
-      const validation = {
-        completed: passed,
-        required,
-        is_complete: required > 0 && missing === 0,
-      };
-      const assessmentScore = dimensionScores[domain]?.score ?? dimensionScores[DOMAIN_LABELS[domain]] ?? dimensionScores[domain];
-      return {
-        id: domain,
-        label: DOMAIN_LABELS[domain],
-        belt: formatBelt(currentBelt),
-        readiness: readinessFromValidation(validation),
-        progress: Math.max(progressFromValidation(validation), clamp(toNumber(assessmentScore, 0) * 10)),
-      };
-    });
-  }, [data.readiness, data.assessment, data.trials]);
-
-  const nextTrial = useMemo(() => {
-    const currentBelt = data.readiness?.target_belt || data.readiness?.current_belt || 'yellow';
-    const incomplete = data.trials.find((trial) => !['passed', 'completed'].includes(String(trial.status || '').toLowerCase()));
-    if (incomplete) {
-      return {
-        title: `Complete ${formatBelt(incomplete.target_belt)} ${String(incomplete.trial_type || 'reflection').replace(/_/g, ' ')} trial`,
-        domain: DOMAIN_LABELS[incomplete.dimension_id] || incomplete.dimension_id,
-        belt: formatBelt(incomplete.target_belt),
-        cta: 'Continue Trial',
-        reason: 'This trial is already open and gives Alfred the clearest next evidence for your Journey progression.',
-      };
-    }
-
-    const weakest = [...wheelDomains].sort((a, b) => a.progress - b.progress)[0] || wheelDomains[0];
-    return {
-      title: `${formatBelt(currentBelt)} reflection trial`,
-      domain: weakest?.label || 'Vision & Goals',
-      belt: formatBelt(currentBelt),
-      cta: 'Start Trial',
-      reason: `${weakest?.label || 'This domain'} has the most room for evidence, so a focused reflection is the best next leadership signal.`,
-    };
-  }, [data.readiness, data.trials, wheelDomains]);
-
-  const toggleTask = async (taskId) => {
-    setCompletingTaskIds((prev) => new Set([...prev, taskId]));
+  const handleTaskToggle = async (taskId) => {
     try {
       await axios.patch(`${apiUrl}/api/tasks/${taskId}/toggle`, {}, { params: { user_number: userNumber } });
-      setData((prev) => ({ ...prev, tasks: prev.tasks.filter((task) => task.id !== taskId) }));
+      setSnapshot((prev) => ({
+        ...prev,
+        payload: {
+          ...prev.payload,
+          top_tasks: (prev.payload.top_tasks || []).filter((task) => task.id !== taskId),
+        },
+      }));
     } catch {
-      setCompletingTaskIds((prev) => {
-        const next = new Set(prev);
-        next.delete(taskId);
-        return next;
-      });
+      // The next daily snapshot will correct this if the toggle fails.
     }
   };
 
   const handleOpportunity = async (opportunityId, action) => {
     setOpportunityActions((prev) => ({ ...prev, [opportunityId]: 'working' }));
     try {
-      const path = action === 'accept' ? 'accept' : 'decline';
-      await axios.post(`${apiUrl}/api/opportunities/${opportunityId}/${path}`, {
+      await axios.post(`${apiUrl}/api/opportunities/${opportunityId}/${action === 'accept' ? 'accept' : 'decline'}`, {
         user_number: userNumber,
         reason: action === 'decline' ? 'Dismissed from Home' : undefined,
       });
@@ -479,13 +350,8 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
     }
   };
 
-  if (loading) {
-    return <div className="p-6 text-slate-600">Building your leadership dashboard...</div>;
-  }
-
-  if (error) {
-    return <div className="p-6 text-slate-700">{error}</div>;
-  }
+  if (loading) return <div className="p-6 text-slate-600">Loading your cached leadership dashboard...</div>;
+  if (error) return <div className="p-6 text-slate-700">{error}</div>;
 
   return (
     <div className="min-h-full bg-slate-50">
@@ -494,27 +360,23 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-teal-700">Executive leadership dashboard</p>
             <h1 className="mt-2 text-3xl font-semibold text-slate-950">Home</h1>
-            <p className="mt-2 max-w-3xl text-sm text-slate-600">
-              Weekly performance, behavioral momentum, execution focus, and Journey readiness in one operating view.
-            </p>
+            <p className="mt-2 max-w-3xl text-sm text-slate-600">Weekly performance, behavioral momentum, execution focus, and Journey readiness in one operating view.</p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
             <span className="font-semibold text-slate-900">Today:</span> {new Date(`${today}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
           </div>
         </header>
 
-        {!activationReady && (
+        {!payload.activation_ready && (
           <section className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-5">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <h2 className="text-base font-semibold text-amber-950">Alfred needs a little more signal</h2>
-                <p className="mt-1 text-sm text-amber-900">Add the first few leadership inputs and this page becomes a much sharper operating dashboard.</p>
+                <p className="mt-1 text-sm text-amber-900">Add the first few leadership inputs and this page becomes a sharper operating dashboard.</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {emptyStateActions.map((action) => (
-                  <button key={action.page} onClick={() => onNavigate(action.page)} className="rounded-md bg-white px-3 py-2 text-sm font-medium text-amber-950 shadow-sm hover:bg-amber-100">
-                    {action.label}
-                  </button>
+                  <button key={action.page} onClick={() => onNavigate(action.page)} className="rounded-md bg-white px-3 py-2 text-sm font-medium text-amber-950 shadow-sm hover:bg-amber-100">{action.label}</button>
                 ))}
               </div>
             </div>
@@ -522,85 +384,23 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
         )}
 
         <div className="grid gap-5 xl:grid-cols-3">
-          <MetricCard
-            eyebrow="Weekly leadership output"
-            title="MTN Score"
-            value={metrics.currentMtn.toFixed(1)}
-            detail={`${toNumber(data.mtn?.summary?.last_7_days?.completed_tasks, 0)} completed high-leverage tasks`}
-            delta={scoreDelta(metrics.mtnDelta)}
-            status={metrics.mtnStatus}
-            sparkline={<MiniSparkline points={(data.mtn?.trend_chart || []).map((item) => item.rolling_average)} />}
-          />
-          <MetricCard
-            eyebrow="Behavioral consistency"
-            title="Habits Compliance"
-            value={`${Math.round(metrics.habitRate)}%`}
-            detail={`${metrics.habitCompleted} completed / ${metrics.habitExpected} planned`}
-            delta={pctDelta(metrics.habitDelta)}
-            status={metrics.habitStatus}
-          >
-            <ProgressRing value={metrics.habitRate} />
+          <MetricCard eyebrow="Weekly leadership output" title="MTN Score" value={toNumber(metrics.mtn?.score, 0).toFixed(1)} detail={`${toNumber(metrics.mtn?.completed_tasks, 0)} completed high-leverage tasks`} delta={scoreDelta(metrics.mtn?.delta)} status={metrics.mtn?.status || 'Stable'} sparkline={<MiniSparkline points={metrics.mtn?.sparkline || []} />} />
+          <MetricCard eyebrow="Behavioral consistency" title="Habits Compliance" value={`${Math.round(toNumber(metrics.habits?.compliance_rate, 0))}%`} detail={`${toNumber(metrics.habits?.completed, 0)} completed / ${toNumber(metrics.habits?.expected, 0)} planned`} delta={pointDelta(metrics.habits?.delta)} status={metrics.habits?.status || 'Stable'}>
+            <ProgressRing value={toNumber(metrics.habits?.compliance_rate, 0)} />
           </MetricCard>
-          <MetricCard
-            eyebrow="Reflection quality"
-            title="Journal Performance"
-            value={`${metrics.entriesThisWeek} entries`}
-            detail={`Avg depth: ${metrics.avgDepth5.toFixed(1)} / 5`}
-            delta={scoreDelta(metrics.depthDelta5)}
-            status={metrics.journalStatus}
-            sparkline={<MiniSparkline points={(data.journal?.trend_chart || []).map((item) => item.weekly_average)} color="#7c3aed" />}
-          />
+          <MetricCard eyebrow="Reflection quality" title="Journal Performance" value={`${toNumber(metrics.journal?.entries_this_week, 0)} entries`} detail={`Avg depth: ${toNumber(metrics.journal?.average_depth_5, 0).toFixed(1)} / 5`} delta={scoreDelta(metrics.journal?.delta_depth_5)} status={metrics.journal?.status || 'Needs more depth'} sparkline={<MiniSparkline points={metrics.journal?.sparkline || []} color="#7c3aed" />} />
         </div>
 
-        <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.8fr)_minmax(320px,0.8fr)]">
-          <CombinedTrendChart series={trendSeries} />
-
+        <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)_minmax(320px,0.8fr)]">
+          <CombinedTrendChart trends={payload.trends || {}} />
+          <TaskStack title="Top 3 MTN Tasks" eyebrow="Execution focus" tasks={payload.top_tasks || []} emptyText="Add tasks to give Alfred an execution focus." onToggle={handleTaskToggle} timezone={timezone} />
           <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Execution focus</p>
-                <h2 className="mt-1 text-lg font-semibold text-slate-950">Top Todos</h2>
-              </div>
-              <button onClick={() => onNavigate('todo-list')} className="rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">View all</button>
-            </div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended MTN actions</p>
+            <h2 className="mt-1 text-lg font-semibold text-slate-950">Move the needle next</h2>
             <div className="mt-4 space-y-3">
-              {topTasks.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600">Add your first task to give Alfred an execution focus.</div>
-              ) : topTasks.map((task) => {
-                const mtn = normalizeMtn(task.mtn_score_today ?? task.move_the_needle_score);
-                return (
-                  <article key={task.id} className="rounded-lg border border-slate-200 p-4">
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => toggleTask(task.id)}
-                        className="mt-0.5 h-5 w-5 shrink-0 rounded border border-slate-300 hover:border-teal-600"
-                        aria-label={`Complete ${task.title}`}
-                        disabled={completingTaskIds.has(task.id)}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <h3 className="text-sm font-semibold text-slate-950">{task.title}</h3>
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
-                          <span className="rounded bg-slate-100 px-2 py-1">{task.due_date ? formatDueDate(task.due_date, timezone) : 'No due date'}</span>
-                          {getGoalTitle(goalsById, task.goal_id) && <span className="rounded bg-teal-50 px-2 py-1 text-teal-800">{getGoalTitle(goalsById, task.goal_id)}</span>}
-                          <span className="rounded bg-slate-900 px-2 py-1 text-white">MTN {mtn.toFixed(1)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended MTN actions</p>
-              <h2 className="mt-1 text-lg font-semibold text-slate-950">Move the needle next</h2>
-            </div>
-            <div className="mt-4 space-y-3">
-              {data.opportunities.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600">Alfred will recommend actions once goals, tasks, and recent behavior create enough context.</div>
-              ) : data.opportunities.map((item) => {
+              {(payload.recommendations || []).length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600">Alfred will recommend actions once enough context exists.</div>
+              ) : payload.recommendations.map((item) => {
                 const state = opportunityActions[item.id];
                 return (
                   <article key={item.id} className="rounded-lg border border-slate-200 p-4">
@@ -609,12 +409,8 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
                     <div className="mt-3 flex items-center justify-between gap-3">
                       <span className="rounded bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-800">MTN {toNumber(item.mtn_score, 0).toFixed(1)}</span>
                       <div className="flex gap-2">
-                        <button onClick={() => handleOpportunity(item.id, 'accept')} className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700" disabled={Boolean(state)}>
-                          {state === 'accepted' ? 'Added' : 'Add to Tasks'}
-                        </button>
-                        <button onClick={() => handleOpportunity(item.id, 'decline')} className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" disabled={Boolean(state)}>
-                          {state === 'dismissed' ? 'Dismissed' : 'Dismiss'}
-                        </button>
+                        <button onClick={() => handleOpportunity(item.id, 'accept')} className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700" disabled={Boolean(state)}>{state === 'accepted' ? 'Added' : 'Add to Tasks'}</button>
+                        <button onClick={() => handleOpportunity(item.id, 'decline')} className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" disabled={Boolean(state)}>{state === 'dismissed' ? 'Dismissed' : 'Dismiss'}</button>
                       </div>
                     </div>
                   </article>
@@ -624,40 +420,22 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
           </section>
         </div>
 
-        <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
-          <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Leadership development</p>
-            <h2 className="mt-1 text-lg font-semibold text-slate-950">Leadership Wheel Status</h2>
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
-              {wheelDomains.map((domain) => (
-                <div key={domain.id} className="rounded-lg border border-slate-200 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-950">{domain.label}</h3>
-                      <p className="mt-1 text-xs text-slate-500">{domain.belt}</p>
-                    </div>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">{domain.readiness}</span>
-                  </div>
-                  <div className="mt-4 h-2 rounded-full bg-slate-100">
-                    <div className="h-2 rounded-full bg-teal-700" style={{ width: `${domain.progress}%` }} />
-                  </div>
-                </div>
-              ))}
+        <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(320px,0.85fr)_minmax(320px,0.85fr)]">
+          <TaskStack title="Top 3 Procrastinated Tasks" eyebrow="Execution friction" tasks={payload.procrastinated_tasks || []} emptyText="No repeated postponement pattern is visible yet." onToggle={handleTaskToggle} timezone={timezone} showPostponed />
+          <section className="rounded-lg border border-teal-200 bg-teal-50 p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-teal-800">Best next trial</p>
+            <h2 className="mt-3 text-xl font-semibold text-slate-950">{payload.next_trial?.title}</h2>
+            <div className="mt-4 space-y-2 text-sm text-slate-700">
+              <p><span className="font-semibold text-slate-950">Domain:</span> {payload.next_trial?.domain}</p>
+              <p><span className="font-semibold text-slate-950">Belt level:</span> {payload.next_trial?.belt}</p>
+              <p>{payload.next_trial?.reason}</p>
             </div>
+            <button onClick={() => onNavigate('my-journey')} className="mt-6 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">{payload.next_trial?.cta || 'Start Trial'}</button>
           </section>
+        </div>
 
-          <section className="rounded-lg border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-teal-200">Best next trial</p>
-            <h2 className="mt-3 text-xl font-semibold">{nextTrial.title}</h2>
-            <div className="mt-4 space-y-2 text-sm text-slate-300">
-              <p><span className="font-semibold text-white">Domain:</span> {nextTrial.domain}</p>
-              <p><span className="font-semibold text-white">Belt level:</span> {nextTrial.belt}</p>
-              <p>{nextTrial.reason}</p>
-            </div>
-            <button onClick={() => onNavigate('my-journey')} className="mt-6 rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-slate-100">
-              {nextTrial.cta}
-            </button>
-          </section>
+        <div className="mt-5">
+          <WheelHeatmap wheel={payload.leadership_wheel || {}} />
         </div>
       </div>
     </div>

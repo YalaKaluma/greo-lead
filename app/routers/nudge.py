@@ -891,6 +891,12 @@ def send_nudge_for_user(
         if nudge_type == "morning":
             briefing_service = MorningBriefingService(db)
             move_the_needle_context = briefing_service.generate_move_the_needle_context(user_number)
+            try:
+                from app.services.home_dashboard_service import HomeDashboardService
+                HomeDashboardService(db).refresh(user_number, source="morning_nudge")
+            except Exception as exc:
+                db.rollback()
+                logger.warning("Failed to refresh Home dashboard snapshot for %s during morning nudge: %s", user_number, exc)
             
 
         # Build context summary for logging

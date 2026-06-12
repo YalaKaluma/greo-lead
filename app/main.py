@@ -10,7 +10,7 @@ import time
 from urllib.parse import parse_qsl, urlencode
 from datetime import datetime
 from app.db import Base, engine, SessionLocal
-from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits, waitlist, onboarding, chat, priority, leadership_coaching_router, audio, message_feedback, opportunities, message_signals, settings, admin, usage
+from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits, waitlist, onboarding, chat, priority, leadership_coaching_router, audio, message_feedback, opportunities, message_signals, settings, admin, usage, home
 from app.routers import auth
 from sqlalchemy import text
 import threading
@@ -290,6 +290,7 @@ routers_to_register = [
     (usage.router, "/api", "Usage"),
     (opportunities.router, "/api/opportunities", "Opportunities"),
     (priority.router, "/api/priority", "Priority"),
+    (home.router, "/api/home", "Home"),
     (leadership_coaching_router.router, "/api/leadership-coaching", "Leadership-Coaching"),
 ]
 

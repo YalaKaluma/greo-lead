@@ -85,25 +85,17 @@ function App() {
     if (!isLoggedIn || !userNumber || hasDeepLinkedRef.current) return;
 
     let cancelled = false;
-    const safeJson = (url) => fetch(url).then((response) => response.ok ? response.json() : null).catch(() => null);
     const encodedUser = encodeURIComponent(userNumber);
 
-    Promise.all([
-      safeJson(`${API_URL}/api/journey/goals?user_number=${encodedUser}`),
-      safeJson(`${API_URL}/api/tasks/?user_number=${encodedUser}&filter_type=all`),
-      safeJson(`${API_URL}/api/habits?user_number=${encodedUser}`),
-      safeJson(`${API_URL}/api/journal/journal/trends?user_number=${encodedUser}`),
-      safeJson(`${API_URL}/api/journey/belt-trials?user_number=${encodedUser}`)
-    ]).then(([goals, tasks, habits, journal, trials]) => {
-      if (cancelled || hasDeepLinkedRef.current) return;
-      const hasGoalOrTasks = (Array.isArray(goals) && goals.length >= 1) || (Array.isArray(tasks) && tasks.length >= 3);
-      const hasHabit = Array.isArray(habits) && habits.length >= 1;
-      const completedTrial = Array.isArray(trials) && trials.some((trial) => ['passed', 'completed'].includes(String(trial.status || '').toLowerCase()));
-      const hasJournalOrTrial = Number(journal?.summary?.total_journal_entries || 0) >= 1 || completedTrial;
-      setCurrentPage(hasGoalOrTasks && hasHabit && hasJournalOrTrial ? HOME_PAGE : NEW_USER_DEFAULT_PAGE);
-    }).catch(() => {
-      if (!cancelled) setCurrentPage(NEW_USER_DEFAULT_PAGE);
-    });
+    fetch(`${API_URL}/api/home/dashboard?user_number=${encodedUser}`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((snapshot) => {
+        if (cancelled || hasDeepLinkedRef.current) return;
+        setCurrentPage(snapshot?.payload?.activation_ready ? HOME_PAGE : NEW_USER_DEFAULT_PAGE);
+      })
+      .catch(() => {
+        if (!cancelled) setCurrentPage(NEW_USER_DEFAULT_PAGE);
+      });
 
     return () => {
       cancelled = true;
