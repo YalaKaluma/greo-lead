@@ -203,62 +203,44 @@ function WheelHeatmap({ wheel }) {
   }));
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
+    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Leadership wheel heatmap</p>
-      <h2 className="mt-1 text-lg font-semibold text-slate-950">Where your Journey work is deep, and where it needs more depth</h2>
-      <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(280px,420px)_minmax(260px,1fr)]">
-        <div className="flex justify-center">
-          <svg className="h-[340px] w-[340px] max-w-full" viewBox="0 0 420 420" role="img" aria-label="Leadership wheel heatmap">
-            <circle cx="210" cy="210" r="58" fill="#06111f" />
-            <text x="210" y="205" textAnchor="middle" className="fill-white text-base font-semibold">Alfred</text>
-            <text x="210" y="224" textAnchor="middle" className="fill-teal-100 text-xs">Assessment</text>
-            {domains.map((domain) => {
-              const angle = domainAngles.get(domain);
-              const pos = textPosition(210, 210, 96, angle.start, angle.end);
-              return (
-                <g key={domain}>
-                  <path d={ringSegmentPath(210, 210, 62, 132, angle.start + 1, angle.end - 1)} fill="#ecfdf5" stroke="#ffffff" strokeWidth="2" />
-                  <text x={pos.x} y={pos.y} textAnchor="middle" dominantBaseline="middle" className="fill-slate-900 text-[10px] font-semibold">
-                    {domain.split(' ').slice(0, 2).join(' ')}
-                  </text>
-                </g>
-              );
-            })}
-            {segments.map((segment, index) => {
-              const siblings = segments.filter((item) => item.domain === segment.domain);
-              const siblingIndex = siblings.findIndex((item) => item.label === segment.label);
-              const angle = domainAngles.get(segment.domain);
-              const span = (angle.end - angle.start) / Math.max(siblings.length, 1);
-              const start = angle.start + siblingIndex * span;
-              const end = start + span;
-              const pos = textPosition(210, 210, 164, start, end);
-              return (
-                <g key={`${segment.domain}-${segment.label}-${index}`}>
-                  <path d={ringSegmentPath(210, 210, 134, 194, start + 1, end - 1)} fill={heatColor(toNumber(segment.score, 3))} stroke="#ffffff" strokeWidth="2" />
-                  <text x={pos.x} y={pos.y} textAnchor="middle" dominantBaseline="middle" className="fill-slate-900 text-[9px] font-semibold">
-                    {segment.label.split(' ').slice(0, 2).join(' ')}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {segments.map((segment) => (
-            <div key={`${segment.domain}-${segment.label}`} className="rounded-lg border border-slate-200 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-950">{segment.label}</h3>
-                  <p className="mt-1 text-xs text-slate-500">{segment.domain}</p>
-                </div>
-                <span className="rounded px-2 py-1 text-xs font-semibold text-slate-950" style={{ backgroundColor: heatColor(toNumber(segment.score, 3)) }}>
-                  {toNumber(segment.score, 0).toFixed(1)}
-                </span>
-              </div>
-              <p className="mt-2 text-xs text-slate-600">{segment.status}</p>
-            </div>
-          ))}
-        </div>
+      <h2 className="mt-1 text-lg font-semibold text-slate-950">Leadership depth map</h2>
+      <div className="mt-5 flex justify-center">
+        <svg className="h-[280px] w-[280px] max-w-full" viewBox="0 0 420 420" role="img" aria-label="Leadership wheel heatmap">
+          <circle cx="210" cy="210" r="58" fill="#06111f" />
+          <text x="210" y="205" textAnchor="middle" className="fill-white text-base font-semibold">Alfred</text>
+          <text x="210" y="224" textAnchor="middle" className="fill-teal-100 text-xs">Assessment</text>
+          {domains.map((domain) => {
+            const angle = domainAngles.get(domain);
+            const pos = textPosition(210, 210, 96, angle.start, angle.end);
+            return (
+              <g key={domain}>
+                <path d={ringSegmentPath(210, 210, 62, 132, angle.start + 1, angle.end - 1)} fill="#ecfdf5" stroke="#ffffff" strokeWidth="2" />
+                <text x={pos.x} y={pos.y} textAnchor="middle" dominantBaseline="middle" className="fill-slate-900 text-[10px] font-semibold">
+                  {domain.split(' ').slice(0, 2).join(' ')}
+                </text>
+              </g>
+            );
+          })}
+          {segments.map((segment, index) => {
+            const siblings = segments.filter((item) => item.domain === segment.domain);
+            const siblingIndex = siblings.findIndex((item) => item.label === segment.label);
+            const angle = domainAngles.get(segment.domain);
+            const span = (angle.end - angle.start) / Math.max(siblings.length, 1);
+            const start = angle.start + siblingIndex * span;
+            const end = start + span;
+            const pos = textPosition(210, 210, 164, start, end);
+            return (
+              <g key={`${segment.domain}-${segment.label}-${index}`}>
+                <path d={ringSegmentPath(210, 210, 134, 194, start + 1, end - 1)} fill={heatColor(toNumber(segment.score, 3))} stroke="#ffffff" strokeWidth="2" />
+                <text x={pos.x} y={pos.y} textAnchor="middle" dominantBaseline="middle" className="fill-slate-900 text-[9px] font-semibold">
+                  {segment.label.split(' ').slice(0, 2).join(' ')}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
       </div>
     </section>
   );
@@ -293,6 +275,24 @@ function TaskStack({ title, eyebrow, tasks, emptyText, onToggle, timezone, showP
           </article>
         ))}
       </div>
+    </section>
+  );
+}
+
+function NextTrialCard({ trial, onNavigate }) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Leadership development</p>
+      <h2 className="mt-1 text-lg font-semibold text-slate-950">Recommended Next Trial</h2>
+      <h3 className="mt-3 text-xl font-semibold text-slate-950">{trial?.title}</h3>
+      <div className="mt-4 space-y-2 text-sm text-slate-700">
+        <p><span className="font-semibold text-slate-950">Domain:</span> {trial?.domain}</p>
+        <p><span className="font-semibold text-slate-950">Belt level:</span> {trial?.belt}</p>
+        <p>{trial?.reason}</p>
+      </div>
+      <button onClick={() => onNavigate('my-journey')} className="mt-6 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+        {trial?.cta || 'Start Trial'}
+      </button>
     </section>
   );
 }
@@ -403,9 +403,8 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
               ) : payload.recommendations.map((item) => {
                 const state = opportunityActions[item.id];
                 return (
-                  <article key={item.id} className="rounded-lg border border-slate-200 p-4">
+                  <article key={item.id} className="rounded-lg border border-slate-200 p-3">
                     <h3 className="text-sm font-semibold text-slate-950">{item.title}</h3>
-                    <p className="mt-2 text-sm text-slate-600">{item.reason || item.description || 'This action appears likely to unlock meaningful progress.'}</p>
                     <div className="mt-3 flex items-center justify-between gap-3">
                       <span className="rounded bg-teal-50 px-2 py-1 text-xs font-semibold text-teal-800">MTN {toNumber(item.mtn_score, 0).toFixed(1)}</span>
                       <div className="flex gap-2">
@@ -420,22 +419,10 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
           </section>
         </div>
 
-        <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(320px,0.85fr)_minmax(320px,0.85fr)]">
-          <TaskStack title="Top 3 Procrastinated Tasks" eyebrow="Execution friction" tasks={payload.procrastinated_tasks || []} emptyText="No repeated postponement pattern is visible yet." onToggle={handleTaskToggle} timezone={timezone} showPostponed />
-          <section className="rounded-lg border border-teal-200 bg-teal-50 p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-teal-800">Best next trial</p>
-            <h2 className="mt-3 text-xl font-semibold text-slate-950">{payload.next_trial?.title}</h2>
-            <div className="mt-4 space-y-2 text-sm text-slate-700">
-              <p><span className="font-semibold text-slate-950">Domain:</span> {payload.next_trial?.domain}</p>
-              <p><span className="font-semibold text-slate-950">Belt level:</span> {payload.next_trial?.belt}</p>
-              <p>{payload.next_trial?.reason}</p>
-            </div>
-            <button onClick={() => onNavigate('my-journey')} className="mt-6 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">{payload.next_trial?.cta || 'Start Trial'}</button>
-          </section>
-        </div>
-
-        <div className="mt-5">
+        <div className="mt-5 grid gap-5 xl:grid-cols-3">
           <WheelHeatmap wheel={payload.leadership_wheel || {}} />
+          <NextTrialCard trial={payload.next_trial || {}} onNavigate={onNavigate} />
+          <TaskStack title="Top 3 Procrastinated Tasks" eyebrow="Execution friction" tasks={payload.procrastinated_tasks || []} emptyText="No repeated postponement pattern is visible yet." onToggle={handleTaskToggle} timezone={timezone} showPostponed />
         </div>
       </div>
     </div>
