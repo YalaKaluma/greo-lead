@@ -187,18 +187,23 @@ class PeopleReviewService:
     def update_review(
         db: Session,
         review_id: int,
-        updates: Dict[str, Any]
+        user_number_or_updates: str | Dict[str, Any],
+        updates: Optional[Dict[str, Any]] = None
     ) -> RelationshipReview:
         """Update review with new information"""
-        review = db.query(RelationshipReview).filter(
-            RelationshipReview.id == review_id
-        ).first()
+        user_number = user_number_or_updates if isinstance(user_number_or_updates, str) else None
+        update_values = updates if updates is not None else user_number_or_updates
+
+        query = db.query(RelationshipReview).filter(RelationshipReview.id == review_id)
+        if user_number:
+            query = query.filter(RelationshipReview.user_number == user_number)
+        review = query.first()
         
         if not review:
             raise ValueError("Review not found")
         
         # Update fields
-        for key, value in updates.items():
+        for key, value in update_values.items():
             if hasattr(review, key) and value is not None:
                 setattr(review, key, value)
         
@@ -211,19 +216,23 @@ class PeopleReviewService:
     @staticmethod
     def complete_review(
         db: Session,
-        review_id: int
+        review_id: int,
+        user_number: Optional[str] = None
     ) -> Dict[str, Any]:
         """Mark review as complete and update person record"""
-        review = db.query(RelationshipReview).filter(
-            RelationshipReview.id == review_id
-        ).first()
+        query = db.query(RelationshipReview).filter(RelationshipReview.id == review_id)
+        if user_number:
+            query = query.filter(RelationshipReview.user_number == user_number)
+        review = query.first()
         
         if not review:
             raise ValueError("Review not found")
         
         # Update person record
+        owner_number = user_number or review.user_number
         person = db.query(JourneyPerson).filter(
-            JourneyPerson.id == review.person_id
+            JourneyPerson.id == review.person_id,
+            JourneyPerson.user_number == owner_number
         ).first()
         
         if person:
@@ -293,7 +302,8 @@ class PeopleReviewService:
             return None
         
         person = db.query(JourneyPerson).filter(
-            JourneyPerson.id == review.person_id
+            JourneyPerson.id == review.person_id,
+            JourneyPerson.user_number == user_number
         ).first()
         
         if not person:

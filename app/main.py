@@ -17,6 +17,7 @@ import threading
 from app.email_poller import run_email_loop
 from app.services.admin_bootstrap import ensure_admin_schema_and_seed
 from app.models import SystemHealthEvent
+from app.security_middleware import RateLimitMiddleware, SecurityHeadersMiddleware
 
 # Configure logging with timestamp
 logging.basicConfig(
@@ -113,6 +114,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 logger.info("✓ CORS middleware configured (allowing all origins)")
+
+
+# --------------------------------------
+# Security headers and rate limiting
+# --------------------------------------
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RateLimitMiddleware)
+logger.info("✓ Security headers and rate limiting configured")
 
 
 # --------------------------------------

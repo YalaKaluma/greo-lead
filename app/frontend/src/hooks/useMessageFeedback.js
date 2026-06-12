@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 
-export default function useMessageFeedback({ apiUrl = '', messageId, sourceContext }) {
+export default function useMessageFeedback({ apiUrl = '', messageId, userNumber, sourceContext }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(null);
   const [error, setError] = useState('');
@@ -15,6 +15,7 @@ export default function useMessageFeedback({ apiUrl = '', messageId, sourceConte
     try {
       const response = await axios.post(`${apiUrl}/api/message-feedback`, {
         message_id: messageId,
+        user_number: userNumber,
         source_context: sourceContext,
         rating,
         feedback_text: feedbackText

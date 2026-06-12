@@ -415,7 +415,7 @@ people:
     relationship_health: 5
 
 leadership_journey:
-  current_belt: yellow
+  current_belt: green
   dimensions:
     - vision
     - people

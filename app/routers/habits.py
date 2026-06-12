@@ -116,6 +116,17 @@ def calculate_streak(completions: list, frequency: str, today: date) -> int:
     return streak
 
 
+def validate_user_goal_link(db: Session, user_number: str, goal_id: int | None) -> None:
+    if goal_id is None:
+        return
+    exists = db.query(JourneyGoal.id).filter(
+        JourneyGoal.id == goal_id,
+        JourneyGoal.user_number == user_number,
+    ).first()
+    if not exists:
+        raise HTTPException(status_code=404, detail="Goal not found")
+
+
 # ---------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------
@@ -171,6 +182,7 @@ def create_habit(payload: HabitCreate, user_number: str, db: Session = Depends(g
 
     if not payload.title:
         raise HTTPException(status_code=400, detail="Title is required")
+    validate_user_goal_link(db, user_number, payload.goal_id)
 
     habit = Habit(
         user_number=user_number,
@@ -207,6 +219,7 @@ def update_habit(
     if payload.title is not None:
         habit.title = payload.title
     if payload.goal_id is not None:
+        validate_user_goal_link(db, user_number, payload.goal_id)
         habit.goal_id = payload.goal_id
     if payload.frequency is not None:  # NEW
         habit.frequency = payload.frequency

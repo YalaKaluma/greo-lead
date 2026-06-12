@@ -10,6 +10,7 @@ router = APIRouter()
 
 class MessageFeedbackRequest(BaseModel):
     message_id: int
+    user_number: str = Field(..., min_length=1, max_length=255)
     source_context: str = Field(..., min_length=1, max_length=50)
     rating: int = Field(..., ge=1, le=5)
     feedback_text: str | None = None
@@ -20,7 +21,10 @@ def submit_message_feedback(
     payload: MessageFeedbackRequest,
     db: Session = Depends(get_db),
 ):
-    message = db.query(Message).filter(Message.id == payload.message_id).first()
+    message = db.query(Message).filter(
+        Message.id == payload.message_id,
+        Message.user_number == payload.user_number,
+    ).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
 

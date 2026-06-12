@@ -5,6 +5,7 @@ import useMessageFeedback from '../hooks/useMessageFeedback';
 export default function MessageFeedbackButton({
   apiUrl = '',
   messageId,
+  userNumber,
   sourceContext = 'journal',
   className = ''
 }) {
@@ -12,6 +13,7 @@ export default function MessageFeedbackButton({
   const { error, isSubmitting, savedFeedback, submitFeedback } = useMessageFeedback({
     apiUrl,
     messageId,
+    userNumber,
     sourceContext
   });
 

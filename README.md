@@ -87,6 +87,16 @@ npm run build
 
 The backend exposes `/api/health` for runtime checks and `/docs` for FastAPI's generated API documentation.
 
+## Secret Scanning
+
+Before pushing or deploying, run:
+
+```bash
+gitleaks detect --source . --redact
+```
+
+Do not commit `.env` files or runtime secrets, including `OPENAI_API_KEY`, `DATABASE_URL`, `TWILIO_AUTH_TOKEN`, `MAILGUN_API_KEY`, `JWT_SECRET`, Railway secrets, or Neon credentials. GitHub Actions also runs Gitleaks as part of the CI/release checks.
+
 ## Nudge Cron Jobs
 
 Cron URLs stay environment-level. When no `user_number` is supplied, each endpoint sends a tailored nudge to every active user in that environment:

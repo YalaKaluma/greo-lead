@@ -2318,13 +2318,17 @@ def delete_goal(
 
     # Delete linked review sessions first
     review_sessions = db.query(GoalReviewSession).filter(
-        GoalReviewSession.goal_id == goal.id
+        GoalReviewSession.goal_id == goal.id,
+        GoalReviewSession.user_number == user_number
     ).all()
 
     for session in review_sessions:
         db.delete(session)
 
-    wave_links = db.query(WaveGoal).filter(WaveGoal.goal_id == goal.id).all()
+    wave_links = db.query(WaveGoal).join(VisionRoadmapWave).filter(
+        WaveGoal.goal_id == goal.id,
+        VisionRoadmapWave.user_number == user_number
+    ).all()
     for link in wave_links:
         db.delete(link)
 
@@ -4595,11 +4599,12 @@ def get_people_review_history(
 def update_people_review(
     review_id: int,
     updates: dict,
+    user_number: str,
     db: Session = Depends(get_db)
 ):
     """Update a review in progress"""
     try:
-        review = PeopleReviewService.update_review(db, review_id, updates)
+        review = PeopleReviewService.update_review(db, review_id, user_number, updates)
         return {"success": True, "review_id": review.id}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -4611,11 +4616,12 @@ def update_people_review(
 @router.post("/people/reviews/{review_id}/complete")
 def complete_people_review(
     review_id: int,
+    user_number: str,
     db: Session = Depends(get_db)
 ):
     """Mark review as complete and update person record"""
     try:
-        result = PeopleReviewService.complete_review(db, review_id)
+        result = PeopleReviewService.complete_review(db, review_id, user_number)
         return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

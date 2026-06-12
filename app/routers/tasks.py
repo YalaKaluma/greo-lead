@@ -3,7 +3,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 import calendar
 from app.db import get_db
-from app.models import Task
+from app.models import JourneyGoal, Task
 from pydantic import BaseModel
 from datetime import datetime, date, timedelta
 from typing import Optional, List
@@ -250,6 +250,17 @@ def create_new_task_from_recurring_template(task: Task, next_due_date: date, db:
     return new_task
 
 
+def validate_user_goal_link(db: Session, user_number: str, goal_id: Optional[int]) -> None:
+    if goal_id is None:
+        return
+    exists = db.query(JourneyGoal.id).filter(
+        JourneyGoal.id == goal_id,
+        JourneyGoal.user_number == user_number,
+    ).first()
+    if not exists:
+        raise HTTPException(status_code=404, detail="Goal not found")
+
+
 def attach_today_mtn_metadata(db: Session, user_number: str, tasks: List[Task]) -> None:
     """Add today's stored MTN rank/score to task response objects."""
     try:
@@ -436,6 +447,7 @@ def create_task(
     """
     Create a new task
     """
+    validate_user_goal_link(db, user_number, task.goal_id)
     new_task = Task(
         user_number=user_number,
         title=task.title,
@@ -500,6 +512,9 @@ def update_task(
     # Capitalize priority if provided
     if 'priority' in update_data:
         update_data['priority'] = update_data['priority'].capitalize()
+
+    if "goal_id" in update_data:
+        validate_user_goal_link(db, user_number, update_data.get("goal_id"))
 
     for field, value in update_data.items():
         setattr(task, field, value)

@@ -607,11 +607,49 @@ class SyntheticUserSeeder:
                     "Continue one daily market-facing action and one body-facing action for the next two weeks.",
                 ],
                 leadership_profile={
+                    "headline": "A systems builder learning to lead through visible practice",
+                    "description": (
+                        "Alex's leadership style is no longer merely emerging. It is becoming a practical operating system: "
+                        "he turns ambiguity into cadence, uses business building and marathon training as real-world practice fields, "
+                        "and is learning to lead through clearer asks, better recovery, and repeatable execution rather than private over-preparation."
+                    ),
                     "style": "Practical systems builder",
-                    "current_growth_edge": "Turning insight into visible asks and repeatable delivery.",
-                    "likely_strengths": ["Clarity", "Operational rhythm", "Pattern recognition"],
-                    "likely_risks": ["Over-polishing", "Carrying too much privately", "Recovery leakage"],
+                    "current_growth_edge": "Turning insight into visible asks, cleaner delegation, and repeatable delivery.",
+                    "likely_strengths": ["Operational clarity", "Pattern recognition", "Consistent practice under pressure"],
+                    "likely_risks": ["Over-polishing before asking", "Carrying too much privately", "Letting recovery become negotiable"],
                 },
+                wheel_scores=self._assessment_wheel_scores(),
+                wheel_feedback=self._assessment_wheel_scores(),
+                promotion_limiters=[
+                    {
+                        "domain": "People",
+                        "subdomain": "Coach & Delegate",
+                        "score": 4,
+                        "why_it_limits_promotion": "Alex is practicing clearer delegation, but still sometimes protects quality by staying too close to the work.",
+                        "what_to_do_next": "Delegate one meaningful business-development asset with success criteria, not step-by-step instructions.",
+                    },
+                    {
+                        "domain": "Time & Energy",
+                        "subdomain": "Recovery",
+                        "score": 4,
+                        "why_it_limits_promotion": "Recovery is improving, but late reactive work still competes with sleep and training consistency.",
+                        "what_to_do_next": "Protect the shutdown ritual for two weeks and review the impact on training quality.",
+                    },
+                ],
+                strongest_areas=[
+                    {
+                        "domain": "Prioritize & Execute",
+                        "subdomain": "Prioritization",
+                        "score": 5,
+                        "why_it_is_strong": "Alex is consistently translating goals into daily MTN actions and reviewing whether they moved reality.",
+                    },
+                    {
+                        "domain": "Vision",
+                        "subdomain": "Vision",
+                        "score": 5,
+                        "why_it_is_strong": "The business and marathon visions now reinforce a coherent identity around courage, consistency, and ownership.",
+                    },
+                ],
                 final_coaching_note="Your next level is not more planning. It is more clean contact with reality.",
                 alfred_coaching_note="Keep using the business and marathon as paired practice fields for courage and consistency.",
                 evidence_snapshot={"synthetic": True, "persona": self.persona_name},
@@ -851,12 +889,164 @@ class SyntheticUserSeeder:
         }.get(level, "Reflection")
 
     def _trial_response(self, belt: str, dimension: str, trial_type: str) -> str:
+        key = (belt, dimension, trial_type)
+        responses = {
+            ("green", "vision", "reflection"): (
+                "The biggest integration lesson for me is that my business vision and marathon goal are not competing priorities; they are training the same operating system. "
+                "The business asks me to tolerate public imperfection: making a clear offer, asking founders for feedback, and letting the market answer. "
+                "The marathon asks me to tolerate slow accumulation: easy miles, sleep, fuel, and recovery when nothing dramatic is happening. "
+                "In both cases my old pattern was to wait for a cleaner identity before acting. Green Belt practice has been the opposite: act in small visible reps until the identity becomes believable. "
+                "My vision now feels less like a heroic future and more like a weekly cadence I can inspect."
+            ),
+            ("green", "vision", "real_world"): (
+                "I audited my calendar against the two visions: build my own business and complete a marathon. The mismatch was obvious. "
+                "I said both mattered, but my week still overprotected reactive work and underprotected market-facing asks and training recovery. "
+                "I made three structural changes: founder calls before inbox work on Tuesdays and Thursdays, long-run prep on Friday afternoon, and a Sunday review that names one business outcome and one training outcome. "
+                "The first week felt uncomfortable because it exposed the tradeoffs I had been avoiding. The second week produced two founder conversations, a clearer offer paragraph, and a better long run. "
+                "The audit changed my environment, not just my intention."
+            ),
+            ("green", "vision", "behavioral"): (
+                "I explicitly connected my visions to values and strengths in Alfred. Ownership now links to the business because I want direct responsibility for the value I create. "
+                "Health links to the marathon because ambition without capacity has already cost me consistency. Courage links to both: asking for the sale and showing up for imperfect training are the same muscle. "
+                "My strongest leadership strength is operating clarity, so I am using it on myself: one cadence, one dashboard, one weekly review, and one visible ask each day. "
+                "That connection keeps the vision from becoming motivational wallpaper."
+            ),
+            ("green", "people", "reflection"): (
+                "The leader I admire most right now is Evelyn, my mentor, because she creates clarity without taking ownership away. "
+                "When I bring her a vague business idea, she does not solve it for me; she asks which buyer, which pain, which evidence, and which ask. "
+                "That exposes my avoidance but also gives me dignity because the next move is still mine. Comparing that to my own style, I see that I often over-help. "
+                "With Priya, I can turn collaboration into hidden control by giving too much context and too many steps. My Green Belt edge is to delegate through criteria and decision rights, not through constant proximity."
+            ),
+            ("green", "people", "real_world"): (
+                "I delegated the first draft of the sprint delivery checklist to Priya. My old move would have been to write the structure myself and ask her to polish it. "
+                "This time I gave her the outcome, the buyer context, and three quality criteria, then asked her to decide the format. "
+                "I felt the urge to jump in when her first outline looked different from mine, but I waited and asked what tradeoffs she was making. "
+                "The final version had two sections I would not have thought of, especially around founder onboarding. In the debrief she said the freedom made the work feel more owned. "
+                "That is the evidence I needed: delegation was slower for a day but created more capacity and better thinking."
+            ),
+            ("green", "people", "behavioral"): (
+                "I completed relationship reviews for Priya, Marcus, Dana, Evelyn, and Coach Daniel, and I used them to change behavior. "
+                "Priya needs decision rights, not more explanation. Marcus needs a crisp diagnostic conversation, not a broad pitch. Dana gives me founder-speed feedback, but I need to convert it into commitments. "
+                "Evelyn is most useful when I bring a specific ask. Daniel helps me protect the training plan when work stress rises. "
+                "The pattern is that my support system works when I stop being vague about what I need and what I am asking them to own."
+            ),
+            ("green", "execute", "reflection"): (
+                "I have learned that discipline, emotion, focus, and performance are one system. When I avoid a founder ask, it rarely feels like fear at first; it feels like useful preparation. "
+                "When I avoid a run, it rarely feels like avoidance; it feels like needing a better day. In both cases the emotional move is the same: protect the imagined version of myself from evidence. "
+                "My execution improved when I stopped asking whether I felt ready and started asking what reality-facing action would teach me something. "
+                "The MTN review helps because it does not reward busyness. It asks whether I moved the business, the body, or the relationship with reality."
+            ),
+            ("green", "execute", "real_world"): (
+                "The recurring distraction I redesigned was morning inbox drift. It looked harmless, but it moved my highest-courage work into the part of the day when I was already depleted. "
+                "I changed the environment: phone outside the office, inbox blocked until 10:30, and a written first task on the desk before shutdown. "
+                "For two weeks the first task had to be either a founder-facing action or an offer asset. The result was not perfect, but the difference was measurable: more completed MTN tasks, fewer stale follow-ups, and less end-of-day guilt. "
+                "The lesson is that focus is easier when the environment has already made the first good action obvious."
+            ),
+            ("green", "execute", "behavioral"): (
+                "I reviewed MTN classifications daily and used the trend to recalibrate my priorities. Early in the 90-day window I was completing tasks, but many were low-consequence cleanup. "
+                "Over time the score improved because I started asking a harder question: does this action create market evidence, training capacity, or a clearer operating system? "
+                "The best signal is that I now have high-MTN days that include uncomfortable asks, not just productive effort. "
+                "That tells me the execution system is changing from task completion to priority truth."
+            ),
+            ("green", "energy", "reflection"): (
+                "Ambition and recovery used to feel like rivals. I treated sleep, food, and mobility as things I could clean up after the important work was done. "
+                "The marathon made that belief impossible to hide. If I ignore recovery, the long run tells the truth. The business does too, just more quietly: poor sleep makes me vague, reactive, and more likely to polish instead of ask. "
+                "I now see recovery as part of leadership integrity. If I want to build something durable, I cannot run the system on adrenaline and call it commitment."
+            ),
+            ("green", "energy", "real_world"): (
+                "I changed one recurring source of exhaustion: late reactive work. I added a 20-minute shutdown ritual that captures open loops, names tomorrow's first task, and closes screens before sleep prep. "
+                "The first few nights felt almost irresponsible because there was always more I could do. But the next mornings were different. I ran more consistently, started deeper work faster, and had less emotional residue from unfinished email. "
+                "The structural change was not dramatic; it was a boundary that protected the next day's ambition."
+            ),
+            ("green", "energy", "behavioral"): (
+                "I maintained a seven-day streak across the habits that matter most for energy: morning run or strength, founder deep work, journaling with a pattern and experiment, and evening shutdown. "
+                "The important part was not perfection. One day the run became mobility, and one day the deep work block was only 35 minutes. "
+                "But I kept the direction intact. That is the Green Belt lesson for me: consistency is not the absence of disruption; it is having a designed response when disruption arrives."
+            ),
+            ("green", "learning", "reflection"): (
+                "My relationship with failure is changing. The delayed business launch used to feel like evidence that I was not really a founder. "
+                "Now I can see it as a precise learning signal: I was using optionality and preparation to avoid rejection. The training restart cycle taught the same lesson physically. "
+                "When I missed runs, I converted a data point into an identity verdict. The wisdom I am taking forward is that failure becomes useful only when I make it specific enough to change the next rep. "
+                "Vague shame creates loops. Specific learning creates systems."
+            ),
+            ("green", "learning", "real_world"): (
+                "I ran a retrospective on the first month of founder discovery and marathon training. I separated facts from stories. "
+                "Facts: founder calls created sharper language, direct asks created more momentum than deck edits, long runs improved when sleep was protected, and missed workouts were recoverable when I had a minimum version. "
+                "Stories: I need the offer to be perfect, I am behind, one lapse means the plan is failing. "
+                "The practical change was a weekly review with three columns: evidence, story, next experiment. That has made learning less emotional and more operational."
+            ),
+            ("green", "learning", "behavioral"): (
+                "I updated my development plan around two edges: direct selling and recovery discipline. For direct selling, the practice is three visible asks per week and a follow-up review of what I learned. "
+                "For recovery, the practice is protecting shutdown and treating mobility as part of the training block. I also identified the scar underneath both: I tend to believe I earn safety by doing more privately before being seen. "
+                "The new plan is to earn trust through honest repetition instead."
+            ),
+        }
+        if key in responses:
+            return responses[key]
         return (
-            f"For my {belt} {dimension} {trial_type} trial, I used a real recent situation rather than a generic answer. "
-            "I named the pressure I felt, the behavior it produced, and the effect it had on my goals and relationships. "
-            "The experiment was to slow down, choose one visible behavior, and review what changed after a week. "
-            "The result was not perfect, but it gave me evidence I could act on instead of another abstract intention."
+            f"For my {belt} {dimension} {trial_type} trial, I used a real recent situation from building the business or training for the marathon. "
+            "I named the pressure, the behavior it created, the cost, and the next experiment. "
+            "The work is becoming more specific: less abstract insight, more visible practice and review."
         )
+
+    def _assessment_wheel_scores(self) -> dict[str, Any]:
+        def feedback(score: int, readiness: str, why: str, improve: list[str]) -> dict[str, Any]:
+            return {
+                "score": score,
+                "status": "strong" if score >= 5 else "solid",
+                "current_readiness": readiness,
+                "why": why,
+                "improve": improve,
+                "next_actions_in_alfred": improve,
+            }
+
+        return {
+            "Vision": {
+                "domain_score": 5,
+                "summary": "Alex has connected business ownership, marathon training, values, strengths, and weekly execution into a coherent direction.",
+                "subdomains": {
+                    "Values": feedback(5, "Values are specific and actively used to make tradeoffs.", "Ownership, health, and courage now shape calendar decisions and market-facing action.", ["Keep linking weekly commitments to one explicit value."]),
+                    "Strengths": feedback(5, "Strengths are named and applied deliberately.", "Alex uses operating clarity and pattern recognition on both the business and training system.", ["Use strengths through delegation, not only personal execution."]),
+                    "Vision": feedback(5, "Vision is concrete, multi-domain, and supported by roadmap evidence.", "The two visions reinforce each other through courage, consistency, and ownership.", ["Review whether each roadmap wave still creates real-world evidence."]),
+                },
+            },
+            "People": {
+                "domain_score": 4,
+                "summary": "Alex has mapped key relationships and is practicing more explicit asks and cleaner delegation.",
+                "subdomains": {
+                    "Team Composition": feedback(4, "The support system is clear and role-specific.", "Alex knows what each person contributes and what each relationship needs.", ["Clarify ownership expectations with Priya and Marcus."]),
+                    "Inspire": feedback(4, "Alex inspires through practical clarity more than motivational language.", "The strongest examples come from making systems visible and useful.", ["Tell the story behind the system more often."]),
+                    "Coach & Delegate": feedback(4, "Delegation is improving, but Alex still feels the pull to stay close.", "The Priya playbook experiment shows real progress and a remaining control edge.", ["Delegate outcomes with criteria, then hold the debrief."]),
+                },
+            },
+            "Prioritize & Execute": {
+                "domain_score": 5,
+                "summary": "Alex has a strong execution cadence with daily MTN evidence and a clearer relationship to focus.",
+                "subdomains": {
+                    "Prioritization": feedback(5, "Prioritization is now tied to market evidence and training capacity.", "The MTN history shows more high-value action and fewer avoidance tasks over time.", ["Keep pruning tasks that only create the feeling of progress."]),
+                    "Execution System": feedback(5, "The weekly operating rhythm is concrete and repeatable.", "Two-track weekly planning connects business and marathon actions to reviewable outcomes.", ["Document the system so it can be reused with clients."]),
+                    "Procrastination": feedback(4, "Alex can name avoidance patterns and has practical mitigations.", "Polishing instead of asking is visible now, though still tempting under pressure.", ["Make visible asks before artifact edits on high-stakes days."]),
+                },
+            },
+            "Time & Energy": {
+                "domain_score": 4,
+                "summary": "Energy management is becoming a real operating constraint rather than an afterthought.",
+                "subdomains": {
+                    "Energy Sources": feedback(5, "Alex knows which activities create energy and confidence.", "Founder conversations, morning training, and deep work are clearly identified and scheduled.", ["Protect at least one energy source before reactive work."]),
+                    "Energy Drains": feedback(4, "Energy drains are specific and paired with mitigations.", "Late reactive work and vague optionality are named with practical boundaries.", ["Review evening shutdown compliance weekly."]),
+                    "Recovery": feedback(4, "Recovery routines are improving and connected to performance.", "The shutdown ritual and easy runs are helping, but consistency still needs protection.", ["Treat recovery as a leading indicator, not a cleanup task."]),
+                },
+            },
+            "Learning & Development": {
+                "domain_score": 5,
+                "summary": "Alex is converting failure patterns into specific systems and development practices.",
+                "subdomains": {
+                    "Failures & Scars": feedback(5, "Failure reflections are honest, specific, and actionable.", "The delayed launch and restart cycle are connected to concrete behavior change.", ["Keep separating facts from identity stories."]),
+                    "Development Opportunities": feedback(4, "Development edges are clear and practice-based.", "Direct selling and recovery discipline have explicit reps.", ["Track visible asks and recovery discipline together."]),
+                    "Development Plan": feedback(5, "The development plan is integrated into weekly practice.", "The plan connects market action, training, reflection, and relationship support.", ["Review the plan every two weeks against real evidence."]),
+                },
+            },
+        }
 
     def _lines(self, value: Any) -> str | None:
         if value is None:

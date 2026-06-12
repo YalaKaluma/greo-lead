@@ -610,6 +610,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
                       <MessageFeedbackButton
                         apiUrl={apiUrl}
                         messageId={msg.message_id}
+                        userNumber={userNumber}
                         sourceContext="journal"
                         className="text-gray-600 hover:bg-gray-200"
                       />
