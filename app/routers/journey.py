@@ -1649,6 +1649,9 @@ def submit_belt_trial(
     return trial
 
 
+submit_belt_trial_response = submit_belt_trial
+
+
 # Pydantic response models
 class StrengthResponse(BaseModel):
     id: int
