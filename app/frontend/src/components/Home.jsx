@@ -230,7 +230,7 @@ function CombinedTrendChart({ trends }) {
   );
 }
 
-function GoalProgressReviewCards({ reviews, onNavigate }) {
+function GoalProgressReviewTable({ reviews, onNavigate }) {
   const items = reviews || [];
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -244,40 +244,69 @@ function GoalProgressReviewCards({ reviews, onNavigate }) {
         </button>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        {items.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600 lg:col-span-2">
-            Add goals and refresh the Progress Review page to see project status here.
-          </div>
-        ) : items.map((review) => {
-          const health = goalHealthStyles[review.health] || goalHealthStyles.amber;
-          const statusLabel = goalStatusLabels[review.status] || review.status || 'Review pending';
-          return (
-            <article key={review.goal_id} className={`flex min-h-[260px] flex-col rounded-lg border border-slate-200 border-l-4 p-4 ${health.accent}`}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="text-base font-semibold leading-6 text-slate-950">{review.goal_title || 'Untitled goal'}</h3>
-                  <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{statusLabel}</p>
+      {items.length === 0 ? (
+        <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600">
+          Add goals and refresh the Progress Review page to see project status here.
+        </div>
+      ) : (
+        <div className="mt-4 hidden overflow-x-auto rounded-lg border border-slate-200 lg:block">
+          <div className="min-w-[920px]">
+            <div className="grid grid-cols-[minmax(180px,0.8fr)_140px_minmax(360px,1.7fr)_minmax(260px,1fr)] bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="border-b border-slate-200 px-4 py-3">Goal</div>
+              <div className="border-b border-slate-200 px-4 py-3">Status</div>
+              <div className="border-b border-slate-200 px-4 py-3">Executive Summary</div>
+              <div className="border-b border-slate-200 px-4 py-3">Recommended Action</div>
+            </div>
+            {items.map((review) => {
+              const health = goalHealthStyles[review.health] || goalHealthStyles.amber;
+              const statusLabel = goalStatusLabels[review.status] || review.status || 'Review pending';
+              return (
+                <div key={review.goal_id} className="grid grid-cols-[minmax(180px,0.8fr)_140px_minmax(360px,1.7fr)_minmax(260px,1fr)] border-b border-slate-100 last:border-b-0">
+                  <div className={`border-l-4 px-4 py-4 ${health.accent}`}>
+                    <h3 className="text-sm font-semibold leading-6 text-slate-950">{review.goal_title || 'Untitled goal'}</h3>
+                  </div>
+                  <div className="px-4 py-4">
+                    <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${health.pill}`}>
+                      <span className={`h-2.5 w-2.5 rounded-full ${health.dot}`} />
+                      {health.label}
+                    </span>
+                    <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{statusLabel}</p>
+                  </div>
+                  <div className="px-4 py-4 text-sm leading-6 text-slate-700">{review.executive_summary}</div>
+                  <div className="px-4 py-4 text-sm font-medium leading-6 text-slate-900">{review.recommended_focus}</div>
                 </div>
-                <span className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${health.pill}`}>
-                  <span className={`h-2.5 w-2.5 rounded-full ${health.dot}`} />
-                  {health.label}
-                </span>
-              </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
-              <div className="mt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Executive Summary</p>
-                <p className="mt-2 text-sm leading-6 text-slate-700">{review.executive_summary}</p>
-              </div>
-
-              <div className="mt-auto pt-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended Focus</p>
-                <p className="mt-2 text-sm font-medium leading-6 text-slate-900">{review.recommended_focus}</p>
-              </div>
-            </article>
-          );
-        })}
-      </div>
+      {items.length > 0 && (
+        <div className="mt-4 lg:hidden">
+          <div className="space-y-3">
+            {items.map((review) => {
+              const health = goalHealthStyles[review.health] || goalHealthStyles.amber;
+              const statusLabel = goalStatusLabels[review.status] || review.status || 'Review pending';
+              return (
+                <article key={`mobile-${review.goal_id}`} className={`rounded-lg border border-slate-200 border-l-4 p-4 ${health.accent}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold leading-6 text-slate-950">{review.goal_title || 'Untitled goal'}</h3>
+                      <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{statusLabel}</p>
+                    </div>
+                    <span className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${health.pill}`}>
+                      <span className={`h-2.5 w-2.5 rounded-full ${health.dot}`} />
+                      {health.label}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-slate-700">{review.executive_summary}</p>
+                  <p className="mt-3 text-sm font-medium leading-6 text-slate-900">{review.recommended_focus}</p>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -454,9 +483,12 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
           </section>
         </div>
 
-        <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(320px,0.8fr)_minmax(520px,1.4fr)]">
+        <div className="mt-5">
+          <GoalProgressReviewTable reviews={payload.goal_progress_reviews || []} onNavigate={onNavigate} />
+        </div>
+
+        <div className="mt-5">
           <TaskStack title="Top 3 Procrastinated Tasks" eyebrow="Execution friction" tasks={payload.procrastinated_tasks || []} emptyText="No repeated postponement pattern is visible yet." onToggle={handleTaskToggle} timezone={timezone} showPostponed />
-          <GoalProgressReviewCards reviews={payload.goal_progress_reviews || []} onNavigate={onNavigate} />
         </div>
 
         <div className="mt-5">

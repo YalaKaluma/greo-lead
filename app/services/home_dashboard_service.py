@@ -36,6 +36,7 @@ DOMAIN_LABELS = {
 }
 
 DOMAIN_ORDER = ["vision", "people", "execute", "energy", "learning"]
+HOME_DASHBOARD_SCHEMA_VERSION = 2
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
@@ -323,6 +324,15 @@ class HomeDashboardService:
     def __init__(self, db: Session):
         self.db = db
 
+    @staticmethod
+    def _has_current_schema(snapshot: HomeDashboardSnapshot | None) -> bool:
+        payload = snapshot.payload if snapshot else {}
+        return (
+            isinstance(payload, dict)
+            and payload.get("schema_version") == HOME_DASHBOARD_SCHEMA_VERSION
+            and "goal_progress_reviews" in payload
+        )
+
     def get_or_refresh(self, user_number: str, force: bool = False, source: str = "on_demand") -> HomeDashboardSnapshot:
         timezone_name = get_user_timezone(self.db, user_number)
         snapshot_date = today_for_timezone(timezone_name)
@@ -331,7 +341,7 @@ class HomeDashboardService:
             .filter(HomeDashboardSnapshot.user_number == user_number, HomeDashboardSnapshot.snapshot_date == snapshot_date)
             .first()
         )
-        if snapshot and not force and "goal_progress_reviews" in (snapshot.payload or {}):
+        if snapshot and not force and self._has_current_schema(snapshot):
             return snapshot
         if not force:
             latest_snapshot = (
@@ -340,7 +350,7 @@ class HomeDashboardService:
                 .order_by(HomeDashboardSnapshot.snapshot_date.desc(), HomeDashboardSnapshot.updated_at.desc())
                 .first()
             )
-            if latest_snapshot and "goal_progress_reviews" in (latest_snapshot.payload or {}):
+            if latest_snapshot and self._has_current_schema(latest_snapshot):
                 return latest_snapshot
         return self.refresh(user_number, source=source)
 
@@ -393,7 +403,7 @@ class HomeDashboardService:
         wheel_segments = _wheel_segments(assessment)
         vision_goals = [
             goal for goal in goals
-            if _goal_level(goal) == "vision" or (goal.parent_goal_id is None and _goal_level(goal) not in {"pillar", "outcome"})
+            if _goal_level(goal) == "vision"
         ]
         vision_goals.sort(key=lambda goal: (goal.sort_order or 0, goal.first_seen_at or datetime.min, goal.id or 0))
         latest_saved_reviews: dict[int, VisionProgressReview] = {}
@@ -428,6 +438,7 @@ class HomeDashboardService:
         )
 
         payload = {
+            "schema_version": HOME_DASHBOARD_SCHEMA_VERSION,
             "snapshot_date": today.isoformat(),
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "activation_ready": activation_ready,

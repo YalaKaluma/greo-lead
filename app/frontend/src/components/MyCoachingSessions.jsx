@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import axios from 'axios';
 import ReadAloudButton from './ReadAloudButton';
 import MessageFeedbackButton from './MessageFeedbackButton';
@@ -65,6 +65,15 @@ const MyCoachingSessions = ({
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const { t, language } = useLanguage();
+  const visibleSessionTypeIds = useMemo(
+    () => visibleSessionTypes || SESSION_TYPES.map(session => session.id),
+    [visibleSessionTypes]
+  );
+  const visibleSessions = useMemo(
+    () => SESSION_TYPES.filter(session => visibleSessionTypeIds.includes(session.id)),
+    [visibleSessionTypeIds]
+  );
+  const hasMultipleSessionTypes = visibleSessions.length > 1;
 
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = () => {
@@ -74,6 +83,12 @@ const MyCoachingSessions = ({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    if (!visibleSessionTypeIds.includes(selectedSessionType)) {
+      setSelectedSessionType(visibleSessions[0]?.id || 'goal_review');
+    }
+  }, [selectedSessionType, visibleSessionTypeIds, visibleSessions]);
 
   // Load chat history on mount when this is used as the full coaching page.
   useEffect(() => {
@@ -101,6 +116,7 @@ const MyCoachingSessions = ({
 
   const startSession = async (sessionType) => {
     if (!['goal_review', 'people_review', 'leadership_coaching'].includes(sessionType)) return;
+    if (!visibleSessionTypeIds.includes(sessionType)) return;
 
     console.log('Starting session:', sessionType);
     console.log('API URL:', apiUrl);
@@ -132,6 +148,11 @@ const MyCoachingSessions = ({
         : sessionType === 'people_review'
         ? 'Start people review session'
         : 'Start leadership coaching session';
+      const displayStartMessage = launchLabelByType[sessionType]
+        ? sessionType === 'goal_review' && selectedVisionTitle
+          ? `${launchLabelByType[sessionType]}: ${selectedVisionTitle}`
+          : launchLabelByType[sessionType]
+        : startMessage;
         
       console.log('Sending POST to:', `${apiUrl}/api/chat`);
       const response = await axios.post(`${apiUrl}/api/chat`, {
@@ -151,7 +172,7 @@ const MyCoachingSessions = ({
       };
 
       setMessages(prev => [...prev, 
-        { role: 'user', message_id: response.data.user_message_id, content: startMessage, timestamp: new Date().toISOString() },
+        { role: 'user', message_id: response.data.user_message_id, content: displayStartMessage, timestamp: new Date().toISOString() },
         newMessage
       ]);
 
@@ -356,32 +377,34 @@ const MyCoachingSessions = ({
             )}
           </div>
           <div className="flex flex-wrap justify-end gap-3">
-            <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1">
-              {SESSION_TYPES.filter(session => !visibleSessionTypes || visibleSessionTypes.includes(session.id)).map(session => (
-                <button
-                  key={`tab-${session.id}`}
-                  type="button"
-                  onClick={() => {
-                    if (activeSession) return;
-                    setSelectedSessionType(session.id);
-                    setCurrentStage(null);
-                    setStageIndex(0);
-                  }}
-                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                    selectedSessionType === session.id
-                      ? 'bg-white text-slate-950 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-800'
-                  } ${activeSession ? 'cursor-not-allowed opacity-60' : ''}`}
-                >
-                  {session.id === 'goal_review'
-                    ? 'Goal'
-                    : session.id === 'people_review'
-                    ? 'Team'
-                    : 'Leadership'}
-                </button>
-              ))}
-            </div>
-            {SESSION_TYPES.filter(session => !visibleSessionTypes || visibleSessionTypes.includes(session.id)).map(session => {
+            {hasMultipleSessionTypes && (
+              <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1">
+                {visibleSessions.map(session => (
+                  <button
+                    key={`tab-${session.id}`}
+                    type="button"
+                    onClick={() => {
+                      if (activeSession) return;
+                      setSelectedSessionType(session.id);
+                      setCurrentStage(null);
+                      setStageIndex(0);
+                    }}
+                    className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                      selectedSessionType === session.id
+                        ? 'bg-white text-slate-950 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800'
+                    } ${activeSession ? 'cursor-not-allowed opacity-60' : ''}`}
+                  >
+                    {session.id === 'goal_review'
+                      ? 'Goal'
+                      : session.id === 'people_review'
+                      ? 'Team'
+                      : 'Leadership'}
+                  </button>
+                ))}
+              </div>
+            )}
+            {visibleSessions.map(session => {
               const colorClasses = {
                 blue: {
                   active: 'bg-blue-600 text-white shadow-md',

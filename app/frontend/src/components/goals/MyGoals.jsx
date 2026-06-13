@@ -37,6 +37,10 @@ const organizeGoalsByTimeHorizon = (goals) => {
   return organized;
 };
 
+const GOAL_COACHING_SESSION_TYPES = ['goal_review'];
+const GOAL_COACHING_LAUNCH_LABELS = { goal_review: 'Start Goal Coaching' };
+const GOAL_COACHING_EMPTY_STATE = 'Start a goal coaching session for this vision to review progress, blockers, and next actions.';
+
 /* =========================================================
    MAIN COMPONENT
    ========================================================= */
@@ -485,7 +489,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
                     : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                Coaching Sessions
+                Goal Coaching
                 {activeTab === 'coaching' && (
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
                 )}
@@ -569,6 +573,9 @@ export default function MyGoals({ apiUrl, userNumber }) {
                     userNumber={userNumber}
                     selectedVisionId={expandedGoalId}
                     selectedVisionTitle={selectedVision?.title || selectedVision?.goal_text}
+                    visibleSessionTypes={GOAL_COACHING_SESSION_TYPES}
+                    launchLabelByType={GOAL_COACHING_LAUNCH_LABELS}
+                    emptyStateText={GOAL_COACHING_EMPTY_STATE}
                     loadInitialHistory={false}
                   />
                 </div>
@@ -646,7 +653,7 @@ function PreviousGoalCoachingSessions({ sessions }) {
     <section className="rounded-md border border-slate-200 bg-white">
       <details className="group">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 text-sm font-semibold text-slate-900">
-          <span>Previous Coaching Sessions ({sessions.length})</span>
+          <span>Previous Goal Coaching Sessions ({sessions.length})</span>
           <span className="text-slate-500 group-open:rotate-180 transition-transform">v</span>
         </summary>
         <div className="space-y-3 border-t border-slate-200 px-5 py-4">
