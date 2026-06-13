@@ -219,6 +219,8 @@ function TaskCard({
 
   const mtnLabel = priorityScore ? getMtnLabel(priorityScore.score) : '';
   const activeMtnTag = mtnSelectedTag || mtnLabel;
+  const isBelowTopTen = index >= 10;
+  const mutedBadgeClass = 'bg-slate-100 text-slate-500 border-slate-200';
 
   const openMtnFeedback = () => {
     setMtnSelectedTag(previousTag => previousTag || mtnLabel);
@@ -275,8 +277,8 @@ function TaskCard({
           hover:border-gray-300 transition-all
           ${snapshot.isDragging ? 'opacity-50 scale-98 shadow-lg' : ''}
           ${isCompleting ? 'opacity-60' : ''}
-          ${index >= 10 ? 'bg-slate-50' : 'bg-white'}
-          ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}
+          ${isBelowTopTen ? 'bg-slate-50' : 'bg-white'}
+          ${isSelected ? 'border-blue-500 bg-blue-50' : isBelowTopTen ? 'border-slate-200' : 'border-gray-200'}
           cursor-pointer
         `}
         onClick={handleClick}
@@ -326,7 +328,7 @@ function TaskCard({
               e.stopPropagation();
               onToggle();
             }}
-            className="flex-shrink-0 text-2xl hover:scale-110 transition-transform"
+            className={`flex-shrink-0 text-2xl transition-transform hover:scale-110 ${isBelowTopTen ? 'grayscale opacity-45' : ''}`}
             title={`${task.priority} priority - Click to complete`}
           >
             {getPriorityIcon(task.priority)}
@@ -345,7 +347,11 @@ function TaskCard({
               </span>
             )}
             <div
-              className="font-medium text-slate-800 text-base break-words leading-tight cursor-pointer hover:text-blue-600 transition-colors"
+              className={`text-base break-words leading-tight cursor-pointer transition-colors ${
+                isBelowTopTen
+                  ? 'font-normal italic text-slate-500 hover:text-slate-600'
+                  : 'font-medium text-slate-800 hover:text-blue-600'
+              }`}
               onClick={(e) => {
                 if (handleSelectionShortcut(e)) return;
                 if (handleSelectionModeClick(e)) return;
@@ -361,7 +367,7 @@ function TaskCard({
           <div className="mt-1 flex items-start gap-2">
             <div className="flex-shrink-0">
               {task.due_date && (
-                <span className={`px-2 py-0.5 rounded text-xs font-medium ${getDueDateColor(task.due_date, timezone)}`}>
+                <span className={`px-2 py-0.5 rounded text-xs font-medium ${isBelowTopTen ? 'bg-slate-100 text-slate-500' : getDueDateColor(task.due_date, timezone)}`}>
                   {formatDueDate(task.due_date, timezone)}
                 </span>
               )}
@@ -375,7 +381,7 @@ function TaskCard({
                     e.stopPropagation();
                     openMtnFeedback();
                   }}
-                  className={`max-w-full truncate whitespace-nowrap text-xs px-2 py-0.5 rounded border font-medium sm:hidden ${getMtnStyle(activeMtnTag)}`}
+                  className={`max-w-full truncate whitespace-nowrap text-xs px-2 py-0.5 rounded border font-medium sm:hidden ${isBelowTopTen ? mutedBadgeClass : getMtnStyle(activeMtnTag)}`}
                   title="Review prioritization reasoning"
                 >
                   {activeMtnTag}
@@ -384,7 +390,7 @@ function TaskCard({
 
               {task.goal_id && (
                 <span
-                  className="max-w-full truncate whitespace-nowrap px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-medium"
+                  className={`max-w-full truncate whitespace-nowrap px-2 py-0.5 rounded text-xs font-medium ${isBelowTopTen ? 'bg-slate-100 text-slate-500' : 'bg-slate-100 text-slate-700'}`}
                   title={`Goal: ${goalLabel}`}
                 >
                   Goal: {goalLabel}
@@ -395,7 +401,7 @@ function TaskCard({
 
           {task.delegated_to && (
             <div className="mt-1">
-              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
+              <span className={`px-2 py-0.5 rounded text-xs ${isBelowTopTen ? 'bg-slate-100 text-slate-500' : 'bg-blue-100 text-blue-700'}`}>
                 Delegated: {task.delegated_to}
               </span>
             </div>
@@ -411,7 +417,7 @@ function TaskCard({
                 e.stopPropagation();
                 openMtnFeedback();
               }}
-              className={`whitespace-nowrap text-xs px-2 py-0.5 rounded border font-medium ${getMtnStyle(activeMtnTag)}`}
+              className={`whitespace-nowrap text-xs px-2 py-0.5 rounded border font-medium ${isBelowTopTen ? mutedBadgeClass : getMtnStyle(activeMtnTag)}`}
               title="Review prioritization reasoning"
             >
               {activeMtnTag}

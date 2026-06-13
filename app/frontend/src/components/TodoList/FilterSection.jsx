@@ -39,52 +39,65 @@ export default function FilterSection({
 
       {!filtersCollapsed && (
         <div className="border-t border-gray-200 p-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex-shrink-0">
-              <label className="text-xs font-medium text-slate-600 mb-1 block">Due Date</label>
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                <option value="due_today">Due Today</option>
-                <option value="due_tomorrow">Tomorrow</option>
-                <option value="next_7_days">Next 7 Days</option>
-                <option value="all">All Tasks</option>
-              </select>
-            </div>
-
-            <div className="min-w-[260px] flex-1">
-              <label className="text-xs font-medium text-slate-600 mb-1 block">Search</label>
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search tasks"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              />
-            </div>
-
-            {goals.length > 0 && (
+          <div className="grid gap-4">
+            <div className="grid gap-3 lg:grid-cols-[140px_minmax(260px,1fr)_minmax(240px,290px)_auto] lg:items-end">
               <div className="flex-shrink-0">
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Goal</label>
+                <label className="text-xs font-medium text-slate-600 mb-1 block">Due Date</label>
                 <select
-                  value={selectedGoal}
-                  onChange={(e) => setSelectedGoal(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
-                  <option value="">All Goals</option>
-                  {getLongTermGoals(goals).map(g => {
-                    const displayText = g.title || g.goal_text;
-                    const truncatedText = displayText.length > 30 ? displayText.substring(0, 30) + '...' : displayText;
-                    return <option key={g.id} value={g.id}>{truncatedText}</option>;
-                  })}
+                  <option value="due_today">Due Today</option>
+                  <option value="due_tomorrow">Tomorrow</option>
+                  <option value="next_7_days">Next 7 Days</option>
+                  <option value="all">All Tasks</option>
                 </select>
               </div>
-            )}
+
+              <div>
+                <label className="text-xs font-medium text-slate-600 mb-1 block">Search</label>
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search tasks"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                />
+              </div>
+
+              {goals.length > 0 && (
+                <div>
+                  <label className="text-xs font-medium text-slate-600 mb-1 block">Goal</label>
+                  <select
+                    value={selectedGoal}
+                    onChange={(e) => setSelectedGoal(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="">All Goals</option>
+                    {getLongTermGoals(goals).map(g => {
+                      const displayText = g.title || g.goal_text;
+                      const truncatedText = displayText.length > 30 ? displayText.substring(0, 30) + '...' : displayText;
+                      return <option key={g.id} value={g.id}>{truncatedText}</option>;
+                    })}
+                  </select>
+                </div>
+              )}
+
+              {hasActiveFilters && (
+                <div>
+                  <button
+                    onClick={clearFilters}
+                    className="h-10 w-full px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors lg:w-auto"
+                  >
+                    x Clear Filters
+                  </button>
+                </div>
+              )}
+            </div>
 
             {mtnTagOptions.length > 0 && (
-              <div className="min-w-[280px] flex-1">
+              <div>
                 <label className="text-xs font-medium text-slate-600 mb-1 block">MTN Tag</label>
                 <div className="flex flex-wrap gap-2">
                   {mtnTagOptions.map(tag => {
@@ -106,17 +119,6 @@ export default function FilterSection({
                     );
                   })}
                 </div>
-              </div>
-            )}
-
-            {hasActiveFilters && (
-              <div className="flex-shrink-0 mt-auto">
-                <button
-                  onClick={clearFilters}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
-                >
-                  x Clear Filters
-                </button>
               </div>
             )}
           </div>

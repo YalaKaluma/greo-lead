@@ -37,6 +37,8 @@ const SESSION_TYPES = [
   { id: 'leadership_coaching', label: 'Leadership Coaching', icon: '🧭', color: 'green', enabled: true }
 ];
 
+const DEFAULT_SESSION_TYPE_IDS = ['goal_review', 'people_review'];
+
 const CONVERSATION_TYPE_BY_SESSION = {
   goal_review: 'goal_coaching',
   people_review: 'team_coaching',
@@ -66,7 +68,7 @@ const MyCoachingSessions = ({
   const inputRef = useRef(null);
   const { t, language } = useLanguage();
   const visibleSessionTypeIds = useMemo(
-    () => visibleSessionTypes || SESSION_TYPES.map(session => session.id),
+    () => visibleSessionTypes || DEFAULT_SESSION_TYPE_IDS,
     [visibleSessionTypes]
   );
   const visibleSessions = useMemo(

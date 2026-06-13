@@ -44,15 +44,9 @@ const goalHealthStyles = {
   },
 };
 
-function CardHeader({ eyebrow, title, status }) {
+function CardHeader({ title }) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{eyebrow}</p>
-        <h2 className="mt-1 text-base font-semibold text-slate-900">{title}</h2>
-      </div>
-      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">{status}</span>
-    </div>
+    <h2 className="text-base font-semibold text-slate-900">{title}</h2>
   );
 }
 
@@ -69,7 +63,7 @@ function MtnScoreCard({ metric }) {
   const delta = scoreDelta(metric?.delta);
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <CardHeader eyebrow="Weekly leadership output" title="Move-the-needle Index" status={metric?.status || 'Stable'} />
+      <CardHeader title="Move-the-needle Index" />
       <div className="mt-5 flex items-center justify-between gap-4">
         <ScoreCircle value={toNumber(metric?.score, 0).toFixed(1)} label="index" />
         <div className="min-w-0 flex-1">
@@ -100,7 +94,7 @@ function HabitsMetricCard({ metric }) {
   const delta = pointDelta(metric?.delta);
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <CardHeader eyebrow="Behavioral consistency" title="Balance Index" status={metric?.status || 'Stable'} />
+      <CardHeader title="Balance Index" />
       <div className="mt-5 flex items-center justify-between gap-5">
         <div className="min-w-0 flex-1">
           <p className="text-sm text-slate-600">{toNumber(metric?.completed, 0)} completed / {toNumber(metric?.expected, 0)} planned</p>
@@ -118,7 +112,7 @@ function JournalMetricCard({ metric }) {
   const delta = scoreDelta(metric?.delta_depth_5);
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <CardHeader eyebrow="Reflection quality" title="Wisdom Index" status={metric?.status || 'Needs more depth'} />
+      <CardHeader title="Wisdom Index" />
       <div className="mt-5 grid grid-cols-2 gap-3">
         <div className="rounded-lg bg-slate-50 p-4 text-center">
           <div className="text-3xl font-semibold text-slate-950">{toNumber(metric?.entries_this_week, 0)}</div>
