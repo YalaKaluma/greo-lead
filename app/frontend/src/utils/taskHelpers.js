@@ -245,5 +245,5 @@ export const getMtnStyle = (scoreOrLabel) => {
   if (label === 'Strategic') return 'bg-emerald-100 text-emerald-800 border-emerald-200';
   if (label === 'Important') return 'bg-amber-100 text-amber-800 border-amber-200';
   if (label === 'Maintenance') return 'bg-slate-100 text-slate-700 border-slate-200';
-  return 'bg-gray-100 text-gray-600 border-gray-200';
+  return 'bg-rose-100 text-rose-800 border-rose-200';
 };

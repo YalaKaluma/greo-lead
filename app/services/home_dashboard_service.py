@@ -17,8 +17,10 @@ from app.models import (
     Task,
     TaskPriorityScore,
     User,
+    VisionProgressReview,
 )
 from app.routers.journey import JOURNEY_DIMENSIONS, get_current_belt_status, load_journey_trials_config
+from app.services.goal_progress_review_service import GoalProgressReviewService
 from app.services.habits.habit_trend_service import get_habit_trends
 from app.services.journal_reflection_depth_service import get_reflection_depth_trends
 from app.services.task_mtn_trend_service import get_task_mtn_trends
@@ -58,6 +60,17 @@ def _iso(value: Any) -> str | None:
     if hasattr(value, "isoformat"):
         return value.isoformat()
     return str(value)
+
+
+def _goal_level(goal: JourneyGoal) -> str:
+    value = (goal.time_horizon or "").strip().lower()
+    return {"long": "vision", "medium": "pillar", "short": "outcome"}.get(value, value)
+
+
+def _goal_title(goal: JourneyGoal | None) -> str | None:
+    if not goal:
+        return None
+    return goal.title or goal.goal_text
 
 
 def _task_due_day(task: Task):
@@ -257,6 +270,55 @@ def _weekly_journal_metrics(journal: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _goal_health_color(review: dict[str, Any]) -> str:
+    health = review.get("health_scores") or review.get("goal_health") or {}
+    color = str(health.get("overall_goal_health") or "").strip().lower()
+    if color in {"green", "yellow", "amber", "red"}:
+        return "amber" if color == "yellow" else color
+
+    status = str(review.get("status") or "").strip().lower()
+    if status in {"accelerating", "on_track", "steady"}:
+        return "green"
+    if status in {"at_risk"}:
+        return "red"
+    return "amber"
+
+
+def _serialize_goal_progress_review(
+    db: Session,
+    user_number: str,
+    vision: JourneyGoal,
+    saved_reviews_by_vision: dict[int, VisionProgressReview],
+) -> dict[str, Any] | None:
+    saved = saved_reviews_by_vision.get(vision.id)
+    if saved:
+        review = {
+            "status": saved.status,
+            "executive_summary": saved.executive_summary,
+            "recommended_focus": saved.recommended_focus,
+            "health_scores": saved.health_scores or {},
+            "created_at": _iso(saved.created_at),
+            "source": "ai_saved",
+        }
+    else:
+        try:
+            review = GoalProgressReviewService.build(db, user_number, vision.id)
+            review["source"] = "computed"
+        except ValueError:
+            return None
+
+    return {
+        "goal_id": vision.id,
+        "goal_title": _goal_title(vision),
+        "status": review.get("status") or "steady",
+        "health": _goal_health_color(review),
+        "executive_summary": review.get("executive_summary") or "No progress review summary is available yet.",
+        "recommended_focus": review.get("recommended_focus") or "Create the next concrete task linked to this goal.",
+        "review_created_at": review.get("created_at"),
+        "source": review.get("source"),
+    }
+
+
 class HomeDashboardService:
     def __init__(self, db: Session):
         self.db = db
@@ -269,7 +331,7 @@ class HomeDashboardService:
             .filter(HomeDashboardSnapshot.user_number == user_number, HomeDashboardSnapshot.snapshot_date == snapshot_date)
             .first()
         )
-        if snapshot and not force:
+        if snapshot and not force and "goal_progress_reviews" in (snapshot.payload or {}):
             return snapshot
         if not force:
             latest_snapshot = (
@@ -278,7 +340,7 @@ class HomeDashboardService:
                 .order_by(HomeDashboardSnapshot.snapshot_date.desc(), HomeDashboardSnapshot.updated_at.desc())
                 .first()
             )
-            if latest_snapshot:
+            if latest_snapshot and "goal_progress_reviews" in (latest_snapshot.payload or {}):
                 return latest_snapshot
         return self.refresh(user_number, source=source)
 
@@ -329,6 +391,32 @@ class HomeDashboardService:
         habit_previous = ((habit_trends.get("summary") or {}).get("last_21_days") or {})
         journal_metrics = _weekly_journal_metrics(journal)
         wheel_segments = _wheel_segments(assessment)
+        vision_goals = [
+            goal for goal in goals
+            if _goal_level(goal) == "vision" or (goal.parent_goal_id is None and _goal_level(goal) not in {"pillar", "outcome"})
+        ]
+        vision_goals.sort(key=lambda goal: (goal.sort_order or 0, goal.first_seen_at or datetime.min, goal.id or 0))
+        latest_saved_reviews: dict[int, VisionProgressReview] = {}
+        if vision_goals:
+            saved_reviews = (
+                self.db.query(VisionProgressReview)
+                .filter(
+                    VisionProgressReview.user_number == user_number,
+                    VisionProgressReview.vision_id.in_([goal.id for goal in vision_goals]),
+                )
+                .order_by(VisionProgressReview.vision_id, desc(VisionProgressReview.created_at))
+                .all()
+            )
+            for review in saved_reviews:
+                if review.vision_id not in latest_saved_reviews:
+                    latest_saved_reviews[review.vision_id] = review
+        goal_progress_reviews = [
+            item for item in (
+                _serialize_goal_progress_review(self.db, user_number, goal, latest_saved_reviews)
+                for goal in vision_goals
+            )
+            if item
+        ]
 
         activation_ready = (
             (len(goals) >= 1 or len(tasks) >= 3)
@@ -388,6 +476,7 @@ class HomeDashboardService:
                 "assessment_status": assessment.status if assessment else None,
                 "segments": wheel_segments,
             },
+            "goal_progress_reviews": goal_progress_reviews,
             "next_trial": _next_trial(readiness, trials, wheel_segments),
         }
 

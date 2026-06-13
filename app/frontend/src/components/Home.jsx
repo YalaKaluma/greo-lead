@@ -32,21 +32,35 @@ const pointDelta = (value) => {
   return '0 pts';
 };
 
-const heatColor = (score) => {
-  if (score >= 4.5) return '#07803c';
-  if (score >= 3.8) return '#16a34a';
-  if (score >= 3) return '#6ee7a8';
-  if (score >= 2.2) return '#bbf7d0';
-  return '#e0f2fe';
+const goalStatusLabels = {
+  accelerating: 'Accelerating',
+  on_track: 'On Track',
+  stalled: 'Stalled',
+  constrained: 'Constrained',
+  steady: 'Steady',
+  at_risk: 'At Risk',
 };
 
-const heatLegend = [
-  { label: 'Deep', color: '#07803c' },
-  { label: 'Strong', color: '#16a34a' },
-  { label: 'Solid', color: '#6ee7a8' },
-  { label: 'Building', color: '#bbf7d0' },
-  { label: 'Emerging', color: '#e0f2fe' },
-];
+const goalHealthStyles = {
+  green: {
+    label: 'Green',
+    dot: 'bg-emerald-500',
+    pill: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    accent: 'border-l-emerald-500',
+  },
+  amber: {
+    label: 'Amber',
+    dot: 'bg-amber-500',
+    pill: 'border-amber-200 bg-amber-50 text-amber-700',
+    accent: 'border-l-amber-500',
+  },
+  red: {
+    label: 'Red',
+    dot: 'bg-rose-500',
+    pill: 'border-rose-200 bg-rose-50 text-rose-700',
+    accent: 'border-l-rose-500',
+  },
+};
 
 function CardHeader({ eyebrow, title, status }) {
   return (
@@ -216,85 +230,53 @@ function CombinedTrendChart({ trends }) {
   );
 }
 
-function polarToCartesian(cx, cy, radius, angle) {
-  const radians = ((angle - 90) * Math.PI) / 180;
-  return { x: cx + radius * Math.cos(radians), y: cy + radius * Math.sin(radians) };
-}
-
-function ringSegmentPath(cx, cy, innerRadius, outerRadius, startAngle, endAngle) {
-  const outerStart = polarToCartesian(cx, cy, outerRadius, endAngle);
-  const outerEnd = polarToCartesian(cx, cy, outerRadius, startAngle);
-  const innerStart = polarToCartesian(cx, cy, innerRadius, startAngle);
-  const innerEnd = polarToCartesian(cx, cy, innerRadius, endAngle);
-  const largeArc = endAngle - startAngle <= 180 ? 0 : 1;
-  return [
-    `M ${outerStart.x} ${outerStart.y}`,
-    `A ${outerRadius} ${outerRadius} 0 ${largeArc} 0 ${outerEnd.x} ${outerEnd.y}`,
-    `L ${innerStart.x} ${innerStart.y}`,
-    `A ${innerRadius} ${innerRadius} 0 ${largeArc} 1 ${innerEnd.x} ${innerEnd.y}`,
-    'Z',
-  ].join(' ');
-}
-
-function textPosition(cx, cy, radius, startAngle, endAngle) {
-  return polarToCartesian(cx, cy, radius, (startAngle + endAngle) / 2);
-}
-
-function WheelHeatmap({ wheel }) {
-  const segments = wheel?.segments || [];
-  const domains = Array.from(new Set(segments.map((item) => item.domain)));
-  const domainAngles = new Map(domains.map((domain, index) => {
-    const start = index * (360 / Math.max(domains.length, 1));
-    return [domain, { start, end: start + (360 / Math.max(domains.length, 1)) }];
-  }));
-
+function GoalProgressReviewCards({ reviews, onNavigate }) {
+  const items = reviews || [];
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Leadership wheel heatmap</p>
-      <h2 className="mt-1 text-lg font-semibold text-slate-950">Leadership depth map</h2>
-      <div className="mt-5 flex justify-center">
-        <svg className="h-[430px] w-full max-w-[520px]" viewBox="0 0 420 420" role="img" aria-label="Leadership wheel heatmap">
-          <circle cx="210" cy="210" r="58" fill="#06111f" />
-          <text x="210" y="205" textAnchor="middle" className="fill-white text-base font-semibold">Alfred</text>
-          <text x="210" y="224" textAnchor="middle" className="fill-teal-100 text-xs">Assessment</text>
-          {domains.map((domain) => {
-            const angle = domainAngles.get(domain);
-            const pos = textPosition(210, 210, 96, angle.start, angle.end);
-            return (
-              <g key={domain}>
-                <path d={ringSegmentPath(210, 210, 62, 132, angle.start + 1, angle.end - 1)} fill="#ecfdf5" stroke="#ffffff" strokeWidth="2" />
-                <text x={pos.x} y={pos.y} textAnchor="middle" dominantBaseline="middle" className="fill-slate-900 text-[10px] font-semibold">
-                  {domain.split(' ').slice(0, 2).join(' ')}
-                </text>
-              </g>
-            );
-          })}
-          {segments.map((segment, index) => {
-            const siblings = segments.filter((item) => item.domain === segment.domain);
-            const siblingIndex = siblings.findIndex((item) => item.label === segment.label);
-            const angle = domainAngles.get(segment.domain);
-            const span = (angle.end - angle.start) / Math.max(siblings.length, 1);
-            const start = angle.start + siblingIndex * span;
-            const end = start + span;
-            const pos = textPosition(210, 210, 164, start, end);
-            return (
-              <g key={`${segment.domain}-${segment.label}-${index}`}>
-                <path d={ringSegmentPath(210, 210, 134, 194, start + 1, end - 1)} fill={heatColor(toNumber(segment.score, 3))} stroke="#ffffff" strokeWidth="2" />
-                <text x={pos.x} y={pos.y} textAnchor="middle" dominantBaseline="middle" className="fill-slate-900 text-[9px] font-semibold">
-                  {segment.label.split(' ').slice(0, 2).join(' ')}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Project status</p>
+          <h2 className="mt-1 text-lg font-semibold text-slate-950">Goal progress reviews</h2>
+        </div>
+        <button onClick={() => onNavigate('my-goals')} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">
+          Open Goals
+        </button>
       </div>
-      <div className="mt-4 flex flex-wrap justify-center gap-3">
-        {heatLegend.map((item) => (
-          <div key={item.label} className="flex items-center gap-2 text-xs font-medium text-slate-600">
-            <span className="h-2.5 w-2.5 rounded-full border border-white shadow-sm" style={{ backgroundColor: item.color }} />
-            {item.label}
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        {items.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600 lg:col-span-2">
+            Add goals and refresh the Progress Review page to see project status here.
           </div>
-        ))}
+        ) : items.map((review) => {
+          const health = goalHealthStyles[review.health] || goalHealthStyles.amber;
+          const statusLabel = goalStatusLabels[review.status] || review.status || 'Review pending';
+          return (
+            <article key={review.goal_id} className={`flex min-h-[260px] flex-col rounded-lg border border-slate-200 border-l-4 p-4 ${health.accent}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-base font-semibold leading-6 text-slate-950">{review.goal_title || 'Untitled goal'}</h3>
+                  <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{statusLabel}</p>
+                </div>
+                <span className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${health.pill}`}>
+                  <span className={`h-2.5 w-2.5 rounded-full ${health.dot}`} />
+                  {health.label}
+                </span>
+              </div>
+
+              <div className="mt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Executive Summary</p>
+                <p className="mt-2 text-sm leading-6 text-slate-700">{review.executive_summary}</p>
+              </div>
+
+              <div className="mt-auto pt-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended Focus</p>
+                <p className="mt-2 text-sm font-medium leading-6 text-slate-900">{review.recommended_focus}</p>
+              </div>
+            </article>
+          );
+        })}
       </div>
     </section>
   );
@@ -474,7 +456,7 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
 
         <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(320px,0.8fr)_minmax(520px,1.4fr)]">
           <TaskStack title="Top 3 Procrastinated Tasks" eyebrow="Execution friction" tasks={payload.procrastinated_tasks || []} emptyText="No repeated postponement pattern is visible yet." onToggle={handleTaskToggle} timezone={timezone} showPostponed />
-          <WheelHeatmap wheel={payload.leadership_wheel || {}} />
+          <GoalProgressReviewCards reviews={payload.goal_progress_reviews || []} onNavigate={onNavigate} />
         </div>
 
         <div className="mt-5">
