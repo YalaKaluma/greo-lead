@@ -188,10 +188,10 @@ export default function MyGoals({ apiUrl, userNumber }) {
   }, [userNumber, isYellowBeltOrAbove]);
 
   useEffect(() => {
-    if (!isYellowBeltOrAbove && activeTab === 'review') {
+    if (!isYellowBeltOrAbove && activeTab === 'review' && !expandedGoalId) {
       setActiveTab('setting');
     }
-  }, [isYellowBeltOrAbove, activeTab]);
+  }, [isYellowBeltOrAbove, activeTab, expandedGoalId]);
 
   useEffect(() => {
     if (!expandedGoalId || activeTab !== 'setting') return;
@@ -464,21 +464,19 @@ export default function MyGoals({ apiUrl, userNumber }) {
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
                 )}
               </button>
-              {isYellowBeltOrAbove && (
-                <button
-                  onClick={() => setActiveTab('review')}
-                  className={`pb-3 px-2 font-medium transition-colors relative ${
-                    activeTab === 'review'
-                      ? 'text-blue-600'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  Progress Review
-                  {activeTab === 'review' && (
-                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-                  )}
-                </button>
-              )}
+              <button
+                onClick={() => setActiveTab('review')}
+                className={`pb-3 px-2 font-medium transition-colors relative ${
+                  activeTab === 'review'
+                    ? 'text-blue-600'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Progress Review
+                {activeTab === 'review' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+                )}
+              </button>
               <button
                 onClick={() => setActiveTab('coaching')}
                 className={`pb-3 px-2 font-medium transition-colors relative ${
@@ -554,7 +552,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
             )}
 
             {/* Progress Review Tab */}
-            {isYellowBeltOrAbove && expandedGoalId && activeTab === 'review' && (
+            {expandedGoalId && activeTab === 'review' && (
               <GoalProgressReview
                 apiUrl={apiUrl}
                 userNumber={userNumber}
