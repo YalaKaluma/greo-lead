@@ -18,24 +18,25 @@ Key Features:
 - Excel logging for systematic prompt tuning
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 from openai import OpenAI, OpenAIError
 import logging
+import os
 import yaml
 import pandas as pd
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, NamedTuple
 from datetime import datetime, date, timedelta
 
 from app.db import get_db
 from app.services.journey_context import build_journey_context
 from app.services.message_service import load_conversation_history, save_message
 from app.services.timezone_service import get_user_timezone, today_for_timezone
-from app.models import Task, Habit, HabitCompletion, JourneyGoal, Message
+from app.models import Task, Habit, HabitCompletion, JourneyGoal, Message, User
 from app.services.habit_coaching_service import refresh_habit_coaching_review
 from app.services.vision_progress_review_service import VisionProgressReviewService
 from app.config import (
@@ -522,6 +523,106 @@ ACTIVE HABITS:
 # Helper Functions
 # -------------------------------------------------
 
+class NudgeTarget(NamedTuple):
+    user_number: str
+    environment: str
+    source: str
+
+
+def get_runtime_environment() -> str:
+    """Return the configured runtime environment, defaulting to development."""
+    environment = (
+        os.getenv("APP_ENV")
+        or os.getenv("ENVIRONMENT")
+        or os.getenv("RAILWAY_ENVIRONMENT_NAME")
+        or "development"
+    )
+    return environment.strip().lower() or "development"
+
+
+def _missing_user_number_error(environment: str) -> HTTPException:
+    return HTTPException(
+        status_code=400,
+        detail={
+            "status": "error",
+            "error": "missing_user_number",
+            "environment": environment,
+            "message": "user_number is required for single-user nudge sends.",
+        },
+    )
+
+
+def normalize_nudge_user_number(user_number: str) -> str:
+    """
+    Normalize supported nudge targets.
+
+    WhatsApp users use `whatsapp:+123...`; synthetic/dev users use `synthetic:name`.
+    """
+    user_number = user_number.strip()
+
+    if user_number.startswith("synthetic:"):
+        return user_number
+
+    if user_number.startswith("+"):
+        return f"whatsapp:{user_number}"
+
+    if user_number.startswith("whatsapp:+"):
+        return user_number
+
+    raise HTTPException(
+        status_code=400,
+        detail=f"Invalid user_number format: {user_number}. Expected 'whatsapp:+1234567890' or 'synthetic:user_name'"
+    )
+
+
+def resolve_nudge_user_number(
+        requested_user_number: Optional[str],
+        nudge_type: str,
+        environment: Optional[str] = None,
+) -> NudgeTarget:
+    """
+    Resolve the target user for a scheduled nudge.
+
+    Single-user nudge sends require an explicit target outside production.
+    """
+    environment = (environment or get_runtime_environment()).strip().lower() or "development"
+
+    if requested_user_number:
+        target = NudgeTarget(
+            user_number=normalize_nudge_user_number(requested_user_number),
+            environment=environment,
+            source="query_param",
+        )
+    elif environment == "production":
+        if not DEFAULT_USER_NUMBER:
+            logger.error("No user_number provided and DEFAULT_USER_NUMBER not configured")
+            raise HTTPException(
+                status_code=400,
+                detail="user_number parameter is required when DEFAULT_USER_NUMBER is not set"
+            )
+        target = NudgeTarget(
+            user_number=normalize_nudge_user_number(DEFAULT_USER_NUMBER),
+            environment=environment,
+            source="default",
+        )
+    else:
+        logger.warning(
+            "[nudge_targeting] nudge_type=%s environment=%s source=missing user_number=missing",
+            nudge_type,
+            environment,
+        )
+        raise _missing_user_number_error(environment)
+
+    logger.info(
+        "[nudge_targeting] nudge_type=%s environment=%s source=%s user_number=%s",
+        nudge_type,
+        target.environment,
+        target.source,
+        target.user_number,
+    )
+    return target
+
+
 def validate_user_number(user_number: Optional[str]) -> str:
     """
     Validate and normalize user number.
@@ -545,19 +646,9 @@ def validate_user_number(user_number: Optional[str]) -> str:
         user_number = DEFAULT_USER_NUMBER
         logger.info(f"Using DEFAULT_USER_NUMBER: {user_number}")
 
-    # Validate format
-    if not user_number.startswith('whatsapp:+'):
-        logger.warning(f"User number missing 'whatsapp:+' prefix: {user_number}")
-        if user_number.startswith('+'):
-            user_number = f"whatsapp:{user_number}"
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid user_number format: {user_number}. Expected 'whatsapp:+1234567890'"
-            )
-
-    logger.debug(f"Validated user_number: {user_number}")
-    return user_number
+    normalized = normalize_nudge_user_number(user_number)
+    logger.debug(f"Validated user_number: {normalized}")
+    return normalized
 
 
 def generate_ai_message(
@@ -713,7 +804,7 @@ def save_message_safe(db: Session, user_number: str, text: str) -> None:
 
 def get_all_active_users(db: Session) -> List[str]:
     """
-    Get list of all unique user numbers who have messages in the system.
+    Get list of all active users who should receive scheduled nudges.
 
     Args:
         db: Database session
@@ -722,9 +813,24 @@ def get_all_active_users(db: Session) -> List[str]:
         List of unique user phone numbers
     """
     try:
-        users = db.query(Message.user_number).distinct().all()
-        user_numbers = [user[0] for user in users if user[0]]
-        logger.info(f"Found {len(user_numbers)} active users")
+        user_rows = (
+            db.query(User.phone_number)
+            .filter(
+                User.is_active == True,
+                User.phone_number.isnot(None),
+                User.phone_number != "",
+            )
+            .order_by(User.id)
+            .all()
+        )
+        user_numbers = [row[0] for row in user_rows if row[0]]
+
+        if not user_numbers:
+            message_rows = db.query(Message.user_number).distinct().all()
+            user_numbers = [row[0] for row in message_rows if row[0]]
+
+        user_numbers = list(dict.fromkeys(user_numbers))
+        logger.info(f"Found {len(user_numbers)} active nudge users")
         return user_numbers
     except Exception as e:
         logger.error(f"Failed to get active users: {e}")
@@ -785,6 +891,12 @@ def send_nudge_for_user(
         if nudge_type == "morning":
             briefing_service = MorningBriefingService(db)
             move_the_needle_context = briefing_service.generate_move_the_needle_context(user_number)
+            try:
+                from app.services.home_dashboard_service import HomeDashboardService
+                HomeDashboardService(db).refresh(user_number, source="morning_nudge")
+            except Exception as exc:
+                db.rollback()
+                logger.warning("Failed to refresh Home dashboard snapshot for %s during morning nudge: %s", user_number, exc)
             
 
         # Build context summary for logging
@@ -885,7 +997,126 @@ def send_nudge_for_user(
             "status": "failed",
             "user_number": user_number,
             "error": str(e),
+            "duration_seconds": (datetime.utcnow() - start_time).total_seconds(),
         }
+
+
+def run_single_nudge(
+        requested_user_number: Optional[str],
+        nudge_type: str,
+        db: Session,
+) -> Dict:
+    """Resolve targeting, send one nudge, and return cron-friendly metadata."""
+    target = resolve_nudge_user_number(requested_user_number, nudge_type)
+    result = send_nudge_for_user(target.user_number, nudge_type, db)
+    status = result.get("status", "error")
+    duration = result.get("duration_seconds", 0)
+
+    logger.info(
+        "[nudge_result] nudge_type=%s environment=%s user_number=%s status=%s duration_seconds=%.2f",
+        nudge_type,
+        target.environment,
+        target.user_number,
+        status,
+        duration,
+    )
+
+    return {
+        "nudge_type": nudge_type,
+        "status": status,
+        "environment": target.environment,
+        "user_number": target.user_number,
+        "target_source": target.source,
+        "duration_seconds": duration,
+        "timestamp": datetime.utcnow().isoformat(),
+        **{key: value for key, value in result.items() if key not in {"status", "user_number", "duration_seconds"}},
+    }
+
+
+def run_batch_nudge(
+        nudge_type: str,
+        db: Session,
+) -> Dict:
+    """Send one scheduled nudge to every active user in this environment."""
+    start_time = datetime.utcnow()
+    environment = get_runtime_environment()
+    users = get_all_active_users(db)
+
+    logger.info(
+        "[nudge_targeting] nudge_type=%s environment=%s source=all_active_users total_users=%s",
+        nudge_type,
+        environment,
+        len(users),
+    )
+
+    results = [send_nudge_for_user(user_number, nudge_type, db) for user_number in users]
+
+    duration = (datetime.utcnow() - start_time).total_seconds()
+    successful = len([r for r in results if r["status"] == "success"])
+    failed = len([r for r in results if r["status"] == "failed"])
+
+    logger.info(
+        "[nudge_result] nudge_type=%s environment=%s status=batch_complete total_users=%s successful=%s failed=%s duration_seconds=%.2f",
+        nudge_type,
+        environment,
+        len(users),
+        successful,
+        failed,
+        duration,
+    )
+
+    return {
+        "status": "batch_complete",
+        "nudge_type": nudge_type,
+        "environment": environment,
+        "target_source": "all_active_users",
+        "total_users": len(users),
+        "successful": successful,
+        "failed": failed,
+        "duration_seconds": duration,
+        "timestamp": datetime.utcnow().isoformat(),
+        "results": results,
+    }
+
+
+NUDGE_USER_QUERY_ALIASES = (
+    "user_number",
+    "userNumber",
+    "target_user",
+    "target",
+    "user",
+    "to",
+)
+
+
+def get_requested_nudge_user_number(
+        user_number: Optional[str],
+        request: Request,
+        nudge_type: str,
+) -> Optional[str]:
+    """Resolve the nudge target from supported query parameter names."""
+    query_params = dict(request.query_params)
+    logger.info(
+        "[nudge_request] nudge_type=%s path=%s query_params=%s",
+        nudge_type,
+        request.url.path,
+        query_params,
+    )
+
+    if user_number:
+        return user_number.strip()
+
+    for alias in NUDGE_USER_QUERY_ALIASES:
+        value = request.query_params.get(alias)
+        if value:
+            logger.info(
+                "[nudge_request] nudge_type=%s target_alias=%s",
+                nudge_type,
+                alias,
+            )
+            return value.strip()
+
+    return None
 
 
 # -------------------------------------------------
@@ -894,6 +1125,7 @@ def send_nudge_for_user(
 
 @router.get("/nudge/morning")
 def morning_nudge(
+        request: Request,
         user_number: Optional[str] = Query(None, description="WhatsApp number (e.g., 'whatsapp:+1234567890')"),
         db: Session = Depends(get_db)
 ):
@@ -906,8 +1138,12 @@ def morning_nudge(
     nudge_type = "morning"
     logger.info(f"🌅 {nudge_type.upper()} nudge endpoint invoked")
 
-    user_number = validate_user_number(user_number)
-    result = send_nudge_for_user(user_number, nudge_type, db)
+    requested_user_number = get_requested_nudge_user_number(user_number, request, nudge_type)
+    result = (
+        run_single_nudge(requested_user_number, nudge_type, db)
+        if requested_user_number
+        else run_batch_nudge(nudge_type, db)
+    )
 
     logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
     return {
@@ -919,6 +1155,7 @@ def morning_nudge(
 
 @router.get("/nudge/evening")
 def evening_nudge(
+        request: Request,
         user_number: Optional[str] = Query(None, description="WhatsApp number"),
         db: Session = Depends(get_db)
 ):
@@ -931,8 +1168,12 @@ def evening_nudge(
     nudge_type = "evening"
     logger.info(f"🌙 {nudge_type.upper()} nudge endpoint invoked")
 
-    user_number = validate_user_number(user_number)
-    result = send_nudge_for_user(user_number, nudge_type, db)
+    requested_user_number = get_requested_nudge_user_number(user_number, request, nudge_type)
+    result = (
+        run_single_nudge(requested_user_number, nudge_type, db)
+        if requested_user_number
+        else run_batch_nudge(nudge_type, db)
+    )
 
     logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
     return {
@@ -944,6 +1185,7 @@ def evening_nudge(
 
 @router.get("/nudge/weekly")
 def weekly_nudge(
+        request: Request,
         user_number: Optional[str] = Query(None, description="WhatsApp number"),
         db: Session = Depends(get_db)
 ):
@@ -956,8 +1198,12 @@ def weekly_nudge(
     nudge_type = "weekly"
     logger.info(f"🎯 {nudge_type.upper()} coaching nudge endpoint invoked")
 
-    user_number = validate_user_number(user_number)
-    result = send_nudge_for_user(user_number, nudge_type, db)
+    requested_user_number = get_requested_nudge_user_number(user_number, request, nudge_type)
+    result = (
+        run_single_nudge(requested_user_number, nudge_type, db)
+        if requested_user_number
+        else run_batch_nudge(nudge_type, db)
+    )
 
     logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
     return {
@@ -969,6 +1215,7 @@ def weekly_nudge(
 
 @router.get("/nudge/sunday_review")
 def sunday_review_nudge(
+        request: Request,
         user_number: Optional[str] = Query(None, description="WhatsApp number"),
         db: Session = Depends(get_db)
 ):
@@ -981,8 +1228,12 @@ def sunday_review_nudge(
     nudge_type = "sunday_review"
     logger.info(f"📋 {nudge_type.upper()} goal setting endpoint invoked")
 
-    user_number = validate_user_number(user_number)
-    result = send_nudge_for_user(user_number, nudge_type, db)
+    requested_user_number = get_requested_nudge_user_number(user_number, request, nudge_type)
+    result = (
+        run_single_nudge(requested_user_number, nudge_type, db)
+        if requested_user_number
+        else run_batch_nudge(nudge_type, db)
+    )
 
     logger.info(f"✅ {nudge_type} nudge completed: {result['status']}")
     return {
@@ -1204,8 +1455,8 @@ def health_check(db: Session = Depends(get_db)):
     try:
         users = get_all_active_users(db)
         user_count = len(users)
-    except:
-        pass
+    except Exception as exc:
+        logger.debug("Could not count active users during nudge health check: %s", exc)
 
     return {
         "status": "healthy",

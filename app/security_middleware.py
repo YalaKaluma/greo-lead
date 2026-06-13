@@ -1,0 +1,151 @@
+from __future__ import annotations
+
+import os
+import time
+from collections import defaultdict, deque
+from dataclasses import dataclass
+
+from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse, Response
+
+
+SECURITY_HEADERS = {
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+}
+
+PRODUCTION_CSP = (
+    "default-src 'self'; "
+    "script-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: https:; "
+    "connect-src 'self' https:; "
+    "font-src 'self' data:; "
+    "frame-ancestors 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'"
+)
+
+DEVELOPMENT_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob: https: http:; "
+    "connect-src 'self' https: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; "
+    "font-src 'self' data:; "
+    "frame-ancestors 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'"
+)
+
+
+def get_content_security_policy() -> str:
+    environment = (
+        os.getenv("ENVIRONMENT")
+        or os.getenv("RAILWAY_ENVIRONMENT_NAME")
+        or os.getenv("APP_ENV")
+        or "development"
+    ).lower()
+    if environment in {"production", "prod"}:
+        return PRODUCTION_CSP
+    return DEVELOPMENT_CSP
+
+
+def apply_security_headers(response: Response) -> Response:
+    for header, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(header, value)
+    response.headers.setdefault("Content-Security-Policy", get_content_security_policy())
+    return response
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        return apply_security_headers(response)
+
+
+@dataclass(frozen=True)
+class RateLimitRule:
+    requests: int
+    window_seconds: int = 60
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    def __init__(
+        self,
+        app,
+        auth_limit: RateLimitRule = RateLimitRule(5),
+        ai_limit: RateLimitRule = RateLimitRule(20),
+        general_limit: RateLimitRule = RateLimitRule(100),
+    ):
+        super().__init__(app)
+        self.auth_limit = auth_limit
+        self.ai_limit = ai_limit
+        self.general_limit = general_limit
+        self._buckets: dict[str, deque[float]] = defaultdict(deque)
+
+    async def dispatch(self, request: Request, call_next):
+        rule = self._rule_for_path(request.url.path)
+        if rule is None:
+            return await call_next(request)
+
+        now = time.monotonic()
+        key = self._rate_limit_key(request, rule)
+        bucket = self._buckets[key]
+        while bucket and now - bucket[0] >= rule.window_seconds:
+            bucket.popleft()
+
+        remaining = max(rule.requests - len(bucket), 0)
+        if remaining <= 0:
+            response = JSONResponse(
+                {"detail": "Rate limit exceeded"},
+                status_code=429,
+            )
+            response.headers["X-RateLimit-Limit"] = str(rule.requests)
+            response.headers["X-RateLimit-Remaining"] = "0"
+            response.headers["Retry-After"] = str(rule.window_seconds)
+            return apply_security_headers(response)
+
+        bucket.append(now)
+        response = await call_next(request)
+        response.headers.setdefault("X-RateLimit-Limit", str(rule.requests))
+        response.headers.setdefault("X-RateLimit-Remaining", str(max(rule.requests - len(bucket), 0)))
+        return response
+
+    def _rule_for_path(self, path: str) -> RateLimitRule | None:
+        if path in {"/api/auth/login", "/api/auth/register"} or "password-reset" in path:
+            return self.auth_limit
+        if any(marker in path for marker in (
+            "/chat",
+            "/message-signals",
+            "/audio/",
+            "/belt-assessments/submit",
+            "/belt-trials",
+            "/generate-roadmap",
+            "/opportunities/generate",
+            "/coaching/refresh",
+            "/leadership-coaching/message",
+            "/priority",
+        )):
+            return self.ai_limit
+        if path.startswith("/api/"):
+            return self.general_limit
+        return None
+
+    def _rate_limit_key(self, request: Request, rule: RateLimitRule) -> str:
+        path = request.url.path
+        client_ip = request.client.host if request.client else "unknown"
+        if rule == self.auth_limit:
+            identity = client_ip
+        else:
+            identity = (
+                request.query_params.get("user_number")
+                or request.query_params.get("user_id")
+                or request.headers.get("X-User-Number")
+                or client_ip
+            )
+        return f"{path}:{identity}:{rule.requests}:{rule.window_seconds}"

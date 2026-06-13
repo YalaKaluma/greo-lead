@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import JournalEntry, User
 from app.services.journal_reflection_depth_service import apply_reflection_depth, get_reflection_depth_trends
+from app.services.audit_log_service import write_audit_log
 from app.services.message_service import save_message
 
 router = APIRouter(prefix="/journal", tags=["journal"])
@@ -16,6 +17,14 @@ def create_entry(user_id: int, text: str, db: Session = Depends(get_db)):
     db.add(entry)
     db.commit()
     db.refresh(entry)
+    write_audit_log(
+        db,
+        user_id=user_id,
+        event_type="journal_created",
+        object_type="journal_entry",
+        object_id=entry.id,
+        metadata={"journal_id": entry.id, "status": "created"},
+    )
     try:
         apply_reflection_depth(entry, text)
         db.commit()
@@ -127,4 +136,12 @@ def delete_entry(entry_id: int, user_id: int, db: Session = Depends(get_db)):
 
     db.delete(entry)
     db.commit()
+    write_audit_log(
+        db,
+        user_id=user_id,
+        event_type="journal_deleted",
+        object_type="journal_entry",
+        object_id=entry_id,
+        metadata={"journal_id": entry_id, "status": "deleted"},
+    )
     return {"status": "deleted"}

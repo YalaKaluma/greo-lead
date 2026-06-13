@@ -7,15 +7,17 @@ import logging
 import sys
 import os
 import time
+from urllib.parse import parse_qsl, urlencode
 from datetime import datetime
 from app.db import Base, engine, SessionLocal
-from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits, waitlist, onboarding, chat, priority, leadership_coaching_router, audio, message_feedback, opportunities, message_signals, settings, admin, usage
+from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits, waitlist, onboarding, chat, priority, leadership_coaching_router, audio, message_feedback, opportunities, message_signals, settings, admin, usage, home
 from app.routers import auth
 from sqlalchemy import text
 import threading
 from app.email_poller import run_email_loop
 from app.services.admin_bootstrap import ensure_admin_schema_and_seed
 from app.models import SystemHealthEvent
+from app.security_middleware import RateLimitMiddleware, SecurityHeadersMiddleware
 
 # Configure logging with timestamp
 logging.basicConfig(
@@ -76,8 +78,11 @@ else:
 # --------------------------------------
 logger.info("💾 Initializing Database...")
 try:
-    Base.metadata.create_all(bind=engine)
-    ensure_admin_schema_and_seed()
+    if os.getenv("SKIP_DB_INIT", "").lower() in {"1", "true", "yes"}:
+        logger.info("Database initialization skipped by SKIP_DB_INIT")
+    else:
+        Base.metadata.create_all(bind=engine)
+        ensure_admin_schema_and_seed()
     logger.info("✓ Database tables created/verified successfully")
     logger.info(f"  Database engine: {engine.url.drivername}")
     logger.info(f"  Database host: {engine.url.host}")
@@ -112,12 +117,48 @@ logger.info("✓ CORS middleware configured (allowing all origins)")
 
 
 # --------------------------------------
+# Security headers and rate limiting
+# --------------------------------------
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RateLimitMiddleware)
+logger.info("✓ Security headers and rate limiting configured")
+
+
+# --------------------------------------
 # Request logging middleware
 # --------------------------------------
+SENSITIVE_QUERY_KEYS = {
+    "token",
+    "access_token",
+    "refresh_token",
+    "code",
+    "password",
+    "secret",
+    "api_key",
+    "key",
+    "authorization",
+}
+
+
+def _request_log_target(request: Request) -> str:
+    if not request.url.query:
+        return request.url.path
+
+    safe_params = []
+    for key, value in parse_qsl(request.url.query, keep_blank_values=True):
+        if key.lower() in SENSITIVE_QUERY_KEYS:
+            safe_params.append((key, "[REDACTED]"))
+        else:
+            safe_params.append((key, value))
+
+    return f"{request.url.path}?{urlencode(safe_params)}"
+
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start = time.perf_counter()
-    logger.info(f"📥 {request.method} {request.url.path}")
+    log_target = _request_log_target(request)
+    logger.info(f"📥 {request.method} {log_target}")
     try:
         response = await call_next(request)
     except Exception as exc:
@@ -132,11 +173,11 @@ async def log_requests(request: Request, call_next):
             response_time_ms=elapsed_ms,
             message=str(exc)[:500],
         )
-        logger.exception(f"📤 {request.method} {request.url.path} → 500")
+        logger.exception(f"📤 {request.method} {log_target} → 500")
         raise
 
     elapsed_ms = round((time.perf_counter() - start) * 1000)
-    logger.info(f"📤 {request.method} {request.url.path} → {response.status_code}")
+    logger.info(f"📤 {request.method} {log_target} → {response.status_code}")
     if _should_record_system_health_event(request.url.path, response.status_code, elapsed_ms):
         _record_system_health_event(
             event_type=_classify_response_event(request.url.path, response.status_code, elapsed_ms),
@@ -249,6 +290,7 @@ routers_to_register = [
     (usage.router, "/api", "Usage"),
     (opportunities.router, "/api/opportunities", "Opportunities"),
     (priority.router, "/api/priority", "Priority"),
+    (home.router, "/api/home", "Home"),
     (leadership_coaching_router.router, "/api/leadership-coaching", "Leadership-Coaching"),
 ]
 
@@ -411,6 +453,9 @@ else:
 
 @app.on_event("startup")
 def start_email():
+    if os.getenv("SKIP_STARTUP_TASKS", "").lower() in {"1", "true", "yes"}:
+        logger.info("Startup background tasks skipped by SKIP_STARTUP_TASKS")
+        return
     thread = threading.Thread(target=run_email_loop, daemon=True)
     thread.start()
 

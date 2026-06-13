@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import TrendRangeToggle from '../TrendRangeToggle';
+
 const WIDTH = 720;
 const HEIGHT = 220;
 const PADDING = 28;
@@ -95,7 +98,8 @@ const getEnergyPoints = (energyData) => (Array.isArray(energyData) ? energyData 
   .sort((a, b) => dateToTime(a.date) - dateToTime(b.date));
 
 export default function HabitComplianceChart({ data, energyData }) {
-  const points = Array.isArray(data) ? data : [];
+  const [rangeDays, setRangeDays] = useState(21);
+  const points = (Array.isArray(data) ? data : []).slice(-rangeDays);
   const dailyPath = buildPath(points, 'compliance_rate');
   const rollingPath = buildPath(points, 'rolling_average');
   const energyPoints = getEnergyPoints(energyData);
@@ -107,15 +111,17 @@ export default function HabitComplianceChart({ data, energyData }) {
 
   return (
     <div className="rounded-lg border bg-white p-4">
-      <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Compliance Trend</h2>
+          <p className="mt-1 text-sm text-slate-500">Last {rangeDays} days of habit consistency.</p>
           <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> Daily</span>
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> 7-day average</span>
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: ENERGY_COLOR }} /> Energy</span>
           </div>
         </div>
+        <TrendRangeToggle value={rangeDays} onChange={setRangeDays} label="Habit trend range" />
       </div>
 
       <div className="mt-4 overflow-hidden rounded-md bg-slate-50">

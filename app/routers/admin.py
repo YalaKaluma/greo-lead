@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import (
     AdminAuditLog,
+    AuditLog,
     Habit,
     HabitCompletion,
     JournalEntry,
@@ -220,6 +221,33 @@ def _log_admin_action(
         action=action,
         metadata_json=metadata or {},
     ))
+    db.add(AuditLog(
+        user_id=admin_user.id,
+        event_type="admin_action",
+        object_type="user" if target_user else "admin",
+        object_id=str(target_user.id) if target_user else str(admin_user.id),
+        metadata_json={
+            "action": action,
+            "target_user_id": target_user.id if target_user else None,
+            **(metadata or {}),
+        },
+    ))
+    if action == "deactivated_user" and target_user:
+        db.add(AuditLog(
+            user_id=target_user.id,
+            event_type="account_deleted",
+            object_type="user",
+            object_id=str(target_user.id),
+            metadata_json={"status": "deactivated", "admin_user_id": admin_user.id},
+        ))
+    if action == "password_reset" and target_user:
+        db.add(AuditLog(
+            user_id=target_user.id,
+            event_type="password_change",
+            object_type="user",
+            object_id=str(target_user.id),
+            metadata_json={"method": "admin_reset", "admin_user_id": admin_user.id},
+        ))
 
 
 def _invitation_body(user: User, temp_password: str) -> str:
@@ -318,6 +346,7 @@ def _display_ai_briefing(briefing: AdminAIBriefing | None) -> dict[str, Any] | N
         "summary_text": briefing.summary_text,
         "codex_brief": briefing.codex_brief,
         "top_recommendations": briefing.top_recommendations or [],
+        "source_snapshot": briefing.source_snapshot or {},
         "model": briefing.model,
         "created_at": briefing.created_at.isoformat() if briefing.created_at else None,
         "admin_user_id": briefing.admin_user_id,

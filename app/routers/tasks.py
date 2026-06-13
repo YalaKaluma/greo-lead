@@ -3,7 +3,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 import calendar
 from app.db import get_db
-from app.models import Task
+from app.models import JourneyGoal, Task
 from pydantic import BaseModel
 from datetime import datetime, date, timedelta
 from typing import Optional, List
@@ -11,6 +11,7 @@ from app.services.task_enrichment_service import enrich_task
 from app.services.timezone_service import get_user_timezone, today_for_timezone
 from app.services.task_mtn_trend_service import get_task_mtn_trends
 from app.services.onboarding_seed_service import ensure_starter_tasks_visible_today
+from app.services.audit_log_service import user_id_for_identifier, write_audit_log
 
 router = APIRouter()
 
@@ -121,6 +122,15 @@ class BulkDeferNonTop10Request(BaseModel):
     task_ids_to_keep_today: List[int]
     task_ids_to_move: List[int]
     target_date: date
+
+
+class TaskFollowUpRequest(BaseModel):
+    follow_up_date: date
+
+
+class TaskFollowUpResponse(BaseModel):
+    original_task: TaskResponse
+    follow_up_task: TaskResponse
 
 
 # Priority order for sorting
@@ -239,6 +249,17 @@ def create_new_task_from_recurring_template(task: Task, next_due_date: date, db:
     )
     db.add(new_task)
     return new_task
+
+
+def validate_user_goal_link(db: Session, user_number: str, goal_id: Optional[int]) -> None:
+    if goal_id is None:
+        return
+    exists = db.query(JourneyGoal.id).filter(
+        JourneyGoal.id == goal_id,
+        JourneyGoal.user_number == user_number,
+    ).first()
+    if not exists:
+        raise HTTPException(status_code=404, detail="Goal not found")
 
 
 def attach_today_mtn_metadata(db: Session, user_number: str, tasks: List[Task]) -> None:
@@ -427,6 +448,7 @@ def create_task(
     """
     Create a new task
     """
+    validate_user_goal_link(db, user_number, task.goal_id)
     new_task = Task(
         user_number=user_number,
         title=task.title,
@@ -491,6 +513,9 @@ def update_task(
     # Capitalize priority if provided
     if 'priority' in update_data:
         update_data['priority'] = update_data['priority'].capitalize()
+
+    if "goal_id" in update_data:
+        validate_user_goal_link(db, user_number, update_data.get("goal_id"))
 
     for field, value in update_data.items():
         setattr(task, field, value)
@@ -625,6 +650,70 @@ def bulk_defer_non_top_10(
     }
 
 
+@router.post("/{task_id}/follow-up", response_model=TaskFollowUpResponse)
+def create_follow_up_task(
+        task_id: int,
+        user_number: str,
+        request: TaskFollowUpRequest,
+        db: Session = Depends(get_db)
+):
+    """
+    Create a follow-up task and complete the original task in one transaction.
+    """
+    task = db.query(Task).filter(
+        Task.id == task_id,
+        Task.user_number == user_number
+    ).first()
+
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    try:
+        now = datetime.now()
+        follow_up_task = Task(
+            user_number=task.user_number,
+            title=f"Follow up: {task.title}",
+            notes=task.notes,
+            project=task.project,
+            delegated_to=task.delegated_to,
+            due_date=request.follow_up_date,
+            status="open",
+            priority=task.priority,
+            goal_id=task.goal_id,
+            strategic_intent=task.strategic_intent,
+            move_the_needle_score=task.move_the_needle_score,
+            estimated_effort=task.estimated_effort,
+            suggested_subtasks=task.suggested_subtasks,
+            alfred_help=task.alfred_help,
+            enhanced_title=task.enhanced_title,
+            ai_enriched=task.ai_enriched,
+            originating_opportunity_id=task.originating_opportunity_id,
+            is_recurring=False,
+            created_at=now,
+            updated_at=now,
+        )
+
+        db.add(follow_up_task)
+        task.status = "completed"
+        task.updated_at = now
+
+        db.commit()
+        db.refresh(task)
+        db.refresh(follow_up_task)
+
+        return {
+            "original_task": task,
+            "follow_up_task": follow_up_task,
+        }
+    except Exception as exc:
+        db.rollback()
+        print(f"[TASKS API] Failed to create follow-up task: {exc}")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to create follow-up task. Please try again."
+        )
+
+
 @router.patch("/{task_id}/toggle", response_model=TaskResponse)
 def toggle_task(
         task_id: int,
@@ -681,6 +770,14 @@ def delete_task(
 
     db.delete(task)
     db.commit()
+    write_audit_log(
+        db,
+        user_id=user_id_for_identifier(db, user_number),
+        event_type="task_deleted",
+        object_type="task",
+        object_id=task_id,
+        metadata={"task_id": task_id, "status": "deleted"},
+    )
 
     return {"success": True, "message": "Task deleted"}
 

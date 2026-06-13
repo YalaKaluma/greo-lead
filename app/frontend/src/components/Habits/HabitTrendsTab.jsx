@@ -33,6 +33,12 @@ export default function HabitTrendsTab({
 
   return (
     <div className="space-y-5">
+      <HabitTrendSummary summary={trends?.summary} />
+      <HabitComplianceChart data={trends?.trend_chart} energyData={trends?.energy_trend} />
+      <HabitHeatmap data={trends?.heatmap} />
+      <HabitLeaderboard data={trends?.leaderboard} />
+      <HabitScores scores={trends?.scores} />
+      <HabitInsightsCard insights={trends?.coaching_context?.insights} />
       <HabitCoachingCard
         context={trends?.coaching_context}
         review={trends?.latest_coaching_review}
@@ -41,12 +47,6 @@ export default function HabitTrendsTab({
         onAddMtnActionToTasks={onAddMtnActionToTasks}
         mtnTaskState={mtnTaskState}
       />
-      <HabitTrendSummary summary={trends?.summary} />
-      <HabitComplianceChart data={trends?.trend_chart} energyData={trends?.energy_trend} />
-      <HabitHeatmap data={trends?.heatmap} />
-      <HabitLeaderboard data={trends?.leaderboard} />
-      <HabitScores scores={trends?.scores} />
-      <HabitInsightsCard insights={trends?.coaching_context?.insights} />
     </div>
   );
 }

@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Database
-DATABASE_URL = os.getenv("DATABASE_URL")
+DIRECT_DATABASE_URL = os.getenv("DIRECT_DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL") or DIRECT_DATABASE_URL
 
 # OpenAI
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")

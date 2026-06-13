@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import User
+from app.services.audit_log_service import write_audit_log
 from app.services.journal_reflection_depth_service import backfill_recent_reflection_depth
 from app.services.language import DEFAULT_LANGUAGE, normalize_language
 from app.services.timezone_service import DEFAULT_TIMEZONE, normalize_timezone
@@ -48,6 +49,14 @@ def update_language(request: LanguageSettingsRequest, db: Session = Depends(get_
     user.language_preference = normalize_language(request.language_preference)
     db.commit()
     db.refresh(user)
+    write_audit_log(
+        db,
+        user_id=user.id,
+        event_type="settings_changed",
+        object_type="user_settings",
+        object_id=user.id,
+        metadata={"setting": "language_preference", "value": user.language_preference},
+    )
 
     return {
         "user_number": request.user_number,
@@ -64,6 +73,14 @@ def update_timezone(request: TimezoneSettingsRequest, db: Session = Depends(get_
     user.timezone_preference = normalize_timezone(request.timezone_preference)
     db.commit()
     db.refresh(user)
+    write_audit_log(
+        db,
+        user_id=user.id,
+        event_type="settings_changed",
+        object_type="user_settings",
+        object_id=user.id,
+        metadata={"setting": "timezone_preference", "value": user.timezone_preference},
+    )
 
     return {
         "user_number": request.user_number,

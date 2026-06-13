@@ -297,6 +297,7 @@ export default function AlfredChat({ apiUrl, userNumber, currentPage, showLaunch
                 <MessageFeedbackButton
                   apiUrl={apiUrl}
                   messageId={msg.message_id}
+                  userNumber={userNumber}
                   sourceContext="messages"
                   className="text-slate-600 hover:bg-slate-100"
                 />

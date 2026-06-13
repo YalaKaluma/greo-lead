@@ -185,7 +185,7 @@ def delete_session(
     db: Session = Depends(get_db)
 ):
     """Delete a session"""
-    success = LeadershipCoachingService.delete_session(db, session_id)
+    success = LeadershipCoachingService.delete_session(db, session_id, user_number)
     
     if not success:
         raise HTTPException(status_code=404, detail="Session not found")

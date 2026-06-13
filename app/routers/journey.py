@@ -63,6 +63,7 @@ from app.services.onboarding_seed_service import (
     ensure_starter_goal_samples_compacted,
     ensure_starter_roadmaps_seeded,
 )
+from app.services.audit_log_service import user_id_for_identifier, write_audit_log
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,7 @@ LEGACY_LEVEL_ALIASES = {
 
 ROADMAP_STATUSES = {"not_started", "active", "completed"}
 WAVE_GOAL_STATUSES = {"not_started", "done", "ongoing", "at_risk", "blocked"}
-BELT_IDS = ["white", "yellow", "orange", "green", "brown", "black"]
+BELT_IDS = ["white", "yellow", "green", "brown", "black"]
 ASSESSMENT_STATUS_VALUES = {"ready_for_promotion", "almost_ready", "not_ready", "needs_more_evidence", "submitted"}
 
 JOURNEY_DIMENSIONS = {
@@ -1369,6 +1370,19 @@ def submit_belt_assessment(
     db.add(assessment)
     db.commit()
     db.refresh(assessment)
+    write_audit_log(
+        db,
+        user_id=user_id_for_identifier(db, user_number),
+        event_type="belt_assessment_submitted",
+        object_type="belt_assessment",
+        object_id=assessment.id,
+        metadata={
+            "assessment_id": assessment.id,
+            "current_belt": request.current_belt,
+            "target_belt": request.target_belt,
+            "recommendation": assessment.recommendation,
+        },
+    )
     return assessment
 
 
@@ -1391,6 +1405,19 @@ def accept_belt_promotion(
     assessment.updated_at = datetime.now()
     db.commit()
     db.refresh(assessment)
+    write_audit_log(
+        db,
+        user_id=user_id_for_identifier(db, user_number),
+        event_type="belt_promotion_accepted",
+        object_type="belt_assessment",
+        object_id=assessment.id,
+        metadata={
+            "assessment_id": assessment.id,
+            "current_belt": assessment.current_belt,
+            "target_belt": assessment.target_belt,
+            "status": "accepted",
+        },
+    )
     return assessment
 
 
@@ -1478,6 +1505,21 @@ def start_belt_trial(
                 apply_trial_review(db, existing, config, trace_id=trace_id)
             db.commit()
             db.refresh(existing)
+            if normalize_trial_status(existing.status) == "submitted":
+                write_audit_log(
+                    db,
+                    user_id=user_id_for_identifier(db, trial_data.user_number),
+                    event_type="journey_trial_submitted",
+                    object_type="journey_belt_trial",
+                    object_id=existing.id,
+                    metadata={
+                        "trial_id": existing.id,
+                        "dimension_id": existing.dimension_id,
+                        "target_belt": existing.target_belt,
+                        "trial_type": existing.trial_type,
+                        "status": existing.status,
+                    },
+                )
             logger.info(
                 "[belt_trial_create:%s] existing saved trial_id=%s final_status=%s final_score=%s reviewed_at=%s",
                 trace_id,
@@ -1506,6 +1548,21 @@ def start_belt_trial(
     db.add(trial)
     db.commit()
     db.refresh(trial)
+    if normalize_trial_status(trial.status) == "submitted":
+        write_audit_log(
+            db,
+            user_id=user_id_for_identifier(db, trial_data.user_number),
+            event_type="journey_trial_submitted",
+            object_type="journey_belt_trial",
+            object_id=trial.id,
+            metadata={
+                "trial_id": trial.id,
+                "dimension_id": trial.dimension_id,
+                "target_belt": trial.target_belt,
+                "trial_type": trial.trial_type,
+                "status": trial.status,
+            },
+        )
     logger.info(
         "[belt_trial_create:%s] created trial_id=%s final_status=%s final_score=%s reviewed_at=%s",
         trace_id,
@@ -1564,6 +1621,21 @@ def submit_belt_trial(
         apply_trial_review(db, trial, config, trace_id=trace_id)
     db.commit()
     db.refresh(trial)
+    if normalize_trial_status(trial.status) == "submitted":
+        write_audit_log(
+            db,
+            user_id=user_id_for_identifier(db, user_number),
+            event_type="journey_trial_submitted",
+            object_type="journey_belt_trial",
+            object_id=trial.id,
+            metadata={
+                "trial_id": trial.id,
+                "dimension_id": trial.dimension_id,
+                "target_belt": trial.target_belt,
+                "trial_type": trial.trial_type,
+                "status": trial.status,
+            },
+        )
     logger.info(
         "[belt_trial_submit:%s] saved trial_id=%s final_status=%s final_score=%s reviewed_at=%s response_hash=%s history_count=%s",
         trace_id,
@@ -1575,6 +1647,9 @@ def submit_belt_trial(
         len(((trial.evidence or {}).get("feedback_history") or [])),
     )
     return trial
+
+
+submit_belt_trial_response = submit_belt_trial
 
 
 # Pydantic response models
@@ -2189,6 +2264,19 @@ def create_goal(
     sync_goal_values(db, new_goal, user_number, goal_data.value_ids if time_horizon == "vision" else [])
     db.commit()
     db.refresh(new_goal)
+    write_audit_log(
+        db,
+        user_id=user_id_for_identifier(db, user_number),
+        event_type="goal_created",
+        object_type="journey_goal",
+        object_id=new_goal.id,
+        metadata={
+            "goal_id": new_goal.id,
+            "time_horizon": new_goal.time_horizon,
+            "parent_goal_id": new_goal.parent_goal_id,
+            "status": "created",
+        },
+    )
     return serialize_goal(new_goal)
 
 
@@ -2318,19 +2406,31 @@ def delete_goal(
 
     # Delete linked review sessions first
     review_sessions = db.query(GoalReviewSession).filter(
-        GoalReviewSession.goal_id == goal.id
+        GoalReviewSession.goal_id == goal.id,
+        GoalReviewSession.user_number == user_number
     ).all()
 
     for session in review_sessions:
         db.delete(session)
 
-    wave_links = db.query(WaveGoal).filter(WaveGoal.goal_id == goal.id).all()
+    wave_links = db.query(WaveGoal).join(VisionRoadmapWave).filter(
+        WaveGoal.goal_id == goal.id,
+        VisionRoadmapWave.user_number == user_number
+    ).all()
     for link in wave_links:
         db.delete(link)
 
     # Delete goal
     db.delete(goal)
     db.commit()
+    write_audit_log(
+        db,
+        user_id=user_id_for_identifier(db, user_number),
+        event_type="goal_deleted",
+        object_type="journey_goal",
+        object_id=goal_id,
+        metadata={"goal_id": goal_id, "status": "deleted"},
+    )
 
 
     return {"success": True, "message": "Goal deleted"}
@@ -2813,8 +2913,8 @@ def update_development_area(
     # Only set updated_at if the column exists
     try:
         area.updated_at = datetime.now()
-    except:
-        pass
+    except AttributeError:
+        logger.debug("Development area has no updated_at column")
 
     db.commit()
     db.refresh(area)
@@ -3685,17 +3785,8 @@ def get_procrastination_pattern_rows(db: Session, user_number: str) -> list[dict
         return []
 
     order_column = "first_seen_at" if "first_seen_at" in columns else "id"
-    rows = db.execute(
-        text(
-            f"""
-            SELECT {", ".join(select_columns)}
-            FROM journey_procrastination_patterns
-            WHERE user_number = :user_number
-            ORDER BY {order_column} DESC
-            """
-        ),
-        {"user_number": user_number},
-    ).mappings().all()
+    select_query = f"SELECT {', '.join(select_columns)} FROM journey_procrastination_patterns WHERE user_number = :user_number ORDER BY {order_column} DESC"  # nosec B608 - selected columns are limited to known table column names.
+    rows = db.execute(text(select_query), {"user_number": user_number}).mappings().all()
     return [dict(row) for row in rows]
 
 
@@ -3751,16 +3842,8 @@ def write_procrastination_pattern(
             insert_fields.append("updated_at")
             insert_values.append(":now")
 
-        row = db.execute(
-            text(
-                f"""
-                INSERT INTO journey_procrastination_patterns ({", ".join(insert_fields)})
-                VALUES ({", ".join(insert_values)})
-                RETURNING id
-                """
-            ),
-            values,
-        ).mappings().first()
+        insert_query = f"INSERT INTO journey_procrastination_patterns ({', '.join(insert_fields)}) VALUES ({', '.join(insert_values)}) RETURNING id"  # nosec B608 - inserted columns are limited to known table column names.
+        row = db.execute(text(insert_query), values).mappings().first()
     else:
         existing = db.execute(
             text(
@@ -3788,14 +3871,9 @@ def write_procrastination_pattern(
             updates.append("updated_at = :now")
 
         if updates:
+            update_query = f"UPDATE journey_procrastination_patterns SET {', '.join(updates)} WHERE id = :pattern_id AND user_number = :user_number"  # nosec B608 - update columns are limited to known table column names.
             db.execute(
-                text(
-                    f"""
-                    UPDATE journey_procrastination_patterns
-                    SET {", ".join(updates)}
-                    WHERE id = :pattern_id AND user_number = :user_number
-                    """
-                ),
+                text(update_query),
                 values,
             )
         row = {"id": pattern_id}
@@ -4595,11 +4673,12 @@ def get_people_review_history(
 def update_people_review(
     review_id: int,
     updates: dict,
+    user_number: str,
     db: Session = Depends(get_db)
 ):
     """Update a review in progress"""
     try:
-        review = PeopleReviewService.update_review(db, review_id, updates)
+        review = PeopleReviewService.update_review(db, review_id, user_number, updates)
         return {"success": True, "review_id": review.id}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -4611,11 +4690,12 @@ def update_people_review(
 @router.post("/people/reviews/{review_id}/complete")
 def complete_people_review(
     review_id: int,
+    user_number: str,
     db: Session = Depends(get_db)
 ):
     """Mark review as complete and update person record"""
     try:
-        result = PeopleReviewService.complete_review(db, review_id)
+        result = PeopleReviewService.complete_review(db, review_id, user_number)
         return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

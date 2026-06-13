@@ -70,11 +70,14 @@ class LeadershipCoachingService:
         return session
     
     @staticmethod
-    def get_session(db: Session, session_id: int) -> Optional[LeadershipCoachingSession]:
+    def get_session(db: Session, session_id: int, user_number: Optional[str] = None) -> Optional[LeadershipCoachingSession]:
         """Get a specific session by ID"""
-        return db.query(LeadershipCoachingSession).filter(
+        query = db.query(LeadershipCoachingSession).filter(
             LeadershipCoachingSession.id == session_id
-        ).first()
+        )
+        if user_number:
+            query = query.filter(LeadershipCoachingSession.user_number == user_number)
+        return query.first()
     
     @staticmethod
     def get_active_session(db: Session, user_number: str) -> Optional[LeadershipCoachingSession]:
@@ -129,10 +132,11 @@ class LeadershipCoachingService:
         return session
     
     @staticmethod
-    def delete_session(db: Session, session_id: int) -> bool:
+    def delete_session(db: Session, session_id: int, user_number: str) -> bool:
         """Delete a session"""
         session = db.query(LeadershipCoachingSession).filter(
-            LeadershipCoachingSession.id == session_id
+            LeadershipCoachingSession.id == session_id,
+            LeadershipCoachingSession.user_number == user_number,
         ).first()
         
         if not session:

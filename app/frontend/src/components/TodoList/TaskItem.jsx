@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Draggable } from 'react-beautiful-dnd';
-import { getPriorityIcon, formatDueDate, getDueDateColor } from '../../utils/taskHelpers';
+import { getPriorityIcon, formatDueDate, getDueDateColor, getMtnLabel, getMtnStyle } from '../../utils/taskHelpers';
 
 /**
  * TaskItem Component
@@ -24,6 +24,7 @@ export default function TaskItem({
   onStartEdit,
   onLongPress,
   onSelectToggle,
+  onFollowUp,
   goals,
   priorityMode = false,
   priorityScore = null,
@@ -33,12 +34,19 @@ export default function TaskItem({
   const [swipeDistance, setSwipeDistance] = useState(0);
   const [touchStartX, setTouchStartX] = useState(0);
   const [longPressTimer, setLongPressTimer] = useState(null);
+  const cardRef = useRef(null);
+  const swipeDistanceRef = useRef(0);
+  const suppressClickRef = useRef(false);
+  const longPressFiredRef = useRef(false);
 
   const onTouchStart = (e) => {
     setTouchStartX(e.touches[0].clientX);
+    longPressFiredRef.current = false;
 
     const timer = setTimeout(() => {
       if (!selectionMode) {
+        longPressFiredRef.current = true;
+        suppressClickRef.current = true;
         onLongPress();
         if (navigator.vibrate) {
           navigator.vibrate(50);
@@ -56,7 +64,12 @@ export default function TaskItem({
 
     const currentX = e.touches[0].clientX;
     const distance = Math.max(0, touchStartX - currentX);
-    setSwipeDistance(Math.min(distance, 100));
+    const nextDistance = Math.min(distance, 120);
+    swipeDistanceRef.current = nextDistance;
+    if (nextDistance > 10) {
+      suppressClickRef.current = true;
+    }
+    setSwipeDistance(nextDistance);
   };
 
   const onTouchEnd = () => {
@@ -64,7 +77,20 @@ export default function TaskItem({
       clearTimeout(longPressTimer);
       setLongPressTimer(null);
     }
+    const width = cardRef.current?.offsetWidth || 0;
+    const threshold = Math.min(120, Math.max(80, width * 0.25));
+    const shouldOpenFollowUp = !selectionMode && !longPressFiredRef.current && swipeDistanceRef.current >= threshold;
+    swipeDistanceRef.current = 0;
     setSwipeDistance(0);
+
+    if (shouldOpenFollowUp && onFollowUp) {
+      onFollowUp();
+    }
+
+    window.setTimeout(() => {
+      suppressClickRef.current = false;
+      longPressFiredRef.current = false;
+    }, 250);
   };
 
   return (
@@ -86,11 +112,14 @@ export default function TaskItem({
           onStartEdit={onStartEdit}
           onLongPress={onLongPress}
           onSelectToggle={onSelectToggle}
+          onFollowUp={onFollowUp}
           goals={goals}
           priorityMode={priorityMode}
           priorityScore={priorityScore}
           onMtnFeedback={onMtnFeedback}
           timezone={timezone}
+          cardRef={cardRef}
+          suppressClickRef={suppressClickRef}
         />
       )}
     </Draggable>
@@ -113,15 +142,19 @@ function TaskCard({
   onStartEdit,
   onLongPress,
   onSelectToggle,
+  onFollowUp,
   goals,
   priorityMode,
   priorityScore,
   onMtnFeedback,
-  timezone
+  timezone,
+  cardRef,
+  suppressClickRef
 }) {
   const [showMtnFeedback, setShowMtnFeedback] = useState(false);
   const [mtnRating, setMtnRating] = useState(0);
   const [mtnFeedback, setMtnFeedback] = useState('');
+  const [mtnSelectedTag, setMtnSelectedTag] = useState('');
   const [mtnSaving, setMtnSaving] = useState(false);
   const [mtnSaved, setMtnSaved] = useState(false);
 
@@ -130,23 +163,13 @@ function TaskCard({
     goals.find(g => g.id === task.goal_id)?.goal_text ||
     'Goal';
 
-  const getMtnLabel = (score) => {
-    if (score >= 0.85) return 'Transformational';
-    if (score >= 0.7) return 'Strategic';
-    if (score >= 0.5) return 'Important';
-    if (score >= 0.3) return 'Maintenance';
-    return 'Low Leverage';
-  };
-
-  const getMtnStyle = (score) => {
-    if (score >= 0.85) return 'bg-blue-100 text-blue-800 border-blue-200';
-    if (score >= 0.7) return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-    if (score >= 0.5) return 'bg-amber-100 text-amber-800 border-amber-200';
-    if (score >= 0.3) return 'bg-slate-100 text-slate-700 border-slate-200';
-    return 'bg-gray-100 text-gray-600 border-gray-200';
-  };
-
   const handleClick = (e) => {
+    if (suppressClickRef?.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
       e.stopPropagation();
@@ -168,6 +191,17 @@ function TaskCard({
     onStartEdit();
   };
 
+  const handleSelectionModeClick = (e) => {
+    if (!selectionMode) {
+      return false;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    onSelectToggle();
+    return true;
+  };
+
   const handleSelectionShortcut = (e) => {
     if (!e.ctrlKey && !e.metaKey) {
       return false;
@@ -184,6 +218,13 @@ function TaskCard({
   };
 
   const mtnLabel = priorityScore ? getMtnLabel(priorityScore.score) : '';
+  const activeMtnTag = mtnSelectedTag || mtnLabel;
+
+  const openMtnFeedback = () => {
+    setMtnSelectedTag(previousTag => previousTag || mtnLabel);
+    setShowMtnFeedback(true);
+  };
+
   const submitMtnFeedback = async () => {
     if (!mtnRating || !onMtnFeedback) return;
 
@@ -191,7 +232,7 @@ function TaskCard({
     const result = await onMtnFeedback(
       mtnRating,
       mtnFeedback.trim() || null,
-      mtnLabel,
+      activeMtnTag,
       priorityScore.recommendation_id
     );
     setMtnSaving(false);
@@ -207,24 +248,55 @@ function TaskCard({
       id={`task-${task.id}`}
       ref={provided.innerRef}
       {...provided.draggableProps}
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
       style={{
         ...provided.draggableProps.style,
-        transform: `${provided.draggableProps.style?.transform || ''} translateX(-${swipeDistance}px)`,
       }}
-      className={`
-        bg-white border-2 rounded px-3 py-2
-        hover:border-gray-300 transition-all
-        ${snapshot.isDragging ? 'opacity-50 scale-98 shadow-lg' : ''}
-        ${isCompleting ? 'opacity-60' : ''}
-        ${index >= 10 ? 'opacity-40' : ''}
-        ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}
-        cursor-pointer
-      `}
-      onClick={handleClick}
+      className="relative overflow-hidden rounded"
     >
+      {!selectionMode && (
+        <div className="absolute inset-y-0 right-0 flex w-32 items-center justify-end bg-slate-800 pr-4 text-white sm:hidden">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold">
+            <ClockReturnIcon />
+            Follow Up
+          </span>
+        </div>
+      )}
+
+      <div
+        ref={cardRef}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{
+          transform: `translateX(-${swipeDistance}px)`,
+        }}
+        className={`
+          relative bg-white border-2 rounded px-3 py-2 sm:pr-10
+          hover:border-gray-300 transition-all
+          ${snapshot.isDragging ? 'opacity-50 scale-98 shadow-lg' : ''}
+          ${isCompleting ? 'opacity-60' : ''}
+          ${index >= 10 ? 'opacity-40' : ''}
+          ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}
+          cursor-pointer
+        `}
+        onClick={handleClick}
+      >
+      {!selectionMode && (
+        <button
+          type="button"
+          onClick={(e) => {
+            if (handleSelectionShortcut(e)) return;
+            e.stopPropagation();
+            onFollowUp?.();
+          }}
+          className="absolute right-2 top-2 hidden h-7 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 sm:inline-flex"
+          title="Create follow-up"
+          aria-label="Create follow-up"
+        >
+          <ClockReturnIcon />
+        </button>
+      )}
+
       <div className={`flex items-start gap-2 ${isCompleting ? 'line-through' : ''}`}>
         {isSelected && (
           <div className="flex-shrink-0 mt-0.5">
@@ -276,6 +348,7 @@ function TaskCard({
               className="font-medium text-slate-800 text-base break-words leading-tight cursor-pointer hover:text-blue-600 transition-colors"
               onClick={(e) => {
                 if (handleSelectionShortcut(e)) return;
+                if (handleSelectionModeClick(e)) return;
                 e.stopPropagation();
                 onStartEdit();
               }}
@@ -298,13 +371,14 @@ function TaskCard({
               {priorityMode && priorityScore && (
                 <button
                   onClick={(e) => {
+                    if (handleSelectionModeClick(e)) return;
                     e.stopPropagation();
-                    setShowMtnFeedback(true);
+                    openMtnFeedback();
                   }}
                   className={`max-w-full truncate whitespace-nowrap text-xs px-2 py-0.5 rounded border font-medium sm:hidden ${getMtnStyle(priorityScore.score)}`}
-                  title="Review MTN reasoning"
+                  title="Review prioritization reasoning"
                 >
-                  MTN: {mtnLabel}
+                  {activeMtnTag}
                 </button>
               )}
 
@@ -333,13 +407,14 @@ function TaskCard({
           <div className="hidden flex-shrink-0 ml-3 sm:flex items-center gap-2">
             <button
               onClick={(e) => {
+                if (handleSelectionModeClick(e)) return;
                 e.stopPropagation();
-                setShowMtnFeedback(true);
+                openMtnFeedback();
               }}
               className={`whitespace-nowrap text-xs px-2 py-0.5 rounded border font-medium ${getMtnStyle(priorityScore.score)}`}
-              title="Review MTN reasoning"
+              title="Review prioritization reasoning"
             >
-              MTN: {mtnLabel}
+              {activeMtnTag}
             </button>
             {mtnSaved && (
               <span className="text-xs text-emerald-700">Saved</span>
@@ -351,6 +426,8 @@ function TaskCard({
       {priorityMode && priorityScore && showMtnFeedback && (
         <MtnFeedbackModal
           tag={mtnLabel}
+          selectedTag={activeMtnTag}
+          setSelectedTag={setMtnSelectedTag}
           score={priorityScore}
           rating={mtnRating}
           setRating={setMtnRating}
@@ -361,6 +438,7 @@ function TaskCard({
           onClose={() => setShowMtnFeedback(false)}
         />
       )}
+      </div>
     </div>
   );
 }
@@ -376,8 +454,21 @@ function RepeatIcon() {
   );
 }
 
+function ClockReturnIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+      <path d="M8 18H4v-4" />
+      <path d="M4 18a8 8 0 0 0 5 2.7" />
+    </svg>
+  );
+}
+
 function MtnFeedbackModal({
   tag,
+  selectedTag,
+  setSelectedTag,
   score,
   rating,
   setRating,
@@ -387,6 +478,8 @@ function MtnFeedbackModal({
   onSubmit,
   onClose
 }) {
+  const tagOptions = ['Transformational', 'Strategic', 'Important', 'Maintenance', 'Low Leverage'];
+
   return createPortal(
     <div
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4"
@@ -399,8 +492,8 @@ function MtnFeedbackModal({
       >
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
-            <p className="text-xs uppercase text-slate-500 font-semibold">MTN Tag</p>
-            <h3 className="text-xl font-semibold text-slate-800">{tag}</h3>
+            <p className="text-xs uppercase text-slate-500 font-semibold">Tag</p>
+            <h3 className="text-xl font-semibold text-slate-800">{selectedTag || tag}</h3>
           </div>
           <button
             onClick={onClose}
@@ -412,6 +505,22 @@ function MtnFeedbackModal({
         </div>
 
         <div className="space-y-3 mb-5">
+          <div>
+            <label htmlFor="mtn-tag-select" className="text-sm font-medium text-slate-700 mb-1 block">
+              Change tag
+            </label>
+            <select
+              id="mtn-tag-select"
+              value={selectedTag || tag}
+              onChange={(e) => setSelectedTag(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {tagOptions.map(option => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <p className="text-sm font-medium text-slate-700 mb-1">Why Alfred tagged it this way</p>
             <p className="text-sm text-slate-600">
@@ -428,7 +537,7 @@ function MtnFeedbackModal({
         </div>
 
         <div className="mb-4">
-          <p className="text-sm font-medium text-slate-700 mb-2">How useful is this MTN tag?</p>
+          <p className="text-sm font-medium text-slate-700 mb-2">How useful is this tag?</p>
           <div className="flex gap-1">
             {[1, 2, 3, 4, 5].map(value => (
               <button

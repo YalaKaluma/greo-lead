@@ -48,6 +48,7 @@ DATABASE_URL=postgresql://...
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-4o
 DEFAULT_USER_NUMBER=...
+APP_ENV=development
 TWILIO_SID=...
 TWILIO_AUTH_TOKEN=...
 TWILIO_WHATSAPP_NUMBER=...
@@ -85,6 +86,50 @@ npm run build
 ```
 
 The backend exposes `/api/health` for runtime checks and `/docs` for FastAPI's generated API documentation.
+
+## Secret Scanning
+
+Before pushing or deploying, run:
+
+```bash
+gitleaks detect --source . --redact
+```
+
+Do not commit `.env` files or runtime secrets, including `OPENAI_API_KEY`, `DATABASE_URL`, `TWILIO_AUTH_TOKEN`, `MAILGUN_API_KEY`, `JWT_SECRET`, Railway secrets, or Neon credentials. GitHub Actions also runs Gitleaks as part of the CI/release checks.
+
+## Dependency Security Scanning
+
+Install the security tools and scan Python dependencies before release:
+
+```bash
+pip install -r requirements-security.txt
+pip-audit -r requirements.txt
+```
+
+Known vulnerabilities should fail CI unless the ignore has a documented reason. Do not upgrade production dependencies blindly; run backend tests and the frontend build after any dependency change.
+
+## Nudge Cron Jobs
+
+Cron URLs stay environment-level. When no `user_number` is supplied, each endpoint sends a tailored nudge to every active user in that environment:
+
+```text
+https://<prod-domain>/api/nudge/morning
+```
+
+Development and staging use the same clean endpoint against their own Railway/database environment:
+
+```text
+https://<dev-domain>/api/nudge/morning
+https://<staging-domain>/api/nudge/morning
+```
+
+Add `user_number` only for a manual single-user test:
+
+```text
+https://<dev-domain>/api/nudge/morning?user_number=synthetic%3Aexecutive_alex
+```
+
+Set `APP_ENV`, `ENVIRONMENT`, or `RAILWAY_ENVIRONMENT_NAME` to `production`, `development`, or `staging` so logs clearly show which environment is sending nudges.
 
 ## Database
 

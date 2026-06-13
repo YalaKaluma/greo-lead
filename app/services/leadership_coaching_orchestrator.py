@@ -680,7 +680,7 @@ Generate the analysis now as JSON."""
         result_text = result_text.strip()
         
         return json.loads(result_text)
-    except:
+    except Exception:
         # Fallback
         return {
             "pattern": "Avoids confronting the core issue directly",

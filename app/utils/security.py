@@ -4,7 +4,7 @@ import hmac
 import secrets
 
 
-PASSWORD_HASH_PREFIX = "pbkdf2_sha256"
+PASSWORD_HASH_PREFIX = "pbkdf2_sha256"  # nosec B105 - algorithm marker, not a password.
 PASSWORD_HASH_ITERATIONS = 260000
 
 

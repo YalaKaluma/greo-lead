@@ -246,6 +246,22 @@ class OpportunitySuggestion(Base):
     linked_goal = relationship("JourneyGoal")
 
 
+class HomeDashboardSnapshot(Base):
+    __tablename__ = "home_dashboard_snapshots"
+    __table_args__ = (
+        UniqueConstraint("user_number", "snapshot_date", name="uq_home_dashboard_user_date"),
+        Index("idx_home_dashboard_user_created", "user_number", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, nullable=False, index=True)
+    snapshot_date = Column(Date, nullable=False, index=True)
+    payload = Column(JSONB, nullable=False)
+    source = Column(String(40), nullable=False, default="on_demand")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+
 # ---------------------------------------------------------
 # EXPANDED JOURNEY STRUCTURE
 # ---------------------------------------------------------
@@ -931,6 +947,27 @@ class AdminAuditLog(Base):
 
     admin_user = relationship("User", foreign_keys=[admin_user_id])
     target_user = relationship("User", foreign_keys=[target_user_id])
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("idx_audit_logs_user_created", "user_id", "created_at"),
+        Index("idx_audit_logs_event_created", "event_type", "created_at"),
+        Index("idx_audit_logs_object", "object_type", "object_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    event_type = Column(String(80), nullable=False, index=True)
+    object_type = Column(String(80), nullable=True)
+    object_id = Column(String(120), nullable=True)
+    metadata_json = Column(JSONB, nullable=True)
+    ip_address = Column(String(64), nullable=True)
+    user_agent = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    user = relationship("User")
 
 
 class EmailVerification(Base):

@@ -2,3 +2,7 @@ curl "https://greo-lead-production.up.railway.app/api/nudge/morning"
 curl "https://greo-lead-production.up.railway.app/api/nudge/evening"
 curl "https://greo-lead-production.up.railway.app/api/nudge/weekly"
 curl "https://greo-lead-production.up.railway.app/api/nudge/sunday_review"
+
+Dev/staging examples use the same clean endpoint against their own Railway/database environment:
+curl "https://<dev-domain>/api/nudge/morning"
+curl "https://<staging-domain>/api/nudge/morning"

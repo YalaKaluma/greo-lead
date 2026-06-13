@@ -6,7 +6,8 @@ import TaskItem from './TodoList/TaskItem';
 import TaskModal from './TodoList/TaskModal';
 import BulkActionModal from './TodoList/BulkActionModal';
 import FilterSection from './TodoList/FilterSection';
-import { getTodayET, getETDate, formatDateForInput, isOverdueET, getSortedGoals, getLongTermGoals } from '../utils/taskHelpers';
+import TrendRangeToggle from './TrendRangeToggle';
+import { getTodayET, getETDate, formatDateForInput, isOverdueET, getSortedGoals, getLongTermGoals, getMtnLabel, MTN_TAG_OPTIONS } from '../utils/taskHelpers';
 import { useLanguage } from '../i18n/LanguageContext';
 import { usePriority } from '../hooks/usePriority';
 
@@ -35,6 +36,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [selectedProject, setSelectedProject] = useState('');
   const [selectedDelegate, setSelectedDelegate] = useState('');
   const [selectedGoal, setSelectedGoal] = useState('');
+  const [selectedMtnTags, setSelectedMtnTags] = useState([]);
   const [projects, setProjects] = useState([]);
   const [delegates, setDelegates] = useState([]);
   const [goals, setGoals] = useState([]);
@@ -52,7 +54,13 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [opportunityActions, setOpportunityActions] = useState({});
   const [showDeferModal, setShowDeferModal] = useState(false);
   const [deferLoading, setDeferLoading] = useState(false);
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [selectedFollowUpTask, setSelectedFollowUpTask] = useState(null);
+  const [followUpDate, setFollowUpDate] = useState('');
+  const [followUpError, setFollowUpError] = useState('');
+  const [followUpSaving, setFollowUpSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('tasks');
+  const [columnSort, setColumnSort] = useState(null);
   const [mtnTrends, setMtnTrends] = useState(null);
   const [mtnTrendsLoading, setMtnTrendsLoading] = useState(false);
   const [mtnTrendsError, setMtnTrendsError] = useState(null);
@@ -82,6 +90,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       setSelectedProject('');
       setSelectedDelegate('');
       setSelectedGoal('');
+      setSelectedMtnTags([]);
       setSelectedTasks([]);
       setSelectionMode(false);
     };
@@ -292,8 +301,19 @@ export default function TodoList({ apiUrl, userNumber }) {
     return getTaskScore(task.id) || getStoredTaskScore(task);
   };
 
+  const taskMatchesSelectedMtnTags = (task) => {
+    if (selectedMtnTags.length === 0) return true;
+    const scoreData = getVisibleTaskScore(task);
+    if (!scoreData) return false;
+    return selectedMtnTags.includes(getMtnLabel(scoreData.score));
+  };
+
+  const getVisibleTasks = () => {
+    return tasks.filter(taskMatchesSelectedMtnTags);
+  };
+
   const hasStoredMtnScoring = () => {
-    return tasks.some(task => Boolean(getVisibleTaskScore(task)));
+    return getVisibleTasks().some(task => Boolean(getVisibleTaskScore(task)));
   };
 
   const saveSortOrder = (order) => {
@@ -308,11 +328,55 @@ export default function TodoList({ apiUrl, userNumber }) {
     });
   };
 
+  const prioritySortValue = (priority) => {
+    const priorityOrder = { high: 0, medium: 1, low: 2 };
+    return priorityOrder[String(priority || '').toLowerCase()] ?? 3;
+  };
+
+  const mtnSortValue = (task) => {
+    const scoreData = getVisibleTaskScore(task);
+    if (!scoreData) return 999;
+    const labelOrder = {
+      Transformational: 0,
+      Strategic: 1,
+      Important: 2,
+      Maintenance: 3,
+      'Low Leverage': 4
+    };
+    return labelOrder[getMtnLabel(scoreData.score)] ?? 999;
+  };
+
+  const compareTasksByColumn = (a, b) => {
+    if (!columnSort) return 0;
+
+    const direction = columnSort.direction === 'asc' ? -1 : 1;
+    const valueA = columnSort.key === 'urgency' ? prioritySortValue(a.priority) : mtnSortValue(a);
+    const valueB = columnSort.key === 'urgency' ? prioritySortValue(b.priority) : mtnSortValue(b);
+    if (valueA !== valueB) return (valueA - valueB) * direction;
+
+    const titleCompare = String(a.title || '').localeCompare(String(b.title || ''));
+    if (titleCompare !== 0) return titleCompare;
+    return (a.id ?? 0) - (b.id ?? 0);
+  };
+
+  const toggleColumnSort = (key) => {
+    setColumnSort(previousSort => {
+      if (previousSort?.key !== key) return { key, direction: 'desc' };
+      return { key, direction: previousSort.direction === 'desc' ? 'asc' : 'desc' };
+    });
+  };
+
   const getSortedTasks = () => {
+    const visibleTasks = getVisibleTasks();
+
+    if (columnSort) {
+      return [...visibleTasks].sort(compareTasksByColumn);
+    }
+
     // Manual drag-and-drop order should always win once it exists. MTN scores
     // still render as labels, but they should not lock the list order.
     if (sortOrder.length > 0) {
-      return [...tasks].sort((a, b) => {
+      return [...visibleTasks].sort((a, b) => {
         const indexA = sortOrder.indexOf(a.id);
         const indexB = sortOrder.indexOf(b.id);
         
@@ -325,12 +389,12 @@ export default function TodoList({ apiUrl, userNumber }) {
       });
     }
 
-    const persistedOrderValues = tasks
+    const persistedOrderValues = visibleTasks
       .map(task => task.sort_order)
       .filter(order => order !== null && order !== undefined);
     const hasPersistedTaskOrder = new Set(persistedOrderValues).size > 1;
     if (hasPersistedTaskOrder) {
-      return [...tasks].sort((a, b) => {
+      return [...visibleTasks].sort((a, b) => {
         const orderA = a.sort_order ?? 999999;
         const orderB = b.sort_order ?? 999999;
         if (orderA !== orderB) return orderA - orderB;
@@ -339,7 +403,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
 
     if (hasStoredMtnScoring()) {
-      return [...tasks].sort((a, b) => {
+      return [...visibleTasks].sort((a, b) => {
         const scoreA = getVisibleTaskScore(a);
         const scoreB = getVisibleTaskScore(b);
 
@@ -356,7 +420,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
     
     // Default sorting: Top 10 first, then by priority (High > Medium > Low)
-    return [...tasks].sort((a, b) => {
+    return [...visibleTasks].sort((a, b) => {
       // 1. Top 10 tasks always come first
       if (a.in_top10 && !b.in_top10) return -1;
       if (!a.in_top10 && b.in_top10) return 1;
@@ -396,6 +460,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     items.splice(result.destination.index, 0, reorderedItem);
 
     const newOrder = items.map(task => task.id);
+    setColumnSort(null);
     saveSortOrder(newOrder);
   };
 
@@ -469,6 +534,52 @@ export default function TodoList({ apiUrl, userNumber }) {
     } catch (err) {
       console.error('Error adding task:', err);
       alert('Failed to add task');
+    }
+  };
+
+  const openFollowUpModal = (task) => {
+    setSelectedFollowUpTask(task);
+    setFollowUpDate('');
+    setFollowUpError('');
+    setShowFollowUpModal(true);
+  };
+
+  const closeFollowUpModal = () => {
+    if (followUpSaving) return;
+    setShowFollowUpModal(false);
+    setSelectedFollowUpTask(null);
+    setFollowUpDate('');
+    setFollowUpError('');
+  };
+
+  const createFollowUp = async () => {
+    if (!selectedFollowUpTask) return;
+    if (!followUpDate) {
+      setFollowUpError('Please select a follow-up date.');
+      return;
+    }
+
+    setFollowUpSaving(true);
+    setFollowUpError('');
+    try {
+      await axios.post(
+        `${apiUrl}/api/tasks/${selectedFollowUpTask.id}/follow-up`,
+        { follow_up_date: followUpDate },
+        { params: { user_number: userNumber } }
+      );
+      setTasks(prevTasks => prevTasks.filter(task => task.id !== selectedFollowUpTask.id));
+      setSortOrder(prevOrder => prevOrder.filter(id => id !== selectedFollowUpTask.id));
+      setShowFollowUpModal(false);
+      setSelectedFollowUpTask(null);
+      setFollowUpDate('');
+      await fetchTasks();
+      await fetchFilters();
+      fetchMtnTrends();
+    } catch (err) {
+      console.error('Error creating follow-up task:', err);
+      setFollowUpError(err.response?.data?.detail || 'Unable to create follow-up task. Please try again.');
+    } finally {
+      setFollowUpSaving(false);
     }
   };
 
@@ -564,6 +675,15 @@ export default function TodoList({ apiUrl, userNumber }) {
     setSelectedProject('');
     setSelectedDelegate('');
     setSelectedGoal('');
+    setSelectedMtnTags([]);
+  };
+
+  const toggleMtnTagFilter = (tag) => {
+    setSelectedMtnTags(previousTags =>
+      previousTags.includes(tag)
+        ? previousTags.filter(currentTag => currentTag !== tag)
+        : [...previousTags, tag]
+    );
   };
 
   const resetSortOrder = () => {
@@ -738,13 +858,14 @@ export default function TodoList({ apiUrl, userNumber }) {
   // COMPUTED VALUES
   // ============================================================================
 
-  const hasActiveFilters = selectedProject || selectedDelegate || selectedGoal || filterType !== 'due_today';
+  const hasActiveFilters = selectedProject || selectedDelegate || selectedGoal || selectedMtnTags.length > 0 || filterType !== 'due_today';
   const sortedTasks = getSortedTasks();
   const todayMtnScore = Number(mtnTrends?.summary?.today?.mtn_score || 0);
   const todayCompletedTasks = Number(mtnTrends?.summary?.today?.completed_tasks || 0);
   const todayMtnTasks = Array.isArray(mtnTrends?.summary?.today?.tasks)
     ? mtnTrends.summary.today.tasks
     : [];
+  const mtnBenchmark = buildDailyMtnBenchmark(mtnTrends);
 
   // ============================================================================
   // RENDER
@@ -782,6 +903,7 @@ export default function TodoList({ apiUrl, userNumber }) {
               <DailyMtnNeedle
                 score={todayMtnScore}
                 completedTasks={todayCompletedTasks}
+                benchmark={mtnBenchmark}
                 onClick={() => setShowMtnBreakdown(true)}
               />
             </div>
@@ -906,6 +1028,9 @@ export default function TodoList({ apiUrl, userNumber }) {
             setSelectedDelegate={setSelectedDelegate}
             selectedGoal={selectedGoal}
             setSelectedGoal={setSelectedGoal}
+            selectedMtnTags={selectedMtnTags}
+            mtnTagOptions={MTN_TAG_OPTIONS}
+            toggleMtnTagFilter={toggleMtnTagFilter}
             projects={projects}
             delegates={delegates}
             goals={goals}
@@ -939,45 +1064,54 @@ export default function TodoList({ apiUrl, userNumber }) {
             </p>
           </div>
         ) : activeTab === 'tasks' ? (
-          <DragDropContext onDragEnd={handleDragEnd}>
-            <Droppable droppableId="tasks">
-              {(provided) => (
-                <div
-                  {...provided.droppableProps}
-                  ref={provided.innerRef}
-                  className="space-y-1"
-                >
-                  {sortedTasks.map((task, index) => {
-                    const scoreData = getVisibleTaskScore(task);
+          <>
+            {!selectionMode && (
+              <TaskColumnHeader
+                columnSort={columnSort}
+                onSort={toggleColumnSort}
+              />
+            )}
+            <DragDropContext onDragEnd={handleDragEnd}>
+              <Droppable droppableId="tasks">
+                {(provided) => (
+                  <div
+                    {...provided.droppableProps}
+                    ref={provided.innerRef}
+                    className="space-y-1"
+                  >
+                    {sortedTasks.map((task, index) => {
+                      const scoreData = getVisibleTaskScore(task);
 
-                    return (
-                      <TaskItem
-                        key={task.id}
-                        task={task}
-                        index={index}
-                        isCompleting={completingTasks.includes(task.id)}
-                        isSelected={selectedTasks.includes(task.id)}
-                        selectionMode={selectionMode}
-                        onToggle={() => toggleTaskComplete(task.id)}
-                        onStartEdit={() => {
-                          setEditingTask(task);
-                          setShowTaskModal(true);
-                        }}
-                        onLongPress={() => enterSelectionMode(task.id)}
-                        onSelectToggle={() => toggleTaskSelection(task.id)}
-                        goals={goals}
-                        priorityMode={priorityMode || Boolean(scoreData)}
-                        priorityScore={scoreData}
-                        onMtnFeedback={(rating, feedback, tag, recommendationId) => handleMtnFeedback(task.id, rating, feedback, tag, recommendationId)}
-                        timezone={timezone}
-                      />
-                    );
-                  })}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          </DragDropContext>
+                      return (
+                        <TaskItem
+                          key={task.id}
+                          task={task}
+                          index={index}
+                          isCompleting={completingTasks.includes(task.id)}
+                          isSelected={selectedTasks.includes(task.id)}
+                          selectionMode={selectionMode}
+                          onToggle={() => toggleTaskComplete(task.id)}
+                          onStartEdit={() => {
+                            setEditingTask(task);
+                            setShowTaskModal(true);
+                          }}
+                          onLongPress={() => enterSelectionMode(task.id)}
+                          onSelectToggle={() => toggleTaskSelection(task.id)}
+                          onFollowUp={() => openFollowUpModal(task)}
+                          goals={goals}
+                          priorityMode={priorityMode || Boolean(scoreData)}
+                          priorityScore={scoreData}
+                          onMtnFeedback={(rating, feedback, tag, recommendationId) => handleMtnFeedback(task.id, rating, feedback, tag, recommendationId)}
+                          timezone={timezone}
+                        />
+                      );
+                    })}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </DragDropContext>
+          </>
         ) : null}
       </div>
 
@@ -1035,6 +1169,18 @@ export default function TodoList({ apiUrl, userNumber }) {
           delegates={delegates}
           goals={getLongTermGoals(goals)}
           timezone={timezone}
+        />
+      )}
+
+      {showFollowUpModal && selectedFollowUpTask && (
+        <FollowUpModal
+          task={selectedFollowUpTask}
+          followUpDate={followUpDate}
+          setFollowUpDate={setFollowUpDate}
+          error={followUpError}
+          saving={followUpSaving}
+          onCancel={closeFollowUpModal}
+          onConfirm={createFollowUp}
         />
       )}
 
@@ -1194,42 +1340,48 @@ export default function TodoList({ apiUrl, userNumber }) {
   );
 }
 
-function DailyMtnNeedle({ score, completedTasks, onClick }) {
-  const cappedScore = Math.max(0, Math.min(Number(score || 0), 20));
-  const needleLeft = 7 + (cappedScore / 20) * 86;
+function DailyMtnNeedle({ score, completedTasks, benchmark, onClick }) {
+  const scaleMax = Math.max(Number(benchmark?.effectiveMax || 20), 1);
+  const cappedScore = Math.max(0, Math.min(Number(score || 0), scaleMax));
+  const needleLeft = 7 + (cappedScore / scaleMax) * 86;
+  const comparison = benchmark?.isDynamic
+    ? describeMtnAverageComparison(score, benchmark.avgMtn)
+    : 'Building your 30-day benchmark';
   const label = completedTasks > 0
     ? `${formatMtnNumber(score)} MTN from ${completedTasks} done`
     : `${formatMtnNumber(score)} MTN today`;
+  const title = benchmark?.isDynamic
+    ? `Today's MTN: ${formatMtnNumber(score)}\n${comparison}`
+    : `${label}\nStatic scale until 7 active MTN days`;
+  const segments = benchmark?.segments?.length ? benchmark.segments : STATIC_MTN_SEGMENTS;
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className="w-64 max-w-[68vw] rounded-md px-1 py-0.5 text-left transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-      title={label}
-      aria-label={label}
+      className="w-96 max-w-[82vw] rounded-md px-1 py-1 text-left transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      title={title}
+      aria-label={title}
     >
-      <div className="relative h-5">
-        <div className="absolute inset-x-0 top-2 grid h-2 grid-cols-5 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
-          <span className="bg-blue-100" />
-          <span className="bg-blue-200" />
-          <span className="bg-blue-300" />
-          <span className="bg-blue-500" />
-          <span className="bg-blue-700" />
+      <div className="relative h-8">
+        <div className="absolute inset-x-0 top-3 flex h-3 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
+          {segments.map(segment => (
+            <span
+              key={segment.label}
+              style={{
+                backgroundColor: segment.color,
+                flexGrow: segment.range,
+                flexBasis: 0,
+              }}
+            />
+          ))}
         </div>
         <div
-          className="absolute top-0 h-5 w-0.5 rounded-full bg-slate-900 shadow-sm transition-all"
+          className="absolute top-0 h-8 w-1 rounded-full bg-slate-900 shadow-sm transition-all"
           style={{ left: `${needleLeft}%` }}
         >
-          <span className="absolute -left-[5px] -top-1 h-0 w-0 border-l-[5px] border-r-[5px] border-t-[6px] border-l-transparent border-r-transparent border-t-slate-900" />
+          <span className="absolute -left-[5px] -top-1 h-0 w-0 border-l-[7px] border-r-[7px] border-t-[8px] border-l-transparent border-r-transparent border-t-slate-900" />
         </div>
-      </div>
-      <div className="flex justify-between text-[10px] text-slate-400">
-        <span>0</span>
-        <span>5</span>
-        <span>10</span>
-        <span>15</span>
-        <span>20+</span>
       </div>
     </button>
   );
@@ -1299,6 +1451,50 @@ const MTN_CHART_HEIGHT = 240;
 const MTN_CHART_PADDING = 34;
 const MTN_CHART_BOTTOM_PADDING = 46;
 
+function TaskColumnHeader({ columnSort, onSort }) {
+  return (
+    <div className="hidden sm:grid grid-cols-[3.75rem_minmax(0,1fr)_10rem_1.75rem] items-center px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+      <SortHeaderButton
+        label="Urgency"
+        sortKey="urgency"
+        columnSort={columnSort}
+        onSort={onSort}
+        className="col-start-1 justify-self-start"
+      />
+      <SortHeaderButton
+        label="Importance"
+        sortKey="importance"
+        columnSort={columnSort}
+        onSort={onSort}
+        className="col-start-3 justify-self-end"
+      />
+    </div>
+  );
+}
+
+function SortHeaderButton({ label, sortKey, columnSort, onSort, className = '' }) {
+  const active = columnSort?.key === sortKey;
+  const direction = active ? columnSort.direction : 'desc';
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      className={`inline-flex items-center gap-1 transition-colors hover:text-slate-600 ${active ? 'text-slate-700' : ''} ${className}`}
+      title={`Sort by ${label.toLowerCase()}`}
+      aria-label={`Sort by ${label.toLowerCase()}`}
+    >
+      <span>{label}</span>
+      <span
+        className={`h-0 w-0 border-x-[3.5px] border-x-transparent transition-transform ${
+          active ? 'border-b-[5px] border-b-slate-600' : 'border-b-[5px] border-b-slate-300'
+        } ${direction === 'asc' ? 'rotate-180' : ''}`}
+        aria-hidden="true"
+      />
+    </button>
+  );
+}
+
 const extractTrendChart = (payload) => {
   if (Array.isArray(payload)) return payload;
   const candidates = [
@@ -1336,6 +1532,95 @@ function formatMtnNumber(value) {
   const numeric = Number(value || 0);
   return numeric.toFixed(1);
 }
+
+const MTN_BRACKET_COLORS = {
+  Low: '#DC2626',
+  Base: '#F97316',
+  Good: '#FACC15',
+  Strong: '#84CC16',
+  Peak: '#16A34A',
+};
+
+const STATIC_MTN_SEGMENTS = [
+  { label: 'Low', start: 0, end: 4, range: 4, color: MTN_BRACKET_COLORS.Low },
+  { label: 'Base', start: 4, end: 8, range: 4, color: MTN_BRACKET_COLORS.Base },
+  { label: 'Good', start: 8, end: 12, range: 4, color: MTN_BRACKET_COLORS.Good },
+  { label: 'Strong', start: 12, end: 16, range: 4, color: MTN_BRACKET_COLORS.Strong },
+  { label: 'Peak', start: 16, end: 20, range: 4, color: MTN_BRACKET_COLORS.Peak },
+];
+
+const buildDailyMtnBenchmark = (mtnTrends) => {
+  const todayDate = mtnTrends?.summary?.today?.date;
+  const rows = extractTrendChart(mtnTrends)
+    .map(row => ({
+      date: dateKey(row.date),
+      mtnScore: Number(row.mtn_score ?? row.mtnScore ?? 0),
+      completedTasks: Number(row.completed_tasks ?? row.completedTasks ?? 0),
+    }))
+    .filter(row => row.date);
+
+  const previousRows = todayDate
+    ? rows.filter(row => row.date < todayDate)
+    : rows.slice(0, -1);
+  const historyRows = previousRows.slice(-30);
+  const activeHistoryDays = historyRows.filter(row => row.completedTasks > 0 || row.mtnScore > 0).length;
+
+  if (activeHistoryDays < 7) {
+    return {
+      isDynamic: false,
+      avgMtn: 0,
+      effectiveMax: 20,
+      activeHistoryDays,
+      segments: STATIC_MTN_SEGMENTS,
+    };
+  }
+
+  const dailyScores = historyRows.map(row => row.mtnScore);
+  const avgMtn = dailyScores.reduce((sum, value) => sum + value, 0) / Math.max(dailyScores.length, 1);
+  const maxMtn = Math.max(...dailyScores, 0);
+  const effectiveMax = Math.max(maxMtn, avgMtn + 5, 1);
+  const range = effectiveMax - avgMtn;
+  const boundaries = [
+    0,
+    avgMtn * 0.5,
+    avgMtn,
+    avgMtn + range * 0.33,
+    avgMtn + range * 0.66,
+    effectiveMax,
+  ];
+  const labels = ['Low', 'Base', 'Good', 'Strong', 'Peak'];
+  const segments = labels.map((label, index) => {
+    const start = boundaries[index];
+    const end = Math.max(boundaries[index + 1], start);
+    return {
+      label,
+      start,
+      end,
+      range: Math.max(end - start, 0.1),
+      color: MTN_BRACKET_COLORS[label],
+    };
+  });
+
+  return {
+    isDynamic: true,
+    avgMtn,
+    maxMtn,
+    effectiveMax,
+    activeHistoryDays,
+    segments,
+  };
+};
+
+const describeMtnAverageComparison = (score, average) => {
+  const numericScore = Number(score || 0);
+  const numericAverage = Number(average || 0);
+  if (numericAverage <= 0) return 'Your 30-day average is still forming';
+
+  const percent = Math.round(((numericScore - numericAverage) / numericAverage) * 100);
+  if (percent > 0) return `${percent}% above your 30-day average`;
+  if (percent < 0) return `${Math.abs(percent)}% below your 30-day average`;
+  return 'Right at your 30-day average';
+};
 
 const dateFromKey = (key) => {
   const [year, month, day] = dateKey(key).split('-').map(Number);
@@ -1461,6 +1746,7 @@ class TrendsErrorBoundary extends Component {
 }
 
 function TaskMtnTrendChart({ data }) {
+  const [rangeDays, setRangeDays] = useState(21);
   const rows = (Array.isArray(data) ? data : [])
     .filter(item => item && typeof item === 'object' && dateKey(item.date))
     .map(item => ({
@@ -1469,7 +1755,7 @@ function TaskMtnTrendChart({ data }) {
       rollingAverage: Number(item.rolling_average || 0),
       completedTasks: Number(item.completed_tasks || 0),
     }));
-  const visibleRows = fillMtnTrendDates(rows).slice(-90);
+  const visibleRows = fillMtnTrendDates(rows).slice(-rangeDays);
   const maxValue = Math.max(
     1,
     Math.ceil(Math.max(...visibleRows.flatMap(item => [item.mtnScore, item.rollingAverage]), 0) * 1.15)
@@ -1485,16 +1771,14 @@ function TaskMtnTrendChart({ data }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">MTN Score Trend</h2>
-          <p className="mt-1 text-sm text-slate-500">Last {visibleRows.length || 90} days of task momentum.</p>
+          <p className="mt-1 text-sm text-slate-500">Last {rangeDays} days of task momentum.</p>
           <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-300" /> Daily MTN</span>
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-600" /> 7-day average</span>
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-500" /> No input</span>
           </div>
         </div>
-        <div className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
-          {visibleRows.length || rows.length} days
-        </div>
+        <TrendRangeToggle value={rangeDays} onChange={setRangeDays} label="Task trend range" />
       </div>
 
       {visibleRows.length === 0 ? (
@@ -1707,7 +1991,7 @@ function ProcrastinationRanking({ tasks }) {
           </p>
         </div>
         <div className="rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
-          Top {Math.min(rankedTasks.length, 10)}
+          Top {Math.min(rankedTasks.length, 3)}
         </div>
       </div>
 
@@ -1725,6 +2009,7 @@ function ProcrastinationRanking({ tasks }) {
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                   {task.project && <span>{task.project}</span>}
                   {task.due_date && <span>Due {formatShortDate(dateKey(task.due_date))}</span>}
+                  {task.mtn_score !== undefined && <span>MTN {formatMtnNumber(task.mtn_score)}</span>}
                   {task.status && <span className="capitalize">{task.status}</span>}
                 </div>
               </div>
@@ -1735,6 +2020,84 @@ function ProcrastinationRanking({ tasks }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function FollowUpModal({
+  task,
+  followUpDate,
+  setFollowUpDate,
+  error,
+  saving,
+  onCancel,
+  onConfirm
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/40 flex items-center justify-center px-4 py-6">
+      <div className="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Create Follow-Up</h2>
+            <p className="text-sm text-slate-500 mt-1">Done for now. Remind me later.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="text-slate-500 hover:text-slate-800 p-1 rounded hover:bg-slate-100 disabled:opacity-50"
+            aria-label="Close follow-up"
+          >
+            <CloseIcon />
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          <div>
+            <p className="text-sm font-medium text-slate-700">Follow up on:</p>
+            <p className="mt-1 text-base font-semibold text-slate-900 break-words">{task.title}</p>
+          </div>
+
+          <div>
+            <label htmlFor="follow-up-date" className="block text-sm font-medium text-slate-700 mb-1">
+              Follow-up date
+            </label>
+            <input
+              id="follow-up-date"
+              type="date"
+              value={followUpDate}
+              onChange={(event) => setFollowUpDate(event.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
+              autoFocus
+            />
+          </div>
+
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-4 flex items-center justify-end gap-2 bg-slate-50">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg font-medium transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={saving}
+            className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Creating...' : 'OK'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
