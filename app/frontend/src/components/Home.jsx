@@ -32,32 +32,14 @@ const pointDelta = (value) => {
   return '0 pts';
 };
 
-const goalStatusLabels = {
-  accelerating: 'Accelerating',
-  on_track: 'On Track',
-  stalled: 'Stalled',
-  constrained: 'Constrained',
-  steady: 'Steady',
-  at_risk: 'At Risk',
-};
-
 const goalHealthStyles = {
   green: {
-    label: 'Green',
-    dot: 'bg-emerald-500',
-    pill: 'border-emerald-200 bg-emerald-50 text-emerald-700',
     accent: 'border-l-emerald-500',
   },
   amber: {
-    label: 'Amber',
-    dot: 'bg-amber-500',
-    pill: 'border-amber-200 bg-amber-50 text-amber-700',
     accent: 'border-l-amber-500',
   },
   red: {
-    label: 'Red',
-    dot: 'bg-rose-500',
-    pill: 'border-rose-200 bg-rose-50 text-rose-700',
     accent: 'border-l-rose-500',
   },
 };

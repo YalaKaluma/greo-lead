@@ -291,6 +291,13 @@ def _serialize_goal_progress_review(
     vision: JourneyGoal,
     saved_reviews_by_vision: dict[int, VisionProgressReview],
 ) -> dict[str, Any] | None:
+    computed_review: dict[str, Any] = {}
+    try:
+        computed_review = GoalProgressReviewService.build(db, user_number, vision.id)
+    except ValueError:
+        if vision.id not in saved_reviews_by_vision:
+            return None
+
     saved = saved_reviews_by_vision.get(vision.id)
     if saved:
         review = {
@@ -302,11 +309,8 @@ def _serialize_goal_progress_review(
             "source": "ai_saved",
         }
     else:
-        try:
-            review = GoalProgressReviewService.build(db, user_number, vision.id)
-            review["source"] = "computed"
-        except ValueError:
-            return None
+        review = computed_review
+        review["source"] = "computed"
 
     return {
         "goal_id": vision.id,
@@ -314,7 +318,7 @@ def _serialize_goal_progress_review(
         "status": review.get("status") or "steady",
         "health": _goal_health_color(review),
         "executive_summary": review.get("executive_summary") or "No progress review summary is available yet.",
-        "recommended_focus": review.get("recommended_focus") or "Create the next concrete task linked to this goal.",
+        "recommended_focus": computed_review.get("recommended_focus") or review.get("recommended_focus") or "Create the next concrete task linked to this goal.",
         "review_created_at": review.get("created_at"),
         "source": review.get("source"),
     }
