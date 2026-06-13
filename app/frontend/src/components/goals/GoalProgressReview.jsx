@@ -227,7 +227,7 @@ export default function GoalProgressReview({ apiUrl, userNumber, expandedGoalId 
 
       <section className="rounded-md border border-slate-200 bg-white p-5">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended Focus</p>
-        <p className="mt-2 text-base font-medium leading-7 text-slate-900">{review.recommended_focus}</p>
+        <p className="mt-2 text-base leading-7 text-slate-700">{review.recommended_focus}</p>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
