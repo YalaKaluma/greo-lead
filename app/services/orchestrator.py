@@ -671,7 +671,7 @@ def _finalize_goal_review_session(
                 try:
                     from dateutil import parser as date_parser
                     due_date = date_parser.parse(t["deadline"])
-                except:
+                except Exception:
                     due_date = datetime.utcnow() + timedelta(days=7)
             else:
                 due_date = datetime.utcnow() + timedelta(days=7)

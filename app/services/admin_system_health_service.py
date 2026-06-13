@@ -277,12 +277,12 @@ class AdminSystemHealthService:
         request = urllib.request.Request(RAILWAY_GRAPHQL_URL, data=payload, headers=headers, method="POST")
 
         try:
-            with urllib.request.urlopen(request, timeout=8) as response:
+            with urllib.request.urlopen(request, timeout=8) as response:  # nosec B310 - URL is the fixed HTTPS Railway GraphQL endpoint.
                 body = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
             if token_type not in {"account", "workspace", "oauth", "bearer"} and exc.code in {401, 403}:
-                os.environ["RAILWAY_TOKEN_TYPE"] = "account"
+                os.environ["RAILWAY_TOKEN_TYPE"] = "account"  # nosec B105 - token type label, not a password.
                 return self._railway_graphql(query, variables)
             return {"ok": False, "error": f"Railway API HTTP {exc.code}: {body[:300]}", "data": {}}
         except Exception as exc:

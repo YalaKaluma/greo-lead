@@ -2913,8 +2913,8 @@ def update_development_area(
     # Only set updated_at if the column exists
     try:
         area.updated_at = datetime.now()
-    except:
-        pass
+    except AttributeError:
+        logger.debug("Development area has no updated_at column")
 
     db.commit()
     db.refresh(area)
@@ -3785,17 +3785,8 @@ def get_procrastination_pattern_rows(db: Session, user_number: str) -> list[dict
         return []
 
     order_column = "first_seen_at" if "first_seen_at" in columns else "id"
-    rows = db.execute(
-        text(
-            f"""
-            SELECT {", ".join(select_columns)}
-            FROM journey_procrastination_patterns
-            WHERE user_number = :user_number
-            ORDER BY {order_column} DESC
-            """
-        ),
-        {"user_number": user_number},
-    ).mappings().all()
+    select_query = f"SELECT {', '.join(select_columns)} FROM journey_procrastination_patterns WHERE user_number = :user_number ORDER BY {order_column} DESC"  # nosec B608 - selected columns are limited to known table column names.
+    rows = db.execute(text(select_query), {"user_number": user_number}).mappings().all()
     return [dict(row) for row in rows]
 
 
@@ -3851,16 +3842,8 @@ def write_procrastination_pattern(
             insert_fields.append("updated_at")
             insert_values.append(":now")
 
-        row = db.execute(
-            text(
-                f"""
-                INSERT INTO journey_procrastination_patterns ({", ".join(insert_fields)})
-                VALUES ({", ".join(insert_values)})
-                RETURNING id
-                """
-            ),
-            values,
-        ).mappings().first()
+        insert_query = f"INSERT INTO journey_procrastination_patterns ({', '.join(insert_fields)}) VALUES ({', '.join(insert_values)}) RETURNING id"  # nosec B608 - inserted columns are limited to known table column names.
+        row = db.execute(text(insert_query), values).mappings().first()
     else:
         existing = db.execute(
             text(
@@ -3888,14 +3871,9 @@ def write_procrastination_pattern(
             updates.append("updated_at = :now")
 
         if updates:
+            update_query = f"UPDATE journey_procrastination_patterns SET {', '.join(updates)} WHERE id = :pattern_id AND user_number = :user_number"  # nosec B608 - update columns are limited to known table column names.
             db.execute(
-                text(
-                    f"""
-                    UPDATE journey_procrastination_patterns
-                    SET {", ".join(updates)}
-                    WHERE id = :pattern_id AND user_number = :user_number
-                    """
-                ),
+                text(update_query),
                 values,
             )
         row = {"id": pattern_id}

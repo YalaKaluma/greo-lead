@@ -80,6 +80,6 @@ def write_audit_log(
     except Exception as exc:
         try:
             db.rollback()
-        except Exception:
-            pass
+        except Exception as rollback_exc:
+            logger.debug("Could not rollback after audit log failure: %s", rollback_exc)
         logger.warning("Could not write audit log event_type=%s: %s", event_type, exc)

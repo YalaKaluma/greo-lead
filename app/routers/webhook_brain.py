@@ -93,7 +93,6 @@ def process_message_brain(
             # ✅ SECURITY: Completed user said "Hey Alfred" - just treat as normal message
             print(f"👋 DEBUG: Completed user said 'Hey Alfred' - treating as greeting, not onboarding trigger")
             # Don't process as onboarding, fall through to normal Brain processing
-            pass
 
         # Only process onboarding if user is NOT completed
         if not user.onboarding_completed:
@@ -238,4 +237,5 @@ def send_email(to: str, subject: str, text: str):
             "subject": subject,
             "text": text,
         },
+        timeout=10,
     )

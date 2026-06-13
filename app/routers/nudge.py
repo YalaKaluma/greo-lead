@@ -1455,8 +1455,8 @@ def health_check(db: Session = Depends(get_db)):
     try:
         users = get_all_active_users(db)
         user_count = len(users)
-    except:
-        pass
+    except Exception as exc:
+        logger.debug("Could not count active users during nudge health check: %s", exc)
 
     return {
         "status": "healthy",

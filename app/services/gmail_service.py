@@ -23,7 +23,7 @@ def get_gmail_service():
     creds = Credentials(
         token=None,
         refresh_token=_require_env("GMAIL_REFRESH_TOKEN", config.GMAIL_REFRESH_TOKEN),
-        token_uri="https://oauth2.googleapis.com/token",
+        token_uri="https://oauth2.googleapis.com/token",  # nosec B106 - OAuth token endpoint URL, not a password.
         client_id=_require_env("GMAIL_CLIENT_ID", config.GMAIL_CLIENT_ID),
         client_secret=_require_env("GMAIL_CLIENT_SECRET", config.GMAIL_CLIENT_SECRET),
         scopes=SCOPES,
