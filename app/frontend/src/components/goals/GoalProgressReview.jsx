@@ -232,19 +232,19 @@ export default function GoalProgressReview({ apiUrl, userNumber, expandedGoalId 
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-md border border-slate-200 bg-white p-5">
-          <h3 className="text-base font-semibold text-slate-900">Key Wins</h3>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Key Wins</p>
           <BulletList items={review.key_wins} emptyText="No major wins logged yet." />
         </section>
 
         <section className="rounded-md border border-slate-200 bg-white p-5">
-          <h3 className="text-base font-semibold text-slate-900">Key Risks</h3>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Key Risks</p>
           <BulletList items={review.key_risks} emptyText="No material risks detected." />
         </section>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-md border border-slate-200 bg-white p-5">
-          <h3 className="text-base font-semibold text-slate-900">Latest Outcomes Achieved</h3>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Latest Outcomes Achieved</p>
           {review.recent_outcomes?.length ? (
             <div className="mt-4 grid gap-3">
               {review.recent_outcomes.map(outcome => (
@@ -265,10 +265,10 @@ export default function GoalProgressReview({ apiUrl, userNumber, expandedGoalId 
         </section>
 
         <section className="rounded-md border border-slate-200 bg-white p-5">
-          <h3 className="text-base font-semibold text-slate-900">Next Outcome to Focus On</h3>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Next Outcome to Focus On</p>
           {nextOutcomeFocus ? (
-            <div className="mt-4 rounded-md border border-blue-100 bg-blue-50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+            <div className="mt-4 rounded-md border border-slate-200 bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Based on current roadmap
               </p>
               <p className="mt-2 text-base font-semibold leading-6 text-slate-950">{nextOutcomeFocus}</p>
@@ -285,7 +285,7 @@ export default function GoalProgressReview({ apiUrl, userNumber, expandedGoalId 
       </div>
 
       <section className="rounded-md border border-slate-200 bg-white p-5">
-        <h3 className="text-base font-semibold text-slate-900">Top 3 MTN Recommendations</h3>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top 3 MTN Recommendations</p>
         {review.recommendations?.length ? (
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             {review.recommendations.map((recommendation, index) => {
@@ -323,7 +323,7 @@ export default function GoalProgressReview({ apiUrl, userNumber, expandedGoalId 
       </section>
 
       <section className="rounded-md border border-slate-200 bg-white p-5">
-        <h3 className="text-base font-semibold text-slate-900">Recently Completed Tasks</h3>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recently Completed Tasks</p>
         <div className="mt-4">
           <TaskList items={review.completed_tasks} dateLabel="Completed" emptyText="No completed tasks are linked to this Vision yet." />
         </div>
@@ -332,13 +332,13 @@ export default function GoalProgressReview({ apiUrl, userNumber, expandedGoalId 
       <section className="rounded-md border border-slate-200 bg-white p-5">
         <div className="grid gap-6 lg:grid-cols-2">
           <div>
-            <h3 className="text-base font-semibold text-slate-900">Immediate Focus</h3>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Immediate Focus</p>
             <div className="mt-4">
               <TaskList items={review.upcoming_tasks?.immediate_focus} emptyText="No active tasks are linked to this Vision." />
             </div>
           </div>
           <div>
-            <h3 className="text-base font-semibold text-slate-900">Coming Next</h3>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Coming Next</p>
             <div className="mt-4">
               <TaskList items={review.upcoming_tasks?.coming_next} emptyText="No linked tasks are due in the next 30 days." />
             </div>
@@ -347,7 +347,7 @@ export default function GoalProgressReview({ apiUrl, userNumber, expandedGoalId 
       </section>
 
       <section className="rounded-md border border-slate-200 bg-white p-5">
-        <h3 className="text-base font-semibold text-slate-900">Journal Signals Impacting This Goal</h3>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Journal Signals Impacting This Goal</p>
         {review.journal_insights?.length ? (
           <div className="mt-4 space-y-3">
             {review.journal_insights.map((insight, index) => (
