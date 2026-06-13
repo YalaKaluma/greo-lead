@@ -239,8 +239,8 @@ export const getMtnLabel = (score) => {
   return 'Low Leverage';
 };
 
-export const getMtnStyle = (score) => {
-  const label = getMtnLabel(score);
+export const getMtnStyle = (scoreOrLabel) => {
+  const label = MTN_TAG_OPTIONS.includes(scoreOrLabel) ? scoreOrLabel : getMtnLabel(scoreOrLabel);
   if (label === 'Transformational') return 'bg-blue-100 text-blue-800 border-blue-200';
   if (label === 'Strategic') return 'bg-emerald-100 text-emerald-800 border-emerald-200';
   if (label === 'Important') return 'bg-amber-100 text-amber-800 border-amber-200';

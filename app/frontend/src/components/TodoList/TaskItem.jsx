@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Draggable } from 'react-beautiful-dnd';
-import { getPriorityIcon, formatDueDate, getDueDateColor, getMtnLabel, getMtnStyle } from '../../utils/taskHelpers';
+import { getPriorityIcon, formatDueDate, getDueDateColor, getMtnLabel, getMtnStyle, MTN_TAG_OPTIONS } from '../../utils/taskHelpers';
 
 /**
  * TaskItem Component
@@ -375,7 +375,7 @@ function TaskCard({
                     e.stopPropagation();
                     openMtnFeedback();
                   }}
-                  className={`max-w-full truncate whitespace-nowrap text-xs px-2 py-0.5 rounded border font-medium sm:hidden ${getMtnStyle(priorityScore.score)}`}
+                  className={`max-w-full truncate whitespace-nowrap text-xs px-2 py-0.5 rounded border font-medium sm:hidden ${getMtnStyle(activeMtnTag)}`}
                   title="Review prioritization reasoning"
                 >
                   {activeMtnTag}
@@ -411,7 +411,7 @@ function TaskCard({
                 e.stopPropagation();
                 openMtnFeedback();
               }}
-              className={`whitespace-nowrap text-xs px-2 py-0.5 rounded border font-medium ${getMtnStyle(priorityScore.score)}`}
+              className={`whitespace-nowrap text-xs px-2 py-0.5 rounded border font-medium ${getMtnStyle(activeMtnTag)}`}
               title="Review prioritization reasoning"
             >
               {activeMtnTag}
@@ -478,8 +478,6 @@ function MtnFeedbackModal({
   onSubmit,
   onClose
 }) {
-  const tagOptions = ['Transformational', 'Strategic', 'Important', 'Maintenance', 'Low Leverage'];
-
   return createPortal(
     <div
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4"
@@ -506,19 +504,25 @@ function MtnFeedbackModal({
 
         <div className="space-y-3 mb-5">
           <div>
-            <label htmlFor="mtn-tag-select" className="text-sm font-medium text-slate-700 mb-1 block">
-              Change tag
-            </label>
-            <select
-              id="mtn-tag-select"
-              value={selectedTag || tag}
-              onChange={(e) => setSelectedTag(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {tagOptions.map(option => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
+            <p className="text-sm font-medium text-slate-700 mb-2">Change tag</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {MTN_TAG_OPTIONS.map(option => {
+                const isSelected = (selectedTag || tag) === option;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setSelectedTag(option)}
+                    aria-pressed={isSelected}
+                    className={`rounded border px-3 py-2 text-left text-sm font-semibold transition-all ${getMtnStyle(option)} ${
+                      isSelected ? 'ring-2 ring-slate-900 ring-offset-1' : 'hover:shadow-sm'
+                    }`}
+                  >
+                    {option}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div>
