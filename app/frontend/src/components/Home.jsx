@@ -46,7 +46,7 @@ const goalHealthStyles = {
 
 function CardHeader({ title }) {
   return (
-    <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+    <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
   );
 }
 
