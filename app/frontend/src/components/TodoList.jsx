@@ -18,7 +18,7 @@ import { usePriority } from '../hooks/usePriority';
  * - Task display with Top 10 prioritization
  * - Drag-and-drop reordering
  * - Multi-select for bulk actions
- * - Filtering (date, project, delegate, goal)
+ * - Filtering (date, search, goal)
  * - Task CRUD operations
  * - Mobile-responsive with touch gestures
  * - 1500ms completion animation
@@ -33,11 +33,9 @@ export default function TodoList({ apiUrl, userNumber }) {
   
   // Filters
   const [filterType, setFilterType] = useState('due_today');
-  const [selectedProject, setSelectedProject] = useState('');
-  const [selectedDelegate, setSelectedDelegate] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedGoal, setSelectedGoal] = useState('');
   const [selectedMtnTags, setSelectedMtnTags] = useState([]);
-  const [projects, setProjects] = useState([]);
   const [delegates, setDelegates] = useState([]);
   const [goals, setGoals] = useState([]);
   
@@ -87,8 +85,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   useEffect(() => {
     return () => {
       setFilterType('due_today');
-      setSelectedProject('');
-      setSelectedDelegate('');
+      setSearchQuery('');
       setSelectedGoal('');
       setSelectedMtnTags([]);
       setSelectedTasks([]);
@@ -138,7 +135,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       return;
     }
     fetchTasks();
-  }, [apiUrl, userNumber, filterType, selectedProject, selectedDelegate, selectedGoal, timezone]);
+  }, [apiUrl, userNumber, filterType, selectedGoal, timezone]);
 
   useEffect(() => {
     if (apiUrl == null || !userNumber) return;
@@ -169,7 +166,6 @@ export default function TodoList({ apiUrl, userNumber }) {
         params: { user_number: userNumber }
       });
       if (response.data) {
-        setProjects(response.data.projects || []);
         setDelegates(response.data.delegates || []);
       }
     } catch (err) {
@@ -204,8 +200,6 @@ export default function TodoList({ apiUrl, userNumber }) {
         // If a goal is selected, show ALL tasks for that goal, not just due today
         filter_type: selectedGoal ? 'all' : filterType
       };
-      if (selectedProject) params.project = selectedProject;
-      if (selectedDelegate) params.delegated_to = selectedDelegate;
       if (selectedGoal) params.goal_id = parseInt(selectedGoal);
 
       const response = await axios.get(`${apiUrl}/api/tasks/`, { params });
@@ -308,8 +302,29 @@ export default function TodoList({ apiUrl, userNumber }) {
     return selectedMtnTags.includes(getMtnLabel(scoreData.score));
   };
 
+  const taskMatchesSearch = (task) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+
+    const searchableText = [
+      task.title,
+      task.description,
+      task.project,
+      task.delegated_to,
+      task.goal_title,
+      task.strategic_intent,
+      task.mtn_reason_today,
+      task.mtn_risk_today,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    return searchableText.includes(query);
+  };
+
   const getVisibleTasks = () => {
-    return tasks.filter(taskMatchesSelectedMtnTags);
+    return tasks.filter(task => taskMatchesSelectedMtnTags(task) && taskMatchesSearch(task));
   };
 
   const hasStoredMtnScoring = () => {
@@ -672,8 +687,7 @@ export default function TodoList({ apiUrl, userNumber }) {
 
   const clearFilters = () => {
     setFilterType('due_today');
-    setSelectedProject('');
-    setSelectedDelegate('');
+    setSearchQuery('');
     setSelectedGoal('');
     setSelectedMtnTags([]);
   };
@@ -858,7 +872,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   // COMPUTED VALUES
   // ============================================================================
 
-  const hasActiveFilters = selectedProject || selectedDelegate || selectedGoal || selectedMtnTags.length > 0 || filterType !== 'due_today';
+  const hasActiveFilters = searchQuery.trim() || selectedGoal || selectedMtnTags.length > 0 || filterType !== 'due_today';
   const sortedTasks = getSortedTasks();
   const todayMtnScore = Number(mtnTrends?.summary?.today?.mtn_score || 0);
   const todayCompletedTasks = Number(mtnTrends?.summary?.today?.completed_tasks || 0);
@@ -1022,17 +1036,13 @@ export default function TodoList({ apiUrl, userNumber }) {
             setFiltersCollapsed={setFiltersCollapsed}
             filterType={filterType}
             setFilterType={setFilterType}
-            selectedProject={selectedProject}
-            setSelectedProject={setSelectedProject}
-            selectedDelegate={selectedDelegate}
-            setSelectedDelegate={setSelectedDelegate}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
             selectedGoal={selectedGoal}
             setSelectedGoal={setSelectedGoal}
             selectedMtnTags={selectedMtnTags}
             mtnTagOptions={MTN_TAG_OPTIONS}
             toggleMtnTagFilter={toggleMtnTagFilter}
-            projects={projects}
-            delegates={delegates}
             goals={goals}
             hasActiveFilters={hasActiveFilters}
             clearFilters={clearFilters}

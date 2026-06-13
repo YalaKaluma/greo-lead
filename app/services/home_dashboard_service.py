@@ -242,16 +242,17 @@ def _next_trial(readiness: dict[str, Any], trials: list[JourneyBeltTrial], wheel
 def _weekly_journal_metrics(journal: dict[str, Any]) -> dict[str, Any]:
     chart = journal.get("trend_chart") or []
     week = chart[-7:]
-    previous = chart[-14:-7]
+    previous_month = chart[-37:-7]
     entries = sum(int(item.get("entry_count") or 0) for item in week)
     weekly_depth = [float(item.get("daily_average") or 0) for item in week if item.get("daily_average")]
-    previous_depth = [float(item.get("daily_average") or 0) for item in previous if item.get("daily_average")]
+    monthly_depth = [float(item.get("daily_average") or 0) for item in previous_month if item.get("daily_average")]
     avg_depth_10 = mean(weekly_depth) if weekly_depth else 0
-    previous_depth_10 = mean(previous_depth) if previous_depth else 0
+    month_avg_depth_10 = mean(monthly_depth) if monthly_depth else 0
     return {
         "entries_this_week": entries,
         "average_depth_5": round(avg_depth_10 / 2, 1),
-        "delta_depth_5": round((avg_depth_10 - previous_depth_10) / 2, 1),
+        "month_average_depth_5": round(month_avg_depth_10 / 2, 1),
+        "delta_depth_5": round((avg_depth_10 - month_avg_depth_10) / 2, 1),
         "status": "Deep reflection" if avg_depth_10 >= 7 else "Consistent" if entries >= 3 else "Needs more depth",
     }
 

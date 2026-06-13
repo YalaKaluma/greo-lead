@@ -104,7 +104,7 @@ function HabitsMetricCard({ metric }) {
   const delta = pointDelta(metric?.delta);
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <CardHeader eyebrow="Behavioral consistency" title="Habits Compliance" status={metric?.status || 'Stable'} />
+      <CardHeader eyebrow="Behavioral consistency" title="Balance Index" status={metric?.status || 'Stable'} />
       <div className="mt-5 flex items-center justify-between gap-5">
         <div className="min-w-0 flex-1">
           <p className="text-sm text-slate-600">{toNumber(metric?.completed, 0)} completed / {toNumber(metric?.expected, 0)} planned</p>
@@ -122,7 +122,7 @@ function JournalMetricCard({ metric }) {
   const delta = scoreDelta(metric?.delta_depth_5);
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <CardHeader eyebrow="Reflection quality" title="Journal Performance" status={metric?.status || 'Needs more depth'} />
+      <CardHeader eyebrow="Reflection quality" title="Wisdom Index" status={metric?.status || 'Needs more depth'} />
       <div className="mt-5 grid grid-cols-2 gap-3">
         <div className="rounded-lg bg-slate-50 p-4 text-center">
           <div className="text-3xl font-semibold text-slate-950">{toNumber(metric?.entries_this_week, 0)}</div>

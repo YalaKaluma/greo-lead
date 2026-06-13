@@ -6,8 +6,7 @@ import { getLongTermGoals } from '../../utils/taskHelpers';
  *
  * Collapsible filter panel for tasks:
  * - Due date filter (due today, tomorrow, next 7 days, all)
- * - Project filter
- * - Delegate filter
+ * - Search filter
  * - Goal filter with Vision/long-term goals
  * - MTN tag multi-select filter
  * - Clear all filters button
@@ -17,17 +16,13 @@ export default function FilterSection({
   setFiltersCollapsed,
   filterType,
   setFilterType,
-  selectedProject,
-  setSelectedProject,
-  selectedDelegate,
-  setSelectedDelegate,
+  searchQuery,
+  setSearchQuery,
   selectedGoal,
   setSelectedGoal,
   selectedMtnTags,
   mtnTagOptions,
   toggleMtnTagFilter,
-  projects,
-  delegates,
   goals,
   hasActiveFilters,
   clearFilters
@@ -59,37 +54,16 @@ export default function FilterSection({
               </select>
             </div>
 
-            {projects.length > 0 && (
-              <div className="flex-shrink-0">
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Project</label>
-                <select
-                  value={selectedProject}
-                  onChange={(e) => setSelectedProject(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                >
-                  <option value="">All Projects</option>
-                  {projects.map(p => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {delegates.length > 0 && (
-              <div className="flex-shrink-0">
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Delegated To</label>
-                <select
-                  value={selectedDelegate}
-                  onChange={(e) => setSelectedDelegate(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                >
-                  <option value="">All Delegates</option>
-                  {delegates.map(d => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <div className="min-w-[260px] flex-1">
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Search</label>
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search tasks"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              />
+            </div>
 
             {goals.length > 0 && (
               <div className="flex-shrink-0">
