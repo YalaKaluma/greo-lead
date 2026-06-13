@@ -36,7 +36,7 @@ DOMAIN_LABELS = {
 }
 
 DOMAIN_ORDER = ["vision", "people", "execute", "energy", "learning"]
-HOME_DASHBOARD_SCHEMA_VERSION = 2
+HOME_DASHBOARD_SCHEMA_VERSION = 3
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:

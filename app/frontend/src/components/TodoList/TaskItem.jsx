@@ -271,11 +271,11 @@ function TaskCard({
           transform: `translateX(-${swipeDistance}px)`,
         }}
         className={`
-          relative bg-white border-2 rounded px-3 py-2 sm:pr-10
+          relative border-2 rounded px-3 py-2 sm:pr-10
           hover:border-gray-300 transition-all
           ${snapshot.isDragging ? 'opacity-50 scale-98 shadow-lg' : ''}
           ${isCompleting ? 'opacity-60' : ''}
-          ${index >= 10 ? 'opacity-40' : ''}
+          ${index >= 10 ? 'bg-slate-50' : 'bg-white'}
           ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}
           cursor-pointer
         `}

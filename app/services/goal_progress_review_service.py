@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Optional
 
-from sqlalchemy import desc, or_
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -252,10 +252,7 @@ class GoalProgressReviewService:
             .filter(
                 OpportunitySuggestion.user_id == user.id,
                 OpportunitySuggestion.status == "suggested",
-                or_(
-                    OpportunitySuggestion.linked_goal_id.in_(scoped_goal_ids),
-                    OpportunitySuggestion.linked_goal_id.is_(None),
-                ),
+                OpportunitySuggestion.linked_goal_id.in_(scoped_goal_ids),
             )
             .order_by(desc(OpportunitySuggestion.mtn_score), desc(OpportunitySuggestion.created_at))
             .limit(3)
