@@ -7,7 +7,9 @@ function normalizeBelt(value) {
   const normalized = String(value || '')
     .trim()
     .toLowerCase()
-    .replace(/\s+belt$/, '');
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+belt$/, '')
+    .replace(/\s+/g, '_');
 
   return BELT_ORDER.includes(normalized) ? normalized : 'white';
 }

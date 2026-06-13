@@ -502,12 +502,24 @@ function getBelt(beltIndex) {
   return BELTS[beltIndex] || BELTS[0];
 }
 
+function normalizeBeltId(value) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+belt$/, "")
+    .replace(/\s+/g, "_");
+
+  return BELT_IDS.includes(normalized) ? normalized : "white";
+}
+
 function getBeltById(beltId) {
-  return BELTS.find((belt) => belt.id === beltId) || BELTS[0];
+  const normalizedBeltId = normalizeBeltId(beltId);
+  return BELTS.find((belt) => belt.id === normalizedBeltId) || BELTS[0];
 }
 
 function getBeltIndexById(beltId) {
-  return Math.max(0, BELTS.findIndex((belt) => belt.id === beltId));
+  return Math.max(0, BELTS.findIndex((belt) => belt.id === normalizeBeltId(beltId)));
 }
 
 function getNextBeltId(currentBeltId) {
@@ -1262,9 +1274,10 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   };
 
   const selectedState = dimensionStates[selectedDimension.id];
-  const journeyCurrentBelt = getBeltById(readinessStatus?.current_belt || latestAssessment?.target_belt || selectedState.currentBeltId);
+  const normalizedReadinessCurrentBelt = normalizeBeltId(readinessStatus?.current_belt || latestAssessment?.target_belt || selectedState.currentBeltId);
+  const journeyCurrentBelt = getBeltById(normalizedReadinessCurrentBelt);
   const journeyNextBelt = getBeltById(readinessStatus?.target_belt || getNextBeltId(journeyCurrentBelt.id));
-  const isAssessmentLockedUntilYellow = readinessStatus?.assessment_locked_until_yellow || readinessStatus?.current_belt === "white";
+  const isAssessmentLockedUntilYellow = readinessStatus?.assessment_locked_until_yellow || normalizedReadinessCurrentBelt === "white";
   const availableTrialBelts = BELTS.filter(
     (belt) => getBeltIndexById(belt.id) >= getBeltIndexById(journeyCurrentBelt.id)
   );
@@ -1605,6 +1618,20 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
               )}
             </button>
           )}
+          {!isAssessmentLockedUntilYellow && (
+            <button
+              type="button"
+              onClick={() => setActiveJourneyTab("progress")}
+              className={`relative px-2 pb-3 font-medium transition-colors ${
+                activeJourneyTab === "progress" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {t('journey.progressReview')}
+              {activeJourneyTab === "progress" && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+              )}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setActiveJourneyTab("coaching")}
@@ -1629,6 +1656,15 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
             error={assessmentError}
             onSubmit={() => setShowAssessmentConfirm(true)}
             onAcceptPromotion={handleAcceptPromotion}
+          />
+        ) : !isAssessmentLockedUntilYellow && activeJourneyTab === "progress" ? (
+          <JourneyProgressReviewTab
+            readinessStatus={readinessStatus}
+            currentBelt={journeyCurrentBelt}
+            nextBelt={journeyNextBelt}
+            latestAssessment={latestAssessment}
+            assessmentHistory={assessmentHistory}
+            dimensionStates={dimensionStates}
           />
         ) : activeJourneyTab === "coaching" ? (
           <LeadershipCoachingSessionsTab apiUrl={apiUrl} userNumber={userNumber} />
@@ -1747,6 +1783,145 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           onSave={handleSaveSubdomainItem}
           onDelete={handleDeleteSubdomainItem}
         />
+      )}
+    </div>
+  );
+}
+
+function JourneyProgressReviewTab({
+  readinessStatus,
+  currentBelt,
+  nextBelt,
+  latestAssessment,
+  assessmentHistory,
+  dimensionStates,
+}) {
+  const completedTrials = readinessStatus?.completed_trials ?? 0;
+  const requiredTrials = readinessStatus?.required_trials ?? 0;
+  const missingTrials = Array.isArray(readinessStatus?.missing_trials) ? readinessStatus.missing_trials : [];
+  const trialCompletion = requiredTrials > 0 ? Math.round((completedTrials / requiredTrials) * 100) : 100;
+  const latest = latestAssessment ? directAssessmentCopy(latestAssessment) : null;
+  const dimensionRows = Object.values(dimensionStates || {});
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Journey Progress Review</p>
+            <h2 className="mt-2 text-2xl font-semibold text-slate-950">
+              {currentBelt.name} progress toward {nextBelt.name}
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              A consolidated view of belt progress, recent assessment signal, and the leadership domains Alfred is tracking.
+            </p>
+          </div>
+          <div className="grid min-w-[280px] grid-cols-2 overflow-hidden rounded-lg border border-slate-200">
+            <div className="bg-slate-50 p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Current</p>
+              <p className="mt-1 font-semibold" style={{ color: currentBelt.color }}>{currentBelt.name}</p>
+              <p className="mt-2 text-xs text-slate-500">{currentBelt.meaning}</p>
+            </div>
+            <div className="bg-white p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Next</p>
+              <p className="mt-1 font-semibold" style={{ color: nextBelt.color }}>{nextBelt.name}</p>
+              <p className="mt-2 text-xs text-slate-500">{nextBelt.meaning}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Required Trials</p>
+              <h3 className="mt-1 text-xl font-semibold text-slate-950">{completedTrials}/{requiredTrials} complete</h3>
+            </div>
+            <span className="text-3xl font-semibold text-slate-950">{trialCompletion}%</span>
+          </div>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-green-500" style={{ width: `${trialCompletion}%` }} />
+          </div>
+          <div className="mt-4 space-y-2">
+            {missingTrials.length > 0 ? (
+              missingTrials.slice(0, 6).map((trial, index) => (
+                <div key={`${trial.dimension_id}-${trial.trial_type}-${index}`} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <span className="font-medium text-slate-800">{trial.domain} - {trial.trial_title}</span>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{formatTrialStatus(trial.status)}</span>
+                </div>
+              ))
+            ) : (
+              <p className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm font-semibold text-green-700">
+                All required trials for this belt are complete.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Latest Assessment</p>
+          {latest ? (
+            <>
+              <h3 className="mt-2 text-xl font-semibold text-slate-950">
+                {RECOMMENDATION_LABELS[latest.recommendation] || latest.recommendation || "Assessment complete"}
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{latest.assessment_summary}</p>
+              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs uppercase tracking-wide text-slate-500">Journey Depth</p>
+                <p className="mt-1 text-3xl font-semibold text-slate-950">{latest.readiness_score ?? "--"}</p>
+                <p className="mt-2 text-xs text-slate-500">{formatDateTime(latest.created_at)}</p>
+              </div>
+            </>
+          ) : (
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              No belt assessment has been generated yet. The review will sharpen after Alfred has an assessment snapshot.
+            </p>
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Domain Snapshot</p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {dimensionRows.map((state) => {
+            const belt = getBeltById(state.currentBeltId);
+            return (
+              <div key={state.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="font-semibold text-slate-950">{state.name}</h4>
+                    <p className="mt-1 text-xs text-slate-500">{belt.name}</p>
+                  </div>
+                  <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700">
+                    {state.completionScore}%
+                  </span>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+                  <div className="h-full rounded-full" style={{ width: `${state.completionScore}%`, backgroundColor: belt.color }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {assessmentHistory.length > 0 && (
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Assessment History</p>
+          <div className="mt-3 space-y-2">
+            {assessmentHistory.slice(0, 5).map((assessment) => (
+              <div key={assessment.id} className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm md:flex-row md:items-center md:justify-between">
+                <span className="font-semibold text-slate-900">
+                  {getBeltById(assessment.current_belt).name} to {getBeltById(assessment.target_belt).name}
+                </span>
+                <span className="text-slate-600">
+                  {RECOMMENDATION_LABELS[assessment.recommendation] || assessment.recommendation || "Assessment"} - {formatDateTime(assessment.created_at)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );
