@@ -485,7 +485,7 @@ function MtnFeedbackModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg p-6 max-w-lg w-full shadow-2xl max-h-[85vh] overflow-y-auto"
+        className="bg-white rounded-lg p-6 max-w-3xl w-full shadow-2xl max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 mb-4">
@@ -505,7 +505,7 @@ function MtnFeedbackModal({
         <div className="space-y-3 mb-5">
           <div>
             <p className="text-sm font-medium text-slate-700 mb-2">Change tag</p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="flex flex-nowrap gap-2">
               {MTN_TAG_OPTIONS.map(option => {
                 const isSelected = (selectedTag || tag) === option;
                 return (
@@ -514,7 +514,7 @@ function MtnFeedbackModal({
                     type="button"
                     onClick={() => setSelectedTag(option)}
                     aria-pressed={isSelected}
-                    className={`rounded border px-3 py-2 text-left text-sm font-semibold transition-all ${getMtnStyle(option)} ${
+                    className={`min-w-0 flex-1 whitespace-nowrap rounded border px-2 py-1.5 text-center text-xs font-semibold transition-all ${getMtnStyle(option)} ${
                       isSelected ? 'ring-2 ring-slate-900 ring-offset-1' : 'hover:shadow-sm'
                     }`}
                   >
