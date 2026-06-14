@@ -311,6 +311,7 @@ class SyntheticUserSeeder:
                 updated_at=due_date if status == "completed" else datetime.utcnow() - timedelta(days=self.rng.randint(0, 5)),
                 goal_id=goal.id if goal else None,
                 priority=spec.get("priority") or self.rng.choice(["high", "medium", "medium", "low"]),
+                times_postponed=int(spec.get("times_postponed", 0)),
                 current_bucket=spec.get("bucket") or ("today" if index < 3 and status != "completed" else "this_week"),
                 in_top10=bool(spec.get("in_top10", index < 6 and status != "completed")),
                 top10_position=index + 1 if index < 6 and status != "completed" else None,

@@ -110,13 +110,14 @@ function HabitsMetricCard({ metric }) {
 
 function JournalMetricCard({ metric }) {
   const delta = scoreDelta(metric?.delta_depth_5);
+  const monthAverageDepth = toNumber(metric?.month_average_depth_5, 0).toFixed(1);
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <CardHeader title="Wisdom Index" />
       <div className="mt-5 grid grid-cols-2 gap-3">
         <div className="rounded-lg bg-slate-50 p-4 text-center">
           <div className="text-3xl font-semibold text-slate-950">{toNumber(metric?.entries_this_week, 0)}</div>
-          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Entries</p>
+          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Frequency</p>
         </div>
         <div className="rounded-lg bg-slate-50 p-4 text-center">
           <div className="text-3xl font-semibold text-slate-950">{toNumber(metric?.average_depth_5, 0).toFixed(1)}</div>
@@ -125,7 +126,7 @@ function JournalMetricCard({ metric }) {
       </div>
       <div className="mt-4 flex items-center justify-between gap-4">
         <p className={`text-sm font-semibold ${delta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
-          {delta} depth vs month average
+          {delta} depth vs {monthAverageDepth} last month avg
         </p>
       </div>
     </section>

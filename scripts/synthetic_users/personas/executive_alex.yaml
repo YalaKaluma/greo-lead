@@ -216,6 +216,7 @@ tasks:
     priority: high
     mtn_score: 0.94
     in_top10: true
+    times_postponed: 2
   - title: Finalize founder call notes from last week
     status: active
     created_days_ago: 9
@@ -225,6 +226,7 @@ tasks:
     priority: high
     mtn_score: 0.81
     in_top10: true
+    times_postponed: 4
   - title: Reschedule missed mobility session
     status: active
     created_days_ago: 6
@@ -233,6 +235,7 @@ tasks:
     goal: Add Mobility Routine
     priority: medium
     mtn_score: 0.58
+    times_postponed: 3
   - title: Send Evelyn the revised offer draft
     status: active
     created_days_ago: 12
@@ -241,6 +244,7 @@ tasks:
     priority: high
     mtn_score: 0.89
     in_top10: true
+    times_postponed: 5
   - title: Draft the one-page flagship offer
     status: active
     created_days_ago: 5
@@ -249,6 +253,7 @@ tasks:
     priority: high
     mtn_score: 0.91
     in_top10: true
+    times_postponed: 2
   - title: Schedule Saturday 14 mile route
     status: active
     created_days_ago: 2
@@ -303,6 +308,7 @@ tasks:
     goal: Practice Race Fueling
     priority: medium
     mtn_score: 0.71
+    times_postponed: 2
 
 journal:
   - days_ago: 28
