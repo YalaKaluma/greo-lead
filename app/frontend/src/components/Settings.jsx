@@ -282,6 +282,7 @@ function AdminUserManagement({ apiUrl, userNumber }) {
           { id: 'users', label: 'User Management' },
           { id: 'feedback', label: 'Feedback Review' },
           { id: 'analytics', label: 'Analytics' },
+          { id: 'operations', label: 'Operations Director' },
           { id: 'health', label: 'System Health' }
         ].map((item) => (
           <button
@@ -305,6 +306,8 @@ function AdminUserManagement({ apiUrl, userNumber }) {
         <AdminFeedbackPanel apiUrl={apiUrl} userNumber={userNumber} />
       ) : adminView === 'analytics' ? (
         <AdminAnalyticsPanel apiUrl={apiUrl} userNumber={userNumber} />
+      ) : adminView === 'operations' ? (
+        <AdminOperationsDirectorPanel apiUrl={apiUrl} userNumber={userNumber} />
       ) : (
         <AdminSystemHealthPanel apiUrl={apiUrl} userNumber={userNumber} />
       )}
@@ -848,6 +851,219 @@ function AdminAnalyticsPanel({ apiUrl, userNumber }) {
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+function AdminOperationsDirectorPanel({ apiUrl, userNumber }) {
+  const [drafts, setDrafts] = useState([]);
+  const [healthEvents, setHealthEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [reviewing, setReviewing] = useState(false);
+  const [actingDraftId, setActingDraftId] = useState(null);
+  const [expandedDraftId, setExpandedDraftId] = useState(null);
+  const [error, setError] = useState('');
+  const adminParams = { user_number: userNumber };
+
+  const loadOperations = async ({ showLoading = true } = {}) => {
+    if (showLoading) setLoading(true);
+    setError('');
+    try {
+      const [draftResponse, eventsResponse] = await Promise.all([
+        axios.get(`${apiUrl}/api/admin/operations/issue-drafts`, { params: adminParams }),
+        axios.get(`${apiUrl}/api/admin/operations/health-events`, { params: adminParams })
+      ]);
+      setDrafts(draftResponse.data.issue_drafts || []);
+      setHealthEvents(eventsResponse.data.health_events || []);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Alfred Operations Director could not be loaded.');
+    } finally {
+      if (showLoading) setLoading(false);
+    }
+  };
+
+  const runReview = async () => {
+    setReviewing(true);
+    setError('');
+    try {
+      await axios.post(`${apiUrl}/api/admin/operations/review`, null, { params: adminParams });
+      await loadOperations({ showLoading: false });
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Operations review could not be completed.');
+    } finally {
+      setReviewing(false);
+    }
+  };
+
+  const runDraftAction = async (draft, action) => {
+    setActingDraftId(draft.id);
+    setError('');
+    try {
+      await axios.post(`${apiUrl}/api/admin/operations/issue-drafts/${draft.id}/${action}`, null, { params: adminParams });
+      await loadOperations({ showLoading: false });
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Draft action failed.');
+    } finally {
+      setActingDraftId(null);
+    }
+  };
+
+  useEffect(() => {
+    loadOperations();
+  }, [apiUrl, userNumber]);
+
+  if (loading) {
+    return <div className="py-6 text-sm text-slate-500">Loading Alfred Operations Director...</div>;
+  }
+
+  const openDrafts = drafts.filter((draft) => ['draft', 'approved', 'known_issue'].includes(draft.status));
+  const recentEvents = healthEvents.slice(0, 8);
+
+  return (
+    <div>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Alfred Operations Director</h2>
+          <p className="mt-1 text-sm text-slate-500">Review grouped operational failures and approve Codex-ready GitHub issues.</p>
+        </div>
+        <button
+          type="button"
+          onClick={runReview}
+          disabled={reviewing}
+          className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300"
+        >
+          {reviewing ? 'Reviewing...' : 'Run Review'}
+        </button>
+      </div>
+
+      {error && (
+        <div className="mb-6 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
+        </div>
+      )}
+
+      <div className="mb-6 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Open Drafts</div>
+          <div className="mt-2 text-2xl font-bold text-slate-950">{openDrafts.length}</div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Health Events</div>
+          <div className="mt-2 text-2xl font-bold text-slate-950">{healthEvents.length}</div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">GitHub Created</div>
+          <div className="mt-2 text-2xl font-bold text-slate-950">{drafts.filter((draft) => draft.status === 'github_created').length}</div>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {drafts.length === 0 ? (
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
+            No issue drafts yet. Run review after health events have been captured.
+          </div>
+        ) : drafts.map((draft) => {
+          const expanded = expandedDraftId === draft.id;
+          const acting = actingDraftId === draft.id;
+          const evidence = draft.evidence || {};
+
+          return (
+            <div key={draft.id} className="rounded-lg border border-slate-200 bg-white p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-base font-semibold text-slate-950">{draft.title}</h3>
+                    <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">{draft.status}</span>
+                    <span className="rounded bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">{draft.severity}</span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-700">{draft.summary}</p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedDraftId(expanded ? null : draft.id)}
+                    className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    {expanded ? 'Hide Brief' : 'Preview Brief'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => runDraftAction(draft, 'create-github-issue')}
+                    disabled={acting || draft.status === 'github_created'}
+                    className="rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300"
+                  >
+                    {draft.status === 'github_created' ? 'GitHub Created' : acting ? 'Working...' : 'Create GitHub Issue'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => runDraftAction(draft, 'mark-known')}
+                    disabled={acting || draft.status === 'github_created'}
+                    className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Mark as Known
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => runDraftAction(draft, 'dismiss')}
+                    disabled={acting || draft.status === 'github_created'}
+                    className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 text-sm text-slate-700 md:grid-cols-2 lg:grid-cols-4">
+                <div><span className="font-semibold text-slate-950">Environment:</span> {draft.environment || 'unknown'}</div>
+                <div><span className="font-semibold text-slate-950">Category:</span> {draft.category || 'unknown'}</div>
+                <div><span className="font-semibold text-slate-950">Occurrences:</span> {evidence.occurrences || 0}</div>
+                <div><span className="font-semibold text-slate-950">Target:</span> {evidence.affected_target || 'unknown'}</div>
+                <div><span className="font-semibold text-slate-950">First seen:</span> {formatDate(evidence.first_seen)}</div>
+                <div><span className="font-semibold text-slate-950">Last seen:</span> {formatDate(evidence.last_seen)}</div>
+                <div><span className="font-semibold text-slate-950">Issue:</span> {draft.github_issue_url ? <a className="text-blue-700 hover:underline" href={draft.github_issue_url} target="_blank" rel="noreferrer">#{draft.github_issue_number}</a> : '-'}</div>
+                <div><span className="font-semibold text-slate-950">Labels:</span> {(draft.github_labels || []).join(', ') || '-'}</div>
+              </div>
+
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Suspected Root Cause</div>
+                  <p className="mt-1 text-sm leading-6 text-slate-700">{draft.suspected_root_cause || '-'}</p>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended Action</div>
+                  <p className="mt-1 text-sm leading-6 text-slate-700">{draft.recommended_action || '-'}</p>
+                </div>
+              </div>
+
+              {expanded && (
+                <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Codex-ready Brief Preview</div>
+                  <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-700">{draft.codex_brief_markdown}</pre>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-8 rounded-lg border border-slate-200 bg-white">
+        <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900">Recent Health Events</div>
+        <div className="divide-y divide-slate-100">
+          {recentEvents.length === 0 ? (
+            <div className="px-4 py-4 text-sm text-slate-500">No health events recorded yet.</div>
+          ) : recentEvents.map((event) => (
+            <div key={event.id} className="px-4 py-3 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-slate-950">{event.category}</span>
+                <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{event.severity}</span>
+                <span className="text-xs text-slate-400">{formatDate(event.last_seen_at)}</span>
+              </div>
+              <div className="mt-1 text-slate-600">{event.method || ''} {event.endpoint || event.job_name || event.source || ''}</div>
+              {event.message && <div className="mt-1 text-xs text-slate-400">{event.message}</div>}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

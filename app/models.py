@@ -100,19 +100,65 @@ class SystemHealthEvent(Base):
         Index("idx_system_health_events_type_created", "event_type", "created_at"),
         Index("idx_system_health_events_status_created", "status_code", "created_at"),
         Index("idx_system_health_events_path_created", "path", "created_at"),
+        Index("idx_system_health_events_dedupe", "dedupe_key"),
+        Index("idx_system_health_events_category_last_seen", "category", "last_seen_at"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
     event_type = Column(String(80), nullable=False, index=True)
+    environment = Column(String(80), nullable=True, index=True)
+    category = Column(String(80), nullable=True, index=True)
     severity = Column(String(20), default="info", nullable=False, index=True)
     source = Column(String(80), nullable=True, index=True)
+    details_json = Column(JSONB, nullable=True)
+    stack_trace = Column(Text, nullable=True)
+    endpoint = Column(String(240), nullable=True, index=True)
     path = Column(String(240), nullable=True, index=True)
     method = Column(String(12), nullable=True)
     status_code = Column(Integer, nullable=True, index=True)
+    user_number = Column(String(80), nullable=True)
+    request_id = Column(String(120), nullable=True, index=True)
+    release_version = Column(String(120), nullable=True)
+    job_name = Column(String(120), nullable=True, index=True)
+    dedupe_key = Column(String(500), nullable=True, index=True)
+    first_seen_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    last_seen_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    occurrence_count = Column(Integer, default=1, nullable=False)
+    resolved_at = Column(DateTime, nullable=True, index=True)
     response_time_ms = Column(Integer, nullable=True)
     message = Column(Text, nullable=True)
     metadata_json = Column(JSONB, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class OperationsIssueDraft(Base):
+    __tablename__ = "operations_issue_drafts"
+    __table_args__ = (
+        Index("idx_operations_issue_drafts_status_created", "status", "created_at"),
+        Index("idx_operations_issue_drafts_category_created", "category", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(220), nullable=False)
+    summary = Column(Text, nullable=False)
+    severity = Column(String(20), nullable=False, index=True)
+    status = Column(String(40), default="draft", nullable=False, index=True)
+    environment = Column(String(80), nullable=True, index=True)
+    category = Column(String(80), nullable=True, index=True)
+    source_event_ids = Column(JSONB, nullable=True)
+    evidence_json = Column(JSONB, nullable=True)
+    suspected_root_cause = Column(Text, nullable=True)
+    recommended_action = Column(Text, nullable=True)
+    codex_brief_markdown = Column(Text, nullable=False)
+    github_labels_json = Column(JSONB, nullable=True)
+    github_issue_number = Column(Integer, nullable=True)
+    github_issue_url = Column(Text, nullable=True)
+    created_by_agent = Column(String(80), default="operations_director", nullable=False, index=True)
+    reviewed_by = Column(String(160), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
 class AdminAIBriefing(Base):

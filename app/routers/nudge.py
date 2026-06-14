@@ -39,6 +39,10 @@ from app.services.timezone_service import get_user_timezone, today_for_timezone
 from app.models import Task, Habit, HabitCompletion, JourneyGoal, Message, User
 from app.services.habit_coaching_service import refresh_habit_coaching_review
 from app.services.vision_progress_review_service import VisionProgressReviewService
+from app.services.operations_director.health_events import (
+    record_external_service_failure_with_new_session,
+    record_job_failure,
+)
 from app.config import (
     TWILIO_SID,
     TWILIO_AUTH_TOKEN,
@@ -709,6 +713,12 @@ def generate_ai_message(
 
         except OpenAIError as e:
             logger.warning(f"OpenAI API error on attempt {attempt + 1}: {e}")
+            record_external_service_failure_with_new_session(
+                service_name="OpenAI",
+                operation=f"{nudge_type}_generation",
+                error=e,
+                retry_status=f"attempt {attempt + 1}/{max_retries}",
+            )
             if attempt == max_retries - 1:
                 logger.error(f"❌ All OpenAI retry attempts failed for {nudge_type}")
                 raise HTTPException(
@@ -717,6 +727,12 @@ def generate_ai_message(
                 )
         except Exception as e:
             logger.exception(f"Unexpected error in OpenAI call: {e}")
+            record_external_service_failure_with_new_session(
+                service_name="OpenAI",
+                operation=f"{nudge_type}_generation",
+                error=e,
+                retry_status="unexpected_error",
+            )
             raise HTTPException(status_code=500, detail=f"Unexpected AI error: {str(e)}")
 
 
@@ -765,6 +781,12 @@ def send_whatsapp_message(text: str, user_number: str, nudge_type: str) -> bool:
 
         except TwilioRestException as e:
             logger.warning(f"Twilio API error on attempt {attempt + 1}: {e.code} - {e.msg}")
+            record_external_service_failure_with_new_session(
+                service_name="Twilio",
+                operation=f"{nudge_type}_whatsapp_send",
+                error=e,
+                retry_status=f"attempt {attempt + 1}/{max_retries}",
+            )
             if attempt == max_retries - 1:
                 logger.error(f"❌ All Twilio retry attempts failed for {nudge_type}")
                 raise HTTPException(
@@ -773,6 +795,12 @@ def send_whatsapp_message(text: str, user_number: str, nudge_type: str) -> bool:
                 )
         except Exception as e:
             logger.exception(f"Unexpected error sending WhatsApp: {e}")
+            record_external_service_failure_with_new_session(
+                service_name="Twilio",
+                operation=f"{nudge_type}_whatsapp_send",
+                error=e,
+                retry_status="unexpected_error",
+            )
             raise HTTPException(status_code=500, detail=f"Unexpected WhatsApp error: {str(e)}")
 
     return False
@@ -981,6 +1009,20 @@ def send_nudge_for_user(
 
     except Exception as e:
         logger.exception(f"Failed to send {nudge_type} to {user_number}: {e}")
+        try:
+            record_job_failure(
+                db,
+                job_name=nudge_type,
+                error=e,
+                source="cron",
+                details={"operation": "send_nudge_for_user"},
+                user_number=user_number,
+                commit=False,
+            )
+            db.commit()
+        except Exception as health_exc:
+            db.rollback()
+            logger.warning("Failed to record %s nudge health event: %s", nudge_type, health_exc)
 
         # LOG FAILURE TO EXCEL (non-blocking) ✨
         log_nudge_to_excel(

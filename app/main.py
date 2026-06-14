@@ -10,14 +10,14 @@ import time
 from urllib.parse import parse_qsl, urlencode
 from datetime import datetime
 from app.db import Base, engine, SessionLocal
-from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits, waitlist, onboarding, chat, priority, leadership_coaching_router, audio, message_feedback, opportunities, message_signals, settings, admin, usage, home
+from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits, waitlist, onboarding, chat, priority, leadership_coaching_router, audio, message_feedback, opportunities, message_signals, settings, admin, admin_operations, usage, home
 from app.routers import auth
 from sqlalchemy import text
 import threading
 from app.email_poller import run_email_loop
 from app.services.admin_bootstrap import ensure_admin_schema_and_seed
-from app.models import SystemHealthEvent
 from app.security_middleware import RateLimitMiddleware, SecurityHeadersMiddleware
+from app.services.operations_director.health_events import record_exception, record_health_event
 
 # Configure logging with timestamp
 logging.basicConfig(
@@ -165,13 +165,14 @@ async def log_requests(request: Request, call_next):
         elapsed_ms = round((time.perf_counter() - start) * 1000)
         _record_system_health_event(
             event_type=_classify_exception_event(request.url.path, exc),
-            severity="error",
+            severity="high",
             source="api",
             path=request.url.path,
             method=request.method,
             status_code=500,
             response_time_ms=elapsed_ms,
-            message=str(exc)[:500],
+            message=str(exc),
+            exc=exc,
         )
         logger.exception(f"📤 {request.method} {log_target} → 500")
         raise
@@ -229,10 +230,10 @@ def _classify_exception_event(path: str, exc: Exception) -> str:
 
 def _severity_for_response(status_code: int, elapsed_ms: int) -> str:
     if status_code >= 500:
-        return "error"
+        return "high"
     if status_code in {401, 403} or elapsed_ms >= 2000:
-        return "warning"
-    return "info"
+        return "medium"
+    return "low"
 
 
 def _record_system_health_event(
@@ -244,24 +245,39 @@ def _record_system_health_event(
     status_code: int,
     response_time_ms: int,
     message: str | None = None,
+    exc: Exception | None = None,
 ) -> None:
+    db = None
     try:
         db = SessionLocal()
         try:
-            db.add(SystemHealthEvent(
-                event_type=event_type,
-                severity=severity,
-                source=source,
-                path=path[:240],
-                method=method[:12],
-                status_code=status_code,
-                response_time_ms=response_time_ms,
-                message=message,
-                metadata_json={},
-            ))
-            db.commit()
+            if exc:
+                record_exception(
+                    db,
+                    source=source,
+                    category=event_type,
+                    severity=severity,
+                    endpoint=path,
+                    method=method,
+                    status_code=status_code,
+                    details={"response_time_ms": response_time_ms},
+                    exc=exc,
+                )
+            else:
+                record_health_event(
+                    db,
+                    source=source,
+                    category=event_type,
+                    severity=severity,
+                    endpoint=path,
+                    method=method,
+                    status_code=status_code,
+                    message=message,
+                    details={"response_time_ms": response_time_ms},
+                )
         finally:
-            db.close()
+            if db:
+                db.close()
     except Exception as exc:
         logger.warning(f"Could not record system health event: {exc}")
 
@@ -284,6 +300,7 @@ routers_to_register = [
     (chat.router, "/api", "Chat"),
     (settings.router, "/api", "Settings"),
     (admin.router, "/api/admin", "Admin"),
+    (admin_operations.router, "/api/admin", "Admin-Operations"),
     (audio.router, "/api/audio", "Audio"),
     (message_feedback.router, "/api", "Message-Feedback"),
     (message_signals.router, "/api/message-signals", "Message-Signals"),
