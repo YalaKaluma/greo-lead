@@ -379,7 +379,7 @@ class GoalProgressReviewService:
             upcoming_tasks.get("immediate_focus", [{}])[0].get("title") if upcoming_tasks.get("immediate_focus") else None
         )
 
-        parts = [f"Over the last 30 days, Alfred sees {vision_title} moving with {len(completed_tasks)} completed task(s) and {len(recent_outcomes)} outcome(s) achieved."]
+        parts = [f"Over the last 30 days, I see {vision_title} moving with {len(completed_tasks)} completed task(s) and {len(recent_outcomes)} outcome(s) achieved."]
         if strongest_pillar:
             parts.append(f"The strongest visible progress is around {strongest_pillar}.")
         if current_wave:

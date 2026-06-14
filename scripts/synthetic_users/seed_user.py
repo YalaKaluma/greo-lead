@@ -627,7 +627,7 @@ class SyntheticUserSeeder:
                 readiness_score=84,
                 recommendation="ready_for_promotion",
                 assessment_summary=(
-                    "Alex's current Journey work shows a clear shift from abstract ambition to visible practice. "
+                    "Your current Journey work shows a clear shift from abstract ambition to visible practice. "
                     "The strongest signal is integration across business building and marathon training: both are now being used as daily evidence of focus, courage, and consistency."
                 ),
                 dimension_scores={
@@ -653,9 +653,9 @@ class SyntheticUserSeeder:
                 leadership_profile={
                     "headline": "A systems builder learning to lead through visible practice",
                     "description": (
-                        "Alex's leadership style is no longer merely emerging. It is becoming a practical operating system: "
-                        "he turns ambiguity into cadence, uses business building and marathon training as real-world practice fields, "
-                        "and is learning to lead through clearer asks, better recovery, and repeatable execution rather than private over-preparation."
+                        "Your leadership style is no longer merely emerging. It is becoming a practical operating system: "
+                        "you turn ambiguity into cadence, use business building and marathon training as real-world practice fields, "
+                        "and are learning to lead through clearer asks, better recovery, and repeatable execution rather than private over-preparation."
                     ),
                     "style": "Practical systems builder",
                     "current_growth_edge": "Turning insight into visible asks, cleaner delegation, and repeatable delivery.",
@@ -669,7 +669,7 @@ class SyntheticUserSeeder:
                         "domain": "People",
                         "subdomain": "Coach & Delegate",
                         "score": 4,
-                        "why_it_limits_promotion": "Alex is practicing clearer delegation, but still sometimes protects quality by staying too close to the work.",
+                        "why_it_limits_promotion": "You are practicing clearer delegation, but still sometimes protect quality by staying too close to the work.",
                         "what_to_do_next": "Delegate one meaningful business-development asset with success criteria, not step-by-step instructions.",
                     },
                     {
@@ -685,7 +685,7 @@ class SyntheticUserSeeder:
                         "domain": "Prioritize & Execute",
                         "subdomain": "Prioritization",
                         "score": 5,
-                        "why_it_is_strong": "Alex is consistently translating goals into daily MTN actions and reviewing whether they moved reality.",
+                        "why_it_is_strong": "You are consistently translating goals into daily MTN actions and reviewing whether they moved reality.",
                     },
                     {
                         "domain": "Vision",
@@ -834,19 +834,19 @@ class SyntheticUserSeeder:
         if "business" in (vision.title or "").lower():
             status = "on_track"
             summary = (
-                "Alex's business vision is active and gaining sharper market contact. The strongest progress is not that the company is already built; "
-                "it is that Alex is moving from private refinement into visible founder conversations, a clearer flagship offer, and reusable proof from past COO wins. "
+                "Your business vision is active and gaining sharper market contact. The strongest progress is not that the company is already built; "
+                "it is that you are moving from private refinement into visible founder conversations, a clearer flagship offer, and reusable proof from past COO wins. "
                 "The current constraint is commercial exposure: the offer is becoming concrete enough to sell, but it still needs more direct asks and faster conversion of call notes into a paid sprint."
             )
             wins = [
                 "Founder discovery is producing sharper language around the Operating System Sprint.",
                 "The flagship offer has moved from broad expertise to a more specific transformation promise.",
-                "Alex is using his journal reflections to catch the polishing-before-asking pattern earlier.",
+                "You are using your journal reflections to catch the polishing-before-asking pattern earlier.",
             ]
             risks = [
                 "The main risk is over-polishing the offer instead of testing it with buyers.",
                 "Several high-MTN follow-up tasks remain open or overdue, which can slow commercial momentum.",
-                "If Alex keeps too many business ideas alive, the founder wedge may lose force.",
+                "If you keep too many business ideas alive, the founder wedge may lose force.",
             ]
             focus = (
                 "This week, prioritize market evidence over internal refinement: close the overdue founder follow-ups, convert discovery notes into the paid sprint offer, "
@@ -859,16 +859,16 @@ class SyntheticUserSeeder:
                 "outcome_achievement": "yellow",
                 "overall_goal_health": "yellow",
             }
-            journal_theme = "Journal signals show Alex is naming the founder avoidance pattern more clearly and turning it into visible asks."
+            journal_theme = "Journal signals show you are naming the founder avoidance pattern more clearly and turning it into visible asks."
         else:
             status = "on_track"
             summary = (
-                "Alex's marathon vision is active and increasingly integrated with the business goal. The progress signal is consistency under real-life pressure: "
+                "Your marathon vision is active and increasingly integrated with the business goal. The progress signal is consistency under real-life pressure: "
                 "missed runs are no longer becoming identity verdicts, and recovery is starting to be treated as part of performance. The next edge is making fueling, mobility, and sleep as concrete as the long-run plan."
             )
             wins = [
                 "The 12-mile long run created confidence without needing drama or intensity.",
-                "Alex has a clearer missed-run recovery rule and is using minimum viable workouts.",
+                "You have a clearer missed-run recovery rule and are using minimum viable workouts.",
                 "Training and business execution are now reinforcing the same identity: return to the next rep.",
             ]
             risks = [
@@ -885,7 +885,7 @@ class SyntheticUserSeeder:
                 "outcome_achievement": "yellow",
                 "overall_goal_health": "green",
             }
-            journal_theme = "Journal signals show Alex connecting marathon consistency to leadership identity and calmer recovery after disruption."
+            journal_theme = "Journal signals show you connecting marathon consistency to leadership identity and calmer recovery after disruption."
 
         self.db.add(VisionProgressReview(
             user_id=self.user.id,
@@ -1164,43 +1164,43 @@ class SyntheticUserSeeder:
         return {
             "Vision": {
                 "domain_score": 5,
-                "summary": "Alex has connected business ownership, marathon training, values, strengths, and weekly execution into a coherent direction.",
+                "summary": "You have connected business ownership, marathon training, values, strengths, and weekly execution into a coherent direction.",
                 "subdomains": {
                     "Values": feedback(5, "Values are specific and actively used to make tradeoffs.", "Ownership, health, and courage now shape calendar decisions and market-facing action.", ["Keep linking weekly commitments to one explicit value."]),
-                    "Strengths": feedback(5, "Strengths are named and applied deliberately.", "Alex uses operating clarity and pattern recognition on both the business and training system.", ["Use strengths through delegation, not only personal execution."]),
+                    "Strengths": feedback(5, "Strengths are named and applied deliberately.", "You use operating clarity and pattern recognition on both the business and training system.", ["Use strengths through delegation, not only personal execution."]),
                     "Vision": feedback(5, "Vision is concrete, multi-domain, and supported by roadmap evidence.", "The two visions reinforce each other through courage, consistency, and ownership.", ["Review whether each roadmap wave still creates real-world evidence."]),
                 },
             },
             "People": {
                 "domain_score": 4,
-                "summary": "Alex has mapped key relationships and is practicing more explicit asks and cleaner delegation.",
+                "summary": "You have mapped key relationships and are practicing more explicit asks and cleaner delegation.",
                 "subdomains": {
-                    "Team Composition": feedback(4, "The support system is clear and role-specific.", "Alex knows what each person contributes and what each relationship needs.", ["Clarify ownership expectations with Priya and Marcus."]),
-                    "Inspire": feedback(4, "Alex inspires through practical clarity more than motivational language.", "The strongest examples come from making systems visible and useful.", ["Tell the story behind the system more often."]),
-                    "Coach & Delegate": feedback(4, "Delegation is improving, but Alex still feels the pull to stay close.", "The Priya playbook experiment shows real progress and a remaining control edge.", ["Delegate outcomes with criteria, then hold the debrief."]),
+                    "Team Composition": feedback(4, "The support system is clear and role-specific.", "You know what each person contributes and what each relationship needs.", ["Clarify ownership expectations with Priya and Marcus."]),
+                    "Inspire": feedback(4, "You inspire through practical clarity more than motivational language.", "The strongest examples come from making systems visible and useful.", ["Tell the story behind the system more often."]),
+                    "Coach & Delegate": feedback(4, "Delegation is improving, but you still feel the pull to stay close.", "The Priya playbook experiment shows real progress and a remaining control edge.", ["Delegate outcomes with criteria, then hold the debrief."]),
                 },
             },
             "Prioritize & Execute": {
                 "domain_score": 5,
-                "summary": "Alex has a strong execution cadence with daily MTN evidence and a clearer relationship to focus.",
+                "summary": "You have a strong execution cadence with daily MTN evidence and a clearer relationship to focus.",
                 "subdomains": {
                     "Prioritization": feedback(5, "Prioritization is now tied to market evidence and training capacity.", "The MTN history shows more high-value action and fewer avoidance tasks over time.", ["Keep pruning tasks that only create the feeling of progress."]),
                     "Execution System": feedback(5, "The weekly operating rhythm is concrete and repeatable.", "Two-track weekly planning connects business and marathon actions to reviewable outcomes.", ["Document the system so it can be reused with clients."]),
-                    "Procrastination": feedback(4, "Alex can name avoidance patterns and has practical mitigations.", "Polishing instead of asking is visible now, though still tempting under pressure.", ["Make visible asks before artifact edits on high-stakes days."]),
+                    "Procrastination": feedback(4, "You can name avoidance patterns and have practical mitigations.", "Polishing instead of asking is visible now, though still tempting under pressure.", ["Make visible asks before artifact edits on high-stakes days."]),
                 },
             },
             "Time & Energy": {
                 "domain_score": 4,
                 "summary": "Energy management is becoming a real operating constraint rather than an afterthought.",
                 "subdomains": {
-                    "Energy Sources": feedback(5, "Alex knows which activities create energy and confidence.", "Founder conversations, morning training, and deep work are clearly identified and scheduled.", ["Protect at least one energy source before reactive work."]),
+                    "Energy Sources": feedback(5, "You know which activities create energy and confidence.", "Founder conversations, morning training, and deep work are clearly identified and scheduled.", ["Protect at least one energy source before reactive work."]),
                     "Energy Drains": feedback(4, "Energy drains are specific and paired with mitigations.", "Late reactive work and vague optionality are named with practical boundaries.", ["Review evening shutdown compliance weekly."]),
                     "Recovery": feedback(4, "Recovery routines are improving and connected to performance.", "The shutdown ritual and easy runs are helping, but consistency still needs protection.", ["Treat recovery as a leading indicator, not a cleanup task."]),
                 },
             },
             "Learning & Development": {
                 "domain_score": 5,
-                "summary": "Alex is converting failure patterns into specific systems and development practices.",
+                "summary": "You are converting failure patterns into specific systems and development practices.",
                 "subdomains": {
                     "Failures & Scars": feedback(5, "Failure reflections are honest, specific, and actionable.", "The delayed launch and restart cycle are connected to concrete behavior change.", ["Keep separating facts from identity stories."]),
                     "Development Opportunities": feedback(4, "Development edges are clear and practice-based.", "Direct selling and recovery discipline have explicit reps.", ["Track visible asks and recovery discipline together."]),

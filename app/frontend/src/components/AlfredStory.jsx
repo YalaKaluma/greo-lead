@@ -4,7 +4,7 @@ import { useLanguage } from '../i18n/LanguageContext';
 const STORY_CONTENT = {
   en: {
     eyebrow: "Alfred's Story",
-    title: "What are we solving?",
+    title: "Why I Created Alfred",
     paragraphs: [
       "I didn't create Alfred because I wanted to build software.",
       "I created Alfred because I needed help.",
