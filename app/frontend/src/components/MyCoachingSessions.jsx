@@ -54,6 +54,7 @@ const MyCoachingSessions = ({
   launchLabelByType = {},
   emptyStateText = null,
   loadInitialHistory = true,
+  selectedPersonName = '',
 }) => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -147,12 +148,16 @@ const MyCoachingSessions = ({
         ? `Start goal review session for Vision: ${selectedVisionTitle}`
         : sessionType === 'goal_review' 
         ? 'Start goal review session'
+        : sessionType === 'people_review' && selectedPersonName
+        ? `Start people review session for ${selectedPersonName}`
         : sessionType === 'people_review'
         ? 'Start people review session'
         : 'Start leadership coaching session';
       const displayStartMessage = launchLabelByType[sessionType]
         ? sessionType === 'goal_review' && selectedVisionTitle
           ? `${launchLabelByType[sessionType]}: ${selectedVisionTitle}`
+          : sessionType === 'people_review' && selectedPersonName
+          ? `${launchLabelByType[sessionType]}: ${selectedPersonName}`
           : launchLabelByType[sessionType]
         : startMessage;
         

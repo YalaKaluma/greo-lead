@@ -109,29 +109,38 @@ def _handle_selection(
     state_context: Dict[str, Any]
 ) -> Dict[str, Any]:
     """Handle person selection phase"""
+    msg_lower = user_message.lower().strip()
+
+    if 'candidates' in state_context and msg_lower == 'all':
+        state_context.pop('candidates', None)
     
     # If no candidates loaded yet, load them
     if 'candidates' not in state_context:
         # Check if user wants to see all
-        show_all = 'all' in user_message.lower()
+        show_all = msg_lower == 'all'
         
         candidates_data = PeopleReviewService.get_review_candidates(
-            db, user_number, include_all=show_all
+            db, user_number, include_all=True
         )
-        candidates = candidates_data['people']
+        all_candidates = candidates_data['people']
         stats = candidates_data['stats']
         
-        state_context['candidates'] = candidates
+        state_context['candidates'] = all_candidates if show_all else all_candidates[:5]
         
-        if not candidates:
+        if not all_candidates:
             return {
                 "response": "I don't see any people in your network yet. Add some in My Leadership Journey first!",
                 "next_phase": "completed",
                 "state_context": None
             }
+
+        selected_person = None if show_all else _parse_selection(user_message, all_candidates)
+        if selected_person:
+            return _start_selected_person_review(db, user_number, selected_person, state_context)
         
         # Format candidates for display
         people_list = []
+        candidates = state_context['candidates']
         display_count = min(len(candidates), 5) if not show_all else len(candidates)
         
         for i, person in enumerate(candidates[:display_count], 1):
@@ -180,7 +189,16 @@ def _handle_selection(
             "state_context": state_context
         }
     
-    # Start the review
+    return _start_selected_person_review(db, user_number, selected_person, state_context)
+
+
+def _start_selected_person_review(
+    db: Session,
+    user_number: str,
+    selected_person: Dict[str, Any],
+    state_context: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Start a people review for the selected candidate."""
     try:
         review_session = PeopleReviewService.start_review(
             db,
