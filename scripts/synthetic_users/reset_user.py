@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
 
 from app.db import SessionLocal
 from app.models import (
+    AdminAuditLog,
     BeltAssessment,
     ConversationState,
     DailyEnergyCheckin,
@@ -17,6 +18,7 @@ from app.models import (
     Habit,
     HabitCoachingReview,
     HabitCompletion,
+    HomeDashboardSnapshot,
     JournalEntry,
     JourneyBeltTrial,
     JourneyCoachingMoment,
@@ -69,6 +71,11 @@ def reset_synthetic_user(db, email: str, delete_user: bool = True) -> int:
     identifiers = [value for value in {user_number, email, str(user.id)} if value]
 
     deleted = 0
+    deleted += _delete(
+        db.query(AdminAuditLog).filter(
+            (AdminAuditLog.target_user_id == user.id) | (AdminAuditLog.admin_user_id == user.id)
+        )
+    )
 
     messages = db.query(Message).filter(Message.user_number.in_(identifiers)).all()
     message_ids = [item.id for item in messages]
@@ -140,6 +147,7 @@ def reset_synthetic_user(db, email: str, delete_user: bool = True) -> int:
     deleted += _delete(db.query(Task).filter(Task.user_number.in_(identifiers)))
     deleted += _delete(db.query(Habit).filter(Habit.user_number.in_(identifiers)))
     deleted += _delete(db.query(DailyEnergyCheckin).filter(DailyEnergyCheckin.user_number.in_(identifiers)))
+    deleted += _delete(db.query(HomeDashboardSnapshot).filter(HomeDashboardSnapshot.user_number.in_(identifiers)))
     deleted += _delete(db.query(Message).filter(Message.user_number.in_(identifiers)))
     deleted += _delete(db.query(JourneyPerson).filter(JourneyPerson.user_number.in_(identifiers)))
     deleted += _delete(db.query(JourneyValue).filter(JourneyValue.user_number.in_(identifiers)))

@@ -78,11 +78,15 @@ def sanitize_text(value: Any, limit: int = MAX_MESSAGE_LENGTH) -> str | None:
     if value is None:
         return None
     text = str(value)
+    text = re.sub(r"(?is)\[SQL:.*?\]", "[SQL: REDACTED]", text)
+    text = re.sub(r"(?is)\[parameters:.*?\]", "[parameters: REDACTED]", text)
+    text = re.sub(r"(?is)\bDETAIL:\s*Key\s*\([^)]+\)=\([^)]+\)", "DETAIL: Key values redacted", text)
     text = re.sub(r"(?i)(bearer\s+)[a-z0-9._\-]+", rf"\1{REDACTION}", text)
     text = re.sub(r"(?i)(token|api[_-]?key|password|secret)=([^&\s]+)", rf"\1={REDACTION}", text)
     text = re.sub(r"(?i)(postgres(?:ql)?|mysql)://[^\s]+", REDACTION, text)
-    text = re.sub(r"whatsapp:\+\d{4,}", "whatsapp:+[REDACTED]", text)
+    text = re.sub(r"(?i)whatsapp:\+\d[\d\s().-]{6,}\d", "whatsapp:+[REDACTED]", text)
     text = re.sub(r"\+\d{7,15}", "+[REDACTED]", text)
+    text = re.sub(r"(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b", "[REDACTED_EMAIL]", text)
     return text[:limit]
 
 

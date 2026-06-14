@@ -986,6 +986,8 @@ function AdminOperationsDirectorPanel({ apiUrl, userNumber }) {
 
   const openDrafts = drafts.filter((draft) => ['draft', 'approved', 'known_issue'].includes(draft.status));
   const sortedDrafts = sortByCriticality(drafts);
+  const visibleDrafts = sortedDrafts.slice(0, 25);
+  const hiddenDraftCount = Math.max(sortedDrafts.length - visibleDrafts.length, 0);
   const recentEvents = sortByCriticality(healthEvents).slice(0, 8);
   const summary = executiveSummary || buildFallbackSummary(drafts, healthEvents);
 
@@ -1087,7 +1089,14 @@ function AdminOperationsDirectorPanel({ apiUrl, userNumber }) {
           <div className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
             No issue drafts yet. Run review after health events have been captured.
           </div>
-        ) : sortedDrafts.map((draft) => {
+        ) : (
+          <>
+            {hiddenDraftCount > 0 && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                Showing the top {visibleDrafts.length} drafts by criticality. {hiddenDraftCount} lower-priority drafts are hidden from this view.
+              </div>
+            )}
+            {visibleDrafts.map((draft) => {
           const expanded = expandedDraftId === draft.id;
           const acting = actingDraftId === draft.id;
           const evidence = draft.evidence || {};
@@ -1168,7 +1177,9 @@ function AdminOperationsDirectorPanel({ apiUrl, userNumber }) {
               )}
             </div>
           );
-        })}
+            })}
+          </>
+        )}
       </div>
 
       <div className="mt-8 rounded-lg border border-slate-200 bg-white">

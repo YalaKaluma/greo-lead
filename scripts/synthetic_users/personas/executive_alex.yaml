@@ -305,15 +305,15 @@ tasks:
     mtn_score: 0.71
 
 journal:
-  - days_ago: 30
+  - days_ago: 28
     title: The old loop
     body: "I noticed today that I am still treating the business idea like a someday project. I read, tweak notes, and imagine the perfect offer, but I avoid the exposed action: asking real founders what they would pay for. The same pattern shows up in running. I can design a plan forever, then miss one workout and make it mean the plan is broken. Both places reveal the same belief: if I do not fully start, I cannot fully fail."
     depth_score: 3.0
-  - days_ago: 27
+  - days_ago: 25
     title: Where urgency hides
     body: My calendar felt full, but most of the work protected me from clearer feedback. I answered easy emails before drafting the offer. I reorganized the training spreadsheet before doing the mobility work. I can see how false productivity gives me the emotional reward of effort without the risk of reality. This week I want to measure courage by the number of honest reps, not the amount of planning.
     depth_score: 3.6
-  - days_ago: 24
+  - days_ago: 22
     title: First uncomfortable asks
     body: I sent three notes to founders asking for feedback on the operating system idea. The discomfort was physical. I kept wanting to soften the ask, explain too much, or make it sound casual. The useful data is that nothing terrible happened. Two people said yes. One ignored it. That is a much better teacher than another hour polishing the deck.
     depth_score: 4.2
@@ -322,11 +322,11 @@ journal:
         confidence: 0.92
         excerpt: "I sent three notes to founders asking for feedback on the operating system idea."
         reason: "This is direct evidence that you are moving the business vision through market-facing action rather than private refinement."
-  - days_ago: 21
+  - days_ago: 19
     title: Missed run, different recovery
     body: "I missed Tuesday's run after a late work night. My first reaction was the familiar one: I am slipping. But I tried to separate the missed action from the identity story. The practical issue was that I had no minimum version for tired days. I did 25 minutes easy today and kept the chain alive. The lesson is not to lower standards; it is to design standards that survive real life."
     depth_score: 4.8
-  - days_ago: 18
+  - days_ago: 16
     title: Market feedback stung
     body: A founder told me the offer sounded smart but broad. I felt defensive because broad is how I hide. If the offer is broad, nobody can reject the real thing because there is no real thing. The sharper version is helping founders install a weekly operating cadence that turns priorities into behavior. That is smaller, but it finally has teeth.
     depth_score: 5.4
@@ -335,7 +335,7 @@ journal:
         confidence: 0.94
         excerpt: "The sharper version is helping founders install a weekly operating cadence that turns priorities into behavior."
         reason: "The entry connects founder feedback to a narrower, more sellable business offer."
-  - days_ago: 15
+  - days_ago: 13
     title: The two visions are connected
     body: "I used to think the business goal and marathon goal competed for time. Now I see they are training the same muscle. The business asks me to tolerate visible imperfection. The marathon asks me to tolerate slow accumulation. Both punish drama. Both reward returning to the next rep. The operating question is: what is the next honest rep today?"
     depth_score: 6.1
@@ -344,7 +344,7 @@ journal:
         confidence: 0.9
         excerpt: "The business asks me to tolerate visible imperfection. The marathon asks me to tolerate slow accumulation."
         reason: "The journal links the business and marathon visions into one development pattern."
-  - days_ago: 12
+  - days_ago: 10
     title: Prioritization as grief
     body: "Choosing the flagship offer meant letting other possible businesses go. I felt more sadness than expected. Those ideas let me imagine many futures without committing to one. Prioritization is partly grief: admitting I cannot live every version of the story. The gain is energy. Once I chose the wedge, the next actions became obvious."
     depth_score: 6.7
@@ -353,15 +353,15 @@ journal:
         confidence: 0.91
         excerpt: "Choosing the flagship offer meant letting other possible businesses go."
         reason: "This is a strong signal that you are narrowing the business wedge instead of keeping vague optionality alive."
-  - days_ago: 9
+  - days_ago: 6
     title: A better kind of discipline
     body: "Discipline used to mean forcing myself harder. This week it looked quieter: laying out running clothes, writing tomorrow's first business task before bed, and ending work before I became useless. The pattern I am seeing is that discipline is often environmental kindness in advance. I do not need a more heroic morning. I need fewer decisions before the important rep."
     depth_score: 7.1
-  - days_ago: 7
+  - days_ago: 5
     title: Feedback without collapse
     body: "I walked through the offer with Evelyn and she pushed hard on the buyer. I noticed the old impulse to collapse into either compliance or defense. Instead I wrote down the parts that created energy and the parts that made me vague. That felt like a new behavior: using feedback as material without making it a verdict on me."
     depth_score: 7.5
-  - days_ago: 5
+  - days_ago: 4
     title: Long run evidence
     body: The 12 mile run changed something. Not because it was fast, but because I stayed calm when it got boring and uncomfortable. That is exactly the state I need in the business too. Boredom and uncertainty are not signs to switch strategies. They are often the middle of the rep. I want to stop confusing emotional weather with strategic information.
     depth_score: 8.0
@@ -370,7 +370,7 @@ journal:
         confidence: 0.88
         excerpt: "I stayed calm when it got boring and uncomfortable. That is exactly the state I need in the business too."
         reason: "The entry links marathon endurance to business execution and emotional steadiness."
-  - days_ago: 4
+  - days_ago: 3
     title: Selling as service
     body: "I had a founder call where the problem was obvious: his team had priorities, but no cadence that turned them into decisions. I did not pitch much. I named what I saw and asked what it was costing him. The conversation felt less like selling and more like useful diagnosis. My growth edge is trusting that clarity is valuable before I overbuild the solution."
     depth_score: 8.4
@@ -379,7 +379,7 @@ journal:
         confidence: 0.96
         excerpt: "The conversation felt less like selling and more like useful diagnosis."
         reason: "This journal entry shows you converting strategic clarity into a commercial behavior that supports the business vision."
-  - days_ago: 3
+  - days_ago: 2
     title: Integration
     body: The business and marathon are starting to form one operating system. Monday is offer creation, Tuesday is founder calls, Wednesday is training quality, Friday is review. The deeper shift is that I am not asking each day to prove my identity. I am asking it to hold one or two commitments. That makes progress feel less fragile.
     depth_score: 8.8

@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.models import OperationsIssueDraft, SystemHealthEvent
-from app.services.operations_director.health_events import severity_for
+from app.services.operations_director.health_events import sanitize_details, sanitize_text, severity_for
 
 
 DRAFT_ACTIVE_STATUSES = {"draft", "approved", "known_issue"}
@@ -125,10 +125,11 @@ class OperationsDirectorReviewer:
     def _summary(self, event: SystemHealthEvent, target: str) -> str:
         count = event.occurrence_count or 1
         category = self._category_label(event.category or event.event_type or "backend_500")
+        message = sanitize_text(event.message or "No message captured.", 180) or "No message captured."
         return (
             f"{category} occurred {count} time{'s' if count != 1 else ''} in "
             f"{event.environment or 'unknown'} for {target}. Latest sanitized message: "
-            f"{event.message or 'No message captured.'}"
+            f"{message}"
         )
 
     def _evidence(self, event: SystemHealthEvent, target: str) -> dict[str, Any]:
@@ -141,7 +142,7 @@ class OperationsDirectorReviewer:
             "affected_users": event.user_number or "unknown",
             "related_health_events": [event.id] if event.id is not None else [],
             "dedupe_key": event.dedupe_key,
-            "details": event.details_json or event.metadata_json or {},
+            "details": sanitize_details(event.details_json or event.metadata_json or {}),
         }
 
     def _suspected_root_cause(self, event: SystemHealthEvent) -> str:

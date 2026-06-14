@@ -20,7 +20,18 @@ def create_github_issue(
     default_assignee = os.getenv("GITHUB_DEFAULT_ASSIGNEE")
 
     if not token or not owner or not repo:
-        raise GitHubIssueError("GitHub issue creation is not configured.")
+        missing = [
+            name for name, value in {
+                "GITHUB_TOKEN": token,
+                "GITHUB_OWNER": owner,
+                "GITHUB_REPO": repo,
+            }.items()
+            if not value
+        ]
+        raise GitHubIssueError(
+            "GitHub issue creation is not configured. "
+            f"Set {', '.join(missing)} in Railway."
+        )
 
     final_assignees = list(assignees or [])
     if default_assignee and default_assignee not in final_assignees:

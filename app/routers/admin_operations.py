@@ -9,7 +9,7 @@ from app.db import get_db
 from app.models import OperationsIssueDraft, SystemHealthEvent, User
 from app.routers.admin import _log_admin_action, require_admin
 from app.services.github.issues import GitHubIssueError, create_github_issue
-from app.services.operations_director.health_events import record_health_event
+from app.services.operations_director.health_events import record_health_event, sanitize_details, sanitize_text
 from app.services.operations_director.reviewer import OperationsDirectorReviewer
 
 
@@ -27,6 +27,17 @@ def _iso(value) -> str | None:
     return value.isoformat() if value else None
 
 
+def _safe_text(value: Any, limit: int = 500) -> str | None:
+    text = sanitize_text(value, limit)
+    if text is None:
+        return None
+    return " ".join(text.split())
+
+
+def _safe_markdown(value: str | None, limit: int = 12000) -> str:
+    return sanitize_text(value or "", limit) or ""
+
+
 def _event_to_dict(event: SystemHealthEvent) -> dict[str, Any]:
     return {
         "id": event.id,
@@ -34,8 +45,8 @@ def _event_to_dict(event: SystemHealthEvent) -> dict[str, Any]:
         "source": event.source,
         "category": event.category or event.event_type,
         "severity": event.severity,
-        "message": event.message,
-        "details": event.details_json or event.metadata_json or {},
+        "message": _safe_text(event.message, 300),
+        "details": sanitize_details(event.details_json or event.metadata_json or {}),
         "endpoint": event.endpoint or event.path,
         "method": event.method,
         "status_code": event.status_code,
@@ -57,16 +68,16 @@ def _draft_to_dict(draft: OperationsIssueDraft) -> dict[str, Any]:
     return {
         "id": draft.id,
         "title": draft.title,
-        "summary": draft.summary,
+        "summary": _safe_text(draft.summary, 700),
         "severity": draft.severity,
         "status": draft.status,
         "environment": draft.environment,
         "category": draft.category,
         "source_event_ids": draft.source_event_ids or [],
-        "evidence": draft.evidence_json or {},
-        "suspected_root_cause": draft.suspected_root_cause,
-        "recommended_action": draft.recommended_action,
-        "codex_brief_markdown": draft.codex_brief_markdown,
+        "evidence": sanitize_details(draft.evidence_json or {}),
+        "suspected_root_cause": _safe_text(draft.suspected_root_cause, 500),
+        "recommended_action": _safe_text(draft.recommended_action, 500),
+        "codex_brief_markdown": _safe_markdown(draft.codex_brief_markdown),
         "github_labels": draft.github_labels_json or [],
         "github_issue_number": draft.github_issue_number,
         "github_issue_url": draft.github_issue_url,
@@ -146,7 +157,8 @@ def _operations_chat_response(message: str, drafts: list[OperationsIssueDraft], 
         draft = open_drafts[0]
         return (
             f"Start with '{draft.title}' ({draft.severity}). "
-            f"{draft.summary} Recommended action: {draft.recommended_action or 'Confirm the failure and prepare the GitHub issue.'}"
+            f"{_safe_text(draft.summary, 400)} Recommended action: "
+            f"{_safe_text(draft.recommended_action, 300) or 'Confirm the failure and prepare the GitHub issue.'}"
         )
 
     if any(term in question for term in ["recurring", "repeat", "again", "events", "signals"]):
@@ -325,10 +337,10 @@ def create_issue_from_draft(
     try:
         issue = create_github_issue(
             title=draft.title,
-            body=draft.codex_brief_markdown,
+            body=_safe_markdown(draft.codex_brief_markdown),
             labels=draft.github_labels_json or [],
         )
-    except (GitHubIssueError, Exception) as exc:
+    except GitHubIssueError as exc:
         record_health_event(
             db,
             source="github",
@@ -337,7 +349,20 @@ def create_issue_from_draft(
             message=str(exc),
             details={"operation": "create_issue", "draft_id": draft.id},
         )
-        raise HTTPException(status_code=502, detail="GitHub issue creation failed gracefully.") from exc
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        record_health_event(
+            db,
+            source="github",
+            category="external_service_failure",
+            service_name="GitHub",
+            message=str(exc),
+            details={"operation": "create_issue", "draft_id": draft.id},
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="GitHub issue creation failed. Alfred recorded this as a health event.",
+        ) from exc
 
     draft.github_issue_number = issue.get("number")
     draft.github_issue_url = issue.get("url")

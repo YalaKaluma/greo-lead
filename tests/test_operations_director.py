@@ -9,6 +9,8 @@ from app.models import OperationsIssueDraft, SystemHealthEvent, User
 from app.routers.admin import _get_admin_user
 from app.routers.admin_operations import (
     _build_executive_summary,
+    _draft_to_dict,
+    _event_to_dict,
     _operations_chat_response,
     _sort_by_criticality,
 )
@@ -120,6 +122,57 @@ def test_health_event_service_sanitizes_secrets_and_user_numbers():
     assert event.details_json["Authorization"] == "[REDACTED]"
     assert event.details_json["safe"] == "kept"
     assert sanitize_text("Bearer abc.def") == "Bearer [REDACTED]"
+
+
+def test_operations_director_api_sanitizes_stored_sql_payloads():
+    raw = (
+        "(psycopg2.errors.UniqueViolation) duplicate key value violates unique constraint "
+        "DETAIL: Key (user_number)=(whatsapp:+17707789240) already exists. "
+        "[SQL: INSERT INTO home_dashboard_snapshots (user_number) VALUES (%(user_number)s)] "
+        "[parameters: {'user_number': 'whatsapp:+17707789240'}]"
+    )
+    event = SystemHealthEvent(
+        id=1,
+        event_type="database_failure",
+        category="database_failure",
+        severity="critical",
+        message=raw,
+        details_json={"raw": raw, "Authorization": "Bearer abc.def"},
+        endpoint="/api/home/dashboard",
+        occurrence_count=1,
+    )
+    draft = OperationsIssueDraft(
+        id=2,
+        title="Critical database failure",
+        summary=f"Latest sanitized message: {raw}",
+        severity="critical",
+        status="draft",
+        evidence_json={"details": {"raw": raw}, "affected_target": "/api/home/dashboard"},
+        suspected_root_cause=raw,
+        recommended_action=raw,
+        codex_brief_markdown=f"# Codex Brief\n\n{raw}",
+    )
+
+    payload = str(_event_to_dict(event)) + str(_draft_to_dict(draft))
+
+    assert "whatsapp:+17707789240" not in payload
+    assert "INSERT INTO home_dashboard_snapshots" not in payload
+    assert "'user_number': 'whatsapp" not in payload
+    assert "Bearer abc.def" not in payload
+    assert "[SQL: REDACTED]" in payload
+
+
+def test_github_issue_missing_configuration_names_required_variables(monkeypatch):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_OWNER", raising=False)
+    monkeypatch.delenv("GITHUB_REPO", raising=False)
+
+    with pytest.raises(github_issues.GitHubIssueError) as exc_info:
+        github_issues.create_github_issue("Title", "Body")
+
+    assert "GITHUB_TOKEN" in str(exc_info.value)
+    assert "GITHUB_OWNER" in str(exc_info.value)
+    assert "GITHUB_REPO" in str(exc_info.value)
 
 
 def test_operations_director_creates_codex_ready_draft_and_prevents_duplicates():
