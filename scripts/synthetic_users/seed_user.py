@@ -94,6 +94,7 @@ class SyntheticUserSeeder:
         self.load_tasks()
         self.load_habits()
         self.load_journal()
+        self.load_nudges()
         self.load_people()
         self.load_journey()
         self.load_opportunities()
@@ -289,7 +290,11 @@ class SyntheticUserSeeder:
                 completed_days_ago = int(spec.get("completed_days_ago", max(1, min(age_days - 1, self.rng.randint(1, 30)))))
                 due_date = datetime.utcnow() - timedelta(days=completed_days_ago)
             else:
-                due_date = datetime.utcnow() + timedelta(days=int(spec.get("due_in_days", self.rng.randint(1, 21))))
+                due_in_days = int(spec.get("due_in_days", self.rng.randint(1, 21)))
+                if due_in_days == 0:
+                    due_date = datetime.combine(self.today, time(hour=23, minute=59))
+                else:
+                    due_date = datetime.utcnow() + timedelta(days=due_in_days)
             if status == "completed":
                 due_date = min(due_date, datetime.utcnow() - timedelta(days=1))
             goal = self.goals_by_title.get(spec.get("goal") or "") or self._sample_outcome(index)
@@ -458,6 +463,27 @@ class SyntheticUserSeeder:
                 reflection_depth_explanation=depth_explanation,
                 reflection_depth_recommendations=recommendations,
                 reflection_depth_scored_at=created_at + timedelta(minutes=1),
+            ))
+
+    def load_nudges(self) -> None:
+        nudges = self.persona.get("nudges") or self._default_nudges()
+        for index, spec in enumerate(nudges):
+            days_ago = int(spec.get("days_ago", len(nudges) - index - 1))
+            nudge_type = spec.get("type") or ("morning" if index % 2 == 0 else "evening")
+            hour = int(spec.get("hour", 8 if nudge_type == "morning" else 18))
+            timestamp = datetime.combine(
+                self.today - timedelta(days=days_ago),
+                time(hour=hour, minute=int(spec.get("minute", 15))),
+                tzinfo=timezone.utc,
+            )
+            self.db.add(Message(
+                sender="assistant",
+                user_number=self.user_number,
+                content=spec.get("content") or spec.get("text") or self._default_nudge_text(nudge_type),
+                message_type="nudge",
+                conversation_type="messages",
+                is_read=bool(spec.get("is_read", days_ago > 1)),
+                timestamp=timestamp,
             ))
 
     def load_people(self) -> None:
@@ -798,6 +824,21 @@ class SyntheticUserSeeder:
             {"title": "Reflective", "body": "The real issue is not time. It is my discomfort choosing what will not get done.", "depth_score": 6},
             {"title": "Transformational", "body": "I am practicing clearer tradeoffs and noticing that leadership often begins with what I stop carrying.", "depth_score": 8},
         ]
+
+    def _default_nudges(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "days_ago": offset,
+                "type": "morning" if offset % 2 == 0 else "evening",
+                "content": self._default_nudge_text("morning" if offset % 2 == 0 else "evening"),
+            }
+            for offset in range(9, -1, -1)
+        ]
+
+    def _default_nudge_text(self, nudge_type: str) -> str:
+        if nudge_type == "morning":
+            return "Today, choose one action that creates real evidence instead of private certainty. What is the smallest visible ask you can make before noon?"
+        return "Evening check: where did you move reality today, and where did you only think about moving it? Name one adjustment for tomorrow."
 
     def _task_priority_telemetry(
             self,

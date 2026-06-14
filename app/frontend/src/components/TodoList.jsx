@@ -898,11 +898,11 @@ export default function TodoList({ apiUrl, userNumber }) {
       <div className="max-w-7xl mx-auto p-6">
         {/* Header */}
         <div className="mb-6 grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_auto_1fr]">
-          <div className="min-w-0">
+          <div className={`order-1 min-w-0 lg:order-none ${selectionMode ? '' : 'hidden sm:block'}`}>
             <h1 className="text-3xl font-bold text-slate-800 hidden lg:block">
               {t('tasks.title')}
             </h1>
-            <p className="text-slate-600 mt-1">
+            <p className={`text-slate-600 mt-1 ${selectionMode ? '' : 'hidden sm:block'}`}>
               {selectionMode ? (
                 <span className="text-blue-600 font-medium">
                   {selectedTasks.length} task(s) selected
@@ -913,7 +913,7 @@ export default function TodoList({ apiUrl, userNumber }) {
             </p>
           </div>
           {!selectionMode && (
-            <div className="flex justify-center pt-9">
+            <div className="order-3 flex justify-center lg:order-none lg:pt-9">
               <DailyMtnNeedle
                 score={todayMtnScore}
                 completedTasks={todayCompletedTasks}
@@ -922,7 +922,7 @@ export default function TodoList({ apiUrl, userNumber }) {
               />
             </div>
           )}
-          <div className="flex justify-end">
+          <div className="order-2 flex justify-end lg:order-none">
             <div className="flex flex-wrap justify-end gap-2">
               {sortOrder.length > 0 && !selectionMode && activeTab === 'tasks' && (
                 <button
@@ -1651,6 +1651,38 @@ const formatDateKey = (date) => {
   return `${year}-${month}-${day}`;
 };
 
+const startOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
+
+const addMonths = (date, months) => new Date(date.getFullYear(), date.getMonth() + months, 1);
+
+const getNextMonthStart = () => addMonths(startOfMonth(new Date()), 1);
+
+const getCalendarDays = (monthDate) => {
+  const firstDay = startOfMonth(monthDate);
+  const startOffset = firstDay.getDay();
+  const daysInMonth = new Date(firstDay.getFullYear(), firstDay.getMonth() + 1, 0).getDate();
+  const days = [];
+
+  for (let index = 0; index < startOffset; index += 1) {
+    days.push(null);
+  }
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    days.push(new Date(firstDay.getFullYear(), firstDay.getMonth(), day));
+  }
+
+  while (days.length % 7 !== 0) {
+    days.push(null);
+  }
+
+  return days;
+};
+
+const formatMonthLabel = (date) => date.toLocaleDateString('en-US', {
+  month: 'long',
+  year: 'numeric',
+});
+
 const fillMtnTrendDates = (rows) => {
   const sortedRows = [...rows].sort((a, b) => dateToTime(a.date) - dateToTime(b.date));
   const firstDate = dateFromKey(sortedRows[0]?.date);
@@ -2043,6 +2075,13 @@ function FollowUpModal({
   onCancel,
   onConfirm
 }) {
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const selectedDate = dateFromKey(followUpDate);
+    return startOfMonth(selectedDate || getNextMonthStart());
+  });
+  const calendarDays = getCalendarDays(calendarMonth);
+  const selectedDateLabel = followUpDate ? formatShortDate(followUpDate) : 'Choose a date';
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/40 flex items-center justify-center px-4 py-6">
       <div className="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden">
@@ -2069,17 +2108,67 @@ function FollowUpModal({
           </div>
 
           <div>
-            <label htmlFor="follow-up-date" className="block text-sm font-medium text-slate-700 mb-1">
-              Follow-up date
-            </label>
-            <input
-              id="follow-up-date"
-              type="date"
-              value={followUpDate}
-              onChange={(event) => setFollowUpDate(event.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
-              autoFocus
-            />
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-slate-700">Follow-up date</p>
+                <p className="text-sm text-slate-500">{selectedDateLabel}</p>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCalendarMonth(prev => addMonths(prev, -1))}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded border border-slate-200 text-slate-600 transition-colors hover:bg-slate-100"
+                  title="Previous month"
+                  aria-label="Previous month"
+                >
+                  <ChevronLeftIcon />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCalendarMonth(prev => addMonths(prev, 1))}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded border border-slate-200 text-slate-600 transition-colors hover:bg-slate-100"
+                  title="Next month"
+                  aria-label="Next month"
+                >
+                  <ChevronRightIcon />
+                </button>
+              </div>
+            </div>
+            <div className="rounded-lg border border-slate-200 p-3">
+              <div className="mb-3 text-center text-sm font-semibold text-slate-900">
+                {formatMonthLabel(calendarMonth)}
+              </div>
+              <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold uppercase text-slate-400">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                  <div key={day} className="py-1">{day}</div>
+                ))}
+              </div>
+              <div className="mt-1 grid grid-cols-7 gap-1">
+                {calendarDays.map((date, index) => {
+                  const key = date ? formatDateKey(date) : `empty-${index}`;
+                  const isSelected = date && key === followUpDate;
+
+                  return date ? (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setFollowUpDate(key)}
+                      className={`aspect-square rounded text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        isSelected
+                          ? 'bg-blue-600 text-white hover:bg-blue-700'
+                          : 'text-slate-700 hover:bg-slate-100'
+                      }`}
+                      aria-pressed={isSelected}
+                      autoFocus={index === calendarDays.findIndex(Boolean)}
+                    >
+                      {date.getDate()}
+                    </button>
+                  ) : (
+                    <div key={key} className="aspect-square" aria-hidden="true" />
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           {error && (
@@ -2185,6 +2274,22 @@ function CloseIcon() {
     <IconSvg>
       <path d="M18 6 6 18" />
       <path d="m6 6 12 12" />
+    </IconSvg>
+  );
+}
+
+function ChevronLeftIcon() {
+  return (
+    <IconSvg>
+      <path d="m15 18-6-6 6-6" />
+    </IconSvg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <IconSvg>
+      <path d="m9 18 6-6-6-6" />
     </IconSvg>
   );
 }
