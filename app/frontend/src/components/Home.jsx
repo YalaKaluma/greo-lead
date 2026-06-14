@@ -32,6 +32,15 @@ const pointDelta = (value) => {
   return '0 pts';
 };
 
+const entryDelta = (value) => {
+  const number = toNumber(value, 0);
+  const absolute = Math.abs(number);
+  const formatted = absolute % 1 > 0 ? absolute.toFixed(1) : Math.round(absolute).toString();
+  if (number > 0) return `+${formatted}`;
+  if (number < 0) return `-${formatted}`;
+  return '0';
+};
+
 const goalHealthStyles = {
   green: {
     accent: 'border-l-emerald-500',
@@ -109,24 +118,31 @@ function HabitsMetricCard({ metric }) {
 }
 
 function JournalMetricCard({ metric }) {
-  const delta = scoreDelta(metric?.delta_depth_5);
+  const depthDelta = scoreDelta(metric?.delta_depth_5);
+  const frequencyDelta = entryDelta(metric?.delta_entries);
+  const entriesThisWeek = toNumber(metric?.entries_this_week, 0);
+  const monthAverageEntries = toNumber(metric?.month_average_entries_per_week, 0).toFixed(1);
+  const averageDepth = toNumber(metric?.average_depth_5, 0).toFixed(1);
   const monthAverageDepth = toNumber(metric?.month_average_depth_5, 0).toFixed(1);
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <CardHeader title="Wisdom Index" />
       <div className="mt-5 grid grid-cols-2 gap-3">
         <div className="rounded-lg bg-slate-50 p-4 text-center">
-          <div className="text-3xl font-semibold text-slate-950">{toNumber(metric?.entries_this_week, 0)}</div>
+          <div className="text-3xl font-semibold text-slate-950">{entriesThisWeek}</div>
           <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Frequency</p>
         </div>
         <div className="rounded-lg bg-slate-50 p-4 text-center">
-          <div className="text-3xl font-semibold text-slate-950">{toNumber(metric?.average_depth_5, 0).toFixed(1)}</div>
+          <div className="text-3xl font-semibold text-slate-950">{averageDepth}</div>
           <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Depth / 5</p>
         </div>
       </div>
-      <div className="mt-4 flex items-center justify-between gap-4">
-        <p className={`text-sm font-semibold ${delta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
-          {delta} depth vs {monthAverageDepth} last month avg
+      <div className="mt-4 space-y-1">
+        <p className={`text-sm font-semibold ${frequencyDelta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
+          {entriesThisWeek} this week vs {monthAverageEntries}/wk last month avg ({frequencyDelta})
+        </p>
+        <p className={`text-sm font-semibold ${depthDelta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
+          {averageDepth} depth vs {monthAverageDepth} last month avg ({depthDelta})
         </p>
       </div>
     </section>

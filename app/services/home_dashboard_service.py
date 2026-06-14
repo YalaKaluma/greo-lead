@@ -258,12 +258,16 @@ def _weekly_journal_metrics(journal: dict[str, Any]) -> dict[str, Any]:
     week = chart[-7:]
     previous_month = chart[-37:-7]
     entries = sum(int(item.get("entry_count") or 0) for item in week)
+    month_entries = sum(int(item.get("entry_count") or 0) for item in previous_month)
+    month_avg_entries_per_week = (month_entries / len(previous_month)) * 7 if previous_month else 0
     weekly_depth = [float(item.get("daily_average") or 0) for item in week if item.get("daily_average")]
     monthly_depth = [float(item.get("daily_average") or 0) for item in previous_month if item.get("daily_average")]
     avg_depth_10 = mean(weekly_depth) if weekly_depth else 0
     month_avg_depth_10 = mean(monthly_depth) if monthly_depth else 0
     return {
         "entries_this_week": entries,
+        "month_average_entries_per_week": round(month_avg_entries_per_week, 1),
+        "delta_entries": round(entries - month_avg_entries_per_week, 1),
         "average_depth_5": round(avg_depth_10 / 2, 1),
         "month_average_depth_5": round(month_avg_depth_10 / 2, 1),
         "delta_depth_5": round((avg_depth_10 - month_avg_depth_10) / 2, 1),
