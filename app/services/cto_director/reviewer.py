@@ -485,15 +485,15 @@ class CtoDirectorReviewer:
             try:
                 self.db.flush()
                 return
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Could not flush CTO review session before commit: %s", exc)
         self.db.commit()
 
     def _refresh(self, item: Any) -> None:
         try:
             self.db.refresh(item)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Could not refresh CTO review item after commit: %s", exc)
 
 
 def build_cto_codex_brief(

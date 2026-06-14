@@ -100,7 +100,7 @@ def test_cto_director_creates_codex_ready_large_file_finding(tmp_path, monkeypat
 
     assert review.status == "completed"
     assert db.cto_findings
-    finding = db.cto_findings[0]
+    finding = next(item for item in db.cto_findings if item.category == "architecture")
     assert finding.category == "architecture"
     assert finding.created_at is not None
     assert "# Codex Brief -" in finding.codex_brief_markdown
