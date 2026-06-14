@@ -57,6 +57,10 @@ jobs:
         working-directory: app/frontend
         run: npm install
 
+      - name: Check frontend translations
+        working-directory: app/frontend
+        run: npm run i18n:check
+
       - name: Build frontend
         working-directory: app/frontend
         run: npm run build

@@ -41,6 +41,7 @@ from app.models import (
     JourneyValue,
     LeadershipCoachingSession,
     Message,
+    MessageSignalFlag,
     OpportunitySuggestion,
     RelationshipReview,
     SubscriptionStatus,
@@ -449,7 +450,7 @@ class SyntheticUserSeeder:
                 reflection_depth_scored_at=created_at + timedelta(minutes=1),
                 created_at=created_at,
             ))
-            self.db.add(Message(
+            message = Message(
                 sender="user",
                 user_number=self.user_number,
                 content=text_value,
@@ -463,7 +464,24 @@ class SyntheticUserSeeder:
                 reflection_depth_explanation=depth_explanation,
                 reflection_depth_recommendations=recommendations,
                 reflection_depth_scored_at=created_at + timedelta(minutes=1),
-            ))
+            )
+            self.db.add(message)
+            self.db.flush()
+            for signal_index, signal in enumerate(spec.get("signals") or []):
+                self.db.add(MessageSignalFlag(
+                    user_id=self.user.id,
+                    message_id=message.id,
+                    source_type="journal",
+                    signal_type=signal.get("type") or "goal_reflection",
+                    is_met=bool(signal.get("is_met", True)),
+                    confidence_score=float(signal.get("confidence", 0.86)),
+                    evidence_excerpt=signal.get("excerpt") or text_body[:240],
+                    reasoning_summary=signal.get("reason") or "This journal entry contains goal-relevant evidence for the progress review.",
+                    prompt_version="synthetic_seed_v1",
+                    model_version="synthetic_seed",
+                    created_at=created_at + timedelta(minutes=2, seconds=signal_index),
+                    updated_at=created_at + timedelta(minutes=2, seconds=signal_index),
+                ))
 
     def load_nudges(self) -> None:
         nudges = self.persona.get("nudges") or self._default_nudges()
@@ -746,6 +764,7 @@ class SyntheticUserSeeder:
                 scoring_details={"confidence": "medium", "source": "seed_user"},
                 created_at=datetime.utcnow() - timedelta(days=self.rng.randint(1, 30)),
             ))
+        self.db.flush()
 
     def load_behavioral_telemetry(self) -> None:
         for day_offset in range(min(120, self.months * 30), -1, -3):
@@ -777,22 +796,8 @@ class SyntheticUserSeeder:
             recommended_focus="Protect the smallest viable version of each habit on disrupted days.",
             raw_context={"synthetic": True},
         ))
-        vision = next((goal for goal in self.goals_by_title.values() if goal.time_horizon == "vision"), None)
-        if vision:
-            self.db.add(VisionProgressReview(
-                user_id=self.user.id,
-                user_number=self.user_number,
-                vision_id=vision.id,
-                review_period_start=datetime.utcnow() - timedelta(days=90),
-                review_period_end=datetime.utcnow(),
-                status="completed",
-                executive_summary="Clear progress across the main transformation arc, with execution habits becoming more deliberate.",
-                key_wins=["Roadmap moved from intent to weekly action", "Better prioritization language"],
-                key_risks=["Too many active commitments can dilute momentum"],
-                recommended_focus="Use the next wave to simplify commitments and increase deliberate practice.",
-                health_scores={"clarity": 4, "momentum": 4, "focus": 3},
-                raw_context={"synthetic": True},
-            ))
+        for vision in self.vision_goals.values():
+            self._seed_vision_progress_review(vision)
         for index, event_type in enumerate(["login", "page_view", "habit_update", "journal_created", "task_completed"] * 4):
             self.db.add(UsageEvent(
                 user_id=self.user.id,
@@ -802,6 +807,121 @@ class SyntheticUserSeeder:
                 metadata_json={"persona": self.persona_name},
                 created_at=datetime.utcnow() - timedelta(days=index * 6),
             ))
+
+    def _seed_vision_progress_review(self, vision: JourneyGoal) -> None:
+        scoped_goal_ids = self._vision_scoped_goal_ids(vision)
+        opportunities = [
+            item
+            for item in self.db.query(OpportunitySuggestion).filter(
+                OpportunitySuggestion.user_id == self.user.id,
+                OpportunitySuggestion.status == "suggested",
+                OpportunitySuggestion.linked_goal_id.in_(scoped_goal_ids),
+            ).all()
+        ]
+        opportunities.sort(key=lambda item: (float(item.mtn_score or 0), item.created_at or datetime.min), reverse=True)
+        mtn_actions = [
+            {
+                "id": item.id,
+                "title": item.title,
+                "why_it_matters": item.rationale,
+                "suggested_next_step": item.description,
+                "linked_goal_id": item.linked_goal_id,
+                "status": item.status,
+            }
+            for item in opportunities[:3]
+        ]
+
+        if "business" in (vision.title or "").lower():
+            status = "on_track"
+            summary = (
+                "Alex's business vision is active and gaining sharper market contact. The strongest progress is not that the company is already built; "
+                "it is that Alex is moving from private refinement into visible founder conversations, a clearer flagship offer, and reusable proof from past COO wins. "
+                "The current constraint is commercial exposure: the offer is becoming concrete enough to sell, but it still needs more direct asks and faster conversion of call notes into a paid sprint."
+            )
+            wins = [
+                "Founder discovery is producing sharper language around the Operating System Sprint.",
+                "The flagship offer has moved from broad expertise to a more specific transformation promise.",
+                "Alex is using his journal reflections to catch the polishing-before-asking pattern earlier.",
+            ]
+            risks = [
+                "The main risk is over-polishing the offer instead of testing it with buyers.",
+                "Several high-MTN follow-up tasks remain open or overdue, which can slow commercial momentum.",
+                "If Alex keeps too many business ideas alive, the founder wedge may lose force.",
+            ]
+            focus = (
+                "This week, prioritize market evidence over internal refinement: close the overdue founder follow-ups, convert discovery notes into the paid sprint offer, "
+                "and ask Evelyn for one specific intro or objection to test."
+            )
+            health = {
+                "momentum": "green",
+                "execution": "yellow",
+                "commercial_progress": "yellow",
+                "outcome_achievement": "yellow",
+                "overall_goal_health": "yellow",
+            }
+            journal_theme = "Journal signals show Alex is naming the founder avoidance pattern more clearly and turning it into visible asks."
+        else:
+            status = "on_track"
+            summary = (
+                "Alex's marathon vision is active and increasingly integrated with the business goal. The progress signal is consistency under real-life pressure: "
+                "missed runs are no longer becoming identity verdicts, and recovery is starting to be treated as part of performance. The next edge is making fueling, mobility, and sleep as concrete as the long-run plan."
+            )
+            wins = [
+                "The 12-mile long run created confidence without needing drama or intensity.",
+                "Alex has a clearer missed-run recovery rule and is using minimum viable workouts.",
+                "Training and business execution are now reinforcing the same identity: return to the next rep.",
+            ]
+            risks = [
+                "Late reactive work can still weaken sleep and morning training quality.",
+                "Mobility and fueling are easy to delay because they feel less urgent than the run itself.",
+            ]
+            focus = (
+                "Protect the next long-run system: schedule the route, test fueling deliberately, and treat sleep prep as part of the training block rather than optional cleanup."
+            )
+            health = {
+                "momentum": "green",
+                "execution": "green",
+                "commercial_progress": "green",
+                "outcome_achievement": "yellow",
+                "overall_goal_health": "green",
+            }
+            journal_theme = "Journal signals show Alex connecting marathon consistency to leadership identity and calmer recovery after disruption."
+
+        self.db.add(VisionProgressReview(
+            user_id=self.user.id,
+            user_number=self.user_number,
+            vision_id=vision.id,
+            review_period_start=datetime.utcnow() - timedelta(days=7),
+            review_period_end=datetime.utcnow(),
+            status=status,
+            executive_summary=summary,
+            key_wins=wins,
+            key_risks=risks,
+            recommended_focus=focus,
+            mtn_actions=mtn_actions,
+            health_scores=health,
+            raw_context={
+                "synthetic": True,
+                "persona": self.persona_name,
+                "journal_theme": journal_theme,
+                "scoped_goal_ids": scoped_goal_ids,
+            },
+            raw_llm_response={"source": "synthetic_seed", "journal_theme": journal_theme},
+            created_at=datetime.utcnow(),
+        ))
+
+    def _vision_scoped_goal_ids(self, vision: JourneyGoal) -> list[int]:
+        ids = [vision.id]
+        changed = True
+        while changed:
+            changed = False
+            for goal in self.goals_by_title.values():
+                if goal.id in ids:
+                    continue
+                if goal.parent_goal_id in ids:
+                    ids.append(goal.id)
+                    changed = True
+        return ids
 
     def _goal(self, **kwargs) -> JourneyGoal:
         goal = JourneyGoal(user_number=self.user_number, **kwargs)

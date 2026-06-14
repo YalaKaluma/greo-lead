@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
+      - dev
 
 jobs:
   dev-ci:
@@ -61,6 +65,10 @@ jobs:
       - name: Install frontend dependencies
         working-directory: app/frontend
         run: npm install
+
+      - name: Check frontend translations
+        working-directory: app/frontend
+        run: npm run i18n:check
 
       - name: Build frontend
         working-directory: app/frontend

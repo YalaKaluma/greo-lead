@@ -294,22 +294,32 @@ class GoalProgressReviewService:
             .limit(30)
         )
 
-        insights = []
+        candidates = []
         for flag in query.all():
             text = " ".join(filter(None, [flag.evidence_excerpt, flag.reasoning_summary, flag.message.content if flag.message else None]))
             score = cls._keyword_score(text, keywords)
-            if keywords and score == 0 and len(insights) >= 3:
+            if keywords and score == 0:
                 continue
-            insights.append({
+            candidates.append({
                 "date": cls._iso(flag.updated_at or flag.created_at),
                 "journal_excerpt": flag.evidence_excerpt or cls._truncate(flag.message.content if flag.message else "", 180),
                 "impact_assessment": flag.reasoning_summary or f"Signal detected: {flag.signal_type.replace('_', ' ')}.",
                 "signal_type": flag.signal_type,
                 "confidence_score": float(flag.confidence_score or 0),
+                "_keyword_score": score,
             })
-            if len(insights) >= 5:
-                break
-        return insights
+        candidates.sort(
+            key=lambda item: (
+                item.get("_keyword_score", 0),
+                item.get("confidence_score", 0),
+                item.get("date") or "",
+            ),
+            reverse=True,
+        )
+        return [
+            {key: value for key, value in item.items() if key != "_keyword_score"}
+            for item in candidates[:5]
+        ]
 
     @classmethod
     def _goal_health(

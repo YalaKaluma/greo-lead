@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "i18n:check": "node scripts/check-i18n.mjs",
     "build": "vite build",
     "preview": "vite preview"
   },
