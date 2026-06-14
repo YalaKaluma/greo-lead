@@ -131,19 +131,17 @@ function JournalMetricCard({ metric }) {
         <div className="rounded-lg bg-slate-50 p-4 text-center">
           <div className="text-3xl font-semibold text-slate-950">{entriesThisWeek}</div>
           <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Frequency</p>
+          <p className={`mt-3 text-xs font-semibold ${frequencyDelta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
+            vs {monthAverageEntries}/wk avg ({frequencyDelta})
+          </p>
         </div>
         <div className="rounded-lg bg-slate-50 p-4 text-center">
           <div className="text-3xl font-semibold text-slate-950">{averageDepth}</div>
           <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Depth / 5</p>
+          <p className={`mt-3 text-xs font-semibold ${depthDelta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
+            vs {monthAverageDepth} avg ({depthDelta})
+          </p>
         </div>
-      </div>
-      <div className="mt-4 space-y-1">
-        <p className={`text-sm font-semibold ${frequencyDelta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
-          {entriesThisWeek} this week vs {monthAverageEntries}/wk last month avg ({frequencyDelta})
-        </p>
-        <p className={`text-sm font-semibold ${depthDelta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
-          {averageDepth} depth vs {monthAverageDepth} last month avg ({depthDelta})
-        </p>
       </div>
     </section>
   );

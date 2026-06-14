@@ -311,6 +311,18 @@ tasks:
     times_postponed: 2
 
 journal:
+  - days_ago: 36
+    title: Naming the stuck place
+    body: "The business still lives mostly in documents and private notes. I keep telling myself that one more refinement will make the first ask easier, but I know the real issue is exposure. The marathon plan has a similar shape: I can study pacing and nutrition longer than I can tolerate a mediocre training day. I want to start treating imperfect evidence as useful data."
+    depth_score: 2.4
+  - days_ago: 33
+    title: Too many possible directions
+    body: "I noticed how much energy leaks into keeping every option open. Advisory sprint, operating cadence, founder coaching, fractional COO work: each idea is plausible, which makes choosing one feel like losing the others. The cost is that none of them becomes real enough to test. This week I want to make one direction concrete enough that the market can disagree with it."
+    depth_score: 2.8
+  - days_ago: 30
+    title: The planning reflex
+    body: "I moved the training plan around again instead of doing the short strength session. That is the pattern: when the action feels emotionally loaded, I convert it into planning. Planning feels responsible, but today it was avoidance wearing a clean shirt. The useful question is not whether the plan is perfect. It is whether I did the next small rep."
+    depth_score: 3.2
   - days_ago: 28
     title: The old loop
     body: "I noticed today that I am still treating the business idea like a someday project. I read, tweak notes, and imagine the perfect offer, but I avoid the exposed action: asking real founders what they would pay for. The same pattern shows up in running. I can design a plan forever, then miss one workout and make it mean the plan is broken. Both places reveal the same belief: if I do not fully start, I cannot fully fail."
