@@ -161,6 +161,67 @@ class OperationsIssueDraft(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
+class CtoReview(Base):
+    __tablename__ = "cto_reviews"
+    __table_args__ = (
+        Index("idx_cto_reviews_status_created", "status", "created_at"),
+        Index("idx_cto_reviews_environment_created", "environment", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    environment = Column(String(80), nullable=True, index=True)
+    review_type = Column(String(40), nullable=False, default="manual", index=True)
+    status = Column(String(40), nullable=False, default="running", index=True)
+    architecture_score = Column(Integer, nullable=True)
+    security_score = Column(Integer, nullable=True)
+    maintainability_score = Column(Integer, nullable=True)
+    test_coverage_score = Column(Integer, nullable=True)
+    release_readiness_score = Column(Integer, nullable=True)
+    summary = Column(Text, nullable=True)
+    top_risks_json = Column(JSONB, nullable=True)
+    recommendations_json = Column(JSONB, nullable=True)
+    source_snapshot_json = Column(JSONB, nullable=True)
+    started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    findings = relationship("CtoFinding", back_populates="review")
+
+
+class CtoFinding(Base):
+    __tablename__ = "cto_findings"
+    __table_args__ = (
+        Index("idx_cto_findings_status_created", "status", "created_at"),
+        Index("idx_cto_findings_category_created", "category", "created_at"),
+        Index("idx_cto_findings_severity_created", "severity", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    cto_review_id = Column(Integer, ForeignKey("cto_reviews.id", ondelete="CASCADE"), nullable=True, index=True)
+    category = Column(String(40), nullable=False, index=True)
+    severity = Column(String(20), nullable=False, index=True)
+    title = Column(String(220), nullable=False)
+    summary = Column(Text, nullable=False)
+    evidence_json = Column(JSONB, nullable=True)
+    affected_files_json = Column(JSONB, nullable=True)
+    affected_modules_json = Column(JSONB, nullable=True)
+    risk_explanation = Column(Text, nullable=True)
+    recommended_action = Column(Text, nullable=True)
+    codex_brief_markdown = Column(Text, nullable=False)
+    confidence = Column(String(20), nullable=True)
+    status = Column(String(40), nullable=False, default="open", index=True)
+    github_labels_json = Column(JSONB, nullable=True)
+    github_issue_number = Column(Integer, nullable=True)
+    github_issue_url = Column(Text, nullable=True)
+    reviewed_by = Column(String(160), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    review = relationship("CtoReview", back_populates="findings")
+
+
 class AdminAIBriefing(Base):
     __tablename__ = "admin_ai_briefings"
     __table_args__ = (

@@ -1121,6 +1121,43 @@ def run_batch_nudge(
     }
 
 
+def run_cto_weekend_review(db: Session) -> Dict:
+    """Run the weekly CTO review from the weekend scheduler path."""
+    start_time = datetime.utcnow()
+    try:
+        from app.services.cto_director.reviewer import CtoDirectorReviewer
+
+        review = CtoDirectorReviewer(db).run_weekend_review()
+        return {
+            "status": review.status,
+            "review_id": review.id,
+            "summary": review.summary,
+            "duration_seconds": (datetime.utcnow() - start_time).total_seconds(),
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    except Exception as exc:
+        logger.exception("Failed to run CTO weekend review: %s", exc)
+        try:
+            record_job_failure(
+                db,
+                job_name="cto_weekend_review",
+                error=exc,
+                source="cron",
+                details={"operation": "run_cto_weekend_review"},
+                commit=False,
+            )
+            db.commit()
+        except Exception as health_exc:
+            db.rollback()
+            logger.warning("Failed to record CTO weekend review health event: %s", health_exc)
+        return {
+            "status": "failed",
+            "error": str(exc),
+            "duration_seconds": (datetime.utcnow() - start_time).total_seconds(),
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+
 NUDGE_USER_QUERY_ALIASES = (
     "user_number",
     "userNumber",
@@ -1283,6 +1320,17 @@ def sunday_review_nudge(
         "timestamp": datetime.utcnow().isoformat(),
         **result
     }
+
+
+@router.get("/nudge/cto_weekend_review")
+def cto_weekend_review(db: Session = Depends(get_db)):
+    """
+    Run Alfred CTO Director's weekend architecture and release-readiness review.
+
+    This creates review findings only. GitHub issues still require admin approval.
+    """
+    logger.info("CTO weekend review endpoint invoked")
+    return run_cto_weekend_review(db)
 
 
 # -------------------------------------------------
