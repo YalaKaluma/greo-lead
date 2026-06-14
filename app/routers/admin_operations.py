@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -13,6 +14,13 @@ from app.services.operations_director.reviewer import OperationsDirectorReviewer
 
 
 router = APIRouter(tags=["admin-operations"])
+
+
+SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "error": 1, "warning": 2, "info": 3}
+
+
+class OperationsChatRequest(BaseModel):
+    message: str
 
 
 def _iso(value) -> str | None:
@@ -77,6 +85,95 @@ def _get_draft(db: Session, draft_id: int) -> OperationsIssueDraft:
     return draft
 
 
+def _severity_sort_key(item: Any) -> tuple[int, str]:
+    severity = (getattr(item, "severity", None) or "").lower()
+    last_seen = getattr(item, "last_seen_at", None) or getattr(item, "created_at", None)
+    return (SEVERITY_RANK.get(severity, 4), str(last_seen or ""))
+
+
+def _sort_by_criticality(items: list[Any]) -> list[Any]:
+    return sorted(items, key=_severity_sort_key)
+
+
+def _build_executive_summary(drafts: list[OperationsIssueDraft], events: list[SystemHealthEvent]) -> dict[str, Any]:
+    open_drafts = [draft for draft in drafts if draft.status in {"draft", "approved", "known_issue"}]
+    github_created = [draft for draft in drafts if draft.status == "github_created"]
+    critical_or_high = [
+        draft for draft in open_drafts
+        if (draft.severity or "").lower() in {"critical", "high", "error"}
+    ]
+    recurring_events = [
+        event for event in events
+        if (event.occurrence_count or 1) >= 3 and not event.resolved_at
+    ]
+    top_issue = _sort_by_criticality(open_drafts)[0] if open_drafts else None
+
+    if top_issue:
+        recommendation = f"Review '{top_issue.title}' first and decide whether to create the GitHub issue."
+    elif recurring_events:
+        recommendation = "Run review to convert recurring health events into issue drafts."
+    else:
+        recommendation = "No urgent operations action is waiting right now."
+
+    return {
+        "headline": (
+            f"{len(critical_or_high)} critical/high draft{'s' if len(critical_or_high) != 1 else ''} "
+            f"and {len(recurring_events)} recurring health signal{'s' if len(recurring_events) != 1 else ''} need review."
+        ),
+        "recommendation": recommendation,
+        "open_drafts": len(open_drafts),
+        "github_created": len(github_created),
+        "health_events": len(events),
+        "critical_or_high": len(critical_or_high),
+        "recurring_events": len(recurring_events),
+        "top_issue_id": top_issue.id if top_issue else None,
+        "top_issue_title": top_issue.title if top_issue else None,
+    }
+
+
+def _operations_chat_response(message: str, drafts: list[OperationsIssueDraft], events: list[SystemHealthEvent]) -> str:
+    question = (message or "").strip().lower()
+    sorted_drafts = _sort_by_criticality(drafts)
+    open_drafts = [draft for draft in sorted_drafts if draft.status in {"draft", "approved", "known_issue"}]
+    summary = _build_executive_summary(drafts, events)
+
+    if not question:
+        return "Ask me about the highest-risk issue, recurring failures, GitHub-ready drafts, or what to review next."
+
+    if any(term in question for term in ["critical", "highest", "priority", "first", "next"]):
+        if not open_drafts:
+            return "There are no open issue drafts. Run review if new health events have appeared."
+        draft = open_drafts[0]
+        return (
+            f"Start with '{draft.title}' ({draft.severity}). "
+            f"{draft.summary} Recommended action: {draft.recommended_action or 'Confirm the failure and prepare the GitHub issue.'}"
+        )
+
+    if any(term in question for term in ["recurring", "repeat", "again", "events", "signals"]):
+        recurring = [event for event in _sort_by_criticality(events) if (event.occurrence_count or 1) >= 3 and not event.resolved_at]
+        if not recurring:
+            return "I do not see recurring unresolved health signals above the review threshold."
+        lines = [
+            f"- {(event.category or event.event_type)} in {event.environment or 'unknown'}: {event.occurrence_count or 1} occurrences, latest target {event.endpoint or event.job_name or event.source or 'unknown'}"
+            for event in recurring[:5]
+        ]
+        return "Recurring signals I would watch:\n" + "\n".join(lines)
+
+    if any(term in question for term in ["github", "issue", "draft", "codex"]):
+        if not open_drafts:
+            return "No GitHub-ready drafts are waiting for approval."
+        lines = [
+            f"- {draft.title} ({draft.severity}, {draft.status})"
+            for draft in open_drafts[:5]
+        ]
+        return "GitHub-ready drafts, sorted by criticality:\n" + "\n".join(lines)
+
+    return (
+        f"Executive summary: {summary['headline']} "
+        f"My recommendation: {summary['recommendation']}"
+    )
+
+
 @router.get("/operations/health-events")
 def list_health_events(
     db: Session = Depends(get_db),
@@ -89,7 +186,7 @@ def list_health_events(
         .all()
     )
     return {
-        "health_events": [_event_to_dict(event) for event in events],
+        "health_events": [_event_to_dict(event) for event in _sort_by_criticality(events)],
         "current_admin_id": admin_user.id,
     }
 
@@ -105,8 +202,16 @@ def list_issue_drafts(
         .limit(250)
         .all()
     )
+    events = (
+        db.query(SystemHealthEvent)
+        .order_by(SystemHealthEvent.last_seen_at.desc().nullslast(), SystemHealthEvent.id.desc())
+        .limit(250)
+        .all()
+    )
+    sorted_drafts = _sort_by_criticality(drafts)
     return {
-        "issue_drafts": [_draft_to_dict(draft) for draft in drafts],
+        "issue_drafts": [_draft_to_dict(draft) for draft in sorted_drafts],
+        "executive_summary": _build_executive_summary(sorted_drafts, events),
         "current_admin_id": admin_user.id,
     }
 
@@ -128,7 +233,40 @@ def run_operations_review(
     db.commit()
     return {
         "created_draft_count": len(drafts),
-        "issue_drafts": [_draft_to_dict(draft) for draft in drafts],
+        "issue_drafts": [_draft_to_dict(draft) for draft in _sort_by_criticality(drafts)],
+        "current_admin_id": admin_user.id,
+    }
+
+
+@router.post("/operations/chat")
+def chat_with_operations_director(
+    request: OperationsChatRequest,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    drafts = (
+        db.query(OperationsIssueDraft)
+        .order_by(OperationsIssueDraft.created_at.desc(), OperationsIssueDraft.id.desc())
+        .limit(250)
+        .all()
+    )
+    events = (
+        db.query(SystemHealthEvent)
+        .order_by(SystemHealthEvent.last_seen_at.desc().nullslast(), SystemHealthEvent.id.desc())
+        .limit(250)
+        .all()
+    )
+    _log_admin_action(
+        db,
+        admin_user,
+        "operations_director_chat",
+        None,
+        {"message_length": len(request.message or "")},
+    )
+    db.commit()
+    return {
+        "reply": _operations_chat_response(request.message, drafts, events),
+        "executive_summary": _build_executive_summary(drafts, events),
         "current_admin_id": admin_user.id,
     }
 

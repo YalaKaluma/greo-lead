@@ -859,12 +859,47 @@ function AdminAnalyticsPanel({ apiUrl, userNumber }) {
 function AdminOperationsDirectorPanel({ apiUrl, userNumber }) {
   const [drafts, setDrafts] = useState([]);
   const [healthEvents, setHealthEvents] = useState([]);
+  const [executiveSummary, setExecutiveSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [reviewing, setReviewing] = useState(false);
   const [actingDraftId, setActingDraftId] = useState(null);
   const [expandedDraftId, setExpandedDraftId] = useState(null);
+  const [chatMessages, setChatMessages] = useState([
+    { role: 'director', content: 'I am watching health events, recurring failures, and GitHub-ready drafts. Ask what needs attention first.' }
+  ]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatSending, setChatSending] = useState(false);
   const [error, setError] = useState('');
   const adminParams = { user_number: userNumber };
+  const severityRank = { critical: 0, high: 1, error: 1, medium: 2, warning: 2, low: 3, info: 4 };
+
+  const sortByCriticality = (items) => [...items].sort((a, b) => {
+    const severityA = severityRank[String(a.severity || '').toLowerCase()] ?? 5;
+    const severityB = severityRank[String(b.severity || '').toLowerCase()] ?? 5;
+    if (severityA !== severityB) return severityA - severityB;
+    const timeA = new Date(a.evidence?.last_seen || a.last_seen_at || a.created_at || 0).getTime();
+    const timeB = new Date(b.evidence?.last_seen || b.last_seen_at || b.created_at || 0).getTime();
+    return timeB - timeA;
+  });
+
+  const buildFallbackSummary = (draftItems, eventItems) => {
+    const openItems = draftItems.filter((draft) => ['draft', 'approved', 'known_issue'].includes(draft.status));
+    const criticalOrHigh = openItems.filter((draft) => ['critical', 'high', 'error'].includes(String(draft.severity || '').toLowerCase()));
+    const recurring = eventItems.filter((event) => (event.occurrence_count || 1) >= 3 && !event.resolved_at);
+    const topIssue = sortByCriticality(openItems)[0];
+    return {
+      headline: `${criticalOrHigh.length} critical/high draft${criticalOrHigh.length === 1 ? '' : 's'} and ${recurring.length} recurring health signal${recurring.length === 1 ? '' : 's'} need review.`,
+      recommendation: topIssue
+        ? `Review "${topIssue.title}" first and decide whether to create the GitHub issue.`
+        : recurring.length
+          ? 'Run review to convert recurring health events into issue drafts.'
+          : 'No urgent operations action is waiting right now.',
+      open_drafts: openItems.length,
+      critical_or_high: criticalOrHigh.length,
+      recurring_events: recurring.length,
+      top_issue_title: topIssue?.title || null
+    };
+  };
 
   const loadOperations = async ({ showLoading = true } = {}) => {
     if (showLoading) setLoading(true);
@@ -876,6 +911,10 @@ function AdminOperationsDirectorPanel({ apiUrl, userNumber }) {
       ]);
       setDrafts(draftResponse.data.issue_drafts || []);
       setHealthEvents(eventsResponse.data.health_events || []);
+      setExecutiveSummary(
+        draftResponse.data.executive_summary
+        || buildFallbackSummary(draftResponse.data.issue_drafts || [], eventsResponse.data.health_events || [])
+      );
     } catch (err) {
       setError(err.response?.data?.detail || 'Alfred Operations Director could not be loaded.');
     } finally {
@@ -909,6 +948,34 @@ function AdminOperationsDirectorPanel({ apiUrl, userNumber }) {
     }
   };
 
+  const sendChatMessage = async (event) => {
+    event.preventDefault();
+    const message = chatInput.trim();
+    if (!message || chatSending) return;
+
+    setChatInput('');
+    setChatMessages((current) => [...current, { role: 'admin', content: message }]);
+    setChatSending(true);
+    setError('');
+
+    try {
+      const response = await axios.post(
+        `${apiUrl}/api/admin/operations/chat`,
+        { message },
+        { params: adminParams }
+      );
+      setChatMessages((current) => [...current, { role: 'director', content: response.data.reply || 'I could not produce a response yet.' }]);
+      if (response.data.executive_summary) {
+        setExecutiveSummary(response.data.executive_summary);
+      }
+    } catch (err) {
+      setChatMessages((current) => [...current, { role: 'director', content: 'I could not answer from the operations context yet.' }]);
+      setError(err.response?.data?.detail || 'Operations Director chat failed.');
+    } finally {
+      setChatSending(false);
+    }
+  };
+
   useEffect(() => {
     loadOperations();
   }, [apiUrl, userNumber]);
@@ -918,7 +985,9 @@ function AdminOperationsDirectorPanel({ apiUrl, userNumber }) {
   }
 
   const openDrafts = drafts.filter((draft) => ['draft', 'approved', 'known_issue'].includes(draft.status));
-  const recentEvents = healthEvents.slice(0, 8);
+  const sortedDrafts = sortByCriticality(drafts);
+  const recentEvents = sortByCriticality(healthEvents).slice(0, 8);
+  const summary = executiveSummary || buildFallbackSummary(drafts, healthEvents);
 
   return (
     <div>
@@ -943,6 +1012,61 @@ function AdminOperationsDirectorPanel({ apiUrl, userNumber }) {
         </div>
       )}
 
+      <div className="mb-6 grid gap-4 lg:grid-cols-5">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 lg:col-span-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Executive Summary</div>
+          <h3 className="mt-2 text-xl font-semibold text-slate-950">{summary.headline}</h3>
+          <p className="mt-3 text-sm leading-6 text-slate-700">{summary.recommendation}</p>
+          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+            <div className="rounded border border-slate-100 px-3 py-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Critical / High</div>
+              <div className="mt-1 text-lg font-bold text-slate-950">{summary.critical_or_high || 0}</div>
+            </div>
+            <div className="rounded border border-slate-100 px-3 py-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Open Drafts</div>
+              <div className="mt-1 text-lg font-bold text-slate-950">{summary.open_drafts || 0}</div>
+            </div>
+            <div className="rounded border border-slate-100 px-3 py-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recurring Signals</div>
+              <div className="mt-1 text-lg font-bold text-slate-950">{summary.recurring_events || 0}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-4 lg:col-span-2">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ask Alfred Operations Director</div>
+          <div className="mt-3 max-h-64 space-y-3 overflow-auto">
+            {chatMessages.map((message, index) => (
+              <div
+                key={`${message.role}-${index}`}
+                className={`rounded-md px-3 py-2 text-sm leading-6 ${
+                  message.role === 'admin'
+                    ? 'bg-slate-950 text-white'
+                    : 'bg-slate-50 text-slate-700'
+                }`}
+              >
+                {message.content}
+              </div>
+            ))}
+          </div>
+          <form onSubmit={sendChatMessage} className="mt-3 flex gap-2">
+            <input
+              value={chatInput}
+              onChange={(event) => setChatInput(event.target.value)}
+              placeholder="What needs attention first?"
+              className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+            <button
+              type="submit"
+              disabled={chatSending || !chatInput.trim()}
+              className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300"
+            >
+              {chatSending ? 'Asking...' : 'Ask'}
+            </button>
+          </form>
+        </div>
+      </div>
+
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
         <div className="rounded-lg border border-slate-200 bg-white p-4">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Open Drafts</div>
@@ -963,7 +1087,7 @@ function AdminOperationsDirectorPanel({ apiUrl, userNumber }) {
           <div className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
             No issue drafts yet. Run review after health events have been captured.
           </div>
-        ) : drafts.map((draft) => {
+        ) : sortedDrafts.map((draft) => {
           const expanded = expandedDraftId === draft.id;
           const acting = actingDraftId === draft.id;
           const evidence = draft.evidence || {};

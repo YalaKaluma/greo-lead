@@ -7,6 +7,11 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
 from app.models import OperationsIssueDraft, SystemHealthEvent, User
 from app.routers.admin import _get_admin_user
+from app.routers.admin_operations import (
+    _build_executive_summary,
+    _operations_chat_response,
+    _sort_by_criticality,
+)
 from app.services.github import issues as github_issues
 from app.services.operations_director.health_events import HealthEventService, sanitize_text
 from app.services.operations_director.reviewer import OperationsDirectorReviewer
@@ -175,6 +180,47 @@ def test_github_issue_payload_contains_codex_brief(monkeypatch):
     assert "# Codex Brief" in captured["json"]["body"]
     assert captured["json"]["labels"] == ["operations-director", "codex-ready"]
     assert captured["headers"]["Authorization"] == "Bearer token"
+
+
+def test_operations_director_sorts_summarizes_and_answers_from_context():
+    low = OperationsIssueDraft(
+        id=1,
+        title="Low email failure",
+        summary="Email failed once.",
+        severity="low",
+        status="draft",
+        codex_brief_markdown="# Codex Brief - Low",
+    )
+    critical = OperationsIssueDraft(
+        id=2,
+        title="Critical database failure",
+        summary="Database writes are failing repeatedly.",
+        severity="critical",
+        status="draft",
+        recommended_action="Inspect schema drift and failed writes.",
+        codex_brief_markdown="# Codex Brief - Critical",
+    )
+    event = SystemHealthEvent(
+        id=10,
+        category="database_failure",
+        event_type="database_failure",
+        severity="critical",
+        environment="production",
+        source="database",
+        occurrence_count=5,
+        endpoint="/api/tasks",
+    )
+
+    sorted_drafts = _sort_by_criticality([low, critical])
+    summary = _build_executive_summary([low, critical], [event])
+    reply = _operations_chat_response("what should I review first?", [low, critical], [event])
+
+    assert sorted_drafts[0].title == "Critical database failure"
+    assert summary["critical_or_high"] == 1
+    assert summary["recurring_events"] == 1
+    assert summary["top_issue_title"] == "Critical database failure"
+    assert "Critical database failure" in reply
+    assert "Inspect schema drift" in reply
 
 
 class AdminFakeDb:
