@@ -229,13 +229,13 @@ class HealthEventService:
             self.db.commit()
             try:
                 self.db.refresh(event)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Could not refresh health event after commit: %s", exc)
         else:
             try:
                 self.db.flush()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Could not flush health event before returning: %s", exc)
         return event
 
     def _find_existing_event(self, dedupe_key: str) -> SystemHealthEvent | None:
@@ -264,8 +264,8 @@ def record_health_event_with_new_session(**kwargs) -> None:
         logger.warning("Could not record operations health event: %s", exc)
         try:
             db.rollback()
-        except Exception:
-            pass
+        except Exception as rollback_exc:
+            logger.debug("Could not roll back failed health event session: %s", rollback_exc)
     finally:
         db.close()
 

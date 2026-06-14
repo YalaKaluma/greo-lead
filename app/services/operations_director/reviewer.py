@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -10,6 +11,7 @@ from app.services.operations_director.health_events import severity_for
 
 
 DRAFT_ACTIVE_STATUSES = {"draft", "approved", "known_issue"}
+logger = logging.getLogger(__name__)
 
 
 class OperationsDirectorReviewer:
@@ -31,8 +33,8 @@ class OperationsDirectorReviewer:
             for draft in created:
                 try:
                     self.db.refresh(draft)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Could not refresh operations issue draft after commit: %s", exc)
         return created
 
     def _recent_unresolved_events(self, lookback_hours: int) -> list[SystemHealthEvent]:
