@@ -922,12 +922,12 @@ export default function TodoList({ apiUrl, userNumber }) {
               />
             </div>
           )}
-          <div className="order-2 flex justify-end lg:order-none">
-            <div className="flex flex-wrap justify-end gap-2">
+          <div className="order-2 flex justify-center lg:order-none lg:justify-end">
+            <div className="flex flex-wrap justify-center gap-2 lg:justify-end">
               {sortOrder.length > 0 && !selectionMode && activeTab === 'tasks' && (
                 <button
                   onClick={resetSortOrder}
-                  className="h-10 w-10 inline-flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
+                  className="h-10 w-10 inline-flex items-center justify-center bg-slate-300 hover:bg-slate-400 text-slate-800 rounded-lg transition-colors"
                   title="Reset manual sort"
                   aria-label="Reset manual sort"
                 >
@@ -1187,6 +1187,7 @@ export default function TodoList({ apiUrl, userNumber }) {
           task={selectedFollowUpTask}
           followUpDate={followUpDate}
           setFollowUpDate={setFollowUpDate}
+          todayKey={todayKey}
           error={followUpError}
           saving={followUpSaving}
           onCancel={closeFollowUpModal}
@@ -1651,24 +1652,16 @@ const formatDateKey = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-const startOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
-
-const addMonths = (date, months) => new Date(date.getFullYear(), date.getMonth() + months, 1);
-
-const getNextMonthStart = () => addMonths(startOfMonth(new Date()), 1);
-
-const getCalendarDays = (monthDate) => {
-  const firstDay = startOfMonth(monthDate);
-  const startOffset = firstDay.getDay();
-  const daysInMonth = new Date(firstDay.getFullYear(), firstDay.getMonth() + 1, 0).getDate();
+const getRollingCalendarDays = (startDate, dayCount = 30) => {
+  const startOffset = startDate.getDay();
   const days = [];
 
   for (let index = 0; index < startOffset; index += 1) {
     days.push(null);
   }
 
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    days.push(new Date(firstDay.getFullYear(), firstDay.getMonth(), day));
+  for (let index = 0; index < dayCount; index += 1) {
+    days.push(addDays(startDate, index));
   }
 
   while (days.length % 7 !== 0) {
@@ -1678,7 +1671,20 @@ const getCalendarDays = (monthDate) => {
   return days;
 };
 
-const formatMonthLabel = (date) => date.toLocaleDateString('en-US', {
+const formatCalendarRangeLabel = (startDate, endDate) => {
+  const sameYear = startDate.getFullYear() === endDate.getFullYear();
+  const startOptions = sameYear
+    ? { month: 'short', day: 'numeric' }
+    : { month: 'short', day: 'numeric', year: 'numeric' };
+
+  return `${startDate.toLocaleDateString('en-US', startOptions)} - ${endDate.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })}`;
+};
+
+const formatMonthShort = (date) => date.toLocaleDateString('en-US', {
   month: 'long',
   year: 'numeric',
 });
@@ -2070,16 +2076,15 @@ function FollowUpModal({
   task,
   followUpDate,
   setFollowUpDate,
+  todayKey,
   error,
   saving,
   onCancel,
   onConfirm
 }) {
-  const [calendarMonth, setCalendarMonth] = useState(() => {
-    const selectedDate = dateFromKey(followUpDate);
-    return startOfMonth(selectedDate || getNextMonthStart());
-  });
-  const calendarDays = getCalendarDays(calendarMonth);
+  const startDate = dateFromKey(todayKey) || new Date();
+  const endDate = addDays(startDate, 29);
+  const calendarDays = getRollingCalendarDays(startDate);
   const selectedDateLabel = followUpDate ? formatShortDate(followUpDate) : 'Choose a date';
 
   return (
@@ -2113,30 +2118,10 @@ function FollowUpModal({
                 <p className="text-sm font-medium text-slate-700">Follow-up date</p>
                 <p className="text-sm text-slate-500">{selectedDateLabel}</p>
               </div>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setCalendarMonth(prev => addMonths(prev, -1))}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded border border-slate-200 text-slate-600 transition-colors hover:bg-slate-100"
-                  title="Previous month"
-                  aria-label="Previous month"
-                >
-                  <ChevronLeftIcon />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCalendarMonth(prev => addMonths(prev, 1))}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded border border-slate-200 text-slate-600 transition-colors hover:bg-slate-100"
-                  title="Next month"
-                  aria-label="Next month"
-                >
-                  <ChevronRightIcon />
-                </button>
-              </div>
             </div>
             <div className="rounded-lg border border-slate-200 p-3">
               <div className="mb-3 text-center text-sm font-semibold text-slate-900">
-                {formatMonthLabel(calendarMonth)}
+                {formatCalendarRangeLabel(startDate, endDate)}
               </div>
               <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold uppercase text-slate-400">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
@@ -2158,6 +2143,7 @@ function FollowUpModal({
                           ? 'bg-blue-600 text-white hover:bg-blue-700'
                           : 'text-slate-700 hover:bg-slate-100'
                       }`}
+                      title={formatMonthShort(date)}
                       aria-pressed={isSelected}
                       autoFocus={index === calendarDays.findIndex(Boolean)}
                     >
@@ -2274,22 +2260,6 @@ function CloseIcon() {
     <IconSvg>
       <path d="M18 6 6 18" />
       <path d="m6 6 12 12" />
-    </IconSvg>
-  );
-}
-
-function ChevronLeftIcon() {
-  return (
-    <IconSvg>
-      <path d="m15 18-6-6 6-6" />
-    </IconSvg>
-  );
-}
-
-function ChevronRightIcon() {
-  return (
-    <IconSvg>
-      <path d="m9 18 6-6-6-6" />
     </IconSvg>
   );
 }
