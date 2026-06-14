@@ -49,6 +49,10 @@ class FakeCtoDb:
         if getattr(item, "id", None) is None:
             item.id = self.next_id
             self.next_id += 1
+        if hasattr(item, "created_at") and getattr(item, "created_at", None) is None:
+            item.created_at = datetime.utcnow()
+        if hasattr(item, "updated_at") and getattr(item, "updated_at", None) is None:
+            item.updated_at = datetime.utcnow()
         if isinstance(item, CtoReview) and item not in self.cto_reviews:
             self.cto_reviews.append(item)
         if isinstance(item, CtoFinding) and item not in self.cto_findings:
