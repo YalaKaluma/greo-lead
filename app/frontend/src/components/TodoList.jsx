@@ -1,18 +1,16 @@
 // frontend/src/components/TodoList.jsx
 import { useState, useEffect, useRef } from 'react';
-import { DragDropContext, Droppable } from 'react-beautiful-dnd';
 import axios from 'axios';
-import TaskItem from './TodoList/TaskItem';
 import TaskModal from './TodoList/TaskModal';
 import BulkActionModal from './TodoList/BulkActionModal';
 import FilterSection from './TodoList/FilterSection';
+import TaskListPanel from './TodoList/TaskListPanel';
 import { DailyMtnNeedle, MtnBreakdownModal, TaskMtnTrendsTab, TrendsErrorBoundary } from './TodoList/MtnTrends';
 import {
   DeferNonTop10Modal,
   FloatingSelectionBar,
   FollowUpModal,
   OpportunityModal,
-  TaskColumnHeader,
   TodoPageHeader,
   TodoTabs,
 } from './TodoList/PageControls';
@@ -21,19 +19,8 @@ import { buildDailyMtnBenchmark } from '../utils/todoMtnTrends.js';
 import { getSortedTasks as sortTodoTasks, getVisibleTaskScore as resolveVisibleTaskScore } from '../utils/todoListLogic';
 import { useLanguage } from '../i18n/LanguageContext';
 import { usePriority } from '../hooks/usePriority';
+import { useTodoFollowUp, useTodoOpportunities, useTodoSelection } from '../hooks/useTodoInteractions';
 
-/**
- * TodoList Component - Main Task Management Interface
- * 
- * Features:
- * - Task display with Top 10 prioritization
- * - Drag-and-drop reordering
- * - Multi-select for bulk actions
- * - Filtering (date, search, goal)
- * - Task CRUD operations
- * - Mobile-responsive with touch gestures
- * - 1500ms completion animation
- */
 export default function TodoList({ apiUrl, userNumber }) {
   const { t, timezone } = useLanguage();
   const showTaskTrends = true;
@@ -56,18 +43,8 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [sortOrder, setSortOrder] = useState([]);
   const [completingTasks, setCompletingTasks] = useState([]);
   const [filtersCollapsed, setFiltersCollapsed] = useState(true);
-  const [showOpportunityModal, setShowOpportunityModal] = useState(false);
-  const [opportunityLoading, setOpportunityLoading] = useState(false);
-  const [opportunityError, setOpportunityError] = useState(null);
-  const [opportunities, setOpportunities] = useState([]);
-  const [opportunityActions, setOpportunityActions] = useState({});
   const [showDeferModal, setShowDeferModal] = useState(false);
   const [deferLoading, setDeferLoading] = useState(false);
-  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
-  const [selectedFollowUpTask, setSelectedFollowUpTask] = useState(null);
-  const [followUpDate, setFollowUpDate] = useState('');
-  const [followUpError, setFollowUpError] = useState('');
-  const [followUpSaving, setFollowUpSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('tasks');
   const [columnSort, setColumnSort] = useState(null);
   const [mtnTrends, setMtnTrends] = useState(null);
@@ -77,10 +54,17 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [todayKey, setTodayKey] = useState(getTodayET(timezone));
   const mtnBackfillRequestsRef = useRef(new Set());
 
-  // Multi-select state
-  const [selectedTasks, setSelectedTasks] = useState([]);
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [showBulkActionModal, setShowBulkActionModal] = useState(false);
+  const {
+    selectedTasks,
+    setSelectedTasks,
+    selectionMode,
+    setSelectionMode,
+    showBulkActionModal,
+    setShowBulkActionModal,
+    toggleTaskSelection,
+    enterSelectionMode,
+    exitSelectionMode,
+  } = useTodoSelection();
 
   // Optional strategic prioritization lens
   const {
@@ -165,10 +149,6 @@ export default function TodoList({ apiUrl, userNumber }) {
 
     return () => clearInterval(timer);
   }, [apiUrl, userNumber, timezone]);
-
-  // ============================================================================
-  // DATA FETCHING
-  // ============================================================================
 
   const fetchFilters = async () => {
     if (apiUrl == null || !userNumber) return;
@@ -279,9 +259,37 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
   };
 
-  // ============================================================================
-  // TASK SORTING
-  // ============================================================================
+  const {
+    showOpportunityModal,
+    opportunityLoading,
+    opportunityError,
+    opportunities,
+    opportunityActions,
+    openOpportunityModal,
+    closeOpportunityModal,
+    acceptOpportunity,
+    declineOpportunity,
+  } = useTodoOpportunities({ apiUrl, userNumber, fetchTasks, fetchFilters });
+
+  const {
+    showFollowUpModal,
+    selectedFollowUpTask,
+    followUpDate,
+    followUpError,
+    followUpSaving,
+    setFollowUpDate,
+    openFollowUpModal,
+    closeFollowUpModal,
+    createFollowUp,
+  } = useTodoFollowUp({
+    apiUrl,
+    userNumber,
+    fetchTasks,
+    fetchFilters,
+    fetchMtnTrends,
+    setTasks,
+    setSortOrder,
+  });
 
   const getVisibleTaskScore = (task) => {
     return resolveVisibleTaskScore(task, getTaskScore);
@@ -328,10 +336,6 @@ export default function TodoList({ apiUrl, userNumber }) {
     setColumnSort(null);
     saveSortOrder(newOrder);
   };
-
-  // ============================================================================
-  // TASK OPERATIONS
-  // ============================================================================
 
   const toggleTaskComplete = async (taskId) => {
     setCompletingTasks(prev => [...prev, taskId]);
@@ -399,135 +403,6 @@ export default function TodoList({ apiUrl, userNumber }) {
     } catch (err) {
       console.error('Error adding task:', err);
       alert('Failed to add task');
-    }
-  };
-
-  const openFollowUpModal = (task) => {
-    setSelectedFollowUpTask(task);
-    setFollowUpDate('');
-    setFollowUpError('');
-    setShowFollowUpModal(true);
-  };
-
-  const closeFollowUpModal = () => {
-    if (followUpSaving) return;
-    setShowFollowUpModal(false);
-    setSelectedFollowUpTask(null);
-    setFollowUpDate('');
-    setFollowUpError('');
-  };
-
-  const createFollowUp = async () => {
-    if (!selectedFollowUpTask) return;
-    if (!followUpDate) {
-      setFollowUpError('Please select a follow-up date.');
-      return;
-    }
-
-    setFollowUpSaving(true);
-    setFollowUpError('');
-    try {
-      await axios.post(
-        `${apiUrl}/api/tasks/${selectedFollowUpTask.id}/follow-up`,
-        { follow_up_date: followUpDate },
-        { params: { user_number: userNumber } }
-      );
-      setTasks(prevTasks => prevTasks.filter(task => task.id !== selectedFollowUpTask.id));
-      setSortOrder(prevOrder => prevOrder.filter(id => id !== selectedFollowUpTask.id));
-      setShowFollowUpModal(false);
-      setSelectedFollowUpTask(null);
-      setFollowUpDate('');
-      await fetchTasks();
-      await fetchFilters();
-      fetchMtnTrends();
-    } catch (err) {
-      console.error('Error creating follow-up task:', err);
-      setFollowUpError(err.response?.data?.detail || 'Unable to create follow-up task. Please try again.');
-    } finally {
-      setFollowUpSaving(false);
-    }
-  };
-
-  // ============================================================================
-  // OPPORTUNITY OPERATIONS
-  // ============================================================================
-
-  const openOpportunityModal = async () => {
-    setShowOpportunityModal(true);
-    setOpportunityLoading(true);
-    setOpportunityError(null);
-    setOpportunities([]);
-    setOpportunityActions({});
-
-    try {
-      const response = await axios.post(`${apiUrl}/api/opportunities/generate`, {
-        user_number: userNumber,
-        surface: 'task_page',
-        type: 'task',
-        limit: 3
-      });
-      setOpportunities(response.data?.opportunities || []);
-    } catch (err) {
-      console.error('Error generating opportunities:', err);
-      setOpportunityError(err.response?.data?.detail || 'Failed to generate opportunities');
-    } finally {
-      setOpportunityLoading(false);
-    }
-  };
-
-  const closeOpportunityModal = () => {
-    setShowOpportunityModal(false);
-    setOpportunityLoading(false);
-    setOpportunityError(null);
-  };
-
-  const updateOpportunityAction = (opportunityId, action) => {
-    setOpportunityActions(prev => {
-      const next = { ...prev, [opportunityId]: action };
-      const allHandled = opportunities.length > 0 && opportunities.every(item => next[item.id]);
-      if (allHandled) {
-        setTimeout(() => closeOpportunityModal(), 600);
-      }
-      return next;
-    });
-  };
-
-  const acceptOpportunity = async (opportunityId) => {
-    setOpportunityActions(prev => ({ ...prev, [opportunityId]: 'working' }));
-    try {
-      await axios.post(`${apiUrl}/api/opportunities/${opportunityId}/accept`, {
-        user_number: userNumber
-      });
-      await fetchTasks();
-      await fetchFilters();
-      updateOpportunityAction(opportunityId, 'accepted');
-    } catch (err) {
-      console.error('Error accepting opportunity:', err);
-      setOpportunityError(err.response?.data?.detail || 'Failed to add opportunity to today');
-      setOpportunityActions(prev => {
-        const next = { ...prev };
-        delete next[opportunityId];
-        return next;
-      });
-    }
-  };
-
-  const declineOpportunity = async (opportunityId) => {
-    setOpportunityActions(prev => ({ ...prev, [opportunityId]: 'working' }));
-    try {
-      await axios.post(`${apiUrl}/api/opportunities/${opportunityId}/decline`, {
-        user_number: userNumber,
-        reason: 'Declined from task page'
-      });
-      updateOpportunityAction(opportunityId, 'declined');
-    } catch (err) {
-      console.error('Error declining opportunity:', err);
-      setOpportunityError(err.response?.data?.detail || 'Failed to decline opportunity');
-      setOpportunityActions(prev => {
-        const next = { ...prev };
-        delete next[opportunityId];
-        return next;
-      });
     }
   };
 
@@ -634,30 +509,6 @@ export default function TodoList({ apiUrl, userNumber }) {
     } finally {
       setDeferLoading(false);
     }
-  };
-
-  // ============================================================================
-  // MULTI-SELECT OPERATIONS
-  // ============================================================================
-
-  const toggleTaskSelection = (taskId) => {
-    setSelectedTasks(prev => {
-      if (prev.includes(taskId)) {
-        return prev.filter(id => id !== taskId);
-      } else {
-        return [...prev, taskId];
-      }
-    });
-  };
-
-  const enterSelectionMode = (taskId) => {
-    setSelectionMode(true);
-    setSelectedTasks([taskId]);
-  };
-
-  const exitSelectionMode = () => {
-    setSelectionMode(false);
-    setSelectedTasks([]);
   };
 
   const applyBulkAction = async (updates) => {
@@ -819,64 +670,33 @@ export default function TodoList({ apiUrl, userNumber }) {
           </TrendsErrorBoundary>
         )}
 
-        {/* Tasks List */}
-        {activeTab === 'tasks' && sortedTasks.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-slate-600 text-lg">{t('tasks.empty')}</p>
-            <p className="text-slate-500 text-sm mt-2">
-              {hasActiveFilters ? t('tasks.emptyFiltered') : t('tasks.emptyNew')}
-            </p>
-          </div>
-        ) : activeTab === 'tasks' ? (
-          <>
-            {!selectionMode && (
-              <TaskColumnHeader
-                columnSort={columnSort}
-                onSort={toggleColumnSort}
-              />
-            )}
-            <DragDropContext onDragEnd={handleDragEnd}>
-              <Droppable droppableId="tasks">
-                {(provided) => (
-                  <div
-                    {...provided.droppableProps}
-                    ref={provided.innerRef}
-                    className="space-y-1"
-                  >
-                    {sortedTasks.map((task, index) => {
-                      const scoreData = getVisibleTaskScore(task);
-
-                      return (
-                        <TaskItem
-                          key={task.id}
-                          task={task}
-                          index={index}
-                          isCompleting={completingTasks.includes(task.id)}
-                          isSelected={selectedTasks.includes(task.id)}
-                          selectionMode={selectionMode}
-                          onToggle={() => toggleTaskComplete(task.id)}
-                          onStartEdit={() => {
-                            setEditingTask(task);
-                            setShowTaskModal(true);
-                          }}
-                          onLongPress={() => enterSelectionMode(task.id)}
-                          onSelectToggle={() => toggleTaskSelection(task.id)}
-                          onFollowUp={() => openFollowUpModal(task)}
-                          goals={goals}
-                          priorityMode={priorityMode || Boolean(scoreData)}
-                          priorityScore={scoreData}
-                          onMtnFeedback={(rating, feedback, tag, recommendationId) => handleMtnFeedback(task.id, rating, feedback, tag, recommendationId)}
-                          timezone={timezone}
-                        />
-                      );
-                    })}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
-            </DragDropContext>
-          </>
-        ) : null}
+        <TaskListPanel
+          activeTab={activeTab}
+          sortedTasks={sortedTasks}
+          hasActiveFilters={hasActiveFilters}
+          emptyText={t('tasks.empty')}
+          emptyFilteredText={t('tasks.emptyFiltered')}
+          emptyNewText={t('tasks.emptyNew')}
+          selectionMode={selectionMode}
+          columnSort={columnSort}
+          onSort={toggleColumnSort}
+          onDragEnd={handleDragEnd}
+          completingTasks={completingTasks}
+          selectedTasks={selectedTasks}
+          onToggleTask={toggleTaskComplete}
+          onStartEdit={(task) => {
+            setEditingTask(task);
+            setShowTaskModal(true);
+          }}
+          onLongPress={enterSelectionMode}
+          onSelectToggle={toggleTaskSelection}
+          onFollowUp={openFollowUpModal}
+          goals={goals}
+          priorityMode={priorityMode}
+          getVisibleTaskScore={getVisibleTaskScore}
+          onMtnFeedback={handleMtnFeedback}
+          timezone={timezone}
+        />
       </div>
 
       {selectionMode && (
