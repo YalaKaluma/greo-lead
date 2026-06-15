@@ -291,6 +291,7 @@ class Task(Base):
     status = Column(String, default="open")  # open, completed, archived
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
     goal_id = Column(Integer, ForeignKey('journey_goals.id', ondelete='SET NULL'), nullable=True)
     goal = relationship("JourneyGoal", backref="tasks")
     #    deadline = Column(Date, nullable=True)

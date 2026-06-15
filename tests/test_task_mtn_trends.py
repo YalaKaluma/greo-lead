@@ -2,7 +2,11 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest import TestCase
 
-from app.services.task_mtn_trend_service import _rank_procrastinated_tasks
+from app.services.task_mtn_trend_service import (
+    _local_completed_at_iso,
+    _rank_procrastinated_tasks,
+    _task_completed_day,
+)
 
 
 class TaskMtnTrendsTest(TestCase):
@@ -31,3 +35,19 @@ class TaskMtnTrendsTest(TestCase):
         ranked = _rank_procrastinated_tasks(tasks)
 
         self.assertEqual([task.id for task in ranked], [2, 3, 1])
+
+    def test_completed_day_uses_completed_at_instead_of_later_update(self):
+        task = SimpleNamespace(
+            completed_at=datetime(2026, 6, 3, 10, 0, 0),
+            updated_at=datetime(2026, 6, 14, 19, 0, 0),
+        )
+
+        self.assertEqual(_task_completed_day(task, "UTC").isoformat(), "2026-06-03")
+
+    def test_completed_at_iso_uses_completed_at_instead_of_later_update(self):
+        task = SimpleNamespace(
+            completed_at=datetime(2026, 6, 3, 10, 0, 0),
+            updated_at=datetime(2026, 6, 14, 19, 0, 0),
+        )
+
+        self.assertEqual(_local_completed_at_iso(task, "UTC"), "2026-06-03T10:00:00+00:00")
