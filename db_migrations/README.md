@@ -1,8 +1,8 @@
 # Database Migrations
 
-This folder contains SQL migrations for Neon/PostgreSQL.
+This folder contains the historical SQL migrations for Neon/PostgreSQL.
 
-`app/main.py` verifies SQLAlchemy tables at startup, but schema changes should still be represented here so production database changes are intentional, reviewable, and repeatable.
+New production schema changes should be added as Alembic revisions in `alembic/versions/` and released with `alembic upgrade head`. `app/main.py` verifies SQLAlchemy tables at startup, but Alembic is the release source of truth for schema evolution after the `20260609_0001` baseline.
 
 ## Migration History
 
@@ -36,6 +36,7 @@ This folder contains SQL migrations for Neon/PostgreSQL.
 - `2026-06-07_add_user_auth_registration_fields.sql` backfills user auth, onboarding, trial, and tour fields required by self-serve registration.
 - `2026-06-08_add_synthetic_user_flags.sql` adds synthetic-user markers and lookup index.
 - `2026-06-09_resync_production_schema.sql` converges production schema drift, backfills procrastination pattern reason/strategy fields, and removes legacy duplicate columns.
+- `alembic/versions/20260614_0001_cto_director.py` adds CTO Director reviews and findings. This is the first post-baseline Alembic-managed migration.
 
 ## Migration Conventions
 

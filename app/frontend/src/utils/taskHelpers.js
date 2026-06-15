@@ -239,11 +239,11 @@ export const getMtnLabel = (score) => {
   return 'Low Leverage';
 };
 
-export const getMtnStyle = (score) => {
-  const label = getMtnLabel(score);
+export const getMtnStyle = (scoreOrLabel) => {
+  const label = MTN_TAG_OPTIONS.includes(scoreOrLabel) ? scoreOrLabel : getMtnLabel(scoreOrLabel);
   if (label === 'Transformational') return 'bg-blue-100 text-blue-800 border-blue-200';
   if (label === 'Strategic') return 'bg-emerald-100 text-emerald-800 border-emerald-200';
   if (label === 'Important') return 'bg-amber-100 text-amber-800 border-amber-200';
   if (label === 'Maintenance') return 'bg-slate-100 text-slate-700 border-slate-200';
-  return 'bg-gray-100 text-gray-600 border-gray-200';
+  return 'bg-rose-100 text-rose-800 border-rose-200';
 };

@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { useLanguage } from '../i18n/LanguageContext';
+import MyCoachingSessions from './MyCoachingSessions';
+
+const PEOPLE_REVIEW_SESSION_TYPES = ['people_review'];
+const PEOPLE_REVIEW_EMPTY_STATE = 'Start a people review session to reflect on the current relationship, diagnose patterns, and choose concrete next steps.';
 
 export default function MyTeam({ apiUrl, userNumber }) {
   const { t } = useLanguage();
@@ -335,6 +339,7 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose, onDeleted }) {
   const [expandedReviewId, setExpandedReviewId] = useState(null);
   const [synthesisExpanded, setSynthesisExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [activeTab, setActiveTab] = useState('profile');
 
   useEffect(() => {
     fetchPersonData();
@@ -457,6 +462,41 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose, onDeleted }) {
           </div>
         )}
 
+        <div className="mb-6 border-b border-slate-200">
+          <div className="flex gap-6">
+            <button
+              type="button"
+              onClick={() => setActiveTab('profile')}
+              className={`relative px-2 pb-3 font-medium transition-colors ${
+                activeTab === 'profile'
+                  ? 'text-blue-600'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              People Profile
+              {activeTab === 'profile' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('review')}
+              className={`relative px-2 pb-3 font-medium transition-colors ${
+                activeTab === 'review'
+                  ? 'text-blue-600'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              People Review
+              {activeTab === 'review' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {activeTab === 'profile' && (
+          <>
         {/* Person Info Card */}
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
           <div className="flex items-start justify-between">
@@ -515,12 +555,6 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose, onDeleted }) {
                 className="h-10 inline-flex items-center justify-center rounded border border-red-200 bg-red-50 px-4 text-sm font-medium text-red-600 transition-colors hover:bg-red-100"
               >
                 Delete
-              </button>
-              <button
-                onClick={() => window.location.href = `/?page=coaching-sessions&session=people_review&person=${person.id}`}
-                className="h-10 inline-flex items-center justify-center rounded bg-blue-600 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-              >
-                + New Review
               </button>
             </div>
           </div>
@@ -682,7 +716,90 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose, onDeleted }) {
             </div>
           )}
         </div>
+          </>
+        )}
+
+        {activeTab === 'review' && (
+          <PeopleReviewTab
+            apiUrl={apiUrl}
+            userNumber={userNumber}
+            person={person}
+            reviews={reviews}
+          />
+        )}
       </div>
+    </div>
+  );
+}
+
+function PeopleReviewTab({ apiUrl, userNumber, person, reviews }) {
+  return (
+    <div className="space-y-4">
+      <PreviousPeopleReviews person={person} reviews={reviews} />
+      <div className="min-h-[720px] overflow-hidden rounded-md border border-slate-200 bg-white">
+        <MyCoachingSessions
+          apiUrl={apiUrl}
+          userNumber={userNumber}
+          visibleSessionTypes={PEOPLE_REVIEW_SESSION_TYPES}
+          launchLabelByType={{ people_review: `Start People Review` }}
+          emptyStateText={PEOPLE_REVIEW_EMPTY_STATE}
+          loadInitialHistory={false}
+          selectedPersonName={person.name}
+        />
+      </div>
+    </div>
+  );
+}
+
+function PreviousPeopleReviews({ person, reviews }) {
+  if (!reviews.length) {
+    return (
+      <section className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm leading-6 text-slate-600">
+        No people reviews yet for {person.name}. Start one below to build a clearer relationship profile.
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-md border border-slate-200 bg-white">
+      <details className="group">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 text-sm font-semibold text-slate-900">
+          <span>Previous People Reviews ({reviews.length})</span>
+          <span className="text-slate-500 transition-transform group-open:rotate-180">v</span>
+        </summary>
+        <div className="space-y-3 border-t border-slate-200 px-5 py-4">
+          {reviews.map((review, index) => (
+            <details key={review.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-slate-900">
+                {index === 0 ? 'Latest Review' : `Review ${reviews.length - index}`} - {new Date(review.review_date).toLocaleDateString('en-US', {
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric'
+                })}
+              </summary>
+              <div className="mt-4 space-y-3">
+                {review.relationship_strength && (
+                  <span className="inline-flex rounded border border-purple-200 bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700">
+                    Strength {review.relationship_strength}/5
+                  </span>
+                )}
+                {review.insights && <PeopleReviewSummaryField title="Insight" value={review.insights} />}
+                {review.patterns_noticed && <PeopleReviewSummaryField title="Pattern" value={review.patterns_noticed} />}
+                {review.next_steps && <PeopleReviewSummaryField title="Next Steps" value={review.next_steps} />}
+              </div>
+            </details>
+          ))}
+        </div>
+      </details>
+    </section>
+  );
+}
+
+function PeopleReviewSummaryField({ title, value }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-white p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-slate-700">{value}</p>
     </div>
   );
 }

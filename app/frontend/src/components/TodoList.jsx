@@ -18,7 +18,7 @@ import { usePriority } from '../hooks/usePriority';
  * - Task display with Top 10 prioritization
  * - Drag-and-drop reordering
  * - Multi-select for bulk actions
- * - Filtering (date, project, delegate, goal)
+ * - Filtering (date, search, goal)
  * - Task CRUD operations
  * - Mobile-responsive with touch gestures
  * - 1500ms completion animation
@@ -33,11 +33,9 @@ export default function TodoList({ apiUrl, userNumber }) {
   
   // Filters
   const [filterType, setFilterType] = useState('due_today');
-  const [selectedProject, setSelectedProject] = useState('');
-  const [selectedDelegate, setSelectedDelegate] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedGoal, setSelectedGoal] = useState('');
   const [selectedMtnTags, setSelectedMtnTags] = useState([]);
-  const [projects, setProjects] = useState([]);
   const [delegates, setDelegates] = useState([]);
   const [goals, setGoals] = useState([]);
   
@@ -87,8 +85,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   useEffect(() => {
     return () => {
       setFilterType('due_today');
-      setSelectedProject('');
-      setSelectedDelegate('');
+      setSearchQuery('');
       setSelectedGoal('');
       setSelectedMtnTags([]);
       setSelectedTasks([]);
@@ -138,7 +135,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       return;
     }
     fetchTasks();
-  }, [apiUrl, userNumber, filterType, selectedProject, selectedDelegate, selectedGoal, timezone]);
+  }, [apiUrl, userNumber, filterType, selectedGoal, timezone]);
 
   useEffect(() => {
     if (apiUrl == null || !userNumber) return;
@@ -169,7 +166,6 @@ export default function TodoList({ apiUrl, userNumber }) {
         params: { user_number: userNumber }
       });
       if (response.data) {
-        setProjects(response.data.projects || []);
         setDelegates(response.data.delegates || []);
       }
     } catch (err) {
@@ -204,8 +200,6 @@ export default function TodoList({ apiUrl, userNumber }) {
         // If a goal is selected, show ALL tasks for that goal, not just due today
         filter_type: selectedGoal ? 'all' : filterType
       };
-      if (selectedProject) params.project = selectedProject;
-      if (selectedDelegate) params.delegated_to = selectedDelegate;
       if (selectedGoal) params.goal_id = parseInt(selectedGoal);
 
       const response = await axios.get(`${apiUrl}/api/tasks/`, { params });
@@ -308,8 +302,29 @@ export default function TodoList({ apiUrl, userNumber }) {
     return selectedMtnTags.includes(getMtnLabel(scoreData.score));
   };
 
+  const taskMatchesSearch = (task) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+
+    const searchableText = [
+      task.title,
+      task.description,
+      task.project,
+      task.delegated_to,
+      task.goal_title,
+      task.strategic_intent,
+      task.mtn_reason_today,
+      task.mtn_risk_today,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    return searchableText.includes(query);
+  };
+
   const getVisibleTasks = () => {
-    return tasks.filter(taskMatchesSelectedMtnTags);
+    return tasks.filter(task => taskMatchesSelectedMtnTags(task) && taskMatchesSearch(task));
   };
 
   const hasStoredMtnScoring = () => {
@@ -672,8 +687,7 @@ export default function TodoList({ apiUrl, userNumber }) {
 
   const clearFilters = () => {
     setFilterType('due_today');
-    setSelectedProject('');
-    setSelectedDelegate('');
+    setSearchQuery('');
     setSelectedGoal('');
     setSelectedMtnTags([]);
   };
@@ -858,7 +872,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   // COMPUTED VALUES
   // ============================================================================
 
-  const hasActiveFilters = selectedProject || selectedDelegate || selectedGoal || selectedMtnTags.length > 0 || filterType !== 'due_today';
+  const hasActiveFilters = searchQuery.trim() || selectedGoal || selectedMtnTags.length > 0 || filterType !== 'due_today';
   const sortedTasks = getSortedTasks();
   const todayMtnScore = Number(mtnTrends?.summary?.today?.mtn_score || 0);
   const todayCompletedTasks = Number(mtnTrends?.summary?.today?.completed_tasks || 0);
@@ -884,11 +898,11 @@ export default function TodoList({ apiUrl, userNumber }) {
       <div className="max-w-7xl mx-auto p-6">
         {/* Header */}
         <div className="mb-6 grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_auto_1fr]">
-          <div className="min-w-0">
+          <div className={`order-1 min-w-0 lg:order-none ${selectionMode ? '' : 'hidden sm:block'}`}>
             <h1 className="text-3xl font-bold text-slate-800 hidden lg:block">
               {t('tasks.title')}
             </h1>
-            <p className="text-slate-600 mt-1">
+            <p className={`text-slate-600 mt-1 ${selectionMode ? '' : 'hidden sm:block'}`}>
               {selectionMode ? (
                 <span className="text-blue-600 font-medium">
                   {selectedTasks.length} task(s) selected
@@ -899,7 +913,7 @@ export default function TodoList({ apiUrl, userNumber }) {
             </p>
           </div>
           {!selectionMode && (
-            <div className="flex justify-center pt-9">
+            <div className="order-3 flex justify-center lg:order-none lg:pt-9">
               <DailyMtnNeedle
                 score={todayMtnScore}
                 completedTasks={todayCompletedTasks}
@@ -908,12 +922,12 @@ export default function TodoList({ apiUrl, userNumber }) {
               />
             </div>
           )}
-          <div className="flex justify-end">
-            <div className="flex flex-wrap justify-end gap-2">
+          <div className="order-2 flex justify-center lg:order-none lg:justify-end">
+            <div className="flex flex-wrap justify-center gap-2 lg:justify-end">
               {sortOrder.length > 0 && !selectionMode && activeTab === 'tasks' && (
                 <button
                   onClick={resetSortOrder}
-                  className="h-10 w-10 inline-flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
+                  className="h-10 w-10 inline-flex items-center justify-center bg-slate-300 hover:bg-slate-400 text-slate-800 rounded-lg transition-colors"
                   title="Reset manual sort"
                   aria-label="Reset manual sort"
                 >
@@ -1022,17 +1036,13 @@ export default function TodoList({ apiUrl, userNumber }) {
             setFiltersCollapsed={setFiltersCollapsed}
             filterType={filterType}
             setFilterType={setFilterType}
-            selectedProject={selectedProject}
-            setSelectedProject={setSelectedProject}
-            selectedDelegate={selectedDelegate}
-            setSelectedDelegate={setSelectedDelegate}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
             selectedGoal={selectedGoal}
             setSelectedGoal={setSelectedGoal}
             selectedMtnTags={selectedMtnTags}
             mtnTagOptions={MTN_TAG_OPTIONS}
             toggleMtnTagFilter={toggleMtnTagFilter}
-            projects={projects}
-            delegates={delegates}
             goals={goals}
             hasActiveFilters={hasActiveFilters}
             clearFilters={clearFilters}
@@ -1177,6 +1187,7 @@ export default function TodoList({ apiUrl, userNumber }) {
           task={selectedFollowUpTask}
           followUpDate={followUpDate}
           setFollowUpDate={setFollowUpDate}
+          todayKey={todayKey}
           error={followUpError}
           saving={followUpSaving}
           onCancel={closeFollowUpModal}
@@ -1641,6 +1652,43 @@ const formatDateKey = (date) => {
   return `${year}-${month}-${day}`;
 };
 
+const getRollingCalendarDays = (startDate, dayCount = 30) => {
+  const startOffset = startDate.getDay();
+  const days = [];
+
+  for (let index = 0; index < startOffset; index += 1) {
+    days.push(null);
+  }
+
+  for (let index = 0; index < dayCount; index += 1) {
+    days.push(addDays(startDate, index));
+  }
+
+  while (days.length % 7 !== 0) {
+    days.push(null);
+  }
+
+  return days;
+};
+
+const formatCalendarRangeLabel = (startDate, endDate) => {
+  const sameYear = startDate.getFullYear() === endDate.getFullYear();
+  const startOptions = sameYear
+    ? { month: 'short', day: 'numeric' }
+    : { month: 'short', day: 'numeric', year: 'numeric' };
+
+  return `${startDate.toLocaleDateString('en-US', startOptions)} - ${endDate.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })}`;
+};
+
+const formatMonthShort = (date) => date.toLocaleDateString('en-US', {
+  month: 'long',
+  year: 'numeric',
+});
+
 const fillMtnTrendDates = (rows) => {
   const sortedRows = [...rows].sort((a, b) => dateToTime(a.date) - dateToTime(b.date));
   const firstDate = dateFromKey(sortedRows[0]?.date);
@@ -2028,11 +2076,17 @@ function FollowUpModal({
   task,
   followUpDate,
   setFollowUpDate,
+  todayKey,
   error,
   saving,
   onCancel,
   onConfirm
 }) {
+  const startDate = dateFromKey(todayKey) || new Date();
+  const endDate = addDays(startDate, 29);
+  const calendarDays = getRollingCalendarDays(startDate);
+  const selectedDateLabel = followUpDate ? formatShortDate(followUpDate) : 'Choose a date';
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/40 flex items-center justify-center px-4 py-6">
       <div className="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden">
@@ -2059,17 +2113,48 @@ function FollowUpModal({
           </div>
 
           <div>
-            <label htmlFor="follow-up-date" className="block text-sm font-medium text-slate-700 mb-1">
-              Follow-up date
-            </label>
-            <input
-              id="follow-up-date"
-              type="date"
-              value={followUpDate}
-              onChange={(event) => setFollowUpDate(event.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
-              autoFocus
-            />
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-slate-700">Follow-up date</p>
+                <p className="text-sm text-slate-500">{selectedDateLabel}</p>
+              </div>
+            </div>
+            <div className="rounded-lg border border-slate-200 p-3">
+              <div className="mb-3 text-center text-sm font-semibold text-slate-900">
+                {formatCalendarRangeLabel(startDate, endDate)}
+              </div>
+              <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold uppercase text-slate-400">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                  <div key={day} className="py-1">{day}</div>
+                ))}
+              </div>
+              <div className="mt-1 grid grid-cols-7 gap-1">
+                {calendarDays.map((date, index) => {
+                  const key = date ? formatDateKey(date) : `empty-${index}`;
+                  const isSelected = date && key === followUpDate;
+
+                  return date ? (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setFollowUpDate(key)}
+                      className={`aspect-square rounded text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                        isSelected
+                          ? 'bg-blue-600 text-white hover:bg-blue-700'
+                          : 'text-slate-700 hover:bg-slate-100'
+                      }`}
+                      title={formatMonthShort(date)}
+                      aria-pressed={isSelected}
+                      autoFocus={index === calendarDays.findIndex(Boolean)}
+                    >
+                      {date.getDate()}
+                    </button>
+                  ) : (
+                    <div key={key} className="aspect-square" aria-hidden="true" />
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           {error && (

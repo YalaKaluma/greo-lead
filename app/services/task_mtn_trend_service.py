@@ -5,6 +5,7 @@ from statistics import mean
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import Task, TaskPriorityScore
@@ -24,7 +25,7 @@ def _iso(day: date) -> str:
 
 
 def _task_completed_day(task: Task, timezone_name: str) -> date | None:
-    completed_at = task.updated_at
+    completed_at = getattr(task, "completed_at", None) or task.updated_at
     if not completed_at:
         return None
 
@@ -36,7 +37,7 @@ def _task_completed_day(task: Task, timezone_name: str) -> date | None:
 
 
 def _local_completed_at_iso(task: Task, timezone_name: str) -> str | None:
-    completed_at = task.updated_at
+    completed_at = getattr(task, "completed_at", None) or task.updated_at
     if not completed_at:
         return None
 
@@ -139,7 +140,7 @@ def get_task_mtn_trends(
         .filter(
             Task.user_number == user_number,
             Task.status == COMPLETED_STATUS,
-            Task.updated_at >= query_start,
+            func.coalesce(Task.completed_at, Task.updated_at) >= query_start,
         )
         .all()
     )
@@ -170,7 +171,8 @@ def get_task_mtn_trends(
         if completed_day not in by_day:
             continue
 
-        mtn_score = _task_mtn_score(task, task.updated_at, score_lookup)
+        completed_at = getattr(task, "completed_at", None) or task.updated_at
+        mtn_score = _task_mtn_score(task, completed_at, score_lookup)
         by_day[completed_day]["mtn_score"] += mtn_score
         by_day[completed_day]["completed_tasks"] += 1
         by_day[completed_day]["tasks"].append({

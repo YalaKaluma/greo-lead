@@ -8,8 +8,8 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onC
   const menuItems = [
     { id: 'home', label: t('nav.home'), disabled: false },
     { id: 'my-goals', label: t('nav.goals'), disabled: false },
-    { id: 'my-journey', label: t('nav.journey'), disabled: false },
     { id: 'todo-list', label: t('nav.tasks'), disabled: false },
+    { id: 'my-journey', label: t('nav.journey'), disabled: false },
     { id: 'my-habits', label: t('nav.habits'), disabled: false },
     { id: 'my-team', label: t('nav.team'), disabled: false },
 //    { id: 'coaching-sessions', label: t('nav.coaching'), disabled: false },
@@ -102,6 +102,16 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onC
         {/* Footer controls */}
         <div className="flex items-end justify-between gap-4 p-4 border-t border-slate-800">
           <div className="flex w-36 flex-col gap-2">
+            <button
+              onClick={() => onNavigate('alfred-story')}
+              className={`px-3 py-3 text-left rounded-lg transition-all duration-200 ${
+                currentPage === 'alfred-story'
+                  ? 'bg-slate-800 text-white shadow-md'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              {t('nav.story')}
+            </button>
             <button
               onClick={() => onNavigate('settings')}
               className={`px-3 py-3 text-left rounded-lg transition-all duration-200 ${

@@ -25,7 +25,7 @@ values:
 visions:
   - title: Build My Own Business
     description: Leave the safety of operator mode and build a durable advisory and software business around executive operating systems.
-    why: Alex wants more ownership, creative freedom, and leverage than a traditional executive role provides.
+    why: You want more ownership, creative freedom, and leverage than a traditional executive role provides.
     pillars:
       - title: Offer & Positioning
         description: Define a narrow, valuable offer for growth-stage founders and operators.
@@ -95,7 +95,7 @@ visions:
 
   - title: Complete a Marathon
     description: Complete a marathon while building consistency, energy, and trust in long-term habit formation.
-    why: Alex wants the marathon to become proof that discipline can be steady without becoming harsh.
+    why: You want the marathon to become proof that discipline can be steady without becoming harsh.
     pillars:
       - title: Training
         description: Build mileage progressively and avoid the injury-restart loop.
@@ -210,26 +210,32 @@ tasks:
   - title: Send 5 founder follow-up notes
     status: active
     created_days_ago: 3
-    due_in_days: 1
+    due_in_days: 0
+    bucket: today
     goal: Book 20 Founder Calls
     priority: high
     mtn_score: 0.94
     in_top10: true
+    times_postponed: 2
   - title: Finalize founder call notes from last week
     status: active
     created_days_ago: 9
     due_in_days: -2
+    bucket: today
     goal: Book 20 Founder Calls
     priority: high
     mtn_score: 0.81
     in_top10: true
+    times_postponed: 4
   - title: Reschedule missed mobility session
     status: active
     created_days_ago: 6
     due_in_days: -1
+    bucket: today
     goal: Add Mobility Routine
     priority: medium
     mtn_score: 0.58
+    times_postponed: 3
   - title: Send Evelyn the revised offer draft
     status: active
     created_days_ago: 12
@@ -238,6 +244,7 @@ tasks:
     priority: high
     mtn_score: 0.89
     in_top10: true
+    times_postponed: 5
   - title: Draft the one-page flagship offer
     status: active
     created_days_ago: 5
@@ -246,6 +253,7 @@ tasks:
     priority: high
     mtn_score: 0.91
     in_top10: true
+    times_postponed: 2
   - title: Schedule Saturday 14 mile route
     status: active
     created_days_ago: 2
@@ -270,7 +278,8 @@ tasks:
   - title: Prep weekday lunches for training week
     status: active
     created_days_ago: 1
-    due_in_days: 1
+    due_in_days: 0
+    bucket: today
     goal: Plan Weekday Meals
     priority: medium
     mtn_score: 0.62
@@ -299,57 +308,100 @@ tasks:
     goal: Practice Race Fueling
     priority: medium
     mtn_score: 0.71
+    times_postponed: 2
 
 journal:
-  - days_ago: 88
+  - days_ago: 36
+    title: Naming the stuck place
+    body: "The business still lives mostly in documents and private notes. I keep telling myself that one more refinement will make the first ask easier, but I know the real issue is exposure. The marathon plan has a similar shape: I can study pacing and nutrition longer than I can tolerate a mediocre training day. I want to start treating imperfect evidence as useful data."
+    depth_score: 2.4
+  - days_ago: 33
+    title: Too many possible directions
+    body: "I noticed how much energy leaks into keeping every option open. Advisory sprint, operating cadence, founder coaching, fractional COO work: each idea is plausible, which makes choosing one feel like losing the others. The cost is that none of them becomes real enough to test. This week I want to make one direction concrete enough that the market can disagree with it."
+    depth_score: 2.8
+  - days_ago: 30
+    title: The planning reflex
+    body: "I moved the training plan around again instead of doing the short strength session. That is the pattern: when the action feels emotionally loaded, I convert it into planning. Planning feels responsible, but today it was avoidance wearing a clean shirt. The useful question is not whether the plan is perfect. It is whether I did the next small rep."
+    depth_score: 3.2
+  - days_ago: 28
     title: The old loop
     body: "I noticed today that I am still treating the business idea like a someday project. I read, tweak notes, and imagine the perfect offer, but I avoid the exposed action: asking real founders what they would pay for. The same pattern shows up in running. I can design a plan forever, then miss one workout and make it mean the plan is broken. Both places reveal the same belief: if I do not fully start, I cannot fully fail."
     depth_score: 3.0
-  - days_ago: 82
+  - days_ago: 25
     title: Where urgency hides
     body: My calendar felt full, but most of the work protected me from clearer feedback. I answered easy emails before drafting the offer. I reorganized the training spreadsheet before doing the mobility work. I can see how false productivity gives me the emotional reward of effort without the risk of reality. This week I want to measure courage by the number of honest reps, not the amount of planning.
     depth_score: 3.6
-  - days_ago: 76
+  - days_ago: 22
     title: First uncomfortable asks
     body: I sent three notes to founders asking for feedback on the operating system idea. The discomfort was physical. I kept wanting to soften the ask, explain too much, or make it sound casual. The useful data is that nothing terrible happened. Two people said yes. One ignored it. That is a much better teacher than another hour polishing the deck.
     depth_score: 4.2
-  - days_ago: 69
+    signals:
+      - type: founder_market_contact
+        confidence: 0.92
+        excerpt: "I sent three notes to founders asking for feedback on the operating system idea."
+        reason: "This is direct evidence that you are moving the business vision through market-facing action rather than private refinement."
+  - days_ago: 19
     title: Missed run, different recovery
     body: "I missed Tuesday's run after a late work night. My first reaction was the familiar one: I am slipping. But I tried to separate the missed action from the identity story. The practical issue was that I had no minimum version for tired days. I did 25 minutes easy today and kept the chain alive. The lesson is not to lower standards; it is to design standards that survive real life."
     depth_score: 4.8
-  - days_ago: 62
+  - days_ago: 16
     title: Market feedback stung
     body: A founder told me the offer sounded smart but broad. I felt defensive because broad is how I hide. If the offer is broad, nobody can reject the real thing because there is no real thing. The sharper version is helping founders install a weekly operating cadence that turns priorities into behavior. That is smaller, but it finally has teeth.
     depth_score: 5.4
-  - days_ago: 55
+    signals:
+      - type: offer_clarity
+        confidence: 0.94
+        excerpt: "The sharper version is helping founders install a weekly operating cadence that turns priorities into behavior."
+        reason: "The entry connects founder feedback to a narrower, more sellable business offer."
+  - days_ago: 13
     title: The two visions are connected
     body: "I used to think the business goal and marathon goal competed for time. Now I see they are training the same muscle. The business asks me to tolerate visible imperfection. The marathon asks me to tolerate slow accumulation. Both punish drama. Both reward returning to the next rep. The operating question is: what is the next honest rep today?"
     depth_score: 6.1
-  - days_ago: 48
+    signals:
+      - type: vision_integration
+        confidence: 0.9
+        excerpt: "The business asks me to tolerate visible imperfection. The marathon asks me to tolerate slow accumulation."
+        reason: "The journal links the business and marathon visions into one development pattern."
+  - days_ago: 10
     title: Prioritization as grief
     body: "Choosing the flagship offer meant letting other possible businesses go. I felt more sadness than expected. Those ideas let me imagine many futures without committing to one. Prioritization is partly grief: admitting I cannot live every version of the story. The gain is energy. Once I chose the wedge, the next actions became obvious."
     depth_score: 6.7
-  - days_ago: 41
+    signals:
+      - type: founder_focus
+        confidence: 0.91
+        excerpt: "Choosing the flagship offer meant letting other possible businesses go."
+        reason: "This is a strong signal that you are narrowing the business wedge instead of keeping vague optionality alive."
+  - days_ago: 6
     title: A better kind of discipline
     body: "Discipline used to mean forcing myself harder. This week it looked quieter: laying out running clothes, writing tomorrow's first business task before bed, and ending work before I became useless. The pattern I am seeing is that discipline is often environmental kindness in advance. I do not need a more heroic morning. I need fewer decisions before the important rep."
     depth_score: 7.1
-  - days_ago: 34
+  - days_ago: 5
     title: Feedback without collapse
     body: "I walked through the offer with Evelyn and she pushed hard on the buyer. I noticed the old impulse to collapse into either compliance or defense. Instead I wrote down the parts that created energy and the parts that made me vague. That felt like a new behavior: using feedback as material without making it a verdict on me."
     depth_score: 7.5
-  - days_ago: 27
+  - days_ago: 4
     title: Long run evidence
     body: The 12 mile run changed something. Not because it was fast, but because I stayed calm when it got boring and uncomfortable. That is exactly the state I need in the business too. Boredom and uncertainty are not signs to switch strategies. They are often the middle of the rep. I want to stop confusing emotional weather with strategic information.
     depth_score: 8.0
-  - days_ago: 20
+    signals:
+      - type: marathon_identity
+        confidence: 0.88
+        excerpt: "I stayed calm when it got boring and uncomfortable. That is exactly the state I need in the business too."
+        reason: "The entry links marathon endurance to business execution and emotional steadiness."
+  - days_ago: 3
     title: Selling as service
     body: "I had a founder call where the problem was obvious: his team had priorities, but no cadence that turned them into decisions. I did not pitch much. I named what I saw and asked what it was costing him. The conversation felt less like selling and more like useful diagnosis. My growth edge is trusting that clarity is valuable before I overbuild the solution."
     depth_score: 8.4
-  - days_ago: 13
+    signals:
+      - type: commercial_confidence
+        confidence: 0.96
+        excerpt: "The conversation felt less like selling and more like useful diagnosis."
+        reason: "This journal entry shows you converting strategic clarity into a commercial behavior that supports the business vision."
+  - days_ago: 2
     title: Integration
     body: The business and marathon are starting to form one operating system. Monday is offer creation, Tuesday is founder calls, Wednesday is training quality, Friday is review. The deeper shift is that I am not asking each day to prove my identity. I am asking it to hold one or two commitments. That makes progress feel less fragile.
     depth_score: 8.8
-  - days_ago: 6
+  - days_ago: 1
     title: The person I am practicing becoming
     body: I can feel a different identity forming. Not the executive who waits until the plan is immaculate, and not the athlete who restarts with intensity after every lapse. The person I am practicing becoming ships the offer, asks for the call, runs the imperfect miles, reviews the data, and returns tomorrow. That feels less dramatic and much more trustworthy.
     depth_score: 9.1
@@ -357,6 +409,39 @@ journal:
     title: This week's experiment
     body: "This week I am combining both visions into one experiment: every day must include one market-facing business action and one body-facing training action. The size can flex, but the direction cannot. I want evidence that I can build ambition around consistency instead of adrenaline. The question for the review is simple: did I move reality, or did I only think about moving it?"
     depth_score: 9.3
+
+nudges:
+  - days_ago: 9
+    type: morning
+    content: "Good morning.\n\nYou have been turning the business from an idea into something the market can react to. That is a different kind of courage than operating inside an established company.\n\nOne pattern I see: when the offer feels exposed, you tend to make it more complete instead of making the next ask. Today, use structure to create contact with reality.\n\nToday's top move-the-needle opportunities are ready in your Todo List:\n\n1. Send 5 founder follow-up notes - this creates market evidence for the business instead of another private revision.\n2. Draft the one-page flagship offer - this sharpens the promise behind your advisory sprint.\n3. Prep weekday lunches for training week - this protects the marathon goal before the week becomes reactive.\n\nIf the ranking feels off, adjust it in your Todo List. The goal today is simple: one clear ask, one clear artifact, one action that protects your energy."
+  - days_ago: 8
+    type: evening
+    content: "You moved the offer forward today by asking for clearer buyer feedback. How did it feel to let the market react before the idea was fully polished? What did that teach you about the difference between preparation and avoidance?\n\nEnergy check: tap your level below from 1 (depleted) to 5 (fully charged)."
+  - days_ago: 7
+    type: morning
+    content: "Good morning.\n\nYour recent journal entries show a useful shift: you are starting to treat the business and the marathon as the same practice field. Both ask you to return to the next rep without drama.\n\nA quick coaching insight: the task that feels emotionally exposed is probably the one that will teach you the most today.\n\nToday's top priorities are in your Todo List:\n\n1. Finalize founder call notes from last week - close the loop while the signal is still fresh.\n2. Send Evelyn the revised offer draft - get sharper feedback from someone who will not let you stay vague.\n3. Reschedule missed mobility session - protect the training system instead of restarting with intensity later.\n\nFocus on closing open loops before opening new ones. That is what turns ambition into an operating system."
+  - days_ago: 6
+    type: evening
+    content: "You protected training despite a messy workday. How did choosing the minimum viable version affect your confidence and energy? Where could the same principle help with selling or founder follow-up?\n\nEnergy check: tap your level below from 1 (depleted) to 5 (fully charged)."
+  - days_ago: 5
+    type: morning
+    content: "Good morning.\n\nYou are building momentum, but I also see the risk: when business pressure rises, recovery becomes negotiable. The marathon is giving you fast feedback on a pattern that also affects your leadership.\n\nToday, focus on these move-the-needle opportunities:\n\n1. Schedule Saturday 14 mile route - this turns the long run from intention into a protected plan.\n2. Prep weekday lunches for training week - this removes a predictable energy leak.\n3. Build case study outline from past COO wins - this converts your operating experience into proof for the business.\n\nThese are prioritized in your Todo List. If the order feels off, adjust it. The deeper work today is to treat recovery as part of execution, not as a reward after execution."
+  - days_ago: 4
+    type: evening
+    content: "The founder call gave you useful discomfort today. What part of the feedback made the offer sharper? Did any part of you want to retreat into polishing instead of making the next ask?\n\nEnergy check: tap your level below from 1 (depleted) to 5 (fully charged)."
+  - days_ago: 3
+    type: morning
+    content: "Good morning.\n\nI see a clear theme in your recent activity: clarity gives you strength. When priorities are vague, you compensate with effort. When the next move is clear, you become steadier.\n\nToday's top move-the-needle opportunities:\n\n1. Send 5 founder follow-up notes - visible asks are the fastest way to validate the business.\n2. Draft the one-page flagship offer - compress the idea into language a buyer can react to.\n3. Reschedule missed mobility session - keep the marathon plan resilient instead of perfect.\n\nThe Todo List is already set up around these priorities. If anything feels off, adjust it there. Your job today is not to do everything; it is to protect the few actions that create evidence."
+  - days_ago: 2
+    type: evening
+    content: "You completed an important task today, but a few overdue items are still creating drag. How did it feel to carry those open loops? What would change tomorrow if you closed one before creating a new priority?\n\nEnergy check: tap your level below from 1 (depleted) to 5 (fully charged)."
+  - days_ago: 1
+    type: morning
+    content: "Good morning.\n\nYour recent reflections show real progress: you are no longer treating discipline as forcing harder. You are designing the environment so the important rep is easier to start.\n\nToday, let's focus on the actions most likely to move the needle:\n\n1. Send 5 founder follow-up notes - direct contact matters more than another internal refinement.\n2. Prep weekday lunches for training week - energy protection is part of the marathon plan.\n3. Ask Evelyn for advisory intro feedback - this can turn the business from a solo effort into a supported system.\n\nThese priorities are waiting in your Todo List. Keep the day honest: one market-facing action, one body-facing action, and one relationship action."
+  - days_ago: 0
+    type: morning
+    is_read: false
+    content: "Good morning.\n\nYou are in a useful moment: the business vision is becoming more concrete, and the marathon goal is giving you a daily test of consistency. I see the same growth edge in both: visible reps before private perfection.\n\nToday's top opportunities are in your Todo List:\n\n1. Send 5 founder follow-up notes - this is the clearest market-facing action for the business today.\n2. Prep weekday lunches for training week - this protects energy before the week becomes reactive.\n3. Build case study outline from past COO wins - this turns your operating credibility into usable proof.\n\nIf the order feels wrong, adjust the list. The aim today is not heroic output. It is clean evidence: one ask, one support action, one artifact that makes the business more real."
 
 people:
   - name: Priya Shah
@@ -401,7 +486,7 @@ people:
     growth_areas:
       - Limited availability
     aspirations:
-      - Help Alex become a clearer founder and more courageous seller.
+      - Help you become a clearer founder and more courageous seller.
     relationship_health: 5
   - name: Coach Daniel Reyes
     relation: Running coach
@@ -411,7 +496,7 @@ people:
     growth_areas:
       - Less context on work stress
     aspirations:
-      - Help Alex arrive at the start line healthy and confident.
+      - Help you arrive at the start line healthy and confident.
     relationship_health: 5
 
 leadership_journey:
@@ -425,18 +510,18 @@ leadership_journey:
   evidence:
     strengths:
       - title: Operating clarity
-        text: Alex can turn messy situations into simple operating rhythms, dashboards, and decision rules.
+        text: You can turn messy situations into simple operating rhythms, dashboards, and decision rules.
       - title: Pattern recognition
-        text: Alex notices repeated behavioral loops across work, training, and relationships.
+        text: You notice repeated behavioral loops across work, training, and relationships.
       - title: Calm under pressure
-        text: Alex becomes steadier when the next concrete action is clear.
+        text: You become steadier when the next concrete action is clear.
     failures:
       - title: The delayed business launch
-        text: Alex spent months refining the idea privately instead of testing it with buyers.
+        text: You spent months refining the idea privately instead of testing it with buyers.
         scar: A fear that visible selling would expose the gap between expertise and entrepreneurship.
         learning: The antidote is not more confidence. It is smaller and more frequent market-facing reps.
       - title: Training restart cycle
-        text: Alex repeatedly restarted fitness plans with too much intensity after missed weeks.
+        text: You repeatedly restarted fitness plans with too much intensity after missed weeks.
         scar: A belief that consistency had to look perfect to count.
         learning: Minimum viable workouts keep identity intact during disrupted weeks.
     development_areas:
@@ -483,11 +568,11 @@ leadership_journey:
         frequency: daily
     procrastination_patterns:
       - title: Polishing instead of asking
-        text: Alex improves the offer privately when the next brave action is a buyer conversation.
+        text: You improve the offer privately when the next brave action is a buyer conversation.
         trigger: Ambiguous feedback or fear of rejection.
         mitigation: Define the next visible ask before improving the artifact.
       - title: Restarting with intensity
-        text: After missed workouts, Alex wants to compensate instead of calmly resuming.
+        text: After missed workouts, you want to compensate instead of calmly resuming.
         trigger: Guilt after travel, poor sleep, or work overload.
         mitigation: Use the minimum viable workout within 24 hours.
     execution_systems:
@@ -501,29 +586,29 @@ leadership_journey:
         effectiveness: improving
     inspiration:
       - title: Make the invisible system visible
-        text: Alex inspires others by turning vague ambition into a clear cadence, dashboard, and next action.
+        text: You inspire others by turning vague ambition into a clear cadence, dashboard, and next action.
         approach: Practical clarity and honest tradeoffs.
-        effectiveness: Strong when Alex speaks from lived experiments.
+        effectiveness: Strong when you speak from lived experiments.
     coaching_moments:
       - title: Priya delivery playbook review
-        text: Alex asked Priya to critique the sprint playbook instead of asking for generic support.
+        text: You asked Priya to critique the sprint playbook instead of asking for generic support.
         person: Priya Shah
         outcome: Priya identified three missing artifacts and took ownership of one.
         learning: Delegation improves when the ask includes decision rights.
       - title: Founder prioritization conversation
-        text: Alex helped Marcus identify the one weekly meeting that could turn priorities into decisions.
+        text: You helped Marcus identify the one weekly meeting that could turn priorities into decisions.
         person: Marcus Lee
         outcome: Marcus agreed to test a 30-minute operating cadence.
         learning: The business creates value when advice becomes a repeatable system.
     team_composition:
       - title: Early business support system
-        text: Mentor, collaborator, running coach, and peer founder form the support network around Alex's business and marathon goals.
+        text: Mentor, collaborator, running coach, and peer founder form the support network around your business and marathon goals.
         team_type: advisory
-        dynamics: Strong trust, but Alex needs to ask more directly and earlier.
+        dynamics: Strong trust, but you need to ask more directly and earlier.
   coaching_sessions:
     - quadrant: vision_goals
-      situation: Alex was trying to keep too many business directions alive while training for a marathon.
-      reflection: The lack of focus was protecting Alex from rejection and commitment.
+      situation: You were trying to keep too many business directions alive while training for a marathon.
+      reflection: The lack of focus was protecting you from rejection and commitment.
       pattern: Optionality was being used as emotional safety.
       experiment: Commit to one business wedge and one training block for 30 days.
       development_level: 4
@@ -531,7 +616,7 @@ leadership_journey:
       practice: Make one market-facing ask and one training action daily.
     - quadrant: time_energy
       situation: Late reactive work was disrupting sleep and morning training.
-      reflection: Alex was treating recovery as optional even though energy was the constraint.
+      reflection: You were treating recovery as optional even though energy was the constraint.
       pattern: Ambition was leaking into unbounded evenings.
       experiment: Use a screen-free shutdown and plan the first task before bed.
       development_level: 3
@@ -541,21 +626,31 @@ leadership_journey:
 opportunities:
   - title: Turn founder call notes into a paid sprint offer
     description: Extract the repeated pain from discovery calls and write the first version of the Operating System Sprint.
+    rationale: Discovery notes are currently the fastest raw material for a sellable offer. Turning them into a sprint package moves you from insight to a paid promise.
     domain: business
     goal: Define Flagship Offer
     mtn_score: 0.93
+  - title: Send three sharp buyer follow-ups
+    description: Send direct follow-ups to the founders who reacted to the operating cadence problem, with one clear question about willingness to pay.
+    rationale: The business needs market evidence more than another internal revision. These follow-ups test urgency, language, and commercial intent.
+    domain: sales
+    goal: Book 20 Founder Calls
+    mtn_score: 0.91
   - title: Schedule three direct referral asks
     description: Ask trusted operators for specific founder introductions instead of general feedback.
+    rationale: Warm referrals are the highest-leverage path to more qualified founder conversations without overbuilding the offer in isolation.
     domain: sales
     goal: Build Referral System
     mtn_score: 0.87
   - title: Plan the next long-run fueling test
     description: Treat fueling like a controlled experiment before increasing distance.
+    rationale: A controlled fueling test reduces race-day risk and turns the marathon goal into a repeatable operating system.
     domain: marathon
     goal: Practice Race Fueling
     mtn_score: 0.76
   - title: Create a missed-run recovery rule
-    description: Define the exact minimum workout Alex does within 24 hours of a missed training session.
+    description: Define the exact minimum workout you do within 24 hours of a missed training session.
+    rationale: A recovery rule prevents one disruption from becoming an identity story or a full training restart.
     domain: habits
     goal: Recover After Missed Runs
     mtn_score: 0.82

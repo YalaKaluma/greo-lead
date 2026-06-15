@@ -78,6 +78,7 @@ class TaskResponse(BaseModel):
     delegated_to: Optional[str]
     created_at: datetime
     updated_at: datetime
+    completed_at: Optional[datetime] = None
     goal_id: Optional[int]
     strategic_intent: Optional[str] = None
     move_the_needle_score: Optional[float] = None
@@ -517,8 +518,21 @@ def update_task(
     if "goal_id" in update_data:
         validate_user_goal_link(db, user_number, update_data.get("goal_id"))
 
+    previous_status = task.status
+    now = datetime.now()
+
     for field, value in update_data.items():
         setattr(task, field, value)
+
+    if "status" in update_data:
+        new_status = (task.status or "").lower()
+        old_status = (previous_status or "").lower()
+        if new_status == "completed" and old_status != "completed":
+            task.completed_at = now
+        elif new_status != "completed" and old_status == "completed":
+            task.completed_at = None
+        elif new_status == "completed" and task.completed_at is None:
+            task.completed_at = now
 
     if should_increment_postponed:
         task.times_postponed = (task.times_postponed or 0) + 1
@@ -538,9 +552,9 @@ def update_task(
         if parent_task:
             for field, value in update_data.items():
                 setattr(parent_task, field, value)
-            parent_task.updated_at = datetime.now()
+            parent_task.updated_at = now
 
-    task.updated_at = datetime.now()
+    task.updated_at = now
 
     db.commit()
     db.refresh(task)
@@ -595,10 +609,10 @@ def reset_task_order(
             detail="Task ordering is not available on this deployment yet. Redeploy the backend after updating models.py."
         )
 
-    updated = db.query(Task).filter(Task.user_number == user_number).update({
-        "sort_order": None,
-        "updated_at": datetime.now()
-    })
+    updated = db.query(Task).filter(
+        Task.user_number == user_number,
+        Task.status == "open",
+    ).update({"sort_order": None})
     db.commit()
 
     return {"success": True, "updated": updated}
@@ -695,6 +709,7 @@ def create_follow_up_task(
 
         db.add(follow_up_task)
         task.status = "completed"
+        task.completed_at = now
         task.updated_at = now
 
         db.commit()
@@ -735,11 +750,13 @@ def toggle_task(
         return task
 
     was_open = task.status == "open"
+    now = datetime.now()
     task.status = 'completed' if was_open else 'open'
-    task.updated_at = datetime.now()
+    task.updated_at = now
+    task.completed_at = now if was_open else None
 
     if was_open and task.is_recurring:
-        next_due_date = calculate_next_due_date(task, task.updated_at)
+        next_due_date = calculate_next_due_date(task, task.completed_at)
         if next_due_date and (
             not task.recurrence_end_date or next_due_date <= task.recurrence_end_date
         ):

@@ -12,6 +12,7 @@
   "nav.coaching": "Mes séances de coaching",
   "nav.feedback": "Mes retours",
   "nav.calendar": "Mon calendrier",
+  "nav.story": "Histoire d'Alfred",
   "nav.settings": "Paramètres",
   "nav.logout": "Déconnexion",
   "page.home": "Accueil",
@@ -22,6 +23,7 @@
   "page.habits": "Mes habitudes",
   "page.coaching": "Séances de coaching",
   "page.journal": "Mon journal de croissance",
+  "page.story": "Histoire d'Alfred",
   "settings.title": "Paramètres",
   "settings.subtitle": "Choisissez comment Alfred gère la langue, les dates et la planification quotidienne.",
   "settings.languageLabel": "Langue de l'interface",
@@ -68,5 +70,6 @@
   "journey.title": "Système d'exploitation du leadership",
   "journey.map": "Carte du parcours",
   "journey.assessment": "Évaluation",
-  "journey.coaching": "Coaching"
+  "journey.coaching": "Coaching",
+  "journey.progressReview": "Revue de progression"
 }

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db import engine
 from app.models import SystemHealthEvent
+from app.services.operations_director.health_events import record_health_event_with_new_session
 
 
 RAILWAY_GRAPHQL_URL = os.getenv("RAILWAY_GRAPHQL_URL", "https://backboard.railway.com/graphql/v2")
@@ -22,7 +23,7 @@ class AdminSystemHealthService:
     def get_recent_errors(self, limit: int = 25) -> list[dict[str, Any]]:
         events = (
             self.db.query(SystemHealthEvent)
-            .filter(SystemHealthEvent.severity.in_(["warning", "error", "critical"]))
+            .filter(SystemHealthEvent.severity.in_(["warning", "error", "medium", "high", "critical"]))
             .order_by(SystemHealthEvent.created_at.desc(), SystemHealthEvent.id.desc())
             .limit(limit)
             .all()
@@ -92,7 +93,7 @@ class AdminSystemHealthService:
         since_7d = now - timedelta(days=7)
 
         total_24h = self._count(SystemHealthEvent.created_at >= since_24h)
-        errors_24h = self._count(SystemHealthEvent.created_at >= since_24h, SystemHealthEvent.severity == "error")
+        errors_24h = self._count(SystemHealthEvent.created_at >= since_24h, SystemHealthEvent.severity.in_(["error", "high", "critical"]))
         auth_failures_24h = self._count(SystemHealthEvent.created_at >= since_24h, SystemHealthEvent.event_type == "auth_failure")
         openai_failures_24h = self._count(SystemHealthEvent.created_at >= since_24h, SystemHealthEvent.event_type == "openai_failure")
         email_failures_24h = self._count(SystemHealthEvent.created_at >= since_24h, SystemHealthEvent.event_type == "email_failure")
@@ -253,6 +254,13 @@ class AdminSystemHealthService:
             elapsed_ms = round((datetime.utcnow() - start).total_seconds() * 1000)
             return {"status": "Connected", "response_time_ms": elapsed_ms}
         except Exception as exc:
+            record_health_event_with_new_session(
+                source="database",
+                category="database_failure",
+                message=str(exc),
+                details={"operation": "admin_system_health_database_check"},
+                exception_type=type(exc).__name__,
+            )
             return {"status": "Error", "response_time_ms": None, "message": str(exc)[:240]}
 
     def _count(self, *filters) -> int:

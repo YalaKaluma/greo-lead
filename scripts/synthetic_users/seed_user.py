@@ -41,6 +41,7 @@ from app.models import (
     JourneyValue,
     LeadershipCoachingSession,
     Message,
+    MessageSignalFlag,
     OpportunitySuggestion,
     RelationshipReview,
     SubscriptionStatus,
@@ -94,6 +95,7 @@ class SyntheticUserSeeder:
         self.load_tasks()
         self.load_habits()
         self.load_journal()
+        self.load_nudges()
         self.load_people()
         self.load_journey()
         self.load_opportunities()
@@ -289,7 +291,11 @@ class SyntheticUserSeeder:
                 completed_days_ago = int(spec.get("completed_days_ago", max(1, min(age_days - 1, self.rng.randint(1, 30)))))
                 due_date = datetime.utcnow() - timedelta(days=completed_days_ago)
             else:
-                due_date = datetime.utcnow() + timedelta(days=int(spec.get("due_in_days", self.rng.randint(1, 21))))
+                due_in_days = int(spec.get("due_in_days", self.rng.randint(1, 21)))
+                if due_in_days == 0:
+                    due_date = datetime.combine(self.today, time(hour=23, minute=59))
+                else:
+                    due_date = datetime.utcnow() + timedelta(days=due_in_days)
             if status == "completed":
                 due_date = min(due_date, datetime.utcnow() - timedelta(days=1))
             goal = self.goals_by_title.get(spec.get("goal") or "") or self._sample_outcome(index)
@@ -305,6 +311,7 @@ class SyntheticUserSeeder:
                 updated_at=due_date if status == "completed" else datetime.utcnow() - timedelta(days=self.rng.randint(0, 5)),
                 goal_id=goal.id if goal else None,
                 priority=spec.get("priority") or self.rng.choice(["high", "medium", "medium", "low"]),
+                times_postponed=int(spec.get("times_postponed", 0)),
                 current_bucket=spec.get("bucket") or ("today" if index < 3 and status != "completed" else "this_week"),
                 in_top10=bool(spec.get("in_top10", index < 6 and status != "completed")),
                 top10_position=index + 1 if index < 6 and status != "completed" else None,
@@ -444,7 +451,7 @@ class SyntheticUserSeeder:
                 reflection_depth_scored_at=created_at + timedelta(minutes=1),
                 created_at=created_at,
             ))
-            self.db.add(Message(
+            message = Message(
                 sender="user",
                 user_number=self.user_number,
                 content=text_value,
@@ -458,6 +465,44 @@ class SyntheticUserSeeder:
                 reflection_depth_explanation=depth_explanation,
                 reflection_depth_recommendations=recommendations,
                 reflection_depth_scored_at=created_at + timedelta(minutes=1),
+            )
+            self.db.add(message)
+            self.db.flush()
+            for signal_index, signal in enumerate(spec.get("signals") or []):
+                self.db.add(MessageSignalFlag(
+                    user_id=self.user.id,
+                    message_id=message.id,
+                    source_type="journal",
+                    signal_type=signal.get("type") or "goal_reflection",
+                    is_met=bool(signal.get("is_met", True)),
+                    confidence_score=float(signal.get("confidence", 0.86)),
+                    evidence_excerpt=signal.get("excerpt") or text_body[:240],
+                    reasoning_summary=signal.get("reason") or "This journal entry contains goal-relevant evidence for the progress review.",
+                    prompt_version="synthetic_seed_v1",
+                    model_version="synthetic_seed",
+                    created_at=created_at + timedelta(minutes=2, seconds=signal_index),
+                    updated_at=created_at + timedelta(minutes=2, seconds=signal_index),
+                ))
+
+    def load_nudges(self) -> None:
+        nudges = self.persona.get("nudges") or self._default_nudges()
+        for index, spec in enumerate(nudges):
+            days_ago = int(spec.get("days_ago", len(nudges) - index - 1))
+            nudge_type = spec.get("type") or ("morning" if index % 2 == 0 else "evening")
+            hour = int(spec.get("hour", 8 if nudge_type == "morning" else 18))
+            timestamp = datetime.combine(
+                self.today - timedelta(days=days_ago),
+                time(hour=hour, minute=int(spec.get("minute", 15))),
+                tzinfo=timezone.utc,
+            )
+            self.db.add(Message(
+                sender="assistant",
+                user_number=self.user_number,
+                content=spec.get("content") or spec.get("text") or self._default_nudge_text(nudge_type),
+                message_type="nudge",
+                conversation_type="messages",
+                is_read=bool(spec.get("is_read", days_ago > 1)),
+                timestamp=timestamp,
             ))
 
     def load_people(self) -> None:
@@ -583,7 +628,7 @@ class SyntheticUserSeeder:
                 readiness_score=84,
                 recommendation="ready_for_promotion",
                 assessment_summary=(
-                    "Alex's current Journey work shows a clear shift from abstract ambition to visible practice. "
+                    "Your current Journey work shows a clear shift from abstract ambition to visible practice. "
                     "The strongest signal is integration across business building and marathon training: both are now being used as daily evidence of focus, courage, and consistency."
                 ),
                 dimension_scores={
@@ -609,9 +654,9 @@ class SyntheticUserSeeder:
                 leadership_profile={
                     "headline": "A systems builder learning to lead through visible practice",
                     "description": (
-                        "Alex's leadership style is no longer merely emerging. It is becoming a practical operating system: "
-                        "he turns ambiguity into cadence, uses business building and marathon training as real-world practice fields, "
-                        "and is learning to lead through clearer asks, better recovery, and repeatable execution rather than private over-preparation."
+                        "Your leadership style is no longer merely emerging. It is becoming a practical operating system: "
+                        "you turn ambiguity into cadence, use business building and marathon training as real-world practice fields, "
+                        "and are learning to lead through clearer asks, better recovery, and repeatable execution rather than private over-preparation."
                     ),
                     "style": "Practical systems builder",
                     "current_growth_edge": "Turning insight into visible asks, cleaner delegation, and repeatable delivery.",
@@ -625,7 +670,7 @@ class SyntheticUserSeeder:
                         "domain": "People",
                         "subdomain": "Coach & Delegate",
                         "score": 4,
-                        "why_it_limits_promotion": "Alex is practicing clearer delegation, but still sometimes protects quality by staying too close to the work.",
+                        "why_it_limits_promotion": "You are practicing clearer delegation, but still sometimes protect quality by staying too close to the work.",
                         "what_to_do_next": "Delegate one meaningful business-development asset with success criteria, not step-by-step instructions.",
                     },
                     {
@@ -641,7 +686,7 @@ class SyntheticUserSeeder:
                         "domain": "Prioritize & Execute",
                         "subdomain": "Prioritization",
                         "score": 5,
-                        "why_it_is_strong": "Alex is consistently translating goals into daily MTN actions and reviewing whether they moved reality.",
+                        "why_it_is_strong": "You are consistently translating goals into daily MTN actions and reviewing whether they moved reality.",
                     },
                     {
                         "domain": "Vision",
@@ -720,6 +765,7 @@ class SyntheticUserSeeder:
                 scoring_details={"confidence": "medium", "source": "seed_user"},
                 created_at=datetime.utcnow() - timedelta(days=self.rng.randint(1, 30)),
             ))
+        self.db.flush()
 
     def load_behavioral_telemetry(self) -> None:
         for day_offset in range(min(120, self.months * 30), -1, -3):
@@ -751,22 +797,8 @@ class SyntheticUserSeeder:
             recommended_focus="Protect the smallest viable version of each habit on disrupted days.",
             raw_context={"synthetic": True},
         ))
-        vision = next((goal for goal in self.goals_by_title.values() if goal.time_horizon == "vision"), None)
-        if vision:
-            self.db.add(VisionProgressReview(
-                user_id=self.user.id,
-                user_number=self.user_number,
-                vision_id=vision.id,
-                review_period_start=datetime.utcnow() - timedelta(days=90),
-                review_period_end=datetime.utcnow(),
-                status="completed",
-                executive_summary="Clear progress across the main transformation arc, with execution habits becoming more deliberate.",
-                key_wins=["Roadmap moved from intent to weekly action", "Better prioritization language"],
-                key_risks=["Too many active commitments can dilute momentum"],
-                recommended_focus="Use the next wave to simplify commitments and increase deliberate practice.",
-                health_scores={"clarity": 4, "momentum": 4, "focus": 3},
-                raw_context={"synthetic": True},
-            ))
+        for vision in self.vision_goals.values():
+            self._seed_vision_progress_review(vision)
         for index, event_type in enumerate(["login", "page_view", "habit_update", "journal_created", "task_completed"] * 4):
             self.db.add(UsageEvent(
                 user_id=self.user.id,
@@ -776,6 +808,121 @@ class SyntheticUserSeeder:
                 metadata_json={"persona": self.persona_name},
                 created_at=datetime.utcnow() - timedelta(days=index * 6),
             ))
+
+    def _seed_vision_progress_review(self, vision: JourneyGoal) -> None:
+        scoped_goal_ids = self._vision_scoped_goal_ids(vision)
+        opportunities = [
+            item
+            for item in self.db.query(OpportunitySuggestion).filter(
+                OpportunitySuggestion.user_id == self.user.id,
+                OpportunitySuggestion.status == "suggested",
+                OpportunitySuggestion.linked_goal_id.in_(scoped_goal_ids),
+            ).all()
+        ]
+        opportunities.sort(key=lambda item: (float(item.mtn_score or 0), item.created_at or datetime.min), reverse=True)
+        mtn_actions = [
+            {
+                "id": item.id,
+                "title": item.title,
+                "why_it_matters": item.rationale,
+                "suggested_next_step": item.description,
+                "linked_goal_id": item.linked_goal_id,
+                "status": item.status,
+            }
+            for item in opportunities[:3]
+        ]
+
+        if "business" in (vision.title or "").lower():
+            status = "on_track"
+            summary = (
+                "Your business vision is active and gaining sharper market contact. The strongest progress is not that the company is already built; "
+                "it is that you are moving from private refinement into visible founder conversations, a clearer flagship offer, and reusable proof from past COO wins. "
+                "The current constraint is commercial exposure: the offer is becoming concrete enough to sell, but it still needs more direct asks and faster conversion of call notes into a paid sprint."
+            )
+            wins = [
+                "Founder discovery is producing sharper language around the Operating System Sprint.",
+                "The flagship offer has moved from broad expertise to a more specific transformation promise.",
+                "You are using your journal reflections to catch the polishing-before-asking pattern earlier.",
+            ]
+            risks = [
+                "The main risk is over-polishing the offer instead of testing it with buyers.",
+                "Several high-MTN follow-up tasks remain open or overdue, which can slow commercial momentum.",
+                "If you keep too many business ideas alive, the founder wedge may lose force.",
+            ]
+            focus = (
+                "This week, prioritize market evidence over internal refinement: close the overdue founder follow-ups, convert discovery notes into the paid sprint offer, "
+                "and ask Evelyn for one specific intro or objection to test."
+            )
+            health = {
+                "momentum": "green",
+                "execution": "yellow",
+                "commercial_progress": "yellow",
+                "outcome_achievement": "yellow",
+                "overall_goal_health": "yellow",
+            }
+            journal_theme = "Journal signals show you are naming the founder avoidance pattern more clearly and turning it into visible asks."
+        else:
+            status = "on_track"
+            summary = (
+                "Your marathon vision is active and increasingly integrated with the business goal. The progress signal is consistency under real-life pressure: "
+                "missed runs are no longer becoming identity verdicts, and recovery is starting to be treated as part of performance. The next edge is making fueling, mobility, and sleep as concrete as the long-run plan."
+            )
+            wins = [
+                "The 12-mile long run created confidence without needing drama or intensity.",
+                "You have a clearer missed-run recovery rule and are using minimum viable workouts.",
+                "Training and business execution are now reinforcing the same identity: return to the next rep.",
+            ]
+            risks = [
+                "Late reactive work can still weaken sleep and morning training quality.",
+                "Mobility and fueling are easy to delay because they feel less urgent than the run itself.",
+            ]
+            focus = (
+                "Protect the next long-run system: schedule the route, test fueling deliberately, and treat sleep prep as part of the training block rather than optional cleanup."
+            )
+            health = {
+                "momentum": "green",
+                "execution": "green",
+                "commercial_progress": "green",
+                "outcome_achievement": "yellow",
+                "overall_goal_health": "green",
+            }
+            journal_theme = "Journal signals show you connecting marathon consistency to leadership identity and calmer recovery after disruption."
+
+        self.db.add(VisionProgressReview(
+            user_id=self.user.id,
+            user_number=self.user_number,
+            vision_id=vision.id,
+            review_period_start=datetime.utcnow() - timedelta(days=7),
+            review_period_end=datetime.utcnow(),
+            status=status,
+            executive_summary=summary,
+            key_wins=wins,
+            key_risks=risks,
+            recommended_focus=focus,
+            mtn_actions=mtn_actions,
+            health_scores=health,
+            raw_context={
+                "synthetic": True,
+                "persona": self.persona_name,
+                "journal_theme": journal_theme,
+                "scoped_goal_ids": scoped_goal_ids,
+            },
+            raw_llm_response={"source": "synthetic_seed", "journal_theme": journal_theme},
+            created_at=datetime.utcnow(),
+        ))
+
+    def _vision_scoped_goal_ids(self, vision: JourneyGoal) -> list[int]:
+        ids = [vision.id]
+        changed = True
+        while changed:
+            changed = False
+            for goal in self.goals_by_title.values():
+                if goal.id in ids:
+                    continue
+                if goal.parent_goal_id in ids:
+                    ids.append(goal.id)
+                    changed = True
+        return ids
 
     def _goal(self, **kwargs) -> JourneyGoal:
         goal = JourneyGoal(user_number=self.user_number, **kwargs)
@@ -798,6 +945,21 @@ class SyntheticUserSeeder:
             {"title": "Reflective", "body": "The real issue is not time. It is my discomfort choosing what will not get done.", "depth_score": 6},
             {"title": "Transformational", "body": "I am practicing clearer tradeoffs and noticing that leadership often begins with what I stop carrying.", "depth_score": 8},
         ]
+
+    def _default_nudges(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "days_ago": offset,
+                "type": "morning" if offset % 2 == 0 else "evening",
+                "content": self._default_nudge_text("morning" if offset % 2 == 0 else "evening"),
+            }
+            for offset in range(9, -1, -1)
+        ]
+
+    def _default_nudge_text(self, nudge_type: str) -> str:
+        if nudge_type == "morning":
+            return "Today, choose one action that creates real evidence instead of private certainty. What is the smallest visible ask you can make before noon?"
+        return "Evening check: where did you move reality today, and where did you only think about moving it? Name one adjustment for tomorrow."
 
     def _task_priority_telemetry(
             self,
@@ -1003,43 +1165,43 @@ class SyntheticUserSeeder:
         return {
             "Vision": {
                 "domain_score": 5,
-                "summary": "Alex has connected business ownership, marathon training, values, strengths, and weekly execution into a coherent direction.",
+                "summary": "You have connected business ownership, marathon training, values, strengths, and weekly execution into a coherent direction.",
                 "subdomains": {
                     "Values": feedback(5, "Values are specific and actively used to make tradeoffs.", "Ownership, health, and courage now shape calendar decisions and market-facing action.", ["Keep linking weekly commitments to one explicit value."]),
-                    "Strengths": feedback(5, "Strengths are named and applied deliberately.", "Alex uses operating clarity and pattern recognition on both the business and training system.", ["Use strengths through delegation, not only personal execution."]),
+                    "Strengths": feedback(5, "Strengths are named and applied deliberately.", "You use operating clarity and pattern recognition on both the business and training system.", ["Use strengths through delegation, not only personal execution."]),
                     "Vision": feedback(5, "Vision is concrete, multi-domain, and supported by roadmap evidence.", "The two visions reinforce each other through courage, consistency, and ownership.", ["Review whether each roadmap wave still creates real-world evidence."]),
                 },
             },
             "People": {
                 "domain_score": 4,
-                "summary": "Alex has mapped key relationships and is practicing more explicit asks and cleaner delegation.",
+                "summary": "You have mapped key relationships and are practicing more explicit asks and cleaner delegation.",
                 "subdomains": {
-                    "Team Composition": feedback(4, "The support system is clear and role-specific.", "Alex knows what each person contributes and what each relationship needs.", ["Clarify ownership expectations with Priya and Marcus."]),
-                    "Inspire": feedback(4, "Alex inspires through practical clarity more than motivational language.", "The strongest examples come from making systems visible and useful.", ["Tell the story behind the system more often."]),
-                    "Coach & Delegate": feedback(4, "Delegation is improving, but Alex still feels the pull to stay close.", "The Priya playbook experiment shows real progress and a remaining control edge.", ["Delegate outcomes with criteria, then hold the debrief."]),
+                    "Team Composition": feedback(4, "The support system is clear and role-specific.", "You know what each person contributes and what each relationship needs.", ["Clarify ownership expectations with Priya and Marcus."]),
+                    "Inspire": feedback(4, "You inspire through practical clarity more than motivational language.", "The strongest examples come from making systems visible and useful.", ["Tell the story behind the system more often."]),
+                    "Coach & Delegate": feedback(4, "Delegation is improving, but you still feel the pull to stay close.", "The Priya playbook experiment shows real progress and a remaining control edge.", ["Delegate outcomes with criteria, then hold the debrief."]),
                 },
             },
             "Prioritize & Execute": {
                 "domain_score": 5,
-                "summary": "Alex has a strong execution cadence with daily MTN evidence and a clearer relationship to focus.",
+                "summary": "You have a strong execution cadence with daily MTN evidence and a clearer relationship to focus.",
                 "subdomains": {
                     "Prioritization": feedback(5, "Prioritization is now tied to market evidence and training capacity.", "The MTN history shows more high-value action and fewer avoidance tasks over time.", ["Keep pruning tasks that only create the feeling of progress."]),
                     "Execution System": feedback(5, "The weekly operating rhythm is concrete and repeatable.", "Two-track weekly planning connects business and marathon actions to reviewable outcomes.", ["Document the system so it can be reused with clients."]),
-                    "Procrastination": feedback(4, "Alex can name avoidance patterns and has practical mitigations.", "Polishing instead of asking is visible now, though still tempting under pressure.", ["Make visible asks before artifact edits on high-stakes days."]),
+                    "Procrastination": feedback(4, "You can name avoidance patterns and have practical mitigations.", "Polishing instead of asking is visible now, though still tempting under pressure.", ["Make visible asks before artifact edits on high-stakes days."]),
                 },
             },
             "Time & Energy": {
                 "domain_score": 4,
                 "summary": "Energy management is becoming a real operating constraint rather than an afterthought.",
                 "subdomains": {
-                    "Energy Sources": feedback(5, "Alex knows which activities create energy and confidence.", "Founder conversations, morning training, and deep work are clearly identified and scheduled.", ["Protect at least one energy source before reactive work."]),
+                    "Energy Sources": feedback(5, "You know which activities create energy and confidence.", "Founder conversations, morning training, and deep work are clearly identified and scheduled.", ["Protect at least one energy source before reactive work."]),
                     "Energy Drains": feedback(4, "Energy drains are specific and paired with mitigations.", "Late reactive work and vague optionality are named with practical boundaries.", ["Review evening shutdown compliance weekly."]),
                     "Recovery": feedback(4, "Recovery routines are improving and connected to performance.", "The shutdown ritual and easy runs are helping, but consistency still needs protection.", ["Treat recovery as a leading indicator, not a cleanup task."]),
                 },
             },
             "Learning & Development": {
                 "domain_score": 5,
-                "summary": "Alex is converting failure patterns into specific systems and development practices.",
+                "summary": "You are converting failure patterns into specific systems and development practices.",
                 "subdomains": {
                     "Failures & Scars": feedback(5, "Failure reflections are honest, specific, and actionable.", "The delayed launch and restart cycle are connected to concrete behavior change.", ["Keep separating facts from identity stories."]),
                     "Development Opportunities": feedback(4, "Development edges are clear and practice-based.", "Direct selling and recovery discipline have explicit reps.", ["Track visible asks and recovery discipline together."]),

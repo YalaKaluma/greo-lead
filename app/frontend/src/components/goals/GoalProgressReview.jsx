@@ -10,16 +10,37 @@ const statusLabels = {
   at_risk: 'At Risk'
 };
 
-const healthLabels = {
-  green: 'Green',
-  yellow: 'Yellow',
-  red: 'Red'
-};
-
-const healthClasses = {
-  green: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  yellow: 'bg-amber-50 text-amber-700 border-amber-200',
-  red: 'bg-rose-50 text-rose-700 border-rose-200'
+const statusSignals = {
+  accelerating: {
+    label: 'Strong',
+    dot: 'bg-emerald-500',
+    pill: 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  },
+  on_track: {
+    label: 'On track',
+    dot: 'bg-emerald-500',
+    pill: 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  },
+  steady: {
+    label: 'Steady',
+    dot: 'bg-emerald-500',
+    pill: 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  },
+  stalled: {
+    label: 'Watch',
+    dot: 'bg-amber-500',
+    pill: 'border-amber-200 bg-amber-50 text-amber-700'
+  },
+  constrained: {
+    label: 'Constrained',
+    dot: 'bg-amber-500',
+    pill: 'border-amber-200 bg-amber-50 text-amber-700'
+  },
+  at_risk: {
+    label: 'At risk',
+    dot: 'bg-rose-500',
+    pill: 'border-rose-200 bg-rose-50 text-rose-700'
+  }
 };
 
 const formatDate = (value) => {
@@ -44,12 +65,6 @@ const RefreshIcon = ({ className = '' }) => (
   </svg>
 );
 
-const HealthPill = ({ value }) => (
-  <span className={`inline-flex min-w-[72px] justify-center rounded-full border px-2.5 py-1 text-xs font-semibold ${healthClasses[value] || healthClasses.yellow}`}>
-    {healthLabels[value] || 'Yellow'}
-  </span>
-);
-
 const TaskList = ({ items, emptyText, dateLabel = 'Due' }) => {
   if (!items?.length) return <EmptyState>{emptyText}</EmptyState>;
   return (
@@ -69,6 +84,20 @@ const TaskList = ({ items, emptyText, dateLabel = 'Due' }) => {
         </div>
       ))}
     </div>
+  );
+};
+
+const BulletList = ({ items, emptyText }) => {
+  if (!items?.length) {
+    return <p className="mt-3 text-sm text-slate-600">{emptyText}</p>;
+  }
+
+  return (
+    <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-slate-700">
+      {items.map((item, index) => (
+        <li key={index}>{item}</li>
+      ))}
+    </ul>
   );
 };
 
@@ -155,13 +184,9 @@ export default function GoalProgressReview({ apiUrl, userNumber, expandedGoalId 
 
   if (!review) return null;
 
-  const healthRows = [
-    ['Momentum', review.goal_health?.momentum],
-    ['Execution', review.goal_health?.execution],
-    ['Commercial Progress', review.goal_health?.commercial_progress],
-    ['Outcome Achievement', review.goal_health?.outcome_achievement],
-    ['Overall Goal Health', review.goal_health?.overall_goal_health]
-  ];
+  const statusSignal = statusSignals[review.status] || statusSignals.constrained;
+  const statusLabel = statusLabels[review.status] || review.status || 'Unknown';
+  const nextOutcomeFocus = review.wave_summary?.next_milestone;
 
   return (
     <div className="space-y-6">
@@ -169,9 +194,13 @@ export default function GoalProgressReview({ apiUrl, userNumber, expandedGoalId 
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Executive Summary</p>
-            <h2 className="mt-1 text-xl font-semibold text-slate-950">
-              Status: {statusLabels[review.status] || review.status}
-            </h2>
+            <div className="mt-1 flex flex-wrap items-center gap-3">
+              <h2 className="text-xl font-semibold text-slate-950">Status: {statusLabel}</h2>
+              <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${statusSignal.pill}`}>
+                <span className={`h-2.5 w-2.5 rounded-full ${statusSignal.dot}`} />
+                {statusSignal.label}
+              </span>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700">
@@ -194,118 +223,69 @@ export default function GoalProgressReview({ apiUrl, userNumber, expandedGoalId 
           </div>
         )}
         <p className="max-w-5xl text-base leading-7 text-slate-700">{review.executive_summary}</p>
-
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Key Wins</div>
-            <ul className="mt-2 space-y-2 text-sm text-slate-700">
-              {(review.key_wins || []).map((item, index) => <li key={index}>{item}</li>)}
-              {(!review.key_wins || review.key_wins.length === 0) && <li>No major wins logged yet.</li>}
-            </ul>
-          </div>
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Key Risks</div>
-            <ul className="mt-2 space-y-2 text-sm text-slate-700">
-              {(review.key_risks || []).map((item, index) => <li key={index}>{item}</li>)}
-              {(!review.key_risks || review.key_risks.length === 0) && <li>No material risks detected.</li>}
-            </ul>
-          </div>
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended Focus</div>
-            <p className="mt-2 text-sm font-medium text-slate-800">{review.recommended_focus}</p>
-          </div>
-        </div>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+      <section className="rounded-md border border-slate-200 bg-white p-5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended Focus</p>
+        <p className="mt-2 text-base leading-7 text-slate-700">{review.recommended_focus}</p>
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-md border border-slate-200 bg-white p-5">
-          <h3 className="text-base font-semibold text-slate-900">Goal Health Score</h3>
-          <div className="mt-4 divide-y divide-slate-100">
-            {healthRows.map(([label, value]) => (
-              <div key={label} className="flex items-center justify-between py-3">
-                <span className="text-sm text-slate-700">{label}</span>
-                <HealthPill value={value} />
-              </div>
-            ))}
-          </div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Key Wins</p>
+          <BulletList items={review.key_wins} emptyText="No major wins logged yet." />
         </section>
 
         <section className="rounded-md border border-slate-200 bg-white p-5">
-          <h3 className="text-base font-semibold text-slate-900">Wave Progress Snapshot</h3>
-          {review.wave_summary?.current_wave ? (
-            <div className="mt-4 space-y-3 text-sm text-slate-700">
-              <div>
-                <div className="text-xs uppercase text-slate-400">Current Wave</div>
-                <div className="font-semibold text-slate-900">{review.wave_summary.current_wave.title}</div>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Status</span>
-                <span className="font-medium capitalize text-slate-900">{review.wave_summary.status?.replace('_', ' ')}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Progress</span>
-                <span className="font-medium text-slate-900">
-                  {review.wave_summary.completed_outcomes} / {review.wave_summary.total_outcomes} outcomes completed
-                </span>
-              </div>
-              <div>
-                <div className="text-xs uppercase text-slate-400">Next Milestone</div>
-                <div className="font-medium text-slate-900">{review.wave_summary.next_milestone || 'No next milestone set'}</div>
-              </div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Key Risks</p>
+          <BulletList items={review.key_risks} emptyText="No material risks detected." />
+        </section>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="rounded-md border border-slate-200 bg-white p-5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Latest Outcomes Achieved</p>
+          {review.recent_outcomes?.length ? (
+            <div className="mt-4 grid gap-3">
+              {review.recent_outcomes.map(outcome => (
+                <div key={outcome.id} className="rounded-md border border-slate-200 p-4">
+                  <div className="font-medium text-slate-900">{outcome.title}</div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+                    <span>{formatDate(outcome.completed_at)}</span>
+                    {outcome.pillar && <span>{outcome.pillar}</span>}
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
-            <EmptyState>No roadmap wave exists for this Vision yet.</EmptyState>
+            <div className="mt-4">
+              <EmptyState>No completed outcomes are attached to this Vision yet.</EmptyState>
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-md border border-slate-200 bg-white p-5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Next Outcome to Focus On</p>
+          {nextOutcomeFocus ? (
+            <div className="mt-4 rounded-md border border-slate-200 bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Based on current roadmap
+              </p>
+              <p className="mt-2 text-base font-semibold leading-6 text-slate-950">{nextOutcomeFocus}</p>
+              {review.wave_summary?.current_wave?.title && (
+                <p className="mt-2 text-sm text-slate-600">{review.wave_summary.current_wave.title}</p>
+              )}
+            </div>
+          ) : (
+            <div className="mt-4">
+              <EmptyState>No next roadmap outcome is available yet.</EmptyState>
+            </div>
           )}
         </section>
       </div>
 
       <section className="rounded-md border border-slate-200 bg-white p-5">
-        <h3 className="text-base font-semibold text-slate-900">Latest Outcomes Achieved</h3>
-        {review.recent_outcomes?.length ? (
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {review.recent_outcomes.map(outcome => (
-              <div key={outcome.id} className="rounded-md border border-slate-200 p-4">
-                <div className="font-medium text-slate-900">{outcome.title}</div>
-                <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
-                  <span>{formatDate(outcome.completed_at)}</span>
-                  {outcome.pillar && <span>{outcome.pillar}</span>}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="mt-4">
-            <EmptyState>No completed outcomes are attached to this Vision yet.</EmptyState>
-          </div>
-        )}
-      </section>
-
-      <section className="rounded-md border border-slate-200 bg-white p-5">
-        <h3 className="text-base font-semibold text-slate-900">Recently Completed Tasks</h3>
-        <div className="mt-4">
-          <TaskList items={review.completed_tasks} dateLabel="Completed" emptyText="No completed tasks are linked to this Vision yet." />
-        </div>
-      </section>
-
-      <section className="rounded-md border border-slate-200 bg-white p-5">
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div>
-            <h3 className="text-base font-semibold text-slate-900">Immediate Focus</h3>
-            <div className="mt-4">
-              <TaskList items={review.upcoming_tasks?.immediate_focus} emptyText="No active tasks are linked to this Vision." />
-            </div>
-          </div>
-          <div>
-            <h3 className="text-base font-semibold text-slate-900">Coming Next</h3>
-            <div className="mt-4">
-              <TaskList items={review.upcoming_tasks?.coming_next} emptyText="No linked tasks are due in the next 30 days." />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="rounded-md border border-slate-200 bg-white p-5">
-        <h3 className="text-base font-semibold text-slate-900">Top 3 MTN Recommendations</h3>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top 3 MTN Recommendations</p>
         {review.recommendations?.length ? (
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             {review.recommendations.map((recommendation, index) => {
@@ -343,7 +323,31 @@ export default function GoalProgressReview({ apiUrl, userNumber, expandedGoalId 
       </section>
 
       <section className="rounded-md border border-slate-200 bg-white p-5">
-        <h3 className="text-base font-semibold text-slate-900">Journal Signals Impacting This Goal</h3>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recently Completed Tasks</p>
+        <div className="mt-4">
+          <TaskList items={review.completed_tasks} dateLabel="Completed" emptyText="No completed tasks are linked to this Vision yet." />
+        </div>
+      </section>
+
+      <section className="rounded-md border border-slate-200 bg-white p-5">
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Immediate Focus</p>
+            <div className="mt-4">
+              <TaskList items={review.upcoming_tasks?.immediate_focus} emptyText="No active tasks are linked to this Vision." />
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Coming Next</p>
+            <div className="mt-4">
+              <TaskList items={review.upcoming_tasks?.coming_next} emptyText="No linked tasks are due in the next 30 days." />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-md border border-slate-200 bg-white p-5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Journal Signals Impacting This Goal</p>
         {review.journal_insights?.length ? (
           <div className="mt-4 space-y-3">
             {review.journal_insights.map((insight, index) => (

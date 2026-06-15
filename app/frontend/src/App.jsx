@@ -11,6 +11,7 @@ import MyJournal from './components/MyJournal';
 import PageIntroBanner from './components/PageIntroBanner';
 import AlfredChat from './components/AlfredChat';
 import Settings from './components/Settings';
+import AlfredStory from './components/AlfredStory';
 import { useEffect, useRef, useState } from "react";
 import Login from "./Login";
 import Welcome from "./Welcome";
@@ -34,6 +35,7 @@ const VALID_PAGE_IDS = new Set([
   'my-habits',
   'coaching-sessions',
   'my-journal',
+  'alfred-story',
   'settings'
 ]);
 
@@ -204,6 +206,7 @@ function MainAppShell({
     'my-habits': t('page.habits'),
     'coaching-sessions': t('page.coaching'),
     'my-journal': t('page.journal'),
+    'alfred-story': t('page.story'),
     settings: t('settings.title')
   };
 
@@ -318,6 +321,9 @@ function MainAppShell({
 
         {currentPage === 'my-journal' && (
           <MyJournal apiUrl={API_URL} userNumber={userNumber} />
+        )}
+        {currentPage === 'alfred-story' && (
+          <AlfredStory />
         )}
       </main>
 

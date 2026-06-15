@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Optional
 
-from sqlalchemy import desc, or_
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -252,10 +252,7 @@ class GoalProgressReviewService:
             .filter(
                 OpportunitySuggestion.user_id == user.id,
                 OpportunitySuggestion.status == "suggested",
-                or_(
-                    OpportunitySuggestion.linked_goal_id.in_(scoped_goal_ids),
-                    OpportunitySuggestion.linked_goal_id.is_(None),
-                ),
+                OpportunitySuggestion.linked_goal_id.in_(scoped_goal_ids),
             )
             .order_by(desc(OpportunitySuggestion.mtn_score), desc(OpportunitySuggestion.created_at))
             .limit(3)
@@ -297,22 +294,32 @@ class GoalProgressReviewService:
             .limit(30)
         )
 
-        insights = []
+        candidates = []
         for flag in query.all():
             text = " ".join(filter(None, [flag.evidence_excerpt, flag.reasoning_summary, flag.message.content if flag.message else None]))
             score = cls._keyword_score(text, keywords)
-            if keywords and score == 0 and len(insights) >= 3:
+            if keywords and score == 0:
                 continue
-            insights.append({
+            candidates.append({
                 "date": cls._iso(flag.updated_at or flag.created_at),
                 "journal_excerpt": flag.evidence_excerpt or cls._truncate(flag.message.content if flag.message else "", 180),
                 "impact_assessment": flag.reasoning_summary or f"Signal detected: {flag.signal_type.replace('_', ' ')}.",
                 "signal_type": flag.signal_type,
                 "confidence_score": float(flag.confidence_score or 0),
+                "_keyword_score": score,
             })
-            if len(insights) >= 5:
-                break
-        return insights
+        candidates.sort(
+            key=lambda item: (
+                item.get("_keyword_score", 0),
+                item.get("confidence_score", 0),
+                item.get("date") or "",
+            ),
+            reverse=True,
+        )
+        return [
+            {key: value for key, value in item.items() if key != "_keyword_score"}
+            for item in candidates[:5]
+        ]
 
     @classmethod
     def _goal_health(
@@ -372,7 +379,7 @@ class GoalProgressReviewService:
             upcoming_tasks.get("immediate_focus", [{}])[0].get("title") if upcoming_tasks.get("immediate_focus") else None
         )
 
-        parts = [f"Over the last 30 days, Alfred sees {vision_title} moving with {len(completed_tasks)} completed task(s) and {len(recent_outcomes)} outcome(s) achieved."]
+        parts = [f"Over the last 30 days, I see {vision_title} moving with {len(completed_tasks)} completed task(s) and {len(recent_outcomes)} outcome(s) achieved."]
         if strongest_pillar:
             parts.append(f"The strongest visible progress is around {strongest_pillar}.")
         if current_wave:

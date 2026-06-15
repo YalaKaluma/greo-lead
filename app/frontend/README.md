@@ -37,6 +37,20 @@ The frontend language/timezone layer lives in `src/i18n/`.
 
 Existing chat history and user-generated content are not translated retroactively.
 
+## Translation Coverage Rule
+
+All user-facing frontend text must use the i18n translation system.
+
+Before opening a PR, run:
+
+```bash
+npm run i18n:check
+```
+
+Every English key must have a valid French translation. CI will fail if French translation coverage is incomplete, if French values are empty, or if placeholder values such as `TODO`, `TBD`, `TRANSLATE`, or `MISSING` are present.
+
+When adding a new page or component, do not hardcode user-facing text directly in JSX. Add the key to both English and French translation files and use the translation helper/context in the component.
+
 ## Journey 2.0 Frontend Notes
 
 `src/components/MyLeadershipJourney.jsx` is currently the largest and most important frontend surface. It handles:
