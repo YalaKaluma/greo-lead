@@ -7,7 +7,8 @@ import TaskModal from './TodoList/TaskModal';
 import BulkActionModal from './TodoList/BulkActionModal';
 import FilterSection from './TodoList/FilterSection';
 import TrendRangeToggle from './TrendRangeToggle';
-import { getTodayET, getETDate, formatDateForInput, isOverdueET, getSortedGoals, getLongTermGoals, getMtnLabel, MTN_TAG_OPTIONS } from '../utils/taskHelpers';
+import { getTodayET, getETDate, formatDateForInput, isOverdueET, getLongTermGoals, MTN_TAG_OPTIONS } from '../utils/taskHelpers';
+import { getSortedTasks as sortTodoTasks, getVisibleTaskScore as resolveVisibleTaskScore } from '../utils/todoListLogic';
 import { useLanguage } from '../i18n/LanguageContext';
 import { usePriority } from '../hooks/usePriority';
 
@@ -272,63 +273,8 @@ export default function TodoList({ apiUrl, userNumber }) {
   // TASK SORTING
   // ============================================================================
 
-  const getStoredTaskScore = (task) => {
-    const rawScore = task.mtn_score_today ?? task.move_the_needle_score;
-    if (rawScore === null || rawScore === undefined) return null;
-    const numericScore = Number(rawScore);
-    if (Number.isNaN(numericScore)) return null;
-
-    return {
-      task_id: task.id,
-      title: task.title,
-      score: numericScore > 1 ? numericScore / 10 : numericScore,
-      reason: task.mtn_reason_today || task.strategic_intent || 'Alfred prioritized this from your todo list.',
-      risk_if_ignored: task.mtn_risk_today || null,
-      confidence: 'medium',
-      rank: task.mtn_rank_today ?? task.top10_position ?? null,
-      is_top_mtn: Boolean(task.mtn_recommended_today),
-      recommendation_id: task.mtn_recommendation_id || null
-    };
-  };
-
   const getVisibleTaskScore = (task) => {
-    return getTaskScore(task.id) || getStoredTaskScore(task);
-  };
-
-  const taskMatchesSelectedMtnTags = (task) => {
-    if (selectedMtnTags.length === 0) return true;
-    const scoreData = getVisibleTaskScore(task);
-    if (!scoreData) return false;
-    return selectedMtnTags.includes(getMtnLabel(scoreData.score));
-  };
-
-  const taskMatchesSearch = (task) => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return true;
-
-    const searchableText = [
-      task.title,
-      task.description,
-      task.project,
-      task.delegated_to,
-      task.goal_title,
-      task.strategic_intent,
-      task.mtn_reason_today,
-      task.mtn_risk_today,
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase();
-
-    return searchableText.includes(query);
-  };
-
-  const getVisibleTasks = () => {
-    return tasks.filter(task => taskMatchesSelectedMtnTags(task) && taskMatchesSearch(task));
-  };
-
-  const hasStoredMtnScoring = () => {
-    return getVisibleTasks().some(task => Boolean(getVisibleTaskScore(task)));
+    return resolveVisibleTaskScore(task, getTaskScore);
   };
 
   const saveSortOrder = (order) => {
@@ -343,37 +289,6 @@ export default function TodoList({ apiUrl, userNumber }) {
     });
   };
 
-  const prioritySortValue = (priority) => {
-    const priorityOrder = { high: 0, medium: 1, low: 2 };
-    return priorityOrder[String(priority || '').toLowerCase()] ?? 3;
-  };
-
-  const mtnSortValue = (task) => {
-    const scoreData = getVisibleTaskScore(task);
-    if (!scoreData) return 999;
-    const labelOrder = {
-      Transformational: 0,
-      Strategic: 1,
-      Important: 2,
-      Maintenance: 3,
-      'Low Leverage': 4
-    };
-    return labelOrder[getMtnLabel(scoreData.score)] ?? 999;
-  };
-
-  const compareTasksByColumn = (a, b) => {
-    if (!columnSort) return 0;
-
-    const direction = columnSort.direction === 'asc' ? -1 : 1;
-    const valueA = columnSort.key === 'urgency' ? prioritySortValue(a.priority) : mtnSortValue(a);
-    const valueB = columnSort.key === 'urgency' ? prioritySortValue(b.priority) : mtnSortValue(b);
-    if (valueA !== valueB) return (valueA - valueB) * direction;
-
-    const titleCompare = String(a.title || '').localeCompare(String(b.title || ''));
-    if (titleCompare !== 0) return titleCompare;
-    return (a.id ?? 0) - (b.id ?? 0);
-  };
-
   const toggleColumnSort = (key) => {
     setColumnSort(previousSort => {
       if (previousSort?.key !== key) return { key, direction: 'desc' };
@@ -382,88 +297,13 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const getSortedTasks = () => {
-    const visibleTasks = getVisibleTasks();
-
-    if (columnSort) {
-      return [...visibleTasks].sort(compareTasksByColumn);
-    }
-
-    // Manual drag-and-drop order should always win once it exists. MTN scores
-    // still render as labels, but they should not lock the list order.
-    if (sortOrder.length > 0) {
-      return [...visibleTasks].sort((a, b) => {
-        const indexA = sortOrder.indexOf(a.id);
-        const indexB = sortOrder.indexOf(b.id);
-        
-        if (indexA !== -1 && indexB !== -1) {
-          return indexA - indexB;
-        }
-        if (indexA !== -1) return -1;
-        if (indexB !== -1) return 1;
-        return 0;
-      });
-    }
-
-    const persistedOrderValues = visibleTasks
-      .map(task => task.sort_order)
-      .filter(order => order !== null && order !== undefined);
-    const hasPersistedTaskOrder = new Set(persistedOrderValues).size > 1;
-    if (hasPersistedTaskOrder) {
-      return [...visibleTasks].sort((a, b) => {
-        const orderA = a.sort_order ?? 999999;
-        const orderB = b.sort_order ?? 999999;
-        if (orderA !== orderB) return orderA - orderB;
-        return 0;
-      });
-    }
-
-    if (hasStoredMtnScoring()) {
-      return [...visibleTasks].sort((a, b) => {
-        const scoreA = getVisibleTaskScore(a);
-        const scoreB = getVisibleTaskScore(b);
-
-        if (scoreA && scoreB) {
-          const rankA = scoreA.rank ?? 999;
-          const rankB = scoreB.rank ?? 999;
-          if (rankA !== rankB) return rankA - rankB;
-          return (scoreB.score ?? 0) - (scoreA.score ?? 0);
-        }
-        if (scoreA) return -1;
-        if (scoreB) return 1;
-        return 0;
-      });
-    }
-    
-    // Default sorting: Top 10 first, then by priority (High > Medium > Low)
-    return [...visibleTasks].sort((a, b) => {
-      // 1. Top 10 tasks always come first
-      if (a.in_top10 && !b.in_top10) return -1;
-      if (!a.in_top10 && b.in_top10) return 1;
-      
-      // 2. Within Top 10, sort by position
-      if (a.in_top10 && b.in_top10) {
-        const posA = a.top10_position ?? 999;
-        const posB = b.top10_position ?? 999;
-        return posA - posB;
-      }
-      
-      // 3. For non-Top 10 tasks, sort by priority (High=0, Medium=1, Low=2)
-      const priorityOrder = { 'high': 0, 'medium': 1, 'low': 2 };
-      const aPriority = priorityOrder[a.priority?.toLowerCase()] ?? 3;
-      const bPriority = priorityOrder[b.priority?.toLowerCase()] ?? 3;
-      
-      if (aPriority !== bPriority) {
-        return aPriority - bPriority;
-      }
-      
-      // 4. If same priority, sort by due date (earlier first)
-      if (a.due_date && b.due_date) {
-        return new Date(a.due_date) - new Date(b.due_date);
-      }
-      if (a.due_date) return -1;
-      if (b.due_date) return 1;
-      
-      return 0;
+    return sortTodoTasks({
+      tasks,
+      selectedMtnTags,
+      searchQuery,
+      sortOrder,
+      columnSort,
+      getTaskScore
     });
   };
 
