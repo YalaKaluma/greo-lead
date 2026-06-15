@@ -6,7 +6,7 @@ This folder contains the main React UI surfaces for Alfred.
 
 - `goals/MyGoals.jsx` renders Vision/Pillar/Outcome goals and coordinates goal panels, tree/list views, goal reviews, linked tasks, and the transformation roadmap.
 - `MyLeadershipJourney.jsx` renders Journey 2.0: leadership wheel, clickable subdomains, belt trials, readiness assessment, trial response modal, evidence library, and subdomain add/edit modal.
-- `TodoList.jsx` renders task management, filtering, completion, recurring/postpone behavior, bulk actions, task editing, MTN trends, and enrichment.
+- `TodoList.jsx` coordinates task data, filters, task mutations, and page-level orchestration while focused TodoList modules render list, modal, trend, and action surfaces.
 - `MyHabits.jsx` renders habit tracking, daily states, energy check-ins, history, trends, scores, heatmap, leaderboard, and habit coaching.
 - `MyTeam.jsx` renders people/team surfaces and relationship review workflows.
 - `MyJournal.jsx` renders journal/reflection content, journal trends, and reflection-depth details.
@@ -24,7 +24,27 @@ This folder contains the main React UI surfaces for Alfred.
 - `JournalDepthModal.jsx` explains journal reflection-depth scoring.
 - `goals/` contains focused goal, roadmap, review, and linked-task components.
 - `Habits/` contains habit analytics and coaching components.
-- `TodoList/` contains task item, filter, modal, and bulk-action components.
+- `TodoList/` contains task item, task-list, filter, modal, bulk-action, page-control, and MTN trend components.
+
+## TodoList Component Structure
+
+`TodoList.jsx` currently owns:
+
+- task/filter/goal/MTN trend data loading from backend endpoints
+- task add/update/delete/complete/reorder operations
+- overdue-to-today and non-Top-10 defer operations
+- top-level filter, tab, modal, and selection orchestration
+- priority integration through `usePriority`
+
+Focused TodoList support modules currently own:
+
+- `TodoList/TaskListPanel.jsx`: list rendering, empty states, drag/drop container, and task item wiring
+- `TodoList/PageControls.jsx`: header actions, tabs, selection bar, follow-up/defer/opportunity modal UI, and column headers
+- `TodoList/MtnTrends.jsx`: MTN needle, trends tab, chart, heatmap, breakdown modal, and trends error boundary
+- `hooks/useTodoInteractions.js`: opportunity, follow-up, and selection interaction state
+- `utils/todoListLogic.js`: task filtering, visible score resolution, and sort order logic
+- `utils/todoMtnTrends.js`: MTN benchmark, chart, heatmap, and trend payload helpers
+- `utils/todoDateLogic.js`: shared calendar/date formatting helpers used by task follow-up and MTN trend views
 
 ## Journey 2.0 Component Structure
 
