@@ -23,6 +23,7 @@ from app.routers.journey import JOURNEY_DIMENSIONS, get_current_belt_status, loa
 from app.services.goal_progress_review_service import GoalProgressReviewService
 from app.services.habits.habit_trend_service import get_habit_trends
 from app.services.journal_reflection_depth_service import get_reflection_depth_trends
+from app.services.onboarding_seed_service import is_starter_goal_example
 from app.services.task_mtn_trend_service import get_task_mtn_trends
 from app.services.timezone_service import get_user_timezone, today_for_timezone
 
@@ -36,7 +37,7 @@ DOMAIN_LABELS = {
 }
 
 DOMAIN_ORDER = ["vision", "people", "execute", "energy", "learning"]
-HOME_DASHBOARD_SCHEMA_VERSION = 3
+HOME_DASHBOARD_SCHEMA_VERSION = 4
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
@@ -127,7 +128,7 @@ def _rank_top_tasks(
     def sort_key(task: Task):
         due_day = _task_due_day(task)
         urgent = 1 if due_day and due_day <= today else 0
-        aligned = 1 if task.goal_id else 0
+        aligned = 1 if task.goal_id in goals_by_id else 0
         score = _as_score_10(scores_by_task.get(task.id).top10_likelihood if scores_by_task.get(task.id) else task.move_the_needle_score)
         return (
             score,
@@ -367,7 +368,8 @@ class HomeDashboardService:
         today = today_for_timezone(timezone_name)
 
         goals = self.db.query(JourneyGoal).filter(JourneyGoal.user_number == user_number).all()
-        goals_by_id = {goal.id: goal for goal in goals}
+        user_goals = [goal for goal in goals if not is_starter_goal_example(goal)]
+        goals_by_id = {goal.id: goal for goal in user_goals}
         tasks = (
             self.db.query(Task)
             .filter(Task.user_number == user_number, Task.status == "open")
@@ -410,7 +412,7 @@ class HomeDashboardService:
         journal_metrics = _weekly_journal_metrics(journal)
         wheel_segments = _wheel_segments(assessment)
         vision_goals = [
-            goal for goal in goals
+            goal for goal in user_goals
             if _goal_level(goal) == "vision"
         ]
         vision_goals.sort(key=lambda goal: (goal.sort_order or 0, goal.first_seen_at or datetime.min, goal.id or 0))
@@ -437,7 +439,7 @@ class HomeDashboardService:
         ]
 
         activation_ready = (
-            (len(goals) >= 1 or len(tasks) >= 3)
+            (len(user_goals) >= 1 or len(tasks) >= 3)
             and len(habits) >= 1
             and (
                 int((journal.get("summary") or {}).get("total_journal_entries") or 0) >= 1
