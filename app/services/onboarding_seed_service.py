@@ -199,6 +199,37 @@ SAMPLE_GOAL_SPECS = [
 ]
 
 
+def is_starter_goal_example(goal: JourneyGoal | None) -> bool:
+    """Return True for unchanged starter goal examples seeded for onboarding."""
+    if not goal:
+        return False
+
+    level = (goal.time_horizon or "").strip().lower()
+    level = {"long": "vision", "medium": "pillar", "short": "outcome"}.get(level, level)
+    title = _normalize_title(goal.title)
+    if not title:
+        return False
+
+    return title in _starter_goal_titles_by_level().get(level, set())
+
+
+def _starter_goal_titles_by_level() -> dict[str, set[str]]:
+    titles = {
+        "vision": set(),
+        "pillar": set(),
+        "outcome": set(),
+    }
+    for spec in SAMPLE_GOAL_SPECS:
+        titles["vision"].add(_normalize_title(spec["vision"]))
+        for pillar_spec in spec["pillars"]:
+            titles["pillar"].add(_normalize_title(pillar_spec["title"]))
+            titles["pillar"].update(_normalize_title(alias) for alias in pillar_spec.get("aliases", []))
+            titles["outcome"].update(_normalize_title(title) for title in pillar_spec["outcomes"])
+        for wave_spec in spec["roadmap"]:
+            titles["outcome"].update(_normalize_title(title) for title in wave_spec["outcomes"])
+    return titles
+
+
 def ensure_starter_examples_seeded(db: Session, user: User) -> bool:
     """Seed editable starter content once for a newly created user."""
     if not user or not user.id or not user.phone_number:
