@@ -76,7 +76,7 @@ function MtnScoreCard({ metric }) {
       <div className="mt-5 flex items-center justify-between gap-4">
         <ScoreCircle value={toNumber(metric?.score, 0).toFixed(1)} label="index" />
         <div className="min-w-0 flex-1">
-          <p className="text-sm text-slate-600">{toNumber(metric?.completed_tasks, 0)} completed high-leverage tasks</p>
+          <p className="text-sm text-slate-600">{toNumber(metric?.completed_tasks, 0)} completed tasks</p>
           <p className={`mt-3 text-sm font-semibold ${delta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
             {delta} vs month average
           </p>
