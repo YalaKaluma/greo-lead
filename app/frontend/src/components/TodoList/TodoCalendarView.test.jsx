@@ -60,7 +60,7 @@ describe('TodoCalendarView', () => {
       id: 3,
       title: 'Operational visible',
       due_date: '2026-06-21',
-      move_the_needle_score: 0.45,
+      move_the_needle_score: 0.55,
       goal_id: 10,
       estimated_effort: '30m',
       delegated_to: 'Avery',

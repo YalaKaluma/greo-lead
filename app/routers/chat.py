@@ -94,7 +94,8 @@ async def send_chat_message(
         user_number=chat_msg.user_number,
         user_message=chat_msg.message,
         channel="chat",
-        preferred_language=preferred_language
+        preferred_language=preferred_language,
+        conversation_type=chat_msg.conversation_type,
     )
 
     reply = result.response
@@ -109,6 +110,7 @@ async def send_chat_message(
         content=chat_msg.message,
         message_type=message_type,
         conversation_type=conversation_type,
+        reflection_depth_result=result.data.get("reflection_depth_result"),
     )
 
     assistant_message = save_message(
