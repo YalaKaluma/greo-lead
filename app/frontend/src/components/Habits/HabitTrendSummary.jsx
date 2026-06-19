@@ -1,7 +1,15 @@
+import KpiInfoButton from '../KpiInfoButton';
+
 const periodLabels = {
   last_7_days: 'Last 7 Days',
   last_21_days: 'Last 21 Days',
   last_90_days: 'Last 90 Days'
+};
+
+const periodInfo = {
+  last_7_days: 'Habit completion rate over the last 7 days. The Executive dashboard Balance Index uses this same value as its headline number.',
+  last_21_days: 'Habit completion rate over the last 21 days, useful for seeing whether the latest week is part of a broader pattern.',
+  last_90_days: 'Habit completion rate over the last 90 days. This is the baseline used for the Balance Index comparison.'
 };
 
 function TrendBadge({ trend }) {
@@ -28,7 +36,8 @@ export default function HabitTrendSummary({ summary }) {
       {Object.entries(periodLabels).map(([key, label]) => {
         const item = summary[key] || {};
         return (
-          <div key={key} className="rounded-lg border bg-white p-4">
+          <div key={key} className="relative rounded-lg border bg-white p-4">
+            <KpiInfoButton label={`About ${label}`}>{periodInfo[key]}</KpiInfoButton>
             <div className="text-sm font-medium text-slate-500">{label}</div>
             <div className="mt-2 text-3xl font-bold text-slate-900">{item.compliance_rate || 0}%</div>
             <div className="mt-2 text-xs text-slate-500">

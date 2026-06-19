@@ -1,3 +1,5 @@
+import KpiInfoButton from '../KpiInfoButton';
+
 const statusStyles = {
   Improving: 'bg-emerald-100 text-emerald-800 border-emerald-200',
   Stable: 'bg-slate-100 text-slate-700 border-slate-200',
@@ -73,7 +75,10 @@ export default function HabitCoachingCard({
   const statusClass = statusStyles[review?.status] || 'bg-slate-100 text-slate-700 border-slate-200';
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <KpiInfoButton label="About Alfred habit coaching">
+        Coaching summarizes habit trends, wins, watchouts, and suggested MTN actions based on the latest habit review data.
+      </KpiInfoButton>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">

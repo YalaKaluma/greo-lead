@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import TrendRangeToggle from './TrendRangeToggle';
+import KpiInfoButton from './KpiInfoButton';
 
 const WIDTH = 720;
 const HEIGHT = 240;
@@ -89,11 +90,12 @@ const colorForDepth = (score, entryCount) => {
   return 'bg-rose-600';
 };
 
-function KpiCard({ label, value, detail, tone = 'slate' }) {
+function KpiCard({ label, value, detail, tone = 'slate', info }) {
   const toneClass = tone === 'green' ? 'text-emerald-700' : tone === 'blue' ? 'text-blue-700' : 'text-slate-900';
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
+    <div className="relative rounded-lg border border-slate-200 bg-white p-4">
+      {info && <KpiInfoButton label={`About ${label}`}>{info}</KpiInfoButton>}
       <div className="text-sm font-medium text-slate-500">{label}</div>
       <div className={`mt-2 text-3xl font-bold ${toneClass}`}>{value}</div>
       {detail && <div className="mt-2 text-xs text-slate-500">{detail}</div>}
@@ -113,7 +115,10 @@ function DepthTrendChart({ data }) {
   const dateTicks = buildDateTicks(points);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
+    <div className="relative rounded-lg border border-slate-200 bg-white p-4">
+      <KpiInfoButton label="About reflection depth trend">
+        Shows daily scored reflection depth plus weekly and 30-day rolling averages on a 0-10 scale.
+      </KpiInfoButton>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Reflection Depth Trend</h2>
@@ -187,7 +192,10 @@ function ReflectionDepthHeatmap({ data }) {
   });
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
+    <div className="relative rounded-lg border border-slate-200 bg-white p-4">
+      <KpiInfoButton label="About reflection depth heatmap">
+        Shows the last 90 days of journal reflection depth. Each square is one day, colored by the day’s average score.
+      </KpiInfoButton>
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-800">Reflection Depth Heatmap</h2>
         <span className="text-xs text-slate-500">Last 90 days</span>
@@ -274,24 +282,30 @@ export default function JournalTrendsTab({ trends, loading, error }) {
           value={formatNumber(average.current)}
           detail={`Previous 30 days: ${formatNumber(average.previous_30_days)} | Trend: ${sign}${formatNumber(trend, '0.0')}`}
           tone={trend > 0 ? 'green' : 'slate'}
+          info="Average scored reflection depth over the most recent 30 days, compared with the previous 30-day period."
         />
         <KpiCard
           label="Deep Reflection Entries"
           value={summary.deep_reflection_entries || 0}
           detail="Entries scored 8+"
           tone="blue"
+          info="The number of scored journal entries at 8 or higher, indicating pattern recognition or growth-oriented reflection."
         />
         <KpiCard
           label="Total Journal Entries"
           value={summary.total_journal_entries || 0}
           detail="Scored reflections"
+          info="The number of journal entries in the 90-day trend window that have reflection depth scores."
         />
       </div>
 
       <DepthTrendChart data={extractTrendChart(trends)} />
       <ReflectionDepthHeatmap data={extractTrendChart(trends)} />
 
-      <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="relative rounded-lg border border-slate-200 bg-white p-4">
+        <KpiInfoButton label="About Alfred reflection coach">
+          Coaching summarizes recent reflection depth, common strengths, growth edges, and prompts for deeper entries.
+        </KpiInfoButton>
         <h2 className="text-lg font-semibold text-slate-800">Alfred Reflection Coach</h2>
         <p className="mt-3 text-sm leading-6 text-slate-600">
           {coaching.summary || 'Write a few scored journal entries and Alfred will identify your strongest reflection patterns.'}

@@ -5,6 +5,7 @@ import TaskModal from './TodoList/TaskModal';
 import BulkActionModal from './TodoList/BulkActionModal';
 import FilterSection from './TodoList/FilterSection';
 import TaskListPanel from './TodoList/TaskListPanel';
+import TodoCalendarView, { TodoViewToggle } from './TodoList/TodoCalendarView';
 import { DailyMtnNeedle, MtnBreakdownModal, TaskMtnTrendsTab, TrendsErrorBoundary } from './TodoList/MtnTrends';
 import {
   DeferNonTop10Modal,
@@ -16,6 +17,7 @@ import {
 } from './TodoList/PageControls';
 import { getTodayET, getETDate, formatDateForInput, isOverdueET, getLongTermGoals, MTN_TAG_OPTIONS } from '../utils/taskHelpers';
 import { buildDailyMtnBenchmark } from '../utils/todoMtnTrends.js';
+import { replaceTaskDueDate } from '../utils/todoCalendarLogic.js';
 import { getSortedTasks as sortTodoTasks, getVisibleTaskScore as resolveVisibleTaskScore } from '../utils/todoListLogic';
 import { useLanguage } from '../i18n/LanguageContext';
 import { usePriority } from '../hooks/usePriority';
@@ -43,6 +45,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [sortOrder, setSortOrder] = useState([]);
   const [completingTasks, setCompletingTasks] = useState([]);
   const [filtersCollapsed, setFiltersCollapsed] = useState(true);
+  const [taskViewMode, setTaskViewMode] = useState('list');
   const [showDeferModal, setShowDeferModal] = useState(false);
   const [deferLoading, setDeferLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('tasks');
@@ -130,7 +133,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       return;
     }
     fetchTasks();
-  }, [apiUrl, userNumber, filterType, selectedGoal, timezone]);
+  }, [apiUrl, userNumber, filterType, selectedGoal, timezone, taskViewMode]);
 
   useEffect(() => {
     if (apiUrl == null || !userNumber) return;
@@ -148,7 +151,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     }, 60000);
 
     return () => clearInterval(timer);
-  }, [apiUrl, userNumber, timezone]);
+  }, [apiUrl, userNumber, timezone, taskViewMode, filterType, selectedGoal]);
 
   const fetchFilters = async () => {
     if (apiUrl == null || !userNumber) return;
@@ -188,8 +191,9 @@ export default function TodoList({ apiUrl, userNumber }) {
     try {
       const params = {
         user_number: userNumber,
-        // If a goal is selected, show ALL tasks for that goal, not just due today
-        filter_type: selectedGoal ? 'all' : filterType
+        // If a goal is selected, show ALL tasks for that goal, not just due today.
+        // Calendar mode needs the full weekly planning window even when list mode defaults to today.
+        filter_type: selectedGoal ? 'all' : taskViewMode === 'calendar' ? 'next_7_days' : filterType
       };
       if (selectedGoal) params.goal_id = parseInt(selectedGoal);
 
@@ -335,6 +339,35 @@ export default function TodoList({ apiUrl, userNumber }) {
     const newOrder = items.map(task => task.id);
     setColumnSort(null);
     saveSortOrder(newOrder);
+  };
+
+  const handleCalendarReschedule = async (task, targetDate) => {
+    if (!task || !targetDate) return;
+    const nextDueDate = replaceTaskDueDate(task.due_date, targetDate);
+    if (nextDueDate === task.due_date || targetDate === String(task.due_date || '').split('T')[0]) return;
+
+    const previousTasks = tasks;
+    setTasks(currentTasks =>
+      currentTasks.map(currentTask =>
+        currentTask.id === task.id
+          ? { ...currentTask, due_date: nextDueDate }
+          : currentTask
+      )
+    );
+
+    try {
+      await axios.put(
+        `${apiUrl}/api/tasks/${task.id}`,
+        { due_date: nextDueDate },
+        { params: { user_number: userNumber } }
+      );
+      await fetchTasks();
+      if (showTaskTrends) fetchMtnTrends();
+    } catch (err) {
+      console.error('Error rescheduling task:', err);
+      setTasks(previousTasks);
+      alert(err.response?.data?.detail || 'Failed to reschedule task');
+    }
   };
 
   const toggleTaskComplete = async (taskId) => {
@@ -634,8 +667,12 @@ export default function TodoList({ apiUrl, userNumber }) {
           />
         )}
 
-        {/* Filters Section */}
         {!selectionMode && activeTab === 'tasks' && (
+          <TodoViewToggle value={taskViewMode} onChange={setTaskViewMode} />
+        )}
+
+        {/* Filters Section */}
+        {!selectionMode && activeTab === 'tasks' && taskViewMode === 'list' && (
           <FilterSection
             filtersCollapsed={filtersCollapsed}
             setFiltersCollapsed={setFiltersCollapsed}
@@ -670,33 +707,48 @@ export default function TodoList({ apiUrl, userNumber }) {
           </TrendsErrorBoundary>
         )}
 
-        <TaskListPanel
-          activeTab={activeTab}
-          sortedTasks={sortedTasks}
-          hasActiveFilters={hasActiveFilters}
-          emptyText={t('tasks.empty')}
-          emptyFilteredText={t('tasks.emptyFiltered')}
-          emptyNewText={t('tasks.emptyNew')}
-          selectionMode={selectionMode}
-          columnSort={columnSort}
-          onSort={toggleColumnSort}
-          onDragEnd={handleDragEnd}
-          completingTasks={completingTasks}
-          selectedTasks={selectedTasks}
-          onToggleTask={toggleTaskComplete}
-          onStartEdit={(task) => {
-            setEditingTask(task);
-            setShowTaskModal(true);
-          }}
-          onLongPress={enterSelectionMode}
-          onSelectToggle={toggleTaskSelection}
-          onFollowUp={openFollowUpModal}
-          goals={goals}
-          priorityMode={priorityMode}
-          getVisibleTaskScore={getVisibleTaskScore}
-          onMtnFeedback={handleMtnFeedback}
-          timezone={timezone}
-        />
+        {taskViewMode === 'calendar' ? (
+          <TodoCalendarView
+            activeTab={activeTab}
+            tasks={tasks}
+            todayKey={todayKey}
+            goals={goals}
+            getTaskScore={getTaskScore}
+            onStartEdit={(task) => {
+              setEditingTask(task);
+              setShowTaskModal(true);
+            }}
+            onReschedule={handleCalendarReschedule}
+          />
+        ) : (
+          <TaskListPanel
+            activeTab={activeTab}
+            sortedTasks={sortedTasks}
+            hasActiveFilters={hasActiveFilters}
+            emptyText={t('tasks.empty')}
+            emptyFilteredText={t('tasks.emptyFiltered')}
+            emptyNewText={t('tasks.emptyNew')}
+            selectionMode={selectionMode}
+            columnSort={columnSort}
+            onSort={toggleColumnSort}
+            onDragEnd={handleDragEnd}
+            completingTasks={completingTasks}
+            selectedTasks={selectedTasks}
+            onToggleTask={toggleTaskComplete}
+            onStartEdit={(task) => {
+              setEditingTask(task);
+              setShowTaskModal(true);
+            }}
+            onLongPress={enterSelectionMode}
+            onSelectToggle={toggleTaskSelection}
+            onFollowUp={openFollowUpModal}
+            goals={goals}
+            priorityMode={priorityMode}
+            getVisibleTaskScore={getVisibleTaskScore}
+            onMtnFeedback={handleMtnFeedback}
+            timezone={timezone}
+          />
+        )}
       </div>
 
       {selectionMode && (

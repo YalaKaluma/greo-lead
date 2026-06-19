@@ -37,7 +37,7 @@ DOMAIN_LABELS = {
 }
 
 DOMAIN_ORDER = ["vision", "people", "execute", "energy", "learning"]
-HOME_DASHBOARD_SCHEMA_VERSION = 4
+HOME_DASHBOARD_SCHEMA_VERSION = 5
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
@@ -408,7 +408,7 @@ class HomeDashboardService:
 
         mtn_week = (mtn.get("summary") or {}).get("last_7_days") or {}
         habit_week = ((habit_trends.get("summary") or {}).get("last_7_days") or {})
-        habit_previous = ((habit_trends.get("summary") or {}).get("last_21_days") or {})
+        habit_baseline = ((habit_trends.get("summary") or {}).get("last_90_days") or {})
         journal_metrics = _weekly_journal_metrics(journal)
         wheel_segments = _wheel_segments(assessment)
         vision_goals = [
@@ -464,7 +464,7 @@ class HomeDashboardService:
                     "compliance_rate": int(habit_week.get("compliance_rate") or 0),
                     "completed": int(habit_week.get("completed") or 0),
                     "expected": int(habit_week.get("expected") or 0),
-                    "delta": int(habit_week.get("compliance_rate") or 0) - int(habit_previous.get("compliance_rate") or 0),
+                    "delta": int(habit_week.get("compliance_rate") or 0) - int(habit_baseline.get("compliance_rate") or 0),
                     "status": (habit_week.get("trend") or {}).get("label") or "Stable",
                 },
                 "journal": {

@@ -1,6 +1,13 @@
+import KpiInfoButton from '../KpiInfoButton';
+
 function HabitRows({ title, rows }) {
+  const info = title === 'Top Habits'
+    ? 'Your three strongest habits by 90-day completion rate.'
+    : 'The three habits with the lowest 90-day completion rate, shown as likely improvement opportunities.';
+
   return (
-    <div>
+    <div className="relative rounded-lg border bg-white p-4">
+      <KpiInfoButton label={`About ${title}`}>{info}</KpiInfoButton>
       <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h3>
       <div className="mt-3 overflow-hidden rounded-lg border">
         <div className="grid grid-cols-[1fr_110px_100px] bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">

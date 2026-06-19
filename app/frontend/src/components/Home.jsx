@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { formatDueDate, getTodayET } from '../utils/taskHelpers';
 import { useLanguage } from '../i18n/LanguageContext';
+import KpiInfoButton from './KpiInfoButton';
 
 const emptyStateActions = [
   { label: 'Create your first goal', page: 'my-goals' },
@@ -59,23 +60,6 @@ function CardHeader({ title }) {
   );
 }
 
-function KpiInfoButton({ label, children }) {
-  return (
-    <details className="group absolute right-4 top-4 z-10">
-      <summary
-        className="flex h-5 w-5 cursor-pointer list-none items-center justify-center rounded-full border border-slate-200 bg-white text-[11px] font-semibold leading-none text-slate-400 transition-colors hover:border-slate-300 hover:text-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 [&::-webkit-details-marker]:hidden"
-        aria-label={label}
-        title={label}
-      >
-        i
-      </summary>
-      <div className="absolute right-0 mt-2 w-64 rounded-md border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-600 shadow-lg">
-        {children}
-      </div>
-    </details>
-  );
-}
-
 function ScoreCircle({ value, label, color = '#0f766e' }) {
   return (
     <div className="flex h-24 w-24 shrink-0 flex-col items-center justify-center rounded-full border-[8px] bg-white" style={{ borderColor: color }}>
@@ -124,14 +108,14 @@ function HabitsMetricCard({ metric }) {
   return (
     <section className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <KpiInfoButton label="About the Balance Index">
-        The share of planned habits completed in the last 7 days. It is compared with the prior 21-day baseline to show habit balance.
+        The share of planned habits completed in the last 7 days. It is compared with the 90-day habit baseline to show habit balance.
       </KpiInfoButton>
       <CardHeader title="Balance Index" />
       <div className="mt-5 flex items-center justify-between gap-5">
         <div className="min-w-0 flex-1">
           <p className="text-sm text-slate-600">{toNumber(metric?.completed, 0)} completed / {toNumber(metric?.expected, 0)} planned</p>
           <p className={`mt-3 text-sm font-semibold ${delta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
-            {delta} vs month average
+            {delta} vs 90-day average
           </p>
         </div>
         <ProgressRing value={toNumber(metric?.compliance_rate, 0)} />
@@ -204,7 +188,10 @@ function CombinedTrendChart({ trends }) {
   };
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <KpiInfoButton label="About behavioral trends">
+        A 30-day view of the main operating signals. MTN, habits, journal depth, and energy are normalized to a 0-100 scale so their direction can be compared.
+      </KpiInfoButton>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Behavioral trends</p>
@@ -250,7 +237,10 @@ function CombinedTrendChart({ trends }) {
 function GoalProgressReviewTable({ reviews, onNavigate }) {
   const items = reviews || [];
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <KpiInfoButton label="About goal progress reviews">
+        A compact executive view of your vision-level goals, their current health, and the next recommended focus.
+      </KpiInfoButton>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Project status</p>
@@ -311,7 +301,12 @@ function GoalProgressReviewTable({ reviews, onNavigate }) {
 
 function TaskStack({ title, eyebrow, tasks, emptyText, onToggle, timezone, showPostponed = false }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <KpiInfoButton label={`About ${title}`}>
+        {showPostponed
+          ? 'Highlights open tasks that have been postponed repeatedly, sorted by friction and MTN relevance.'
+          : 'Highlights the open tasks with the strongest combination of MTN score, urgency, goal alignment, and priority.'}
+      </KpiInfoButton>
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{eyebrow}</p>
         <h2 className="mt-1 text-lg font-semibold text-slate-950">{title}</h2>
@@ -343,7 +338,10 @@ function TaskStack({ title, eyebrow, tasks, emptyText, onToggle, timezone, showP
 
 function NextTrialCard({ trial, onNavigate }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="relative rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <KpiInfoButton label="About the recommended next trial">
+        The next Journey trial Alfred recommends based on open trials, belt readiness, and the weakest current leadership wheel signal.
+      </KpiInfoButton>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended Next Trial</p>
@@ -456,7 +454,10 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
         <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)_minmax(320px,0.8fr)]">
           <CombinedTrendChart trends={payload.trends || {}} />
           <TaskStack title="Top Tasks" eyebrow="Execution focus" tasks={payload.top_tasks || []} emptyText="Add tasks to give Alfred an execution focus." onToggle={handleTaskToggle} timezone={timezone} />
-          <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <KpiInfoButton label="About recommended MTN actions">
+              Suggested actions are drawn from Alfred opportunity signals and ranked by their expected move-the-needle value.
+            </KpiInfoButton>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended MTN actions</p>
             <h2 className="mt-1 text-lg font-semibold text-slate-950">Move the needle next</h2>
             <div className="mt-4 space-y-3">
