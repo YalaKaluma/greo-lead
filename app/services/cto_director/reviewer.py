@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import logging
 import os
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import requests
 from sqlalchemy.orm import Session
 
 from app.models import CtoFinding, CtoReview, OperationsIssueDraft, SystemHealthEvent
@@ -17,6 +19,94 @@ logger = logging.getLogger(__name__)
 
 ACTIVE_FINDING_STATUSES = {"open", "converted_to_issue"}
 SEVERITY_SCORE_PENALTY = {"critical": 30, "high": 20, "warning": 10, "medium": 10, "low": 5, "info": 0}
+CTO_COPILOT_DEFAULT_MODEL = os.getenv("GITHUB_COPILOT_CTO_MODEL", "gpt-4o")
+CTO_COPILOT_DEFAULT_URL = os.getenv("GITHUB_COPILOT_CTO_URL", "https://models.inference.ai.azure.com/chat/completions")
+
+
+class GitHubCopilotCtoError(RuntimeError):
+    pass
+
+
+def build_github_copilot_cto_prompt(snapshot: dict[str, Any]) -> str:
+    compact_snapshot = sanitize_details(snapshot)
+    return f"""Act like a pragmatic CTO reviewing Alfred's repository, release posture, and operational signals.
+
+Do not apply simple static thresholds. Use judgment: architecture risk, release readiness, maintainability, security posture, test strategy, product/user impact, and likely engineering leverage.
+
+Return ONLY valid JSON in this shape:
+{{
+  "findings": [
+    {{
+      "category": "architecture|security|testing|release_readiness|migration|documentation|maintainability|operations",
+      "severity": "critical|high|warning|medium|low|info",
+      "title": "short GitHub issue title",
+      "summary": "what you noticed",
+      "affected_files": ["path/from/repo.py"],
+      "affected_modules": ["module-or-area"],
+      "evidence": {{"signal": "specific evidence from the snapshot"}},
+      "risk": "why this matters",
+      "action": "what Codex should do next",
+      "confidence": "high|medium|low"
+    }}
+  ]
+}}
+
+Rules:
+- Prefer 0 to 8 high-signal findings over broad cleanup.
+- Only include findings grounded in the snapshot.
+- If the snapshot is too thin, return a finding that explains the missing inspection signal instead of inventing code risks.
+- Write each action as a Codex-ready implementation request.
+
+Snapshot:
+{json.dumps(compact_snapshot, ensure_ascii=True, default=str)}
+"""
+
+
+def request_github_copilot_cto_findings(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    token = os.getenv("GITHUB_COPILOT_CTO_TOKEN") or os.getenv("GITHUB_TOKEN")
+    if not token:
+        raise GitHubCopilotCtoError("GitHub Copilot CTO review is not configured. Set GITHUB_COPILOT_CTO_TOKEN or GITHUB_TOKEN.")
+
+    api_url = os.getenv("GITHUB_COPILOT_CTO_URL", CTO_COPILOT_DEFAULT_URL)
+    model = os.getenv("GITHUB_COPILOT_CTO_MODEL", CTO_COPILOT_DEFAULT_MODEL)
+    response = requests.post(
+        api_url,
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are GitHub Copilot acting as a CTO. Return concise, grounded JSON only.",
+                },
+                {"role": "user", "content": build_github_copilot_cto_prompt(snapshot)},
+            ],
+            "temperature": 0.2,
+            "response_format": {"type": "json_object"},
+        },
+        timeout=45,
+    )
+    if response.status_code >= 400:
+        raise GitHubCopilotCtoError(f"GitHub Copilot CTO review failed with HTTP {response.status_code}.")
+
+    data = response.json()
+    try:
+        content = data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise GitHubCopilotCtoError("GitHub Copilot CTO review returned an unexpected response.") from exc
+
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise GitHubCopilotCtoError("GitHub Copilot CTO review returned invalid JSON.") from exc
+    findings = parsed.get("findings") if isinstance(parsed, dict) else None
+    if not isinstance(findings, list):
+        raise GitHubCopilotCtoError("GitHub Copilot CTO review JSON did not include a findings list.")
+    return findings
 
 
 class CtoDirectorReviewer:
@@ -189,114 +279,71 @@ class CtoDirectorReviewer:
         }
 
     def _build_findings(self, snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+        raw_findings = request_github_copilot_cto_findings(snapshot)
         findings = []
-        local = snapshot.get("local") or {}
-        github = snapshot.get("github") or {}
-        operations = snapshot.get("operations") or {}
-        files = local.get("files") or []
-        tests = set(local.get("test_files") or [])
-        test_text = " ".join(tests).lower()
-
-        for file_info in files:
-            line_count = file_info.get("line_count") or 0
-            path = file_info.get("path")
-            if line_count <= 800:
-                continue
-            severity = "critical" if line_count > 3000 else "high" if line_count > 1500 else "warning"
-            findings.append(self._candidate(
-                category="architecture",
-                severity=severity,
-                title=f"Large module needs ownership split: {path}",
-                summary=f"{path} is {line_count} lines, which raises change risk and review cost.",
-                affected_files=[path],
-                affected_modules=[path.split("/")[0]],
-                evidence={"line_count": line_count, "threshold": 800},
-                risk="Large files tend to hide multiple responsibilities, increase regression risk, and slow Codex/human review.",
-                action="Split the highest-change responsibilities into focused services/components and add targeted regression tests around the moved behavior.",
-                confidence="high",
-            ))
-
-        for file_info in files:
-            path = file_info.get("path", "")
-            if not (path.startswith("app/routers/") or path.startswith("app/services/")):
-                continue
-            stem = Path(path).stem.replace("_", "")
-            if stem and stem not in test_text and file_info.get("line_count", 0) >= 250:
-                findings.append(self._candidate(
-                    category="testing",
-                    severity="warning",
-                    title=f"Important module has no obvious test coverage: {path}",
-                    summary=f"{path} is substantial but no nearby test name was detected.",
-                    affected_files=[path],
-                    affected_modules=[path.rsplit("/", 1)[0]],
-                    evidence={"line_count": file_info.get("line_count"), "test_files_checked": len(tests)},
-                    risk="Important behavior can change without a fast signal, especially around admin or orchestration paths.",
-                    action="Add focused tests for the module's highest-risk public functions or endpoints before the next release train.",
-                    confidence="medium",
-                ))
-
-        failed_runs = [run for run in github.get("workflow_runs") or [] if run.get("conclusion") in {"failure", "timed_out", "cancelled"}]
-        if failed_runs:
-            findings.append(self._candidate(
-                category="release_readiness",
-                severity="high",
-                title="Recent GitHub workflow runs are not clean",
-                summary=f"{len(failed_runs)} recent workflow run(s) ended in failure, timeout, or cancellation.",
-                affected_files=[".github/workflows/"],
-                affected_modules=["ci"],
-                evidence={"failed_runs": failed_runs[:5]},
-                risk="Release confidence drops when CI is red or unstable, and defects can enter the execution backlog without a reliable gate.",
-                action="Inspect the failed workflow logs, fix the underlying failure, and rerun CI before release planning.",
-                confidence="high",
-            ))
-
-        if not github.get("available"):
-            findings.append(self._candidate(
-                category="release_readiness",
-                severity="warning",
-                title="CTO review is missing live GitHub repository signals",
-                summary="The review completed from local Alfred context, but GitHub metadata was unavailable.",
-                affected_files=["app/services/github/repository.py"],
-                affected_modules=["github"],
-                evidence={"github_error": github.get("error")},
-                risk="Without live GitHub metadata, Alfred may miss recent PR, issue, workflow, and repository-tree risks.",
-                action="Configure GitHub repository read access with the same token family used by Operations Director.",
-                confidence="high",
-            ))
-
-        recurring_events = [
-            event for event in operations.get("recent_health_events") or []
-            if (event.get("occurrences") or 1) >= 3 or event.get("severity") in {"critical", "high"}
-        ]
-        if recurring_events:
-            findings.append(self._candidate(
-                category="release_readiness",
-                severity="high",
-                title="Recurring production signals should gate release planning",
-                summary=f"{len(recurring_events)} recent operational signal(s) are recurring or high severity.",
-                affected_files=["app/services/operations_director/", "app/routers/admin_operations.py"],
-                affected_modules=["operations"],
-                evidence={"operational_signals": recurring_events[:8]},
-                risk="Architecture review should incorporate product reality; repeated failures point to reliability debt that can compound.",
-                action="Review the linked Operations Director drafts and resolve or explicitly accept the risk before the next release.",
-                confidence="medium",
-            ))
-
-        if local.get("migration_files") and not any(path.startswith("docs/") and "migration" in path.lower() for path in [item["path"] for item in files]):
-            findings.append(self._candidate(
-                category="migration",
-                severity="info",
-                title="Migration notes should stay visible for release planning",
-                summary="Schema migration files exist, but migration/release documentation coverage looks light.",
-                affected_files=local.get("migration_files")[:5],
-                affected_modules=["db_migrations"],
-                evidence={"migration_file_count": len(local.get("migration_files") or [])},
-                risk="Manual SQL migrations are easier to miss when release notes and verification steps are not kept close to schema changes.",
-                action="Keep migration notes and verification steps current in release documentation whenever schema files change.",
-                confidence="medium",
-            ))
-
+        for raw in raw_findings:
+            candidate = self._candidate_from_copilot(raw)
+            if candidate:
+                findings.append(candidate)
         return sorted(findings, key=lambda item: (self._severity_rank(item["severity"]), item["title"]))[:30]
+
+    def _candidate_from_copilot(self, raw: Any) -> dict[str, Any] | None:
+        if not isinstance(raw, dict):
+            return None
+        category = self._safe_choice(raw.get("category"), {
+            "architecture",
+            "security",
+            "testing",
+            "release_readiness",
+            "migration",
+            "documentation",
+            "maintainability",
+            "operations",
+        }, "maintainability")
+        severity = self._safe_choice(raw.get("severity"), {
+            "critical",
+            "high",
+            "warning",
+            "medium",
+            "low",
+            "info",
+        }, "warning")
+        title = sanitize_text(raw.get("title"), 220)
+        summary = sanitize_text(raw.get("summary"), 900)
+        risk = sanitize_text(raw.get("risk"), 900)
+        action = sanitize_text(raw.get("action"), 900)
+        if not title or not summary or not risk or not action:
+            return None
+        affected_files = self._safe_string_list(raw.get("affected_files"), 12) or ["unknown"]
+        affected_modules = self._safe_string_list(raw.get("affected_modules"), 8) or [category]
+        evidence = raw.get("evidence") if isinstance(raw.get("evidence"), dict) else {"copilot_evidence": raw.get("evidence")}
+        confidence = self._safe_choice(raw.get("confidence"), {"high", "medium", "low"}, "medium")
+        return self._candidate(
+            category=category,
+            severity=severity,
+            title=title,
+            summary=summary,
+            affected_files=affected_files,
+            affected_modules=affected_modules,
+            evidence=sanitize_details(evidence),
+            risk=risk,
+            action=action,
+            confidence=confidence,
+        )
+
+    def _safe_choice(self, value: Any, allowed: set[str], fallback: str) -> str:
+        normalized = str(value or "").strip().lower()
+        return normalized if normalized in allowed else fallback
+
+    def _safe_string_list(self, value: Any, limit: int) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        items = []
+        for item in value:
+            text = sanitize_text(item, 220)
+            if text:
+                items.append(text)
+        return items[:limit]
 
     def _candidate(
         self,
