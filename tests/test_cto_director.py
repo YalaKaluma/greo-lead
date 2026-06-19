@@ -10,7 +10,12 @@ from app.routers.admin import _get_admin_user
 from app.routers.admin_cto import _build_executive_summary, create_issue_from_cto_finding
 from app.routers.nudge import run_cto_weekend_review
 from app.services.cto_director import reviewer as cto_reviewer
-from app.services.cto_director.reviewer import CtoDirectorReviewer, build_cto_codex_brief, build_github_copilot_cto_prompt
+from app.services.cto_director.reviewer import (
+    CtoDirectorReviewer,
+    GitHubCopilotCtoError,
+    build_cto_codex_brief,
+    build_github_copilot_cto_prompt,
+)
 from app.services.github import issues as github_issues
 
 
@@ -163,6 +168,26 @@ def test_cto_director_ignores_incomplete_copilot_findings(tmp_path, monkeypatch)
     assert review.status == "completed"
     assert db.cto_findings == []
     assert "no new open findings" in review.summary.lower()
+
+
+def test_cto_director_records_copilot_auth_error_as_finding(tmp_path, monkeypatch):
+    _stub_github(monkeypatch)
+    monkeypatch.setattr(
+        cto_reviewer,
+        "request_github_copilot_cto_findings",
+        lambda snapshot: (_ for _ in ()).throw(GitHubCopilotCtoError("GitHub Copilot CTO review failed with HTTP 401.")),
+    )
+    (tmp_path / "app").mkdir()
+
+    db = FakeCtoDb()
+    review = CtoDirectorReviewer(db, repo_root=tmp_path).run_review()
+
+    assert review.status == "completed"
+    assert len(db.cto_findings) == 1
+    finding = db.cto_findings[0]
+    assert finding.title == "GitHub Copilot CTO review needs authorized model access"
+    assert finding.category == "release_readiness"
+    assert "HTTP 401" in finding.evidence_json["copilot_cto_error"]
 
 
 def test_cto_github_issue_payload_contains_codex_brief(monkeypatch):

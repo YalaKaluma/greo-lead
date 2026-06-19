@@ -53,7 +53,7 @@ Additional settings loaded by `config.py`:
 CTO Director review:
 
 - `GITHUB_COPILOT_CTO_TOKEN` or `GITHUB_TOKEN`
-- `GITHUB_COPILOT_CTO_URL`, defaulting to GitHub Models-compatible chat completions
+- `GITHUB_COPILOT_CTO_URL`, defaulting to `https://models.github.ai/inference/chat/completions`
 - `GITHUB_COPILOT_CTO_MODEL`, defaulting to `gpt-4o`
 
 ## Current Product Shape

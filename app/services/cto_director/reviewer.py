@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 ACTIVE_FINDING_STATUSES = {"open", "converted_to_issue"}
 SEVERITY_SCORE_PENALTY = {"critical": 30, "high": 20, "warning": 10, "medium": 10, "low": 5, "info": 0}
 CTO_COPILOT_DEFAULT_MODEL = os.getenv("GITHUB_COPILOT_CTO_MODEL", "gpt-4o")
-CTO_COPILOT_DEFAULT_URL = os.getenv("GITHUB_COPILOT_CTO_URL", "https://models.inference.ai.azure.com/chat/completions")
+CTO_COPILOT_DEFAULT_URL = os.getenv("GITHUB_COPILOT_CTO_URL", "https://models.github.ai/inference/chat/completions")
 
 
 class GitHubCopilotCtoError(RuntimeError):
@@ -279,13 +279,39 @@ class CtoDirectorReviewer:
         }
 
     def _build_findings(self, snapshot: dict[str, Any]) -> list[dict[str, Any]]:
-        raw_findings = request_github_copilot_cto_findings(snapshot)
+        try:
+            raw_findings = request_github_copilot_cto_findings(snapshot)
+        except GitHubCopilotCtoError as exc:
+            logger.warning("GitHub Copilot CTO review unavailable: %s", exc)
+            return [self._copilot_unavailable_candidate(exc)]
+
         findings = []
         for raw in raw_findings:
             candidate = self._candidate_from_copilot(raw)
             if candidate:
                 findings.append(candidate)
         return sorted(findings, key=lambda item: (self._severity_rank(item["severity"]), item["title"]))[:30]
+
+    def _copilot_unavailable_candidate(self, exc: Exception) -> dict[str, Any]:
+        message = sanitize_text(str(exc), 500) or "GitHub Copilot CTO review was unavailable."
+        return self._candidate(
+            category="release_readiness",
+            severity="warning",
+            title="GitHub Copilot CTO review needs authorized model access",
+            summary="Alfred collected CTO review context, but the external GitHub Copilot CTO review call could not complete.",
+            affected_files=["app/services/cto_director/reviewer.py"],
+            affected_modules=["cto_director", "github"],
+            evidence={"copilot_cto_error": message},
+            risk=(
+                "The CTO Director can still preserve the review trail, but it cannot ask GitHub Copilot to apply CTO "
+                "judgment until the model endpoint and token are authorized."
+            ),
+            action=(
+                "Configure GITHUB_COPILOT_CTO_TOKEN with access to the configured chat-completions endpoint, or set "
+                "GITHUB_COPILOT_CTO_URL and GITHUB_COPILOT_CTO_MODEL to an authorized GitHub Models-compatible target."
+            ),
+            confidence="high",
+        )
 
     def _candidate_from_copilot(self, raw: Any) -> dict[str, Any] | None:
         if not isinstance(raw, dict):
