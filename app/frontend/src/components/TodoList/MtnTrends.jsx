@@ -369,13 +369,13 @@ export function TaskMtnTrendsTab({ trends, loading, error }) {
         />
         <StatTile
           label="Last 7 Days"
-          value={formatMtnNumber(last7.total_score)}
-          detail={`Avg ${formatMtnNumber(last7.average_score)} per day`}
+          value={formatMtnNumber(last7.average_score)}
+          detail={`${formatMtnNumber(last7.total_score)} total MTN`}
         />
         <StatTile
           label="Last 30 Days"
-          value={formatMtnNumber(last30.total_score)}
-          detail={`${last30.active_days || 0} active day(s)`}
+          value={formatMtnNumber(last30.average_score)}
+          detail={`${formatMtnNumber(last30.total_score)} total MTN, ${last30.active_days || 0} active day(s)`}
         />
         <StatTile
           label="Momentum"

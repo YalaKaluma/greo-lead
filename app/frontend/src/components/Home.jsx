@@ -59,6 +59,23 @@ function CardHeader({ title }) {
   );
 }
 
+function KpiInfoButton({ label, children }) {
+  return (
+    <details className="group absolute right-4 top-4 z-10">
+      <summary
+        className="flex h-5 w-5 cursor-pointer list-none items-center justify-center rounded-full border border-slate-200 bg-white text-[11px] font-semibold leading-none text-slate-400 transition-colors hover:border-slate-300 hover:text-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 [&::-webkit-details-marker]:hidden"
+        aria-label={label}
+        title={label}
+      >
+        i
+      </summary>
+      <div className="absolute right-0 mt-2 w-64 rounded-md border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-600 shadow-lg">
+        {children}
+      </div>
+    </details>
+  );
+}
+
 function ScoreCircle({ value, label, color = '#0f766e' }) {
   return (
     <div className="flex h-24 w-24 shrink-0 flex-col items-center justify-center rounded-full border-[8px] bg-white" style={{ borderColor: color }}>
@@ -71,7 +88,10 @@ function ScoreCircle({ value, label, color = '#0f766e' }) {
 function MtnScoreCard({ metric }) {
   const delta = scoreDelta(metric?.delta);
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <KpiInfoButton label="About the Move-the-needle Index">
+        The 7-day average MTN score from completed tasks. It is compared with the 30-day average to show whether execution momentum is improving.
+      </KpiInfoButton>
       <CardHeader title="Move-the-needle Index" />
       <div className="mt-5 flex items-center justify-between gap-4">
         <ScoreCircle value={toNumber(metric?.score, 0).toFixed(1)} label="index" />
@@ -102,7 +122,10 @@ function ProgressRing({ value }) {
 function HabitsMetricCard({ metric }) {
   const delta = pointDelta(metric?.delta);
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <KpiInfoButton label="About the Balance Index">
+        The share of planned habits completed in the last 7 days. It is compared with the prior 21-day baseline to show habit balance.
+      </KpiInfoButton>
       <CardHeader title="Balance Index" />
       <div className="mt-5 flex items-center justify-between gap-5">
         <div className="min-w-0 flex-1">
@@ -125,7 +148,10 @@ function JournalMetricCard({ metric }) {
   const averageDepth = toNumber(metric?.average_depth_5, 0).toFixed(1);
   const monthAverageDepth = toNumber(metric?.month_average_depth_5, 0).toFixed(1);
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <KpiInfoButton label="About the Wisdom Index">
+        Frequency counts journal entries in the last 7 days. Depth is the average reflection quality on a 5-point scale, compared with the recent monthly baseline.
+      </KpiInfoButton>
       <CardHeader title="Wisdom Index" />
       <div className="mt-5 grid grid-cols-2 gap-3">
         <div className="rounded-lg bg-slate-50 p-4 text-center">

@@ -283,7 +283,27 @@ class CtoDirectorReviewer:
             raw_findings = request_github_copilot_cto_findings(snapshot)
         except GitHubCopilotCtoError as exc:
             logger.warning("GitHub Copilot CTO review unavailable: %s", exc)
+            snapshot["cto_review_engine"] = {
+                "provider": "github_models",
+                "status": "unavailable",
+                "model": os.getenv("GITHUB_COPILOT_CTO_MODEL", CTO_COPILOT_DEFAULT_MODEL),
+                "endpoint": os.getenv("GITHUB_COPILOT_CTO_URL", CTO_COPILOT_DEFAULT_URL),
+                "error": sanitize_text(str(exc), 500),
+            }
             return [self._copilot_unavailable_candidate(exc)]
+
+        snapshot["cto_review_engine"] = {
+            "provider": "github_models",
+            "status": "completed",
+            "model": os.getenv("GITHUB_COPILOT_CTO_MODEL", CTO_COPILOT_DEFAULT_MODEL),
+            "endpoint": os.getenv("GITHUB_COPILOT_CTO_URL", CTO_COPILOT_DEFAULT_URL),
+            "raw_finding_count": len(raw_findings),
+        }
+        logger.info(
+            "GitHub Models CTO review completed with %s raw finding(s) using model %s",
+            len(raw_findings),
+            snapshot["cto_review_engine"]["model"],
+        )
 
         findings = []
         for raw in raw_findings:
