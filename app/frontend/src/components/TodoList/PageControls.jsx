@@ -112,6 +112,8 @@ export function TodoPageHeader({
   onOpenDeferModal,
   onAddTask,
 }) {
+  const isTaskPlanningTab = activeTab === 'tasks' || activeTab === 'calendar';
+
   return (
     <div className="mb-6 grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_auto_1fr]">
       <div className={`order-1 min-w-0 lg:order-none ${selectionMode ? '' : 'hidden sm:block'}`}>
@@ -145,7 +147,7 @@ export function TodoPageHeader({
               <ResetIcon />
             </button>
           )}
-          {!selectionMode && activeTab === 'tasks' && (
+          {!selectionMode && isTaskPlanningTab && (
             <>
               <button
                 onClick={onSetOverdueToToday}
@@ -179,7 +181,7 @@ export function TodoPageHeader({
               </button>
               <button
                 onClick={onOpenDeferModal}
-                disabled={sortedTaskCount <= 10}
+                disabled={activeTab !== 'tasks' || sortedTaskCount <= 10}
                 className="h-10 w-10 inline-flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Move non-Top-10 tasks to tomorrow"
                 aria-label="Move non-Top-10 tasks to tomorrow"
@@ -215,8 +217,22 @@ export function TodoTabs({ activeTab, showTaskTrends, onChangeTab }) {
               : 'text-slate-500 hover:text-slate-700'
           }`}
         >
-          Tasks
+          List
           {activeTab === 'tasks' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => onChangeTab('calendar')}
+          className={`relative px-2 pb-3 font-medium transition-colors ${
+            activeTab === 'calendar'
+              ? 'text-blue-600'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          Calendar
+          {activeTab === 'calendar' && (
             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
           )}
         </button>

@@ -37,7 +37,7 @@ DOMAIN_LABELS = {
 }
 
 DOMAIN_ORDER = ["vision", "people", "execute", "energy", "learning"]
-HOME_DASHBOARD_SCHEMA_VERSION = 5
+HOME_DASHBOARD_SCHEMA_VERSION = 6
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
@@ -380,7 +380,7 @@ class HomeDashboardService:
         mtn = get_task_mtn_trends(user_number, self.db, timezone_name)
         habits = self.db.query(Habit).filter(Habit.user_number == user_number, Habit.is_active == True).all()
         habit_trends = get_habit_trends(user_number, self.db, timezone_name)
-        journal = get_reflection_depth_trends(user_number, self.db)
+        journal = get_reflection_depth_trends(user_number, self.db, include_starter_examples=False)
         readiness = get_current_belt_status(self.db, user_number, load_journey_trials_config())
         assessment = (
             self.db.query(BeltAssessment)

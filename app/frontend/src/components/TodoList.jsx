@@ -5,7 +5,7 @@ import TaskModal from './TodoList/TaskModal';
 import BulkActionModal from './TodoList/BulkActionModal';
 import FilterSection from './TodoList/FilterSection';
 import TaskListPanel from './TodoList/TaskListPanel';
-import TodoCalendarView, { TodoViewToggle } from './TodoList/TodoCalendarView';
+import TodoCalendarView from './TodoList/TodoCalendarView';
 import { DailyMtnNeedle, MtnBreakdownModal, TaskMtnTrendsTab, TrendsErrorBoundary } from './TodoList/MtnTrends';
 import {
   DeferNonTop10Modal,
@@ -45,7 +45,6 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [sortOrder, setSortOrder] = useState([]);
   const [completingTasks, setCompletingTasks] = useState([]);
   const [filtersCollapsed, setFiltersCollapsed] = useState(true);
-  const [taskViewMode, setTaskViewMode] = useState('list');
   const [showDeferModal, setShowDeferModal] = useState(false);
   const [deferLoading, setDeferLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('tasks');
@@ -133,7 +132,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       return;
     }
     fetchTasks();
-  }, [apiUrl, userNumber, filterType, selectedGoal, timezone, taskViewMode]);
+  }, [apiUrl, userNumber, filterType, selectedGoal, timezone, activeTab]);
 
   useEffect(() => {
     if (apiUrl == null || !userNumber) return;
@@ -151,7 +150,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     }, 60000);
 
     return () => clearInterval(timer);
-  }, [apiUrl, userNumber, timezone, taskViewMode, filterType, selectedGoal]);
+  }, [apiUrl, userNumber, timezone, activeTab, filterType, selectedGoal]);
 
   const fetchFilters = async () => {
     if (apiUrl == null || !userNumber) return;
@@ -192,8 +191,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       const params = {
         user_number: userNumber,
         // If a goal is selected, show ALL tasks for that goal, not just due today.
-        // Calendar mode needs the full weekly planning window even when list mode defaults to today.
-        filter_type: selectedGoal ? 'all' : taskViewMode === 'calendar' ? 'next_7_days' : filterType
+        filter_type: selectedGoal ? 'all' : filterType
       };
       if (selectedGoal) params.goal_id = parseInt(selectedGoal);
 
@@ -339,6 +337,18 @@ export default function TodoList({ apiUrl, userNumber }) {
     const newOrder = items.map(task => task.id);
     setColumnSort(null);
     saveSortOrder(newOrder);
+  };
+
+  const handleChangeTab = (nextTab) => {
+    setActiveTab(nextTab);
+    if (nextTab === 'calendar') {
+      if (filterType === 'due_today') {
+        setFilterType('next_7_days');
+      }
+      if (selectedMtnTags.length === 0) {
+        setSelectedMtnTags(['Transformational', 'Strategic']);
+      }
+    }
   };
 
   const handleCalendarReschedule = async (task, targetDate) => {
@@ -663,16 +673,12 @@ export default function TodoList({ apiUrl, userNumber }) {
           <TodoTabs
             activeTab={activeTab}
             showTaskTrends={showTaskTrends}
-            onChangeTab={setActiveTab}
+            onChangeTab={handleChangeTab}
           />
         )}
 
-        {!selectionMode && activeTab === 'tasks' && (
-          <TodoViewToggle value={taskViewMode} onChange={setTaskViewMode} />
-        )}
-
         {/* Filters Section */}
-        {!selectionMode && activeTab === 'tasks' && taskViewMode === 'list' && (
+        {!selectionMode && (activeTab === 'tasks' || activeTab === 'calendar') && (
           <FilterSection
             filtersCollapsed={filtersCollapsed}
             setFiltersCollapsed={setFiltersCollapsed}
@@ -707,11 +713,13 @@ export default function TodoList({ apiUrl, userNumber }) {
           </TrendsErrorBoundary>
         )}
 
-        {taskViewMode === 'calendar' ? (
+        {activeTab === 'calendar' ? (
           <TodoCalendarView
             activeTab={activeTab}
             tasks={tasks}
             todayKey={todayKey}
+            selectedMtnTags={selectedMtnTags}
+            searchQuery={searchQuery}
             goals={goals}
             getTaskScore={getTaskScore}
             onStartEdit={(task) => {

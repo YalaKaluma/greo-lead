@@ -22,6 +22,23 @@ logger = logging.getLogger(__name__)
 STARTER_SEED_KEY = "starter_examples_seeded_v1"
 ROADMAP_SEED_KEY = "starter_roadmaps_seeded_v1"
 COMPACT_GOAL_SAMPLE_KEY = "starter_goal_samples_compacted_v1"
+STARTER_JOURNAL_DEPTH_EXPLANATION = "Starter example created by Alfred to demonstrate reflection depth."
+STARTER_JOURNAL_EXAMPLES = [
+    {
+        "title": "A productive but busy day",
+        "body": "Had a busy day at work. Got a lot done and felt productive, but I did not take much time to think about whether I was working on the right things.",
+        "score": 2.0,
+        "level": 1,
+        "label": "Description",
+    },
+    {
+        "title": "Reacting versus leading",
+        "body": "I noticed today that I spent most of my time reacting to requests instead of working on my most strategic priorities. The issue was not really lack of time. It was that I did not clearly decide what mattered most before the day started. Tomorrow I want to choose my top priority first, then protect time for it before opening myself up to everyone else's agenda.",
+        "score": 8.0,
+        "level": 4,
+        "label": "Pattern Recognition",
+    },
+]
 STARTER_TASK_TITLES = [
     "Migrate my current task list to Alfred",
     "Define my top 3 goals for this year",
@@ -213,6 +230,19 @@ def is_starter_goal_example(goal: JourneyGoal | None) -> bool:
     return title in _starter_goal_titles_by_level().get(level, set())
 
 
+def is_starter_journal_example(entry: JournalEntry | Message | None) -> bool:
+    """Return True for unchanged starter journal examples seeded for onboarding."""
+    if not entry:
+        return False
+
+    explanation = (getattr(entry, "reflection_depth_explanation", None) or "").strip()
+    if explanation != STARTER_JOURNAL_DEPTH_EXPLANATION:
+        return False
+
+    text = (getattr(entry, "text", None) or getattr(entry, "content", None) or "").strip()
+    return text in _starter_journal_texts()
+
+
 def _starter_goal_titles_by_level() -> dict[str, set[str]]:
     titles = {
         "vision": set(),
@@ -228,6 +258,13 @@ def _starter_goal_titles_by_level() -> dict[str, set[str]]:
         for wave_spec in spec["roadmap"]:
             titles["outcome"].update(_normalize_title(title) for title in wave_spec["outcomes"])
     return titles
+
+
+def _starter_journal_texts() -> set[str]:
+    return {
+        f"{item['title']}\n\n{item['body']}"
+        for item in STARTER_JOURNAL_EXAMPLES
+    }
 
 
 def ensure_starter_examples_seeded(db: Session, user: User) -> bool:
@@ -747,26 +784,8 @@ def _seed_habits(db: Session, user_number: str) -> None:
 
 
 def _seed_journal_examples(db: Session, user: User) -> None:
-    examples = [
-        {
-            "title": "A productive but busy day",
-            "body": "Had a busy day at work. Got a lot done and felt productive, but I did not take much time to think about whether I was working on the right things.",
-            "score": 2.0,
-            "level": 1,
-            "label": "Description",
-        },
-        {
-            "title": "Reacting versus leading",
-            "body": "I noticed today that I spent most of my time reacting to requests instead of working on my most strategic priorities. The issue was not really lack of time. It was that I did not clearly decide what mattered most before the day started. Tomorrow I want to choose my top priority first, then protect time for it before opening myself up to everyone else's agenda.",
-            "score": 8.0,
-            "level": 4,
-            "label": "Pattern Recognition",
-        },
-    ]
-
-    for item in examples:
+    for item in STARTER_JOURNAL_EXAMPLES:
         text = f"{item['title']}\n\n{item['body']}"
-        depth_explanation = "Starter example created by Alfred to demonstrate reflection depth."
         depth_recommendations = ["Edit or delete this example once you have added your own reflections."]
 
         db.add(JournalEntry(
@@ -775,7 +794,7 @@ def _seed_journal_examples(db: Session, user: User) -> None:
             reflection_depth_score=item["score"],
             reflection_depth_level=item["level"],
             reflection_depth_label=item["label"],
-            reflection_depth_explanation=depth_explanation,
+            reflection_depth_explanation=STARTER_JOURNAL_DEPTH_EXPLANATION,
             reflection_depth_recommendations=depth_recommendations,
             reflection_depth_scored_at=datetime.utcnow(),
         ))
@@ -789,7 +808,7 @@ def _seed_journal_examples(db: Session, user: User) -> None:
             reflection_depth_score=item["score"],
             reflection_depth_level=item["level"],
             reflection_depth_label=item["label"],
-            reflection_depth_explanation=depth_explanation,
+            reflection_depth_explanation=STARTER_JOURNAL_DEPTH_EXPLANATION,
             reflection_depth_recommendations=depth_recommendations,
             reflection_depth_scored_at=datetime.utcnow(),
         ))

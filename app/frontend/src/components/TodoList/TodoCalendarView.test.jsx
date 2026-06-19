@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import TodoCalendarView, { TodoViewToggle } from './TodoCalendarView';
+import TodoCalendarView from './TodoCalendarView';
 
 const task = (overrides = {}) => ({
   id: overrides.id ?? 1,
@@ -22,22 +22,12 @@ function dataTransfer() {
   };
 }
 
-describe('TodoViewToggle', () => {
-  it('switches view modes', () => {
-    const onChange = vi.fn();
-    render(<TodoViewToggle value="list" onChange={onChange} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Calendar View' }));
-
-    expect(onChange).toHaveBeenCalledWith('calendar');
-    expect(screen.getByRole('button', { name: 'List View' })).toHaveAttribute('aria-pressed', 'true');
-  });
-});
-
 describe('TodoCalendarView', () => {
   const baseProps = {
-    activeTab: 'tasks',
+    activeTab: 'calendar',
     todayKey: '2026-06-19',
+    selectedMtnTags: ['Transformational', 'Strategic'],
+    searchQuery: '',
     goals: [{ id: 10, title: 'Launch goal' }],
     getTaskScore: () => null,
     onStartEdit: () => {},
@@ -56,7 +46,6 @@ describe('TodoCalendarView', () => {
       />
     );
 
-    expect(screen.getByText('7-day workplan')).toBeInTheDocument();
     expect(screen.getAllByRole('region')).toHaveLength(7);
     expect(screen.getByRole('region', { name: 'Today Jun 19' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Thu Jun 25' })).toBeInTheDocument();
@@ -65,7 +54,7 @@ describe('TodoCalendarView', () => {
     expect(screen.queryByText('Operational hidden')).not.toBeInTheDocument();
   });
 
-  it('changes MTN filter and opens a task through the existing edit behavior', () => {
+  it('uses shared MTN tags and opens a task through the existing edit behavior', () => {
     const onStartEdit = vi.fn();
     const operationalTask = task({
       id: 3,
@@ -78,16 +67,14 @@ describe('TodoCalendarView', () => {
       is_recurring: true,
     });
 
-    render(
+    const { rerender } = render(
       <TodoCalendarView
         {...baseProps}
+        selectedMtnTags={['Important']}
         tasks={[operationalTask]}
         onStartEdit={onStartEdit}
       />
     );
-
-    expect(screen.queryByText('Operational visible')).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('MTN filter'), { target: { value: 'operational' } });
 
     expect(screen.getByText('Operational visible')).toBeInTheDocument();
     expect(screen.getByText('Launch goal')).toBeInTheDocument();
@@ -96,6 +83,16 @@ describe('TodoCalendarView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Operational visible/ }));
     expect(onStartEdit).toHaveBeenCalledWith(operationalTask);
+
+    rerender(
+      <TodoCalendarView
+        {...baseProps}
+        selectedMtnTags={['Strategic']}
+        tasks={[operationalTask]}
+        onStartEdit={onStartEdit}
+      />
+    );
+    expect(screen.queryByText('Operational visible')).not.toBeInTheDocument();
   });
 
   it('drops a task onto another day and calls reschedule with the new date', () => {

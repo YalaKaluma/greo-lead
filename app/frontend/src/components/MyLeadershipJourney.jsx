@@ -1278,18 +1278,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   const journeyCurrentBelt = getBeltById(normalizedReadinessCurrentBelt);
   const journeyNextBelt = getBeltById(readinessStatus?.target_belt || getNextBeltId(journeyCurrentBelt.id));
   const isAssessmentLockedUntilYellow = readinessStatus?.assessment_locked_until_yellow || normalizedReadinessCurrentBelt === "white";
-  const availableTrialBelts = BELTS.filter(
-    (belt) => getBeltIndexById(belt.id) >= getBeltIndexById(journeyCurrentBelt.id)
-  );
-
-  useEffect(() => {
-    if (
-      selectedTrialBeltId &&
-      getBeltIndexById(selectedTrialBeltId) < getBeltIndexById(journeyCurrentBelt.id)
-    ) {
-      setSelectedTrialBeltId(null);
-    }
-  }, [journeyCurrentBelt.id, selectedTrialBeltId]);
+  const availableTrialBelts = BELTS;
 
   useEffect(() => {
     if (isAssessmentLockedUntilYellow && activeJourneyTab === "assessment") {
@@ -1297,10 +1286,9 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
     }
   }, [isAssessmentLockedUntilYellow, activeJourneyTab]);
 
-  const effectiveSelectedTrialBeltId = (
-    selectedTrialBeltId &&
-    getBeltIndexById(selectedTrialBeltId) >= getBeltIndexById(journeyCurrentBelt.id)
-  ) ? selectedTrialBeltId : null;
+  const effectiveSelectedTrialBeltId = BELT_IDS.includes(normalizeBeltId(selectedTrialBeltId))
+    ? normalizeBeltId(selectedTrialBeltId)
+    : null;
   const viewedBelt = getBeltById(effectiveSelectedTrialBeltId || journeyCurrentBelt.id);
   const viewedNextBelt = getBeltById(getNextBeltId(viewedBelt.id));
   const viewedBeltRequirements = getBeltRequirementsFromConfig(
@@ -3363,7 +3351,27 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
   const safeRequirements = normalizeRequirements(requirements, dimension.id);
   const reflectionTrial = getStoredTrial(trialRecords, dimension.id, safeTargetBelt.id, "reflection");
   const realWorldTrial = getStoredTrial(trialRecords, dimension.id, safeTargetBelt.id, "real_world");
-  const isViewingCurrentBelt = currentBelt?.id === safeTargetBelt.id;
+  const currentBeltIndex = getBeltIndexById(currentBelt?.id);
+  const targetBeltIndex = getBeltIndexById(safeTargetBelt.id);
+  const isViewingCurrentBelt = currentBeltIndex === targetBeltIndex;
+  const isViewingPastBelt = targetBeltIndex < currentBeltIndex;
+  const isViewingFutureBelt = targetBeltIndex > currentBeltIndex;
+  const getReflectionButtonLabel = () => {
+    if (isViewingCurrentBelt) {
+      if (normalizeStatus(reflectionTrial?.status) === "needs_revision") return "Resubmit";
+      return reflectionTrial ? "Continue Reflection" : "Start Reflection";
+    }
+    if (isViewingPastBelt && reflectionTrial) return "Review Reflection";
+    return null;
+  };
+  const getRealWorldButtonLabel = () => {
+    if (isViewingCurrentBelt) {
+      if (normalizeStatus(realWorldTrial?.status) === "needs_revision") return "Resubmit";
+      return realWorldTrial ? "Log Trial" : "Start Trial";
+    }
+    if (isViewingPastBelt && realWorldTrial) return "Review Trial";
+    return null;
+  };
   const activeCards = [
     isRequirementActive(safeRequirements.reflection) && {
       title: safeRequirements.reflection.title || "Reflection Trial",
@@ -3372,13 +3380,7 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
       status: formatTrialStatus(reflectionTrial?.status),
       feedback: reflectionTrial?.ai_feedback,
       score: getLatestTrialScore(reflectionTrial),
-      buttonLabel: isViewingCurrentBelt
-        ? normalizeStatus(reflectionTrial?.status) === "needs_revision"
-          ? "Resubmit"
-          : reflectionTrial
-            ? "Continue Reflection"
-            : "Start Reflection"
-        : null,
+      buttonLabel: getReflectionButtonLabel(),
       onClick: () => onStartTrial("reflection", safeRequirements.reflection.prompt),
     },
     isRequirementActive(safeRequirements.real_world) && {
@@ -3389,13 +3391,7 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
       statusDetail: normalizeStatus(realWorldStatus) !== "not_started" ? realWorldProgressDetail : null,
       feedback: realWorldTrial?.ai_feedback,
       score: getLatestTrialScore(realWorldTrial),
-      buttonLabel: isViewingCurrentBelt
-        ? normalizeStatus(realWorldTrial?.status) === "needs_revision"
-          ? "Resubmit"
-          : realWorldTrial
-            ? "Log Trial"
-            : "Start Trial"
-        : null,
+      buttonLabel: getRealWorldButtonLabel(),
       onClick: () => onStartTrial("real_world", safeRequirements.real_world.prompt),
     },
     isRequirementActive(safeRequirements.behavioral) && {
@@ -3419,12 +3415,12 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
           </h3>
           {!isViewingCurrentBelt && (
             <p className="mt-1 text-xs font-semibold text-slate-500">
-              Previewing future requirements
+              {isViewingFutureBelt ? "Previewing future requirements" : "Reviewing earlier requirements"}
             </p>
           )}
         </div>
         <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
-          Earn {safeNextBelt.name}
+          {isViewingPastBelt ? "Earlier belt work" : `Earn ${safeNextBelt.name}`}
         </span>
       </div>
 

@@ -1,15 +1,6 @@
 import { addDays, dateFromKey, formatDateKey } from './todoDateLogic.js';
 import { getMtnLabel, normalizeDateString } from './taskHelpers.js';
-import { getVisibleTaskScore } from './todoListLogic.js';
-
-export const CALENDAR_MTN_FILTERS = [
-  { value: 'focus', label: 'Transformational + Strategic' },
-  { value: 'all_mtn', label: 'All MTN tasks' },
-  { value: 'transformational', label: 'Transformational only' },
-  { value: 'strategic', label: 'Strategic only' },
-  { value: 'operational', label: 'Operational' },
-  { value: 'unclassified', label: 'Not classified' },
-];
+import { getVisibleTaskScore, taskMatchesSearch, taskMatchesSelectedMtnTags } from './todoListLogic.js';
 
 export const buildSevenDayWindow = (todayKey) => {
   const startDate = dateFromKey(todayKey) || new Date();
@@ -30,22 +21,11 @@ export const getCalendarMtnLabel = (task, getTaskScore = () => null) => {
   return scoreData ? getMtnLabel(scoreData.score) : '';
 };
 
-export const taskMatchesCalendarMtnFilter = (task, filterValue, getTaskScore = () => null) => {
-  const label = getCalendarMtnLabel(task, getTaskScore);
-
-  if (filterValue === 'focus') return label === 'Transformational' || label === 'Strategic';
-  if (filterValue === 'all_mtn') return Boolean(label);
-  if (filterValue === 'transformational') return label === 'Transformational';
-  if (filterValue === 'strategic') return label === 'Strategic';
-  if (filterValue === 'operational') return ['Important', 'Maintenance', 'Low Leverage'].includes(label);
-  if (filterValue === 'unclassified') return !label;
-  return true;
-};
-
 export const getCalendarTasks = ({
   tasks,
   todayKey,
-  mtnFilter = 'focus',
+  selectedMtnTags = [],
+  searchQuery = '',
   getTaskScore = () => null,
 }) => {
   const days = buildSevenDayWindow(todayKey);
@@ -58,7 +38,8 @@ export const getCalendarTasks = ({
     const dueKey = normalizeDateString(task.due_date);
 
     if (status === 'completed' || !dueKey) return;
-    if (!taskMatchesCalendarMtnFilter(task, mtnFilter, getTaskScore)) return;
+    if (!taskMatchesSelectedMtnTags(task, selectedMtnTags, getTaskScore)) return;
+    if (!taskMatchesSearch(task, searchQuery)) return;
 
     if (dueKey < todayKey) {
       overdueTasks.push(task);

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CALENDAR_MTN_FILTERS, getCalendarMtnLabel, getCalendarTasks } from '../../utils/todoCalendarLogic.js';
+import { getCalendarMtnLabel, getCalendarTasks } from '../../utils/todoCalendarLogic.js';
 import { getMtnStyle } from '../../utils/taskHelpers.js';
 
 function RepeatIcon() {
@@ -162,72 +162,27 @@ function OverdueSection({ tasks, goals, getTaskScore, onStartEdit }) {
   );
 }
 
-export function TodoViewToggle({ value, onChange }) {
-  return (
-    <div className="mb-4 inline-flex rounded border border-slate-200 bg-slate-100 p-1">
-      {[
-        { value: 'list', label: 'List View' },
-        { value: 'calendar', label: 'Calendar View' },
-      ].map(option => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => onChange(option.value)}
-          className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
-            value === option.value
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-          aria-pressed={value === option.value}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 export default function TodoCalendarView({
   activeTab,
   tasks,
   todayKey,
+  selectedMtnTags,
+  searchQuery,
   goals,
   getTaskScore,
   onStartEdit,
   onReschedule,
 }) {
-  const [mtnFilter, setMtnFilter] = useState('focus');
   const [dropTarget, setDropTarget] = useState('');
   const { days, groupedTasks, overdueTasks } = useMemo(
-    () => getCalendarTasks({ tasks, todayKey, mtnFilter, getTaskScore }),
-    [tasks, todayKey, mtnFilter, getTaskScore]
+    () => getCalendarTasks({ tasks, todayKey, selectedMtnTags, searchQuery, getTaskScore }),
+    [tasks, todayKey, selectedMtnTags, searchQuery, getTaskScore]
   );
 
-  if (activeTab !== 'tasks') return null;
-
-  const visibleCount = overdueTasks.length + Object.values(groupedTasks).reduce((sum, dayTasks) => sum + dayTasks.length, 0);
+  if (activeTab !== 'calendar') return null;
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">7-day workplan</h2>
-          <p className="mt-1 text-sm text-slate-500">{visibleCount} task(s) in view</p>
-        </div>
-        <label className="flex flex-col gap-1 text-sm font-medium text-slate-700 sm:min-w-72">
-          MTN filter
-          <select
-            value={mtnFilter}
-            onChange={(event) => setMtnFilter(event.target.value)}
-            className="rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-          >
-            {CALENDAR_MTN_FILTERS.map(option => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-
       <OverdueSection
         tasks={overdueTasks}
         goals={goals}

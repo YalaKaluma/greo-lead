@@ -19,7 +19,11 @@ describe('todoCalendarLogic', () => {
       task({ id: 5, title: 'Maintenance', due_date: '2026-06-21', move_the_needle_score: 0.4 }),
     ];
 
-    const result = getCalendarTasks({ tasks, todayKey: '2026-06-19' });
+    const result = getCalendarTasks({
+      tasks,
+      todayKey: '2026-06-19',
+      selectedMtnTags: ['Transformational', 'Strategic'],
+    });
 
     expect(result.days).toHaveLength(7);
     expect(result.groupedTasks['2026-06-19'].map(item => item.title)).toEqual(['Transformational today']);
@@ -36,13 +40,17 @@ describe('todoCalendarLogic', () => {
       task({ id: 3, title: 'No score', due_date: '2026-06-20' }),
     ];
 
-    const operational = getCalendarTasks({ tasks, todayKey: '2026-06-19', mtnFilter: 'operational' });
+    const operational = getCalendarTasks({ tasks, todayKey: '2026-06-19', selectedMtnTags: ['Important'] });
     expect(operational.groupedTasks['2026-06-19'].map(item => item.title)).toEqual(['Important work']);
 
-    const unclassified = getCalendarTasks({ tasks, todayKey: '2026-06-19', mtnFilter: 'unclassified' });
-    expect(unclassified.groupedTasks['2026-06-20'].map(item => item.title)).toEqual(['No score']);
+    const searchFiltered = getCalendarTasks({ tasks, todayKey: '2026-06-19', searchQuery: 'No score' });
+    expect(searchFiltered.groupedTasks['2026-06-20'].map(item => item.title)).toEqual(['No score']);
 
-    const focus = getCalendarTasks({ tasks, todayKey: '2026-06-19', mtnFilter: 'focus' });
+    const focus = getCalendarTasks({
+      tasks,
+      todayKey: '2026-06-19',
+      selectedMtnTags: ['Transformational', 'Strategic'],
+    });
     expect(focus.overdueTasks.map(item => item.title)).toEqual(['Overdue strategic']);
   });
 
