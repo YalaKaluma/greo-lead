@@ -571,10 +571,20 @@ function isRequirementActive(requirement) {
   return requirement?.active !== false;
 }
 
+const TRIAL_TYPES = ["reflection", "real_world", "behavioral"];
+
 function getActiveTrialTypes(requirements) {
-  return ["reflection", "real_world", "behavioral"].filter((trialType) =>
-    isRequirementActive(requirements?.[trialType])
-  );
+  return TRIAL_TYPES
+    .filter((trialType) => isRequirementActive(requirements?.[trialType]))
+    .sort((first, second) => {
+      const firstOrder = Number.isFinite(requirements?.[first]?.display_order)
+        ? requirements[first].display_order
+        : TRIAL_TYPES.indexOf(first) + 1;
+      const secondOrder = Number.isFinite(requirements?.[second]?.display_order)
+        ? requirements[second].display_order
+        : TRIAL_TYPES.indexOf(second) + 1;
+      return firstOrder - secondOrder || TRIAL_TYPES.indexOf(first) - TRIAL_TYPES.indexOf(second);
+    });
 }
 
 function getStoredTrial(trialRecords, dimensionId, targetBeltId, trialType) {
@@ -903,6 +913,13 @@ function getBeltRequirementsFromConfig(config, dimensionId, beltId) {
   if (beltId === "yellow" && legacyYellow) return legacyYellow;
 
   return FALLBACK_YELLOW_BELT_REQUIREMENTS[dimensionId];
+}
+
+function beltHasActiveTrialContent(config, dimensionId, beltId) {
+  const fullCurriculum = config?.dimensions?.[dimensionId]?.belts?.[beltId];
+  if (!fullCurriculum) return true;
+
+  return getActiveTrialTypes(normalizeRequirements(fullCurriculum, dimensionId)).length > 0;
 }
 
 export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) {
@@ -1278,7 +1295,9 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   const journeyCurrentBelt = getBeltById(normalizedReadinessCurrentBelt);
   const journeyNextBelt = getBeltById(readinessStatus?.target_belt || getNextBeltId(journeyCurrentBelt.id));
   const isAssessmentLockedUntilYellow = readinessStatus?.assessment_locked_until_yellow || normalizedReadinessCurrentBelt === "white";
-  const availableTrialBelts = BELTS;
+  const availableTrialBelts = BELTS.filter((belt) =>
+    beltHasActiveTrialContent(trialConfig, selectedDimension.id, belt.id)
+  );
 
   useEffect(() => {
     if (isAssessmentLockedUntilYellow && activeJourneyTab === "assessment") {
@@ -3339,9 +3358,17 @@ function normalizeRequirements(requirements, dimensionId) {
   const fallback = FALLBACK_YELLOW_BELT_REQUIREMENTS[dimensionId] || FALLBACK_YELLOW_BELT_REQUIREMENTS.execute;
 
   return {
+    ...requirements,
     reflection: requirements?.reflection || fallback.reflection,
     real_world: requirements?.real_world || fallback.real_world,
     behavioral: requirements?.behavioral || fallback.behavioral,
+    story: requirements?.story || {
+      title: "",
+      theme: "",
+      full_story: "",
+      lessons: [],
+      discussion_question: "",
+    },
   };
 }
 
@@ -3372,21 +3399,17 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
     if (isViewingPastBelt && realWorldTrial) return "Review Trial";
     return null;
   };
-  const activeCards = [
-    isRequirementActive(safeRequirements.reflection) && {
-      title: safeRequirements.reflection.title || "Reflection Trial",
-      body: safeRequirements.reflection.prompt,
-      footer: safeRequirements.reflection.completion_hint,
+  const trialState = {
+    reflection: {
+      fallbackTitle: "Reflection Trial",
       status: formatTrialStatus(reflectionTrial?.status),
       feedback: reflectionTrial?.ai_feedback,
       score: getLatestTrialScore(reflectionTrial),
       buttonLabel: getReflectionButtonLabel(),
       onClick: () => onStartTrial("reflection", safeRequirements.reflection.prompt),
     },
-    isRequirementActive(safeRequirements.real_world) && {
-      title: safeRequirements.real_world.title || "Real-World Trial",
-      body: safeRequirements.real_world.prompt,
-      footer: safeRequirements.real_world.completion_hint,
+    real_world: {
+      fallbackTitle: "Real-World Trial",
       status: formatTrialStatus(realWorldStatus),
       statusDetail: normalizeStatus(realWorldStatus) !== "not_started" ? realWorldProgressDetail : null,
       feedback: realWorldTrial?.ai_feedback,
@@ -3394,14 +3417,29 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
       buttonLabel: getRealWorldButtonLabel(),
       onClick: () => onStartTrial("real_world", safeRequirements.real_world.prompt),
     },
-    isRequirementActive(safeRequirements.behavioral) && {
-      title: safeRequirements.behavioral.title || "Behavioral Evidence",
-      body: safeRequirements.behavioral.prompt,
-      footer: safeRequirements.behavioral.completion_hint,
+    behavioral: {
+      fallbackTitle: "Behavioral Evidence",
       status: formatTrialStatus(behavioralStatus),
       statusDetail: normalizeStatus(behavioralStatus) !== "not_started" ? behavioralProgressDetail : null,
     },
-  ].filter(Boolean).map((card, index) => ({ ...card, number: String(index + 1) }));
+  };
+  const activeCards = getActiveTrialTypes(safeRequirements).map((trialType, index) => {
+    const requirement = safeRequirements[trialType] || {};
+    const state = trialState[trialType] || {};
+    return {
+      key: trialType,
+      number: String(index + 1),
+      title: requirement.title || state.fallbackTitle,
+      body: requirement.prompt,
+      footer: requirement.completion_hint,
+      status: state.status,
+      statusDetail: state.statusDetail,
+      feedback: state.feedback,
+      score: state.score,
+      buttonLabel: state.buttonLabel,
+      onClick: state.onClick,
+    };
+  });
 
   return (
     <div className="rounded-lg border border-amber-200 bg-white p-5 shadow-sm">
@@ -3424,10 +3462,12 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
         </span>
       </div>
 
+      <LeadershipStoryCard story={safeRequirements.story} />
+
       <div className={`grid gap-3 ${activeCards.length >= 3 ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
         {activeCards.map((card) => (
           <RequirementCard
-            key={card.title}
+            key={card.key}
             number={card.number}
             title={card.title}
             body={card.body}
@@ -3443,6 +3483,75 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
         ))}
       </div>
     </div>
+  );
+}
+
+function LeadershipStoryCard({ story }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasStory = hasText(story?.title) || hasText(story?.full_story);
+  const lessons = Array.isArray(story?.lessons) ? story.lessons.filter(hasText) : [];
+  const fullStory = String(story?.full_story || "");
+  const shouldCollapse = fullStory.length > 520;
+
+  if (!hasStory) return null;
+
+  return (
+    <article className="mb-4 rounded-lg border border-[#d4b27a] bg-[#fffaf0] p-4 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8a5a1f]">
+        Leadership Story
+      </p>
+      {hasText(story?.title) && (
+        <h4 className="mt-2 text-lg font-semibold text-slate-950">{story.title}</h4>
+      )}
+      {hasText(story?.theme) && (
+        <p className="mt-1 text-sm font-semibold text-[#7c4a2d]">Theme: {story.theme}</p>
+      )}
+      {hasText(fullStory) && (
+        <p
+          className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-800"
+          style={shouldCollapse && !expanded ? {
+            display: "-webkit-box",
+            WebkitLineClamp: 7,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+          } : undefined}
+        >
+          {fullStory}
+        </p>
+      )}
+      {lessons.length > 0 && (!shouldCollapse || expanded) && (
+        <div className="mt-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+            Key Lessons
+          </p>
+          <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-700">
+            {lessons.map((lesson) => (
+              <li key={lesson} className="flex gap-2">
+                <span aria-hidden="true">•</span>
+                <span>{lesson}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {hasText(story?.discussion_question) && (!shouldCollapse || expanded) && (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-white/70 p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+            Reflection Question
+          </p>
+          <p className="mt-1 text-sm leading-6 text-slate-800">{story.discussion_question}</p>
+        </div>
+      )}
+      {shouldCollapse && (
+        <button
+          type="button"
+          onClick={() => setExpanded((current) => !current)}
+          className="mt-4 rounded-md border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-50"
+        >
+          {expanded ? "Show less" : "Read full story"}
+        </button>
+      )}
+    </article>
   );
 }
 

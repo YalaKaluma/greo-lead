@@ -401,8 +401,14 @@ def active_trial_types_for_dimension(config: dict, dimension_id: str, belt_id: s
             continue
         if requirement.get("active") is False:
             continue
-        trial_types.append(trial_type)
-    return trial_types
+        trial_types.append((trial_type, requirement.get("display_order", len(trial_types) + 1)))
+    return [
+        trial_type
+        for trial_type, _display_order in sorted(
+            trial_types,
+            key=lambda item: (item[1] if isinstance(item[1], int) else 999, item[0]),
+        )
+    ]
 
 
 def get_topic_items_for_evidence(db: Session, user_number: str, topic: dict) -> list[Any]:
