@@ -839,10 +839,10 @@ def send_nudge_notification_safe(db: Session, user_number: str, nudge_type: str,
         "sunday_review": "Your Alfred Sunday review is ready",
     }
     url_by_type = {
-        "morning": "/tasks",
-        "evening": "/journal",
-        "weekly": "/goals",
-        "sunday_review": "/goals",
+        "morning": "/?page=todo-list",
+        "evening": "/?page=my-journal",
+        "weekly": "/?page=my-goals",
+        "sunday_review": "/?page=my-goals",
     }
     body_by_type = {
         "morning": "Open Alfred for today's focus.",
