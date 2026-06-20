@@ -132,6 +132,71 @@ class SystemHealthEvent(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
+    __table_args__ = (
+        UniqueConstraint("user_number", "endpoint", name="uq_push_subscriptions_user_endpoint"),
+        Index("idx_push_subscriptions_user_active", "user_number", "is_active"),
+        Index("idx_push_subscriptions_endpoint", "endpoint"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String(160), nullable=False, index=True)
+    endpoint = Column(Text, nullable=False)
+    p256dh_key = Column(Text, nullable=False)
+    auth_key = Column(Text, nullable=False)
+    browser = Column(String(120), nullable=True)
+    platform = Column(String(120), nullable=True)
+    device_label = Column(String(160), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    last_success_at = Column(DateTime, nullable=True)
+    last_failure_at = Column(DateTime, nullable=True)
+    failure_count = Column(Integer, default=0, nullable=False)
+
+
+class NotificationPreference(Base):
+    __tablename__ = "notification_preferences"
+    __table_args__ = (
+        UniqueConstraint("user_number", name="uq_notification_preferences_user"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String(160), nullable=False, index=True)
+    notifications_enabled = Column(Boolean, default=False, nullable=False)
+    quiet_hours_enabled = Column(Boolean, default=False, nullable=False)
+    quiet_hours_start = Column(String(5), nullable=True)
+    quiet_hours_end = Column(String(5), nullable=True)
+    timezone = Column(String(64), nullable=True)
+    channels_enabled = Column(MutableDict.as_mutable(JSONB), nullable=True)
+    notification_types_enabled = Column(MutableDict.as_mutable(JSONB), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class NotificationDeliveryLog(Base):
+    __tablename__ = "notification_delivery_logs"
+    __table_args__ = (
+        Index("idx_notification_delivery_logs_user_created", "user_number", "created_at"),
+        Index("idx_notification_delivery_logs_subscription_created", "subscription_id", "created_at"),
+        Index("idx_notification_delivery_logs_source_type", "source_service", "notification_type"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String(160), nullable=False, index=True)
+    subscription_id = Column(Integer, ForeignKey("push_subscriptions.id", ondelete="SET NULL"), nullable=True, index=True)
+    notification_type = Column(String(120), nullable=True, index=True)
+    source_service = Column(String(120), nullable=True, index=True)
+    title = Column(String(220), nullable=False)
+    body = Column(Text, nullable=True)
+    target_url = Column(Text, nullable=True)
+    status = Column(String(40), nullable=False, index=True)
+    error_message = Column(Text, nullable=True)
+    metadata_json = Column(MutableDict.as_mutable(JSONB), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
 class OperationsIssueDraft(Base):
     __tablename__ = "operations_issue_drafts"
     __table_args__ = (

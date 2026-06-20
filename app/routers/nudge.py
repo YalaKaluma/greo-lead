@@ -38,6 +38,7 @@ from app.services.message_service import load_conversation_history, save_message
 from app.services.timezone_service import get_user_timezone, today_for_timezone
 from app.models import Task, Habit, HabitCompletion, JourneyGoal, Message, User
 from app.services.habit_coaching_service import refresh_habit_coaching_review
+from app.services.notifications import send_notification
 from app.services.vision_progress_review_service import VisionProgressReviewService
 from app.services.operations_director.health_events import (
     record_external_service_failure_with_new_session,
@@ -830,6 +831,47 @@ def save_message_safe(db: Session, user_number: str, text: str) -> None:
         logger.warning(f"Failed to save message to database (non-critical): {e}")
 
 
+def send_nudge_notification_safe(db: Session, user_number: str, nudge_type: str, message_text: str) -> Dict:
+    title_by_type = {
+        "morning": "Your Alfred morning brief is ready",
+        "evening": "Your Alfred evening reflection is ready",
+        "weekly": "Your Alfred weekly review is ready",
+        "sunday_review": "Your Alfred Sunday review is ready",
+    }
+    url_by_type = {
+        "morning": "/tasks",
+        "evening": "/journal",
+        "weekly": "/goals",
+        "sunday_review": "/goals",
+    }
+    body_by_type = {
+        "morning": "Open Alfred for today's focus.",
+        "evening": "Capture one insight while it is still fresh.",
+        "weekly": "Review the week and choose the next move.",
+        "sunday_review": "Reflect, reset, and plan the week ahead.",
+    }
+
+    try:
+        result = send_notification(
+            db=db,
+            user_number=user_number,
+            title=title_by_type.get(nudge_type, "Alfred has something ready for you"),
+            body=body_by_type.get(nudge_type, "Open Alfred to continue."),
+            url=url_by_type.get(nudge_type, "/"),
+            notification_type=f"{nudge_type}_nudge",
+            source_service="nudges",
+            metadata={
+                "nudge_type": nudge_type,
+                "message_preview_length": min(len(message_text or ""), 160),
+            },
+        )
+        return result.to_dict()
+    except Exception as error:
+        db.rollback()
+        logger.warning("Failed to send optional push notification for %s nudge to %s: %s", nudge_type, user_number, error)
+        return {"skipped": 1, "reason": "notification_error", "error": str(error)}
+
+
 def get_all_active_users(db: Session) -> List[str]:
     """
     Get list of all active users who should receive scheduled nudges.
@@ -985,6 +1027,7 @@ def send_nudge_for_user(
             conversation_type="messages",
             is_read=False
         )
+        notification_result = send_nudge_notification_safe(db, user_number, nudge_type, message_text)
 
         # LOG TO EXCEL (non-blocking) ✨
         log_nudge_to_excel(
@@ -1005,6 +1048,7 @@ def send_nudge_for_user(
             "message_length": len(message_text),
             "duration_seconds": duration,
             "sunday_refresh": sunday_refresh_result,
+            "notification_result": notification_result,
         }
 
     except Exception as e:

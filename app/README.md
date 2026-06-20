@@ -50,6 +50,20 @@ Additional settings loaded by `config.py`:
 - `GMAIL_REFRESH_TOKEN`
 - `GMAIL_SENDER_EMAIL`
 
+Web push notifications:
+
+- `VAPID_PUBLIC_KEY`
+- `VAPID_PRIVATE_KEY`
+- `VAPID_SUBJECT`, defaulting to `mailto:admin@alfred.local`
+
+Generate VAPID keys locally with:
+
+```bash
+python -m pywebpush --generate-vapid-keys
+```
+
+Configure the same values in Railway before enabling production push notifications. The backend exposes generic notification endpoints at `/api/notifications/...`; nudges are the first caller, but the service is shared for future task, habit, journal, Journey, review, and admin notifications.
+
 CTO Director review:
 
 - `GITHUB_COPILOT_CTO_TOKEN` or `GITHUB_TOKEN`
