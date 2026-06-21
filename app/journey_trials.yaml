@@ -810,29 +810,28 @@ dimensions:
     description: Recovery, capacity, energy management, and sustainability.
     belts:
       white:
-        criteria: Understand the relationship between energy, emotions, recovery, stress, and performance. Begin identifying
-          the people, habits, and environments that energize or drain you.
+        criteria: Understand that energy is finite and learn to observe the patterns that drain, restore, and sustain it.
         reflection:
-          title: Reflection Trial
-          prompt: Reflect on a period where your energy, stress, or lack of recovery negatively impacted your performance,
-            relationships, or well-being. What patterns contributed to it?
+          title: The Cost of Running Empty
+          prompt: Reflect on a period where low energy, stress, or lack of recovery negatively affected your performance,
+            relationships, or well-being. What did it cost you?
           grading_focus:
           - energy awareness
           - stress patterns
           - recovery insight
           - ownership
-          completion_hint: Connect energy, recovery, stress, and performance through a concrete period in your life.
+          completion_hint: Name the cost of running empty and the patterns that contributed to it.
           display_order: 1
         real_world:
-          active: false
-          title: Real-World Trial
-          prompt: Track your energy levels, stress levels, and recovery quality for one full week. Identify the situations,
-            people, or habits that most strongly impact your energy.
-          completion_hint: Observe the people, habits, and environments that shape your capacity.
+          active: true
+          title: Energy Audit
+          prompt: Journal about your energy, stress, and recovery levels for one week. Notice what drains you, what restores
+            you, and when your performance changes.
+          completion_hint: Observe your energy patterns long enough to see the triggers clearly.
           display_order: 2
         behavioral:
-          title: Behavioral Evidence
-          prompt: Fill out the sections on energy drains, energy sources, and recovery process.
+          title: Map Your Energy Landscape
+          prompt: Complete the Energy Sources, Energy Drains, and Recovery sections in Alfred.
           signals:
           - energy_drains_completed
           - energy_sources_completed
@@ -840,113 +839,202 @@ dimensions:
           completion_hint: Alfred looks for your core energy map to be captured.
           display_order: 3
         story:
-          title: ''
-          theme: ''
-          full_story: ''
-          lessons: []
-          discussion_question: ''
+          title: Life Is a Marathon, Not a Sprint
+          theme: Energy Awareness
+          full_story: |-
+            When we are young, we often believe success comes from effort alone.
+            We work longer.
+            Push harder.
+            Take on more.
+            For a while it works.
+            Then reality catches up.
+            Burnout appears.
+            Relationships suffer.
+            Performance declines.
+            The lesson many high performers eventually learn is that life is not a sprint.
+            It is a marathon.
+            The goal is not to maximize effort today.
+            The goal is to sustain performance for years and decades.
+            Just as a marathon runner cannot sprint every kilometer, leaders cannot operate at maximum intensity forever.
+            The first step toward mastery is recognizing that energy is finite and must be managed intentionally.
+          leadership_lesson: |-
+            Most people manage time.
+            Great leaders learn to manage energy.
+            Before you can improve your energy, you must first become aware of it.
+          key_message: Energy is the fuel behind every achievement. Learn to notice it before you try to optimize it.
+          belt_purpose: Understand that energy is finite and learn to observe it.
+          lessons:
+          - Most people manage time.
+          - Great leaders learn to manage energy.
+          - Before you can improve your energy, you must first become aware of it.
+          discussion_question: Where are you treating life like a sprint instead of a marathon?
       yellow:
-        criteria: Apply intentional habits and routines to improve energy, focus, recovery, and sustainability. Begin aligning
-          your lifestyle with long-term performance and well-being.
+        criteria: Learn how energy can be restored and renewed through deliberate recovery practices.
         reflection:
-          title: Reflection Trial
-          prompt: How do you intentionally use your energy sources and manage your energy drains throughout the week to sustain
-            performance and well-being?
+          title: Recovery Wisdom
+          prompt: What have you learned about the relationship between recovery, energy, and performance?
           grading_focus:
           - habit awareness
           - environment awareness
           - relationship patterns
           - sustainability
-          completion_hint: Identify which recurring conditions raise or drain your energy.
+          completion_hint: Explain how recovery changes the quality and sustainability of your performance.
           display_order: 1
         real_world:
-          title: Real-World Trial
-          prompt: Journal on at least 3 seperate occasions about your energy level and what drives it.
-          completion_hint: Change one weekly routine and observe its effect on energy and focus.
+          title: Recovery Experiments
+          prompt: Test three recovery practices over two weeks. Which practices improved your energy, clarity, or performance
+            the most?
+          completion_hint: Treat recovery as an experiment and compare what actually renews you.
           display_order: 2
         behavioral:
-          title: Behavioral Evidence
-          prompt: In the light of what you learned in the other exercises, define at least 3 habits in the "MyHabits" section
-            that will help you maintain high energy levels.
+          title: Build Recovery Habits
+          prompt: Create at least three habits in Alfred specifically designed to restore or protect your energy.
           signals:
           - high_energy_habits_identified
           - three_energy_level_journals
-          completion_hint: Alfred looks for explicit energy awareness in your habits and journal reflections.
+          completion_hint: Alfred looks for explicit recovery habits and energy-related reflection.
           display_order: 3
         story:
-          title: ''
-          theme: ''
-          full_story: ''
-          lessons: []
-          discussion_question: ''
+          title: Sharpen the Saw
+          theme: Recovery
+          full_story: |-
+            Stephen Covey tells the story of a woodcutter who spends all day cutting trees.
+            A passerby notices that the woodcutter is struggling and asks:
+            "Why don't you stop for a few minutes and sharpen your saw?"
+            The woodcutter replies:
+            "I don't have time. I'm too busy cutting."
+            Many ambitious people make the same mistake.
+            They sacrifice:
+            - Sleep
+            - Exercise
+            - Reflection
+            - Recovery
+            - Relationships
+            because they believe these activities take time away from performance.
+            In reality, these activities create performance.
+            The sharpest saw cuts the most wood.
+            The most recovered leader delivers the best results.
+          leadership_lesson: |-
+            Recovery is not a distraction from performance.
+            Recovery is performance.
+          key_message: The secret is not working harder. The secret is renewing your energy before it runs out.
+          belt_purpose: Learn how energy can be restored and renewed.
+          lessons:
+          - Recovery is not a distraction from performance.
+          - Recovery is performance.
+          - The most recovered leader delivers the best results.
+          discussion_question: Where do you need to sharpen the saw before continuing to cut?
       green:
-        criteria: Integrate ambition, discipline, recovery, relationships, and emotional regulation into a sustainable operating
-          system that remains stable under pressure.
+        criteria: Invest energy intentionally and build systems that protect it under pressure.
         reflection:
-          title: Reflection Trial
-          prompt: What have you learned about the relationship between ambition, recovery, emotional balance, and sustainable
-            performance?
+          title: Energy Allocation
+          prompt: How do you intentionally invest your energy across work, relationships, recovery, and high-impact opportunities?
           grading_focus:
           - integration
           - ambition
           - recovery
           - emotional balance
           - sustainability
-          completion_hint: Show how ambition and recovery now work together instead of competing.
+          completion_hint: Show how you decide what deserves your energy and what does not.
           display_order: 1
         real_world:
-          title: Real-World Trial
+          title: Eliminate an Energy Leak
           prompt: Identify one recurring source of exhaustion, overstimulation, or imbalance in your life and make a meaningful
             structural change to reduce its impact.
-          completion_hint: Make a structural change that reduces a recurring energy drain.
+          completion_hint: Remove or redesign one recurring energy leak.
           display_order: 2
         behavioral:
-          title: Behavioral Evidence
-          prompt: Maintain a 7-day habit streak.
+          title: Energy Operating System
+          prompt: Maintain your energy-management habits for 14 consecutive days in Alfred.
           signals:
           - seven_day_habit_streak
-          completion_hint: Alfred looks for sustained habit consistency.
+          completion_hint: Alfred looks for sustained energy-management habit consistency.
           display_order: 3
         story:
-          title: ''
-          theme: ''
-          full_story: ''
-          lessons: []
-          discussion_question: ''
+          title: Messi & LeBron
+          theme: Strategic Energy
+          full_story: |-
+            Two of the greatest athletes of all time are:
+            - Lionel Messi
+            - LeBron James
+            Yet both are known for something surprising.
+            They often move less than everyone else.
+            Messi frequently walks across the field.
+            LeBron conserves energy throughout the game.
+            To casual observers, it can appear that they are not working hard.
+            The reality is the opposite.
+            They understand something most people miss:
+            Energy is finite.
+            Every sprint has a cost.
+            Every decision has a cost.
+            Every emotional reaction has a cost.
+            Rather than spending energy constantly, they deploy it strategically.
+            They preserve energy for the moments that matter most.
+            When the decisive opportunity appears, they are ready.
+          leadership_lesson: |-
+            High performers do not spend energy everywhere.
+            They invest energy intentionally where it creates the greatest impact.
+          key_message: Not everything deserves your energy. Learn to invest it where it matters most.
+          belt_purpose: Invest energy intentionally and build systems that protect it.
+          lessons:
+          - High performers do not spend energy everywhere.
+          - Every sprint, decision, and emotional reaction has a cost.
+          - Invest energy intentionally where it creates the greatest impact.
+          discussion_question: Where are you spending energy that no longer deserves it?
       brown:
-        criteria: Develop the ability to model and teach sustainable high performance, emotional balance, and healthy ambition
-          through wisdom, discipline, and example.
+        criteria: Become a source of energy for others through presence, recovery wisdom, and emotional steadiness.
         reflection:
-          title: Reflection Trial
-          prompt: What does sustainable success mean to you now, and how has your understanding evolved over time?
+          title: The Energy You Create
+          prompt: How do people feel after interacting with you? What kind of emotional energy do you create as a leader?
           grading_focus:
           - sustainable success
           - wisdom
           - evolution
           - healthy ambition
-          completion_hint: Define success in a way that reflects lived learning and can endure.
+          completion_hint: Reflect on whether your leadership leaves people depleted, steady, or more energized.
           display_order: 1
         real_world:
-          title: Real-World Trial
-          prompt: Help another person improve their balance, recovery, or sustainability by sharing systems, habits, or perspectives
-            that helped you grow.
-          completion_hint: Translate your sustainability lessons into support for another person.
+          title: Energize Another Person
+          prompt: Help another person improve their energy, resilience, or recovery by sharing support, perspective, or a
+            practical system.
+          completion_hint: Support someone else in protecting or renewing their energy.
           display_order: 2
         behavioral:
-          title: Behavioral Evidence
-          prompt: Maintain a 21-day habit streak and complete 3 journal entries where you call out your energy level and sources
-            explicitly.
+          title: Energy Multiplier
+          prompt: Document three occasions where your actions, attitude, or presence helped create energy in another person
+            or team.
           signals:
           - twenty_one_day_habit_streak
           - three_energy_level_and_source_journals
-          completion_hint: Alfred looks for longer habit consistency and explicit energy-source reflection.
+          completion_hint: Alfred looks for evidence that your leadership creates energy in others.
           display_order: 3
         story:
-          title: ''
-          theme: ''
-          full_story: ''
-          lessons: []
-          discussion_question: ''
+          title: Nelson Mandela
+          theme: Energy Multiplier
+          full_story: |-
+            After spending 27 years in prison, Nelson Mandela emerged without bitterness or hatred.
+            Many expected revenge.
+            Instead, he brought hope.
+            Many expected division.
+            Instead, he brought unity.
+            Mandela understood that leadership is not only about managing your own energy.
+            It is about influencing the emotional energy of everyone around you.
+            When he entered a room, people felt calmer.
+            More optimistic.
+            More courageous.
+            More capable.
+            His presence elevated others.
+            This is the highest expression of energy leadership.
+          leadership_lesson: |-
+            The ultimate goal is not simply to maintain your own energy.
+            It is to create energy in others.
+          key_message: Great leaders leave people more energized than they found them.
+          belt_purpose: Become a source of energy for others.
+          lessons:
+          - Leadership includes influencing the emotional energy of others.
+          - Presence can make people calmer, more optimistic, more courageous, and more capable.
+          - Great leaders leave people more energized than they found them.
+          discussion_question: How do people feel after interacting with you?
       black:
         criteria: Models sustainable performance.
         reflection:
@@ -959,11 +1047,13 @@ dimensions:
           - transmission
           completion_hint: Define success in a way that can endure.
           display_order: 1
+          active: false
         real_world:
           title: Real-World Trial
           prompt: Coach another person on sustainable performance.
           completion_hint: Help someone else protect energy and ambition at once.
           display_order: 2
+          active: false
         behavioral:
           title: Behavioral Evidence
           prompt: Capture sustainability coaching or mentorship activity.
@@ -973,6 +1063,7 @@ dimensions:
           - recovery_guidance
           completion_hint: Alfred looks for sustainable leadership being modeled for others.
           display_order: 3
+          active: false
         story:
           title: ''
           theme: ''

@@ -1296,7 +1296,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
     ? normalizeBeltId(selectedTrialBeltId)
     : null;
   const viewedBelt = getBeltById(effectiveSelectedTrialBeltId || journeyCurrentBelt.id);
-  const viewedNextBelt = getBeltById(getNextBeltId(viewedBelt.id));
   const viewedBeltRequirements = getBeltRequirementsFromConfig(
     trialConfig,
     selectedDimension.id,
@@ -1350,7 +1349,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
         journey_current_belt_id: journeyCurrentBelt.id,
         journey_next_belt_id: journeyNextBelt.id,
         viewed_belt_id: viewedBelt.id,
-        viewed_next_belt_id: viewedNextBelt.id,
         assessment_locked_until_yellow: Boolean(isAssessmentLockedUntilYellow),
         is_assessment_available: Boolean(readinessStatus?.is_assessment_available),
         is_eligible_to_submit: Boolean(readinessStatus?.is_eligible_to_submit),
@@ -1374,7 +1372,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
     journeyCurrentBelt.id,
     journeyNextBelt.id,
     viewedBelt.id,
-    viewedNextBelt.id,
     isAssessmentLockedUntilYellow,
   ]);
 
@@ -1712,9 +1709,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
 
           <section className="space-y-5">
             <BeltStepSummary
-              currentBelt={journeyCurrentBelt}
               targetBelt={viewedBelt}
-              nextBelt={viewedNextBelt}
             />
 
             <LeadershipStoryCard story={viewedBeltRequirements?.story} />
@@ -1723,7 +1718,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
               dimension={selectedDimension}
               currentBelt={journeyCurrentBelt}
               targetBelt={viewedBelt}
-              nextBelt={viewedNextBelt}
+              nextBelt={journeyNextBelt}
               requirements={viewedBeltRequirements}
               trialRecords={trialRecords}
               topicData={topicData}
@@ -3415,41 +3410,19 @@ function normalizeRequirements(requirements, dimensionId) {
   };
 }
 
-function BeltStepSummary({ currentBelt, targetBelt, nextBelt }) {
+function BeltStepSummary({ targetBelt }) {
   const stepGuide = BELT_GUIDE.find((guide) => guide.id === targetBelt?.id) || BELT_GUIDE[0];
-  const isCurrentStep = currentBelt?.id === targetBelt?.id;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-            {isCurrentStep ? "Current Dojo Step" : "Viewed Dojo Step"}
-          </p>
-          <h3 className="mt-2 text-xl font-semibold text-slate-950">{targetBelt.name}</h3>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{stepGuide.description}</p>
-          <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700">
-            {stepGuide.keyQuestion}
-          </p>
-        </div>
-
-        <div className="grid min-w-[260px] grid-cols-2 overflow-hidden rounded-lg border border-slate-200">
-          <div className="bg-slate-50 p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Current</p>
-            <p className="mt-1 font-semibold" style={{ color: currentBelt.color }}>
-              {currentBelt.name}
-            </p>
-            <p className="text-xs text-slate-500">{currentBelt.meaning}</p>
-          </div>
-          <div className="bg-white p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Next</p>
-            <p className="mt-1 font-semibold" style={{ color: nextBelt.color }}>
-              {nextBelt.name}
-            </p>
-            <p className="text-xs text-slate-500">{nextBelt.meaning}</p>
-          </div>
-        </div>
-      </div>
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+        Purpose of This Step
+      </p>
+      <h3 className="mt-2 text-xl font-semibold text-slate-950">{targetBelt.name}</h3>
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{stepGuide.description}</p>
+      <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+        {stepGuide.keyQuestion}
+      </p>
     </div>
   );
 }
@@ -3540,7 +3513,7 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
           )}
         </div>
         <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
-          {isViewingPastBelt ? "Earlier belt work" : `Earn ${safeNextBelt.name}`}
+          {isViewingPastBelt ? "Earlier belt work" : isViewingFutureBelt ? "Future belt work" : `Earn ${safeNextBelt.name}`}
         </span>
       </div>
 
