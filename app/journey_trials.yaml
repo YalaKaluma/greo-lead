@@ -543,37 +543,101 @@ dimensions:
           completion_hint: Alfred looks for your current execution pattern to be explicitly captured.
           display_order: 3
         story:
-          title: Kobe Bryant - 4 AM Workouts
+          title: The Aggregation of Marginal Gains
           theme: Discipline Compounds
           full_story: |-
-            Kobe Bryant became famous for his relentless training habits.
+            In 2003, British Cycling was struggling.
 
-            The story often told by teammates is that Kobe would begin training at 4 AM, long before most players arrived.
+            Despite a long history, British cyclists had achieved very little success on the world stage. For nearly a century, they had rarely won major international competitions and had never established themselves as a dominant force in the sport.
 
-            His advantage did not come from one extraordinary workout.
+            When Dave Brailsford became performance director, he introduced a simple idea:
 
-            It came from thousands of ordinary workouts repeated consistently over time.
+            Improve by 1%, consistently.
 
-            While competitors occasionally worked harder, Kobe worked consistently.
+            Not 50%.
 
-            The gap compounded year after year.
+            Not 100%.
 
-            Eventually what appeared to be talent was often the result of discipline accumulated over decades.
+            Just 1%.
+
+            Every day.
+
+            The team began searching for small improvements everywhere:
+
+            Better bike seats
+            Better tires
+            Better riding positions
+            Better nutrition
+            Better sleep
+            Better recovery
+            Better training environments
+
+            Individually, none of these changes seemed significant.
+
+            Most people would have ignored them.
+
+            But Brailsford understood something powerful:
+
+            Small improvements become extraordinary when they are applied consistently and allowed to compound over time.
+
+            The mathematics are remarkable.
+
+            If you improve by just 1% every day:
+
+            After one month:
+
+            1.01^30 = 1.35
+
+            You are already 35% better than when you started.
+
+            After one year:
+
+            1.01^365 ~= 37.8
+
+            You are nearly 38 times better than where you began.
+
+            The opposite is also true.
+
+            If you get 1% worse every day:
+
+            0.99^365 ~= 0.03
+
+            You finish the year with only a fraction of your original capability.
+
+            The lesson is not really about cycling.
+
+            It is about life.
+
+            Most people dramatically overestimate what they can accomplish in a day and underestimate what they can accomplish in a year.
+
+            Great leaders understand that success is rarely built through a single breakthrough.
+
+            It is built through small actions repeated consistently over time.
+
+            One habit.
+
+            One workout.
+
+            One difficult conversation.
+
+            One journal entry.
+
+            One decision.
+
+            None of them seem life-changing in the moment.
+
+            Together, they shape who you become.
           leadership_lesson: |-
-            Most people overestimate what they can accomplish in a day and underestimate what they can accomplish in five years.
+            Leadership excellence is rarely the result of heroic effort.
 
-            Great execution is built through consistency, not intensity.
-
-            Small disciplined actions compound into extraordinary outcomes.
-          key_message: Discipline compounds.
-          belt_purpose: Help users understand the importance of discipline and consistent execution before introducing more
-            advanced concepts.
+            It is the result of small improvements applied consistently and allowed to compound over time.
+          key_message: Small improvements compound into extraordinary outcomes.
+          belt_purpose: Help users understand the power of discipline and consistent execution.
           lessons:
-          - Most people overestimate what they can accomplish in a day and underestimate what they can accomplish in five
-            years.
-          - Great execution is built through consistency, not intensity.
-          - Small disciplined actions compound into extraordinary outcomes.
-          discussion_question: What small disciplined action would compound if you repeated it for the next five years?
+          - Leadership excellence is rarely the result of heroic effort.
+          - Small improvements become extraordinary when they are applied consistently.
+          - Success is built through small actions repeated over time.
+          discussion_question: What 1% improvement could compound if you practiced it consistently?
       yellow:
         criteria: Apply intentional systems for prioritization, focus, planning, and execution. Begin aligning daily behavior
           with strategic priorities instead of reactive impulses.
@@ -622,7 +686,7 @@ dimensions:
 
             But the system he designed protects him from himself.
           leadership_lesson: |-
-            Execution failures are often emotional failures.
+            Personal execution failures are often emotional failures.
 
             Fear, avoidance, perfectionism, distraction, uncertainty, and discomfort frequently pull us away from our intentions.
 
@@ -681,9 +745,9 @@ dimensions:
 
             Because they require less motivation.
           leadership_lesson: |-
-            Motivation fluctuates.
+            Motivation fluctuates, Systems endure.
 
-            Systems endure.
+            You do not rise to the level of your goals. You fall to the level of your systems.
 
             The goal is not to become more disciplined every day.
 
@@ -843,8 +907,8 @@ dimensions:
           title: Life Is a Marathon, Not a Sprint
           theme: Energy Awareness
           full_story: |-
-            When we are young, we often believe success comes from effort alone.
-            We work longer.
+            At the begining of the leadership journey, one often believes success comes from effort alone.
+            Work longer.
             Push harder.
             Take on more.
             For a while it works.

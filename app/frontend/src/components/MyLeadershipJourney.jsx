@@ -1674,18 +1674,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           <div className="flex flex-wrap gap-6">
           <button
             type="button"
-            onClick={() => setActiveJourneyTab("leadership")}
-            className={`relative px-2 pb-3 font-medium transition-colors ${
-              activeJourneyTab === "leadership" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            My Leadership
-            {activeJourneyTab === "leadership" && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-            )}
-          </button>
-          <button
-            type="button"
             onClick={() => setActiveJourneyTab("dojo")}
             className={`relative px-2 pb-3 font-medium transition-colors ${
               activeJourneyTab === "dojo" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
@@ -1693,6 +1681,18 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           >
             My Dojo
             {activeJourneyTab === "dojo" && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveJourneyTab("leadership")}
+            className={`relative px-2 pb-3 font-medium transition-colors ${
+              activeJourneyTab === "leadership" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            My Leadership
+            {activeJourneyTab === "leadership" && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
             )}
           </button>
@@ -1770,7 +1770,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           <LeadershipCoachingSessionsTab apiUrl={apiUrl} userNumber={userNumber} />
         ) : (
         <div className="grid gap-6 xl:grid-cols-[520px_minmax(0,1fr)]">
-          <section className="space-y-5">
+          <section className="order-2 space-y-5 xl:order-1">
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               <LeadershipWheel
                 selectedDimensionId={selectedDimensionId}
@@ -1796,7 +1796,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
             />
           </section>
 
-          <section className="space-y-5">
+          <section className="order-1 space-y-5 xl:order-2">
             <BeltStepSummary
               dimension={selectedDimension}
               targetBelt={viewedBelt}
