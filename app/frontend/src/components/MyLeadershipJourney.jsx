@@ -1819,6 +1819,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
               behavioralProgressDetail={viewedBehavioralProgressDetail}
               savingTrial={savingTrial}
               onStartTrial={handleStartTrial}
+              onNavigate={onNavigate}
             />
 
             {selectedDimension.mvp && <TelemetryPanel telemetry={telemetry} loading={loadingSignals} />}
@@ -3525,7 +3526,7 @@ function BeltStepSummary({ dimension, targetBelt, requirements }) {
   );
 }
 
-function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, requirements, trialRecords, realWorldStatus, realWorldProgressDetail, behavioralStatus, behavioralProgressDetail, savingTrial, onStartTrial }) {
+function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, requirements, trialRecords, realWorldStatus, realWorldProgressDetail, behavioralStatus, behavioralProgressDetail, savingTrial, onStartTrial, onNavigate }) {
   const safeTargetBelt = targetBelt || getBeltById("yellow");
   const safeNextBelt = nextBelt || getBeltById(getNextBeltId(safeTargetBelt.id));
   const safeRequirements = normalizeRequirements(requirements, dimension.id);
@@ -3579,6 +3580,11 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
   const activeCards = getActiveTrialTypes(safeRequirements).map((trialType, index) => {
     const requirement = safeRequirements[trialType] || {};
     const state = trialState[trialType] || {};
+    const canShareInGrowthJournal =
+      safeTargetBelt.id === "yellow" &&
+      ["energy", "learning"].includes(dimension.id) &&
+      ["real_world", "behavioral"].includes(trialType) &&
+      typeof onNavigate === "function";
     return {
       key: trialType,
       number: String(index + 1),
@@ -3591,6 +3597,8 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
       score: state.score,
       buttonLabel: state.buttonLabel,
       onClick: state.onClick,
+      secondaryButtonLabel: canShareInGrowthJournal ? "Share in Growth Journal" : null,
+      onSecondaryClick: canShareInGrowthJournal ? () => onNavigate("my-journal") : null,
     };
   });
 
@@ -3628,8 +3636,10 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
             feedback={card.feedback}
             score={card.score}
             buttonLabel={card.buttonLabel}
+            secondaryButtonLabel={card.secondaryButtonLabel}
             disabled={savingTrial}
             onClick={card.onClick}
+            onSecondaryClick={card.onSecondaryClick}
           />
         ))}
       </div>
@@ -3679,7 +3689,7 @@ function LeadershipStoryCard({ story }) {
   );
 }
 
-function RequirementCard({ number, title, body, footer, status, statusDetail, feedback, score, buttonLabel, disabled, onClick }) {
+function RequirementCard({ number, title, body, footer, status, statusDetail, feedback, score, buttonLabel, secondaryButtonLabel, disabled, onClick, onSecondaryClick }) {
   return (
     <article className="rounded-lg border border-slate-200 bg-[#fbfaf7] p-4">
       <div className="flex items-start gap-3">
@@ -3710,15 +3720,29 @@ function RequirementCard({ number, title, body, footer, status, statusDetail, fe
               <p className="mt-2 text-xs leading-5 text-slate-700">{feedback}</p>
             </div>
           )}
+          {(buttonLabel || secondaryButtonLabel) && (
+            <div className="mt-4 flex flex-wrap gap-2">
           {buttonLabel && (
             <button
               type="button"
               disabled={disabled}
               onClick={onClick}
-              className="mt-4 rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {buttonLabel}
             </button>
+          )}
+          {secondaryButtonLabel && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={onSecondaryClick}
+              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {secondaryButtonLabel}
+            </button>
+          )}
+            </div>
           )}
         </div>
       </div>

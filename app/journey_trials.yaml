@@ -880,27 +880,29 @@ dimensions:
         criteria: Learn how energy can be restored and renewed through deliberate recovery practices.
         reflection:
           title: Recovery Wisdom
-          prompt: What have you learned about the relationship between recovery, energy, and performance?
+          prompt: In your Growth Journal, reflect on what you have learned about the relationship between recovery, energy,
+            and performance.
           grading_focus:
           - habit awareness
           - environment awareness
           - relationship patterns
           - sustainability
-          completion_hint: Explain how recovery changes the quality and sustainability of your performance.
+          completion_hint: Use the Growth Journal to explain how recovery changes the quality and sustainability of your performance.
           display_order: 1
         real_world:
           title: Recovery Experiments
-          prompt: Test three recovery practices over two weeks. Which practices improved your energy, clarity, or performance
-            the most?
-          completion_hint: Treat recovery as an experiment and compare what actually renews you.
+          prompt: Test three recovery practices over two weeks, then share a Growth Journal reflection on which practices
+            improved your energy, clarity, or performance the most.
+          completion_hint: Treat recovery as an experiment, then use the Growth Journal to compare what actually renews you.
           display_order: 2
         behavioral:
           title: Build Recovery Habits
-          prompt: Create at least three habits in Alfred specifically designed to restore or protect your energy.
+          prompt: Create at least three habits in Alfred specifically designed to restore or protect your energy, and share
+            a Growth Journal reflection on what you notice.
           signals:
           - high_energy_habits_identified
           - three_energy_level_journals
-          completion_hint: Alfred looks for explicit recovery habits and energy-related reflection.
+          completion_hint: Alfred looks for explicit recovery habits and energy-related Growth Journal reflection.
           display_order: 3
         story:
           title: Sharpen the Saw
@@ -1159,30 +1161,32 @@ dimensions:
         criteria: Recognize the recurring beliefs, fears, assumptions, and behaviors that limit your growth.
         reflection:
           title: The Recurring Pattern
-          prompt: What recurring pattern, fear, belief, or behavior has limited your growth the most?
+          prompt: In your Growth Journal, reflect on what recurring pattern, fear, belief, or behavior has limited your growth
+            the most.
           grading_focus:
           - limiting belief
           - pattern recognition
           - fear awareness
           - ownership
-          completion_hint: Name the recurring inner pattern that most constrains your growth.
+          completion_hint: Use the Growth Journal to name the recurring inner pattern that most constrains your growth.
           display_order: 1
         real_world:
           title: Pattern Hunt
           active: true
-          prompt: Over a two-week period, observe your reactions, frustrations, fears, conflicts, and setbacks. Identify at
-            least one recurring pattern that repeatedly influences your behavior.
-          completion_hint: Observe your reactions long enough to identify a pattern behind them.
+          prompt: Over a two-week period, observe your reactions, frustrations, fears, conflicts, and setbacks. Then share
+            a Growth Journal reflection identifying at least one recurring pattern that repeatedly influences your behavior.
+          completion_hint: Use the Growth Journal to capture the pattern behind your reactions.
           display_order: 2
         behavioral:
           title: Pattern Reflection Journal
-          prompt: Complete 3 journal reflections exploring how past scars, failures, and recurring patterns continue to influence
-            your current behavior.
+          prompt: Complete 3 Growth Journal reflections exploring how past scars, failures, and recurring patterns continue
+            to influence your current behavior.
           signals:
           - three_behavior_change_journals
           - self_awareness_reflections
           - scars_failures_behavior_reflections
-          completion_hint: Alfred looks for repeated reflection on how past experiences and patterns shape current behavior.
+          completion_hint: Alfred looks for repeated Growth Journal reflection on how past experiences and patterns shape
+            current behavior.
           display_order: 3
         story:
           title: Carl Jung and the Shadow
