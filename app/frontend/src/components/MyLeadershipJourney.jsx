@@ -1770,33 +1770,20 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           <LeadershipCoachingSessionsTab apiUrl={apiUrl} userNumber={userNumber} />
         ) : (
         <div className="grid gap-6 xl:grid-cols-[520px_minmax(0,1fr)]">
-          <section className="order-2 space-y-5 xl:order-1">
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <LeadershipWheel
-                selectedDimensionId={selectedDimensionId}
-                activeTopic={activeTopic}
-                dimensionStates={dimensionStates}
-                topicData={topicData}
-                journeyBelt={journeyCurrentBelt}
-                onSelectDimension={handleSelectDimension}
-                onSelectSubdomain={handleSelectSubdomain}
-                onSelectCenter={() => setShowWheelModal(true)}
-              />
-            </div>
-
-            <TopicEvidencePanel
-              dimension={selectedDimension}
+          <div className="order-1 rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-start-1 xl:row-start-1">
+            <LeadershipWheel
+              selectedDimensionId={selectedDimensionId}
               activeTopic={activeTopic}
-              setActiveTopic={setActiveTopic}
-              items={topicItems}
-              promptConfig={subdomainPromptConfig}
-              onNavigate={onNavigate}
-              onAddItem={handleAddSubdomainItem}
-              onEditItem={handleEditSubdomainItem}
+              dimensionStates={dimensionStates}
+              topicData={topicData}
+              journeyBelt={journeyCurrentBelt}
+              onSelectDimension={handleSelectDimension}
+              onSelectSubdomain={handleSelectSubdomain}
+              onSelectCenter={() => setShowWheelModal(true)}
             />
-          </section>
+          </div>
 
-          <section className="order-1 space-y-5 xl:order-2">
+          <section className="order-2 space-y-5 xl:col-start-2 xl:row-span-2 xl:row-start-1">
             <BeltStepSummary
               dimension={selectedDimension}
               targetBelt={viewedBelt}
@@ -1824,6 +1811,19 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
 
             {selectedDimension.mvp && <TelemetryPanel telemetry={telemetry} loading={loadingSignals} />}
           </section>
+
+          <div className="order-3 xl:col-start-1 xl:row-start-2">
+            <TopicEvidencePanel
+              dimension={selectedDimension}
+              activeTopic={activeTopic}
+              setActiveTopic={setActiveTopic}
+              items={topicItems}
+              promptConfig={subdomainPromptConfig}
+              onNavigate={onNavigate}
+              onAddItem={handleAddSubdomainItem}
+              onEditItem={handleEditSubdomainItem}
+            />
+          </div>
         </div>
         )}
       </div>

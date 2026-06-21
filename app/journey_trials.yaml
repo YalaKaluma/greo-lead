@@ -720,9 +720,11 @@ dimensions:
           display_order: 2
         behavioral:
           title: Behavioral Evidence
-          prompt: Review at least 5 MTN classifications to teach the system how you prioritize.
+          prompt: Update your executive system in light of what you learned. Set up at least 3 habits that your executive
+            system will rely on
           signals:
-          - mtn_classifications_reviewed
+          - executive_system_updated
+          - execution_lessons_integrated
           completion_hint: Alfred counts MTN classification reviews in the background.
           display_order: 3
         story:
@@ -781,8 +783,7 @@ dimensions:
           display_order: 2
         behavioral:
           title: Behavioral Evidence
-          prompt: Update your executive system in light of what you learned. Set up at least 3 habits that your executive
-            system will rely on
+          prompt: Review the habits powering your executive system after using them for a couple of weeks. Update your habits based on what you learned. 
           signals:
           - executive_system_updated
           - execution_lessons_integrated
