@@ -263,7 +263,7 @@ dimensions:
           title: ''
           theme: ''
           full_story: ''
-          lessons: []
+          lessons: &id001 []
           discussion_question: ''
   people:
     name: People
@@ -506,7 +506,7 @@ dimensions:
           title: ''
           theme: ''
           full_story: ''
-          lessons: []
+          lessons: *id001
           discussion_question: ''
   execute:
     name: Prioritize & Execute
@@ -543,11 +543,37 @@ dimensions:
           completion_hint: Alfred looks for your current execution pattern to be explicitly captured.
           display_order: 3
         story:
-          title: ''
-          theme: ''
-          full_story: ''
-          lessons: []
-          discussion_question: ''
+          title: Kobe Bryant - 4 AM Workouts
+          theme: Discipline Compounds
+          full_story: |-
+            Kobe Bryant became famous for his relentless training habits.
+
+            The story often told by teammates is that Kobe would begin training at 4 AM, long before most players arrived.
+
+            His advantage did not come from one extraordinary workout.
+
+            It came from thousands of ordinary workouts repeated consistently over time.
+
+            While competitors occasionally worked harder, Kobe worked consistently.
+
+            The gap compounded year after year.
+
+            Eventually what appeared to be talent was often the result of discipline accumulated over decades.
+          leadership_lesson: |-
+            Most people overestimate what they can accomplish in a day and underestimate what they can accomplish in five years.
+
+            Great execution is built through consistency, not intensity.
+
+            Small disciplined actions compound into extraordinary outcomes.
+          key_message: Discipline compounds.
+          belt_purpose: Help users understand the importance of discipline and consistent execution before introducing more
+            advanced concepts.
+          lessons:
+          - Most people overestimate what they can accomplish in a day and underestimate what they can accomplish in five
+            years.
+          - Great execution is built through consistency, not intensity.
+          - Small disciplined actions compound into extraordinary outcomes.
+          discussion_question: What small disciplined action would compound if you repeated it for the next five years?
       yellow:
         criteria: Apply intentional systems for prioritization, focus, planning, and execution. Begin aligning daily behavior
           with strategic priorities instead of reactive impulses.
@@ -577,11 +603,38 @@ dimensions:
           completion_hint: Alfred looks for task capture and maintenance becoming consistent.
           display_order: 3
         story:
-          title: ''
-          theme: ''
-          full_story: ''
-          lessons: []
-          discussion_question: ''
+          title: Odysseus and the Sirens
+          theme: Understanding Resistance
+          full_story: |-
+            In Greek mythology, Odysseus must sail past the Sirens.
+
+            Their songs are so powerful that sailors lose control and steer their ships toward destruction.
+
+            Odysseus understands that willpower alone may not be enough.
+
+            Before entering dangerous waters:
+
+            * He orders his crew to plug their ears.
+            * He asks to be tied to the mast.
+            * He instructs his crew to ignore his future requests for freedom.
+
+            When the Sirens begin singing, Odysseus desperately tries to break free.
+
+            But the system he designed protects him from himself.
+          leadership_lesson: |-
+            Execution failures are often emotional failures.
+
+            Fear, avoidance, perfectionism, distraction, uncertainty, and discomfort frequently pull us away from our intentions.
+
+            Before we can improve execution, we must understand the forces that repeatedly undermine it.
+          key_message: Understand your resistance before attempting to master it.
+          belt_purpose: Help users identify the emotional patterns that lead to procrastination, distraction, avoidance, and
+            execution failure.
+          lessons:
+          - Execution failures are often emotional failures.
+          - Fear, avoidance, perfectionism, distraction, uncertainty, and discomfort frequently pull us away from our intentions.
+          - Before we can improve execution, we must understand the forces that repeatedly undermine it.
+          discussion_question: What force most often pulls you away from your intentions?
       green:
         criteria: Integrate discipline, prioritization, focus, and execution into a stable operating system that remains effective
           under pressure, uncertainty, and competing demands.
@@ -609,11 +662,40 @@ dimensions:
           completion_hint: Alfred counts MTN classification reviews in the background.
           display_order: 3
         story:
-          title: ''
-          theme: ''
-          full_story: ''
-          lessons: []
-          discussion_question: ''
+          title: Atomic Habits
+          theme: Systems Beat Motivation
+          full_story: |-
+            Many people assume high performers have more motivation.
+
+            The central lesson of Atomic Habits is that sustainable success comes from systems, not motivation.
+
+            Two people may have the same goal.
+
+            One relies on discipline and willpower.
+
+            The other designs routines, triggers, environments, habits, and review mechanisms that make success easier.
+
+            Over time, the second person consistently outperforms the first.
+
+            Not because they are stronger.
+
+            Because they require less motivation.
+          leadership_lesson: |-
+            Motivation fluctuates.
+
+            Systems endure.
+
+            The goal is not to become more disciplined every day.
+
+            The goal is to build systems that make disciplined behavior easier and more automatic.
+          key_message: Systems beat motivation.
+          belt_purpose: Help users design personal operating systems using routines, habits, reviews, triggers, checklists,
+            and environmental design.
+          lessons:
+          - Motivation fluctuates.
+          - Systems endure.
+          - The goal is to build systems that make disciplined behavior easier and more automatic.
+          discussion_question: What system would make your most important disciplined behavior easier?
       brown:
         criteria: Develop the ability to help others improve their execution, prioritization, discipline, and operational
           effectiveness through systems, coaching, and example.
@@ -642,11 +724,55 @@ dimensions:
           completion_hint: Alfred looks for your execution system evolving from lived learning.
           display_order: 3
         story:
-          title: ''
-          theme: ''
-          full_story: ''
-          lessons: []
-          discussion_question: ''
+          title: Toyota Production System
+          theme: Building an Operating Model
+          full_story: |-
+            In the 1950s Toyota was significantly smaller than its competitors.
+
+            Toyota could not compete through scale alone.
+
+            Instead, it focused on creating an operating model that enabled reliable execution.
+
+            Toyota became known for four principles:
+
+            1. Clarity
+
+               * Everyone understands what success looks like.
+               * Processes are clearly defined.
+
+            2. Ownership
+
+               * Every activity has a clear owner.
+               * Accountability is explicit.
+
+            3. Accountability
+
+               * Performance is visible.
+               * Results are measured.
+
+            4. Governance
+
+               * Teams operate through regular review rhythms.
+               * Issues are surfaced early and escalated appropriately.
+
+            Toyota's success was not built on heroic employees.
+
+            It was built on an operating model that allowed ordinary people to consistently produce extraordinary results.
+          leadership_lesson: |-
+            As leaders grow, execution can no longer depend on personal effort alone.
+
+            Execution must become embedded within teams through ownership, accountability, governance, and operating mechanisms.
+
+            The leader shifts from being the executor to being the architect.
+          key_message: Great leaders build operating models, not heroic teams.
+          belt_purpose: Teach users how to scale execution through teams by creating clarity, ownership, accountability, governance,
+            and decision-making structures.
+          lessons:
+          - As leaders grow, execution can no longer depend on personal effort alone.
+          - Execution must become embedded within teams through ownership, accountability, governance, and operating mechanisms.
+          - The leader shifts from being the executor to being the architect.
+          discussion_question: Where does your execution still depend too much on personal effort instead of an operating
+            model?
       black:
         criteria: Helps others execute effectively.
         reflection:
@@ -677,7 +803,7 @@ dimensions:
           title: ''
           theme: ''
           full_story: ''
-          lessons: []
+          lessons: *id001
           discussion_question: ''
   energy:
     name: Time & Energy

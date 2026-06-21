@@ -3366,6 +3366,9 @@ function normalizeRequirements(requirements, dimensionId) {
       title: "",
       theme: "",
       full_story: "",
+      leadership_lesson: "",
+      key_message: "",
+      belt_purpose: "",
       lessons: [],
       discussion_question: "",
     },
@@ -3491,7 +3494,8 @@ function LeadershipStoryCard({ story }) {
   const hasStory = hasText(story?.title) || hasText(story?.full_story);
   const lessons = Array.isArray(story?.lessons) ? story.lessons.filter(hasText) : [];
   const fullStory = String(story?.full_story || "");
-  const shouldCollapse = fullStory.length > 520;
+  const leadershipLesson = String(story?.leadership_lesson || "");
+  const shouldCollapse = fullStory.length + leadershipLesson.length > 720;
 
   if (!hasStory) return null;
 
@@ -3506,6 +3510,26 @@ function LeadershipStoryCard({ story }) {
       {hasText(story?.theme) && (
         <p className="mt-1 text-sm font-semibold text-[#7c4a2d]">Theme: {story.theme}</p>
       )}
+      {(hasText(story?.key_message) || hasText(story?.belt_purpose)) && (
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          {hasText(story?.key_message) && (
+            <div className="rounded-lg border border-amber-200 bg-white/70 p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+                Key Message
+              </p>
+              <p className="mt-1 text-sm font-semibold leading-6 text-slate-900">{story.key_message}</p>
+            </div>
+          )}
+          {hasText(story?.belt_purpose) && (
+            <div className="rounded-lg border border-amber-200 bg-white/70 p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+                Belt Purpose
+              </p>
+              <p className="mt-1 text-sm leading-6 text-slate-800">{story.belt_purpose}</p>
+            </div>
+          )}
+        </div>
+      )}
       {hasText(fullStory) && (
         <p
           className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-800"
@@ -3519,6 +3543,14 @@ function LeadershipStoryCard({ story }) {
           {fullStory}
         </p>
       )}
+      {hasText(leadershipLesson) && (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-white/70 p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+            Leadership Lesson
+          </p>
+          <p className="mt-1 whitespace-pre-line text-sm leading-6 text-slate-800">{leadershipLesson}</p>
+        </div>
+      )}
       {lessons.length > 0 && (!shouldCollapse || expanded) && (
         <div className="mt-4">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
@@ -3527,7 +3559,7 @@ function LeadershipStoryCard({ story }) {
           <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-700">
             {lessons.map((lesson) => (
               <li key={lesson} className="flex gap-2">
-                <span aria-hidden="true">•</span>
+                <span aria-hidden="true">-</span>
                 <span>{lesson}</span>
               </li>
             ))}
