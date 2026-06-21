@@ -300,26 +300,34 @@ dimensions:
           title: The Young Samurai and the Mirror
           theme: Self-Awareness
           full_story: |-
-            A young samurai asks his master, "How do I become a great leader?"
+            A young samurai asks his master:
 
-            The master hands him a mirror and says, "First, learn to see yourself clearly."
+            "How do I become a great leader?"
 
-            For years, the student studies his strengths, fears, habits, and reactions.
+            The master hands him a mirror.
 
-            One day he returns and says, "Master, I know myself now. Am I ready to lead?"
+            The student looks confused.
 
-            The master takes the mirror away and points toward the village.
+            "I asked how to lead others," he says.
 
-            "Now learn how others experience you."
+            The master replies:
 
-            The student is confused.
+            "Before you can lead others, you must first learn to see yourself clearly."
 
-            The master explains, "The first lesson is self-awareness. The second lesson is understanding your impact. Leadership begins when both become true."
+            For years, the student studies his strengths, weaknesses, fears, habits, and reactions.
+
+            Slowly he begins to understand himself.
+
+            Only then does the master explain:
+
+            "Leadership always begins with self-awareness."
+
+            The student realizes that before he can guide others, he must first understand the person looking back at him in the mirror.
           lessons:
           - Leadership begins with self-awareness.
-          - Intent and impact are not always the same.
-          - To understand your leadership, become curious about how others experience you.
-          discussion_question: How might others experience your leadership differently from how you intend it?
+          - Before you can guide others, you must understand yourself clearly.
+          - Strengths, weaknesses, fears, habits, and reactions all shape how you lead.
+          discussion_question: What do you need to see more clearly about yourself before leading others?
       yellow:
         criteria: Understand how your behavior, emotions, communication style, and leadership presence impact other people.
           Begin developing awareness of trust, empathy, and relational patterns.
@@ -1253,17 +1261,39 @@ dimensions:
           title: Benjamin Franklin's Virtue System
           theme: Deliberate Growth
           full_story: |-
-            Benjamin Franklin believed personal growth should be intentional.
+            As a young man, Benjamin Franklin was ambitious, intelligent, and successful.
 
-            He did not wait for improvement to happen naturally.
+            But he was also frustrated.
 
-            Instead, he identified specific virtues he wanted to develop:
+            He noticed that despite his intelligence, he kept making the same mistakes.
 
-            - Discipline
-            - Humility
-            - Temperance
-            - Patience
-            - Order
+            Sometimes he was impatient.
+
+            Sometimes disorganized.
+
+            Sometimes arrogant.
+
+            Sometimes he failed to live according to the standards he set for himself.
+
+            Franklin realized something important:
+
+            Knowing the right thing to do was not enough.
+
+            He could see his weaknesses.
+
+            But awareness alone was not changing his behavior.
+
+            So he decided to approach personal growth differently.
+
+            Instead of hoping to become better, he created a system.
+
+            He identified the virtues he most wanted to develop:
+
+            Discipline
+            Humility
+            Temperance
+            Patience
+            Order
 
             Every day he tracked his behavior.
 
@@ -1271,28 +1301,30 @@ dimensions:
 
             Every month he adjusted his focus.
 
-            Franklin treated personal growth as a practice.
+            Over time, growth stopped being an aspiration.
 
-            He understood that awareness alone does not create change.
+            It became a practice.
 
-            Real growth happens when insights are translated into consistent action.
+            Franklin understood something many people still struggle to accept:
 
-            Over time, his system helped shape the leader, inventor, diplomat, and thinker he became.
+            Self-awareness does not create change.
 
-            Franklin's example reminds us that becoming a better person is not an accident.
+            Deliberate practice creates change.
 
-            It is the result of deliberate effort applied consistently over time.
+            The habits and systems he built helped shape the inventor, diplomat, writer, and statesman we remember today.
           leadership_lesson: |-
-            Self-awareness is valuable.
+            Many people understand their weaknesses.
 
-            But self-awareness without action does not create growth.
+            Far fewer systematically work to improve them.
+
+            Growth happens when insight is translated into repeated action.
           key_message: The person you become is shaped by what you practice repeatedly.
           belt_purpose: Help users intentionally transform self-awareness into meaningful behavioral change.
           lessons:
-          - Self-awareness is valuable.
-          - Self-awareness without action does not create growth.
-          - The person you become is shaped by what you practice repeatedly.
-          discussion_question: What are you deliberately practicing becoming?
+          - Many people understand their weaknesses.
+          - Far fewer systematically work to improve them.
+          - Growth happens when insight is translated into repeated action.
+          discussion_question: What weakness are you ready to turn into deliberate practice?
       brown:
         criteria: Help others grow by using questions, coaching, support, and feedback to develop greater self-awareness.
         reflection:
