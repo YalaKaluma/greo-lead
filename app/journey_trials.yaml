@@ -86,7 +86,8 @@ dimensions:
           and purpose.
         reflection:
           title: False Motivation
-          prompt: Describe a vision or direction you pursued for the wrong reasons. What truly drove it?
+          prompt: Describe a vision, goal, or direction you pursued that was not fully aligned with your values. What was
+            driving you at the time, and what did you learn from the experience?
           grading_focus:
           - motivation honesty
           - self-awareness
@@ -312,15 +313,7 @@ dimensions:
 
             The master replies:
 
-            "Before you can lead others, you must first learn to see yourself clearly."
-
-            For years, the student studies his strengths, weaknesses, fears, habits, and reactions.
-
-            Slowly he begins to understand himself.
-
-            Only then does the master explain:
-
-            "Leadership always begins with self-awareness."
+            "Before you can lead others, you must first learn to see yourself clearly. Leadership always begins with self-awareness."
 
             The student realizes that before he can guide others, he must first understand the person looking back at him in the mirror.
           lessons:
@@ -344,8 +337,8 @@ dimensions:
           display_order: 3
         real_world:
           title: Communication Feedback
-          prompt: Ask someone you trust for honest feedback about how you communicate, lead, or show up under stress. Reflect
-            on what surprised you most.
+          prompt: Ask someone you trust for honest feedback about how you show up under stress. Reflect on what surprised
+            you most.
           completion_hint: Invite honest feedback and look for what you did not already know.
           display_order: 2
         behavioral:
@@ -535,11 +528,10 @@ dimensions:
           completion_hint: Identify what was driving the execution pattern beneath the surface behavior.
           display_order: 1
         real_world:
-          active: false
-          title: Real-World Trial
-          prompt: Track your distractions, avoidance patterns, and reactive behaviors for one full week. Identify the situations,
-            emotions, or triggers most commonly associated with them.
-          completion_hint: Observe distraction and avoidance patterns long enough to see the triggers clearly.
+          active: true
+          title: Task Logging Practice
+          prompt: Start using Alfred's todolist feature consistently. Aim to log 10 Tasks in the next couple of weeks.
+          completion_hint: Alfred looks for early task capture and consistent use of the todolist feature.
           display_order: 2
         behavioral:
           title: Behavioral Evidence
@@ -725,7 +717,8 @@ dimensions:
           display_order: 2
         behavioral:
           title: Behavioral Evidence
-          prompt: Update your executive system in light of what you learned.
+          prompt: Update your executive system in light of what you learned. Set up at least 3 habits that your executive
+            system will rely on
           signals:
           - executive_system_updated
           - execution_lessons_integrated
