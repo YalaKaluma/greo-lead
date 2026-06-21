@@ -18,6 +18,7 @@ const BELTS = [
 ];
 
 const BELT_IDS = BELTS.map((belt) => belt.id);
+const VISIBLE_BELTS = BELTS.filter((belt) => belt.id !== "black");
 
 const BELT_GUIDE = [
   {
@@ -68,20 +69,6 @@ const BELT_GUIDE = [
     ],
     objective: "Multiplication",
     keyQuestion: "Can I help someone else grow?",
-  },
-  {
-    id: "black",
-    statement: "I create growth in others through the pieces.",
-    description: "At Black Belt, leadership becomes legacy.",
-    focus: [
-      "Develop people",
-      "Build teams",
-      "Create cultures",
-      "Inspire action",
-      "Leave others stronger than you found them",
-    ],
-    objective: "Transformation",
-    keyQuestion: "How many people are growing because I showed up?",
   },
 ];
 
@@ -924,7 +911,7 @@ function beltHasActiveTrialContent(config, dimensionId, beltId) {
 
 export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) {
   const { t } = useLanguage();
-  const [activeJourneyTab, setActiveJourneyTab] = useState("journey");
+  const [activeJourneyTab, setActiveJourneyTab] = useState("dojo");
   const [selectedDimensionId, setSelectedDimensionId] = useState("vision");
   const [signals, setSignals] = useState({
     goals: [],
@@ -1295,13 +1282,13 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   const journeyCurrentBelt = getBeltById(normalizedReadinessCurrentBelt);
   const journeyNextBelt = getBeltById(readinessStatus?.target_belt || getNextBeltId(journeyCurrentBelt.id));
   const isAssessmentLockedUntilYellow = readinessStatus?.assessment_locked_until_yellow || normalizedReadinessCurrentBelt === "white";
-  const availableTrialBelts = BELTS.filter((belt) =>
+  const availableTrialBelts = VISIBLE_BELTS.filter((belt) =>
     beltHasActiveTrialContent(trialConfig, selectedDimension.id, belt.id)
   );
 
   useEffect(() => {
     if (isAssessmentLockedUntilYellow && activeJourneyTab === "assessment") {
-      setActiveJourneyTab("journey");
+      setActiveJourneyTab("dojo");
     }
   }, [isAssessmentLockedUntilYellow, activeJourneyTab]);
 
@@ -1601,13 +1588,25 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           <div className="flex flex-wrap gap-6">
           <button
             type="button"
-            onClick={() => setActiveJourneyTab("journey")}
+            onClick={() => setActiveJourneyTab("leadership")}
             className={`relative px-2 pb-3 font-medium transition-colors ${
-              activeJourneyTab === "journey" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
+              activeJourneyTab === "leadership" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            {t('journey.map')}
-            {activeJourneyTab === "journey" && (
+            My Leadership
+            {activeJourneyTab === "leadership" && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveJourneyTab("dojo")}
+            className={`relative px-2 pb-3 font-medium transition-colors ${
+              activeJourneyTab === "dojo" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            My Dojo
+            {activeJourneyTab === "dojo" && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
             )}
           </button>
@@ -1654,7 +1653,15 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           </div>
         </div>
 
-        {!isAssessmentLockedUntilYellow && activeJourneyTab === "assessment" ? (
+        {activeJourneyTab === "leadership" ? (
+          <MyLeadershipTab
+            dimension={selectedDimension}
+            dimensionState={selectedState}
+            currentBelt={journeyCurrentBelt}
+            nextBelt={journeyNextBelt}
+            latestAssessment={latestAssessment}
+          />
+        ) : !isAssessmentLockedUntilYellow && activeJourneyTab === "assessment" ? (
           <BeltAssessmentTab
             readinessStatus={readinessStatus}
             latestAssessment={latestAssessment}
@@ -1704,15 +1711,13 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           </section>
 
           <section className="space-y-5">
-            {!isAssessmentLockedUntilYellow && (
-              <DimensionDeepDive
-                dimension={selectedDimension}
-                dimensionState={selectedState}
-                belt={journeyCurrentBelt}
-                nextBelt={journeyNextBelt}
-                latestAssessment={latestAssessment}
-              />
-            )}
+            <BeltStepSummary
+              currentBelt={journeyCurrentBelt}
+              targetBelt={viewedBelt}
+              nextBelt={viewedNextBelt}
+            />
+
+            <LeadershipStoryCard story={viewedBeltRequirements?.story} />
 
             <PathToNextBeltPanel
               dimension={selectedDimension}
@@ -1934,6 +1939,44 @@ function JourneyProgressReviewTab({
   );
 }
 
+function MyLeadershipTab({ dimension, dimensionState, currentBelt, nextBelt, latestAssessment }) {
+  const [selectedHeatmapSubdomain, setSelectedHeatmapSubdomain] = useState(null);
+  const assessment = latestAssessment ? directAssessmentCopy(latestAssessment) : null;
+  const wheelScores = assessment ? normalizeAssessmentWheel(assessment) : null;
+  const selectedSubdomain = selectedHeatmapSubdomain || firstHeatmapSelection(wheelScores);
+
+  return (
+    <div className="space-y-5">
+      <DimensionDeepDive
+        dimension={dimension}
+        dimensionState={dimensionState}
+        belt={currentBelt}
+        nextBelt={nextBelt}
+        latestAssessment={latestAssessment}
+      />
+
+      {wheelScores ? (
+        <>
+          <BeltHeatmapAssessment
+            wheelScores={wheelScores}
+            selected={selectedSubdomain}
+            onSelect={setSelectedHeatmapSubdomain}
+          />
+          <SubdomainDetailPanel selection={selectedSubdomain} />
+        </>
+      ) : (
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Leadership Wheel Heatmap</p>
+          <h3 className="mt-2 text-xl font-semibold text-slate-950">No heatmap yet</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+            Complete a belt assessment to unlock your latest leadership wheel heatmap.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LeadershipCoachingSessionsTab({ apiUrl, userNumber }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2141,18 +2184,15 @@ function BeltGuideModal({ onClose }) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-4 py-5 md:px-6">
-          <div className="grid min-w-[1180px] gap-4 xl:grid-cols-5">
+          <div className="grid min-w-[960px] gap-4 xl:grid-cols-4">
             {BELT_GUIDE.map((guide) => {
               const belt = getBeltById(guide.id);
-              const isBlackBelt = belt.id === "black";
 
               return (
                 <article key={guide.id} className="flex min-h-[520px] flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-start gap-3">
                     <span
-                      className={`mt-1 h-4 w-4 flex-none rounded-full border ${
-                        isBlackBelt ? "border-slate-950" : "border-slate-300"
-                      }`}
+                      className="mt-1 h-4 w-4 flex-none rounded-full border border-slate-300"
                       style={{ backgroundColor: belt.color }}
                     />
                     <div className="min-w-0">
@@ -3375,6 +3415,45 @@ function normalizeRequirements(requirements, dimensionId) {
   };
 }
 
+function BeltStepSummary({ currentBelt, targetBelt, nextBelt }) {
+  const stepGuide = BELT_GUIDE.find((guide) => guide.id === targetBelt?.id) || BELT_GUIDE[0];
+  const isCurrentStep = currentBelt?.id === targetBelt?.id;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+            {isCurrentStep ? "Current Dojo Step" : "Viewed Dojo Step"}
+          </p>
+          <h3 className="mt-2 text-xl font-semibold text-slate-950">{targetBelt.name}</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{stepGuide.description}</p>
+          <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+            {stepGuide.keyQuestion}
+          </p>
+        </div>
+
+        <div className="grid min-w-[260px] grid-cols-2 overflow-hidden rounded-lg border border-slate-200">
+          <div className="bg-slate-50 p-4">
+            <p className="text-xs uppercase tracking-wide text-slate-500">Current</p>
+            <p className="mt-1 font-semibold" style={{ color: currentBelt.color }}>
+              {currentBelt.name}
+            </p>
+            <p className="text-xs text-slate-500">{currentBelt.meaning}</p>
+          </div>
+          <div className="bg-white p-4">
+            <p className="text-xs uppercase tracking-wide text-slate-500">Next</p>
+            <p className="mt-1 font-semibold" style={{ color: nextBelt.color }}>
+              {nextBelt.name}
+            </p>
+            <p className="text-xs text-slate-500">{nextBelt.meaning}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, requirements, trialRecords, realWorldStatus, realWorldProgressDetail, behavioralStatus, behavioralProgressDetail, savingTrial, onStartTrial }) {
   const safeTargetBelt = targetBelt || getBeltById("yellow");
   const safeNextBelt = nextBelt || getBeltById(getNextBeltId(safeTargetBelt.id));
@@ -3465,8 +3544,6 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
         </span>
       </div>
 
-      <LeadershipStoryCard story={safeRequirements.story} />
-
       <div className={`grid gap-3 ${activeCards.length >= 3 ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
         {activeCards.map((card) => (
           <RequirementCard
@@ -3490,68 +3567,29 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
 }
 
 function LeadershipStoryCard({ story }) {
-  const [expanded, setExpanded] = useState(false);
   const hasStory = hasText(story?.title) || hasText(story?.full_story);
   const lessons = Array.isArray(story?.lessons) ? story.lessons.filter(hasText) : [];
   const fullStory = String(story?.full_story || "");
-  const leadershipLesson = String(story?.leadership_lesson || "");
-  const shouldCollapse = fullStory.length + leadershipLesson.length > 720;
 
   if (!hasStory) return null;
 
   return (
-    <article className="mb-4 rounded-lg border border-[#d4b27a] bg-[#fffaf0] p-4 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8a5a1f]">
+    <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
         Leadership Story
       </p>
       {hasText(story?.title) && (
-        <h4 className="mt-2 text-lg font-semibold text-slate-950">{story.title}</h4>
+        <h3 className="mt-2 text-xl font-semibold text-slate-950">{story.title}</h3>
       )}
       {hasText(story?.theme) && (
-        <p className="mt-1 text-sm font-semibold text-[#7c4a2d]">Theme: {story.theme}</p>
-      )}
-      {(hasText(story?.key_message) || hasText(story?.belt_purpose)) && (
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
-          {hasText(story?.key_message) && (
-            <div className="rounded-lg border border-amber-200 bg-white/70 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
-                Key Message
-              </p>
-              <p className="mt-1 text-sm font-semibold leading-6 text-slate-900">{story.key_message}</p>
-            </div>
-          )}
-          {hasText(story?.belt_purpose) && (
-            <div className="rounded-lg border border-amber-200 bg-white/70 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
-                Belt Purpose
-              </p>
-              <p className="mt-1 text-sm leading-6 text-slate-800">{story.belt_purpose}</p>
-            </div>
-          )}
-        </div>
+        <p className="mt-1 text-sm font-semibold text-slate-600">Theme: {story.theme}</p>
       )}
       {hasText(fullStory) && (
-        <p
-          className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-800"
-          style={shouldCollapse && !expanded ? {
-            display: "-webkit-box",
-            WebkitLineClamp: 7,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-          } : undefined}
-        >
+        <p className="mt-4 whitespace-pre-line text-sm leading-6 text-slate-700">
           {fullStory}
         </p>
       )}
-      {hasText(leadershipLesson) && (
-        <div className="mt-4 rounded-lg border border-amber-200 bg-white/70 p-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
-            Leadership Lesson
-          </p>
-          <p className="mt-1 whitespace-pre-line text-sm leading-6 text-slate-800">{leadershipLesson}</p>
-        </div>
-      )}
-      {lessons.length > 0 && (!shouldCollapse || expanded) && (
+      {lessons.length > 0 && (
         <div className="mt-4">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
             Key Lessons
@@ -3565,23 +3603,6 @@ function LeadershipStoryCard({ story }) {
             ))}
           </ul>
         </div>
-      )}
-      {hasText(story?.discussion_question) && (!shouldCollapse || expanded) && (
-        <div className="mt-4 rounded-lg border border-amber-200 bg-white/70 p-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
-            Reflection Question
-          </p>
-          <p className="mt-1 text-sm leading-6 text-slate-800">{story.discussion_question}</p>
-        </div>
-      )}
-      {shouldCollapse && (
-        <button
-          type="button"
-          onClick={() => setExpanded((current) => !current)}
-          className="mt-4 rounded-md border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-50"
-        >
-          {expanded ? "Show less" : "Read full story"}
-        </button>
       )}
     </article>
   );
