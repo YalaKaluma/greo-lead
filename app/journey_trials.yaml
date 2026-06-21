@@ -695,7 +695,7 @@ dimensions:
           belt_purpose: Help users identify the emotional patterns that lead to procrastination, distraction, avoidance, and
             execution failure.
           lessons:
-          - Execution failures are often emotional failures.
+          - Personal execution failures are often emotional failures.
           - Fear, avoidance, perfectionism, distraction, uncertainty, and discomfort frequently pull us away from our intentions.
           - Before we can improve execution, we must understand the forces that repeatedly undermine it.
           discussion_question: What force most often pulls you away from your intentions?
@@ -756,8 +756,8 @@ dimensions:
           belt_purpose: Help users design personal operating systems using routines, habits, reviews, triggers, checklists,
             and environmental design.
           lessons:
-          - Motivation fluctuates.
-          - Systems endure.
+          - You do not rise to the level of your goals. You fall to the level of your systems.
+          - Motivation fluctuates, Systems endures
           - The goal is to build systems that make disciplined behavior easier and more automatic.
           discussion_question: What system would make your most important disciplined behavior easier?
       brown:
