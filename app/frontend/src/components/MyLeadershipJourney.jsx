@@ -195,6 +195,97 @@ const WHY_IT_MATTERS = {
   "Development Plan": "Insight only compounds when it leads to deliberate action.",
 };
 
+const BELT_DOMAIN_PURPOSES = {
+  white: {
+    vision: {
+      purpose: "Discover what truly matters and begin defining your direction.",
+      why: "If you do not know where you are going, achievement alone will not create fulfillment.",
+    },
+    people: {
+      purpose: "Develop self-awareness and understand how you show up as a leader.",
+      why: "Leadership begins with understanding yourself before trying to influence others.",
+    },
+    execute: {
+      purpose: "Understand the power of discipline and consistent execution.",
+      why: "Extraordinary results come from small actions repeated consistently over time.",
+    },
+    energy: {
+      purpose: "Recognize that energy is finite and learn to observe it.",
+      why: "Energy is the fuel behind performance, leadership, and fulfillment.",
+    },
+    learning: {
+      purpose: "Learn from failure and turn setbacks into self-knowledge.",
+      why: "Growth begins when failures become lessons instead of regrets.",
+    },
+  },
+  yellow: {
+    vision: {
+      purpose: "Understand the motivations behind your goals and align them with your values.",
+      why: "Many people pursue goals that are not truly theirs. Alignment creates meaning and energy.",
+    },
+    people: {
+      purpose: "Understand the impact your behavior has on others.",
+      why: "Leadership is measured by impact, not intention.",
+    },
+    execute: {
+      purpose: "Understand the emotional forces that undermine execution.",
+      why: "Fear, avoidance, distraction, and perfectionism often sabotage execution more than lack of ability.",
+    },
+    energy: {
+      purpose: "Learn how to restore and renew your energy.",
+      why: "Recovery is not a luxury. It is a prerequisite for sustainable performance.",
+    },
+    learning: {
+      purpose: "Identify the recurring patterns, fears, and beliefs limiting growth.",
+      why: "What remains unconscious continues to repeat itself.",
+    },
+  },
+  green: {
+    vision: {
+      purpose: "Align your life, energy, strengths, and goals into a coherent whole.",
+      why: "Success becomes sustainable when your priorities reinforce each other instead of competing.",
+    },
+    people: {
+      purpose: "Build capability in others through trust and delegation.",
+      why: "Great leaders create independence and growth rather than dependence.",
+    },
+    execute: {
+      purpose: "Build systems that make execution easier and more reliable.",
+      why: "Sustainable execution depends on systems, not willpower.",
+    },
+    energy: {
+      purpose: "Invest energy intentionally and protect it through systems.",
+      why: "Not everything deserves your energy. High performers allocate it deliberately.",
+    },
+    learning: {
+      purpose: "Transform self-awareness into deliberate growth.",
+      why: "Awareness creates insight; deliberate practice creates change.",
+    },
+  },
+  brown: {
+    vision: {
+      purpose: "Help others discover purpose, alignment, and direction.",
+      why: "Leadership reaches a higher level when your clarity helps others find their own.",
+    },
+    people: {
+      purpose: "Multiply leadership by developing others.",
+      why: "Leadership scales when you help others become leaders themselves.",
+    },
+    execute: {
+      purpose: "Create operating models that enable teams to execute consistently.",
+      why: "Leadership eventually shifts from doing the work to designing how the work gets done.",
+    },
+    energy: {
+      purpose: "Become a source of energy for others.",
+      why: "The highest form of energy leadership is elevating the people around you.",
+    },
+    learning: {
+      purpose: "Help others recognize patterns and accelerate growth.",
+      why: "The highest expression of wisdom is helping others develop it themselves.",
+    },
+  },
+};
+
 const LEADERSHIP_QUADRANT_LABELS = {
   vision_goals: "Vision",
   vision: "Vision",
@@ -3419,8 +3510,9 @@ function getFirstSentence(value) {
 
 function BeltStepSummary({ dimension, targetBelt, requirements }) {
   const stepGuide = BELT_GUIDE.find((guide) => guide.id === targetBelt?.id) || BELT_GUIDE[0];
-  const purpose = getFirstSentence(requirements?.criteria) || stepGuide.description;
-  const whyItMatters = `This step matters because ${dimension.name.toLowerCase()} growth at the ${targetBelt.shortName.toLowerCase()} belt level turns the idea into focused practice before you move on.`;
+  const purposeCopy = BELT_DOMAIN_PURPOSES[targetBelt?.id]?.[dimension?.id];
+  const purpose = purposeCopy?.purpose || getFirstSentence(requirements?.criteria) || stepGuide.description;
+  const whyItMatters = purposeCopy?.why || "This step turns the idea into focused practice before you move on.";
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
