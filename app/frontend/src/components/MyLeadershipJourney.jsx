@@ -3420,16 +3420,15 @@ function getFirstSentence(value) {
 function BeltStepSummary({ dimension, targetBelt, requirements }) {
   const stepGuide = BELT_GUIDE.find((guide) => guide.id === targetBelt?.id) || BELT_GUIDE[0];
   const purpose = getFirstSentence(requirements?.criteria) || stepGuide.description;
+  const whyItMatters = `This step matters because ${dimension.name.toLowerCase()} growth at the ${targetBelt.shortName.toLowerCase()} belt level turns the idea into focused practice before you move on.`;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
         Purpose of This Step
       </p>
-      <h3 className="mt-2 text-xl font-semibold text-slate-950">
-        {targetBelt.name} in {dimension.name}
-      </h3>
-      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{purpose}</p>
+      <h3 className="mt-2 text-xl font-semibold text-slate-950">{purpose}</h3>
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{whyItMatters}</p>
     </div>
   );
 }
