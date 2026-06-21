@@ -18,6 +18,7 @@ const BELTS = [
 ];
 
 const BELT_IDS = BELTS.map((belt) => belt.id);
+const VISIBLE_BELTS = BELTS.filter((belt) => belt.id !== "black");
 
 const BELT_GUIDE = [
   {
@@ -68,20 +69,6 @@ const BELT_GUIDE = [
     ],
     objective: "Multiplication",
     keyQuestion: "Can I help someone else grow?",
-  },
-  {
-    id: "black",
-    statement: "I create growth in others through the pieces.",
-    description: "At Black Belt, leadership becomes legacy.",
-    focus: [
-      "Develop people",
-      "Build teams",
-      "Create cultures",
-      "Inspire action",
-      "Leave others stronger than you found them",
-    ],
-    objective: "Transformation",
-    keyQuestion: "How many people are growing because I showed up?",
   },
 ];
 
@@ -206,6 +193,97 @@ const WHY_IT_MATTERS = {
   "Failures & Scars": "Unexamined experiences tend to repeat. Reflection turns experience into information.",
   "Development Opportunities": "Growth often hides inside discomfort. Naming it creates direction.",
   "Development Plan": "Insight only compounds when it leads to deliberate action.",
+};
+
+const BELT_DOMAIN_PURPOSES = {
+  white: {
+    vision: {
+      purpose: "Discover what truly matters and begin defining your direction.",
+      why: "If you do not know where you are going, achievement alone will not create fulfillment.",
+    },
+    people: {
+      purpose: "Develop self-awareness and understand how you show up as a leader.",
+      why: "Leadership begins with understanding yourself before trying to influence others.",
+    },
+    execute: {
+      purpose: "Understand the power of discipline and consistent execution.",
+      why: "Extraordinary results come from small actions repeated consistently over time.",
+    },
+    energy: {
+      purpose: "Recognize that energy is finite and learn to observe it.",
+      why: "Energy is the fuel behind performance, leadership, and fulfillment.",
+    },
+    learning: {
+      purpose: "Learn from failure and turn setbacks into self-knowledge.",
+      why: "Growth begins when failures become lessons instead of regrets.",
+    },
+  },
+  yellow: {
+    vision: {
+      purpose: "Understand the motivations behind your goals and align them with your values.",
+      why: "Many people pursue goals that are not truly theirs. Alignment creates meaning and energy.",
+    },
+    people: {
+      purpose: "Understand the impact your behavior has on others.",
+      why: "Leadership is measured by impact, not intention.",
+    },
+    execute: {
+      purpose: "Understand the emotional forces that undermine execution.",
+      why: "Fear, avoidance, distraction, and perfectionism often sabotage execution more than lack of ability.",
+    },
+    energy: {
+      purpose: "Learn how to restore and renew your energy.",
+      why: "Recovery is not a luxury. It is a prerequisite for sustainable performance.",
+    },
+    learning: {
+      purpose: "Identify the recurring patterns, fears, and beliefs limiting growth.",
+      why: "What remains unconscious continues to repeat itself.",
+    },
+  },
+  green: {
+    vision: {
+      purpose: "Align your life, energy, strengths, and goals into a coherent whole.",
+      why: "Success becomes sustainable when your priorities reinforce each other instead of competing.",
+    },
+    people: {
+      purpose: "Build capability in others through trust and delegation.",
+      why: "Great leaders create independence and growth rather than dependence.",
+    },
+    execute: {
+      purpose: "Build systems that make execution easier and more reliable.",
+      why: "Sustainable execution depends on systems, not willpower.",
+    },
+    energy: {
+      purpose: "Invest energy intentionally and protect it through systems.",
+      why: "Not everything deserves your energy. High performers allocate it deliberately.",
+    },
+    learning: {
+      purpose: "Transform self-awareness into deliberate growth.",
+      why: "Awareness creates insight; deliberate practice creates change.",
+    },
+  },
+  brown: {
+    vision: {
+      purpose: "Help others discover purpose, alignment, and direction.",
+      why: "Leadership reaches a higher level when your clarity helps others find their own.",
+    },
+    people: {
+      purpose: "Multiply leadership by developing others.",
+      why: "Leadership scales when you help others become leaders themselves.",
+    },
+    execute: {
+      purpose: "Create operating models that enable teams to execute consistently.",
+      why: "Leadership eventually shifts from doing the work to designing how the work gets done.",
+    },
+    energy: {
+      purpose: "Become a source of energy for others.",
+      why: "The highest form of energy leadership is elevating the people around you.",
+    },
+    learning: {
+      purpose: "Help others recognize patterns and accelerate growth.",
+      why: "The highest expression of wisdom is helping others develop it themselves.",
+    },
+  },
 };
 
 const LEADERSHIP_QUADRANT_LABELS = {
@@ -571,10 +649,20 @@ function isRequirementActive(requirement) {
   return requirement?.active !== false;
 }
 
+const TRIAL_TYPES = ["reflection", "real_world", "behavioral"];
+
 function getActiveTrialTypes(requirements) {
-  return ["reflection", "real_world", "behavioral"].filter((trialType) =>
-    isRequirementActive(requirements?.[trialType])
-  );
+  return TRIAL_TYPES
+    .filter((trialType) => isRequirementActive(requirements?.[trialType]))
+    .sort((first, second) => {
+      const firstOrder = Number.isFinite(requirements?.[first]?.display_order)
+        ? requirements[first].display_order
+        : TRIAL_TYPES.indexOf(first) + 1;
+      const secondOrder = Number.isFinite(requirements?.[second]?.display_order)
+        ? requirements[second].display_order
+        : TRIAL_TYPES.indexOf(second) + 1;
+      return firstOrder - secondOrder || TRIAL_TYPES.indexOf(first) - TRIAL_TYPES.indexOf(second);
+    });
 }
 
 function getStoredTrial(trialRecords, dimensionId, targetBeltId, trialType) {
@@ -905,9 +993,16 @@ function getBeltRequirementsFromConfig(config, dimensionId, beltId) {
   return FALLBACK_YELLOW_BELT_REQUIREMENTS[dimensionId];
 }
 
+function beltHasActiveTrialContent(config, dimensionId, beltId) {
+  const fullCurriculum = config?.dimensions?.[dimensionId]?.belts?.[beltId];
+  if (!fullCurriculum) return true;
+
+  return getActiveTrialTypes(normalizeRequirements(fullCurriculum, dimensionId)).length > 0;
+}
+
 export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) {
   const { t } = useLanguage();
-  const [activeJourneyTab, setActiveJourneyTab] = useState("journey");
+  const [activeJourneyTab, setActiveJourneyTab] = useState("dojo");
   const [selectedDimensionId, setSelectedDimensionId] = useState("vision");
   const [signals, setSignals] = useState({
     goals: [],
@@ -1162,7 +1257,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   const handleSelectDimension = (dimensionId) => {
     const nextDimension = DIMENSIONS.find((dimension) => dimension.id === dimensionId);
     setSelectedDimensionId(dimensionId);
-    setSelectedTrialBeltId(null);
     if (nextDimension?.topics?.length) {
       setActiveTopic(nextDimension.topics[0].label);
     }
@@ -1170,7 +1264,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
 
   const handleSelectSubdomain = (dimensionId, topic) => {
     setSelectedDimensionId(dimensionId);
-    setSelectedTrialBeltId(null);
     setActiveTopic(topic.label);
   };
 
@@ -1278,31 +1371,20 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   const journeyCurrentBelt = getBeltById(normalizedReadinessCurrentBelt);
   const journeyNextBelt = getBeltById(readinessStatus?.target_belt || getNextBeltId(journeyCurrentBelt.id));
   const isAssessmentLockedUntilYellow = readinessStatus?.assessment_locked_until_yellow || normalizedReadinessCurrentBelt === "white";
-  const availableTrialBelts = BELTS.filter(
-    (belt) => getBeltIndexById(belt.id) >= getBeltIndexById(journeyCurrentBelt.id)
+  const availableTrialBelts = VISIBLE_BELTS.filter((belt) =>
+    beltHasActiveTrialContent(trialConfig, selectedDimension.id, belt.id)
   );
 
   useEffect(() => {
-    if (
-      selectedTrialBeltId &&
-      getBeltIndexById(selectedTrialBeltId) < getBeltIndexById(journeyCurrentBelt.id)
-    ) {
-      setSelectedTrialBeltId(null);
-    }
-  }, [journeyCurrentBelt.id, selectedTrialBeltId]);
-
-  useEffect(() => {
     if (isAssessmentLockedUntilYellow && activeJourneyTab === "assessment") {
-      setActiveJourneyTab("journey");
+      setActiveJourneyTab("dojo");
     }
   }, [isAssessmentLockedUntilYellow, activeJourneyTab]);
 
-  const effectiveSelectedTrialBeltId = (
-    selectedTrialBeltId &&
-    getBeltIndexById(selectedTrialBeltId) >= getBeltIndexById(journeyCurrentBelt.id)
-  ) ? selectedTrialBeltId : null;
+  const effectiveSelectedTrialBeltId = BELT_IDS.includes(normalizeBeltId(selectedTrialBeltId))
+    ? normalizeBeltId(selectedTrialBeltId)
+    : null;
   const viewedBelt = getBeltById(effectiveSelectedTrialBeltId || journeyCurrentBelt.id);
-  const viewedNextBelt = getBeltById(getNextBeltId(viewedBelt.id));
   const viewedBeltRequirements = getBeltRequirementsFromConfig(
     trialConfig,
     selectedDimension.id,
@@ -1356,7 +1438,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
         journey_current_belt_id: journeyCurrentBelt.id,
         journey_next_belt_id: journeyNextBelt.id,
         viewed_belt_id: viewedBelt.id,
-        viewed_next_belt_id: viewedNextBelt.id,
         assessment_locked_until_yellow: Boolean(isAssessmentLockedUntilYellow),
         is_assessment_available: Boolean(readinessStatus?.is_assessment_available),
         is_eligible_to_submit: Boolean(readinessStatus?.is_eligible_to_submit),
@@ -1380,7 +1461,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
     journeyCurrentBelt.id,
     journeyNextBelt.id,
     viewedBelt.id,
-    viewedNextBelt.id,
     isAssessmentLockedUntilYellow,
   ]);
 
@@ -1594,13 +1674,25 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           <div className="flex flex-wrap gap-6">
           <button
             type="button"
-            onClick={() => setActiveJourneyTab("journey")}
+            onClick={() => setActiveJourneyTab("leadership")}
             className={`relative px-2 pb-3 font-medium transition-colors ${
-              activeJourneyTab === "journey" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
+              activeJourneyTab === "leadership" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            {t('journey.map')}
-            {activeJourneyTab === "journey" && (
+            My Leadership
+            {activeJourneyTab === "leadership" && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveJourneyTab("dojo")}
+            className={`relative px-2 pb-3 font-medium transition-colors ${
+              activeJourneyTab === "dojo" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            My Dojo
+            {activeJourneyTab === "dojo" && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
             )}
           </button>
@@ -1647,7 +1739,15 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           </div>
         </div>
 
-        {!isAssessmentLockedUntilYellow && activeJourneyTab === "assessment" ? (
+        {activeJourneyTab === "leadership" ? (
+          <MyLeadershipTab
+            dimension={selectedDimension}
+            dimensionState={selectedState}
+            currentBelt={journeyCurrentBelt}
+            nextBelt={journeyNextBelt}
+            latestAssessment={latestAssessment}
+          />
+        ) : !isAssessmentLockedUntilYellow && activeJourneyTab === "assessment" ? (
           <BeltAssessmentTab
             readinessStatus={readinessStatus}
             latestAssessment={latestAssessment}
@@ -1697,21 +1797,19 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           </section>
 
           <section className="space-y-5">
-            {!isAssessmentLockedUntilYellow && (
-              <DimensionDeepDive
-                dimension={selectedDimension}
-                dimensionState={selectedState}
-                belt={journeyCurrentBelt}
-                nextBelt={journeyNextBelt}
-                latestAssessment={latestAssessment}
-              />
-            )}
+            <BeltStepSummary
+              dimension={selectedDimension}
+              targetBelt={viewedBelt}
+              requirements={viewedBeltRequirements}
+            />
+
+            <LeadershipStoryCard story={viewedBeltRequirements?.story} />
 
             <PathToNextBeltPanel
               dimension={selectedDimension}
               currentBelt={journeyCurrentBelt}
               targetBelt={viewedBelt}
-              nextBelt={viewedNextBelt}
+              nextBelt={journeyNextBelt}
               requirements={viewedBeltRequirements}
               trialRecords={trialRecords}
               topicData={topicData}
@@ -1721,6 +1819,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
               behavioralProgressDetail={viewedBehavioralProgressDetail}
               savingTrial={savingTrial}
               onStartTrial={handleStartTrial}
+              onNavigate={onNavigate}
             />
 
             {selectedDimension.mvp && <TelemetryPanel telemetry={telemetry} loading={loadingSignals} />}
@@ -1922,6 +2021,44 @@ function JourneyProgressReviewTab({
             ))}
           </div>
         </section>
+      )}
+    </div>
+  );
+}
+
+function MyLeadershipTab({ dimension, dimensionState, currentBelt, nextBelt, latestAssessment }) {
+  const [selectedHeatmapSubdomain, setSelectedHeatmapSubdomain] = useState(null);
+  const assessment = latestAssessment ? directAssessmentCopy(latestAssessment) : null;
+  const wheelScores = assessment ? normalizeAssessmentWheel(assessment) : null;
+  const selectedSubdomain = selectedHeatmapSubdomain || firstHeatmapSelection(wheelScores);
+
+  return (
+    <div className="space-y-5">
+      <DimensionDeepDive
+        dimension={dimension}
+        dimensionState={dimensionState}
+        belt={currentBelt}
+        nextBelt={nextBelt}
+        latestAssessment={latestAssessment}
+      />
+
+      {wheelScores ? (
+        <>
+          <BeltHeatmapAssessment
+            wheelScores={wheelScores}
+            selected={selectedSubdomain}
+            onSelect={setSelectedHeatmapSubdomain}
+          />
+          <SubdomainDetailPanel selection={selectedSubdomain} />
+        </>
+      ) : (
+        <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Leadership Wheel Heatmap</p>
+          <h3 className="mt-2 text-xl font-semibold text-slate-950">No heatmap yet</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+            Complete a belt assessment to unlock your latest leadership wheel heatmap.
+          </p>
+        </div>
       )}
     </div>
   );
@@ -2134,18 +2271,15 @@ function BeltGuideModal({ onClose }) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-4 py-5 md:px-6">
-          <div className="grid min-w-[1180px] gap-4 xl:grid-cols-5">
+          <div className="grid min-w-[960px] gap-4 xl:grid-cols-4">
             {BELT_GUIDE.map((guide) => {
               const belt = getBeltById(guide.id);
-              const isBlackBelt = belt.id === "black";
 
               return (
                 <article key={guide.id} className="flex min-h-[520px] flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-start gap-3">
                     <span
-                      className={`mt-1 h-4 w-4 flex-none rounded-full border ${
-                        isBlackBelt ? "border-slate-950" : "border-slate-300"
-                      }`}
+                      className="mt-1 h-4 w-4 flex-none rounded-full border border-slate-300"
                       style={{ backgroundColor: belt.color }}
                     />
                     <div className="min-w-0">
@@ -3351,61 +3485,122 @@ function normalizeRequirements(requirements, dimensionId) {
   const fallback = FALLBACK_YELLOW_BELT_REQUIREMENTS[dimensionId] || FALLBACK_YELLOW_BELT_REQUIREMENTS.execute;
 
   return {
+    ...requirements,
     reflection: requirements?.reflection || fallback.reflection,
     real_world: requirements?.real_world || fallback.real_world,
     behavioral: requirements?.behavioral || fallback.behavioral,
+    story: requirements?.story || {
+      title: "",
+      theme: "",
+      full_story: "",
+      leadership_lesson: "",
+      key_message: "",
+      belt_purpose: "",
+      lessons: [],
+      discussion_question: "",
+    },
   };
 }
 
-function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, requirements, trialRecords, realWorldStatus, realWorldProgressDetail, behavioralStatus, behavioralProgressDetail, savingTrial, onStartTrial }) {
+function getFirstSentence(value) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  const match = text.match(/^.*?[.!?](?:\s|$)/);
+  return (match ? match[0] : text).trim();
+}
+
+function BeltStepSummary({ dimension, targetBelt, requirements }) {
+  const stepGuide = BELT_GUIDE.find((guide) => guide.id === targetBelt?.id) || BELT_GUIDE[0];
+  const purposeCopy = BELT_DOMAIN_PURPOSES[targetBelt?.id]?.[dimension?.id];
+  const purpose = purposeCopy?.purpose || getFirstSentence(requirements?.criteria) || stepGuide.description;
+  const whyItMatters = purposeCopy?.why || "This step turns the idea into focused practice before you move on.";
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+        Purpose of This Step
+      </p>
+      <h3 className="mt-2 text-xl font-semibold text-slate-950">{purpose}</h3>
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{whyItMatters}</p>
+    </div>
+  );
+}
+
+function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, requirements, trialRecords, realWorldStatus, realWorldProgressDetail, behavioralStatus, behavioralProgressDetail, savingTrial, onStartTrial, onNavigate }) {
   const safeTargetBelt = targetBelt || getBeltById("yellow");
   const safeNextBelt = nextBelt || getBeltById(getNextBeltId(safeTargetBelt.id));
   const safeRequirements = normalizeRequirements(requirements, dimension.id);
   const reflectionTrial = getStoredTrial(trialRecords, dimension.id, safeTargetBelt.id, "reflection");
   const realWorldTrial = getStoredTrial(trialRecords, dimension.id, safeTargetBelt.id, "real_world");
-  const isViewingCurrentBelt = currentBelt?.id === safeTargetBelt.id;
-  const activeCards = [
-    isRequirementActive(safeRequirements.reflection) && {
-      title: safeRequirements.reflection.title || "Reflection Trial",
-      body: safeRequirements.reflection.prompt,
-      footer: safeRequirements.reflection.completion_hint,
+  const currentBeltIndex = getBeltIndexById(currentBelt?.id);
+  const targetBeltIndex = getBeltIndexById(safeTargetBelt.id);
+  const isViewingCurrentBelt = currentBeltIndex === targetBeltIndex;
+  const isViewingPastBelt = targetBeltIndex < currentBeltIndex;
+  const isViewingFutureBelt = targetBeltIndex > currentBeltIndex;
+  const getReflectionButtonLabel = () => {
+    if (isViewingCurrentBelt) {
+      if (normalizeStatus(reflectionTrial?.status) === "needs_revision") return "Resubmit";
+      return reflectionTrial ? "Continue Reflection" : "Start Reflection";
+    }
+    if (isViewingPastBelt && reflectionTrial) return "Review Reflection";
+    return null;
+  };
+  const getRealWorldButtonLabel = () => {
+    if (isViewingCurrentBelt) {
+      if (normalizeStatus(realWorldTrial?.status) === "needs_revision") return "Resubmit";
+      return realWorldTrial ? "Log Trial" : "Start Trial";
+    }
+    if (isViewingPastBelt && realWorldTrial) return "Review Trial";
+    return null;
+  };
+  const trialState = {
+    reflection: {
+      fallbackTitle: "Reflection Trial",
       status: formatTrialStatus(reflectionTrial?.status),
       feedback: reflectionTrial?.ai_feedback,
       score: getLatestTrialScore(reflectionTrial),
-      buttonLabel: isViewingCurrentBelt
-        ? normalizeStatus(reflectionTrial?.status) === "needs_revision"
-          ? "Resubmit"
-          : reflectionTrial
-            ? "Continue Reflection"
-            : "Start Reflection"
-        : null,
+      buttonLabel: getReflectionButtonLabel(),
       onClick: () => onStartTrial("reflection", safeRequirements.reflection.prompt),
     },
-    isRequirementActive(safeRequirements.real_world) && {
-      title: safeRequirements.real_world.title || "Real-World Trial",
-      body: safeRequirements.real_world.prompt,
-      footer: safeRequirements.real_world.completion_hint,
+    real_world: {
+      fallbackTitle: "Real-World Trial",
       status: formatTrialStatus(realWorldStatus),
       statusDetail: normalizeStatus(realWorldStatus) !== "not_started" ? realWorldProgressDetail : null,
       feedback: realWorldTrial?.ai_feedback,
       score: getLatestTrialScore(realWorldTrial),
-      buttonLabel: isViewingCurrentBelt
-        ? normalizeStatus(realWorldTrial?.status) === "needs_revision"
-          ? "Resubmit"
-          : realWorldTrial
-            ? "Log Trial"
-            : "Start Trial"
-        : null,
+      buttonLabel: getRealWorldButtonLabel(),
       onClick: () => onStartTrial("real_world", safeRequirements.real_world.prompt),
     },
-    isRequirementActive(safeRequirements.behavioral) && {
-      title: safeRequirements.behavioral.title || "Behavioral Evidence",
-      body: safeRequirements.behavioral.prompt,
-      footer: safeRequirements.behavioral.completion_hint,
+    behavioral: {
+      fallbackTitle: "Behavioral Evidence",
       status: formatTrialStatus(behavioralStatus),
       statusDetail: normalizeStatus(behavioralStatus) !== "not_started" ? behavioralProgressDetail : null,
     },
-  ].filter(Boolean).map((card, index) => ({ ...card, number: String(index + 1) }));
+  };
+  const activeCards = getActiveTrialTypes(safeRequirements).map((trialType, index) => {
+    const requirement = safeRequirements[trialType] || {};
+    const state = trialState[trialType] || {};
+    const canShareInGrowthJournal =
+      safeTargetBelt.id === "yellow" &&
+      ["energy", "learning"].includes(dimension.id) &&
+      ["real_world", "behavioral"].includes(trialType) &&
+      typeof onNavigate === "function";
+    return {
+      key: trialType,
+      number: String(index + 1),
+      title: requirement.title || state.fallbackTitle,
+      body: requirement.prompt,
+      footer: requirement.completion_hint,
+      status: state.status,
+      statusDetail: state.statusDetail,
+      feedback: state.feedback,
+      score: state.score,
+      buttonLabel: state.buttonLabel,
+      onClick: state.onClick,
+      secondaryButtonLabel: canShareInGrowthJournal ? "Share in Growth Journal" : null,
+      onSecondaryClick: canShareInGrowthJournal ? () => onNavigate("my-journal") : null,
+    };
+  });
 
   return (
     <div className="rounded-lg border border-amber-200 bg-white p-5 shadow-sm">
@@ -3419,19 +3614,19 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
           </h3>
           {!isViewingCurrentBelt && (
             <p className="mt-1 text-xs font-semibold text-slate-500">
-              Previewing future requirements
+              {isViewingFutureBelt ? "Previewing future requirements" : "Reviewing earlier requirements"}
             </p>
           )}
         </div>
         <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
-          Earn {safeNextBelt.name}
+          {isViewingPastBelt ? "Earlier belt work" : isViewingFutureBelt ? "Future belt work" : `Earn ${safeNextBelt.name}`}
         </span>
       </div>
 
       <div className={`grid gap-3 ${activeCards.length >= 3 ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
         {activeCards.map((card) => (
           <RequirementCard
-            key={card.title}
+            key={card.key}
             number={card.number}
             title={card.title}
             body={card.body}
@@ -3441,8 +3636,10 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
             feedback={card.feedback}
             score={card.score}
             buttonLabel={card.buttonLabel}
+            secondaryButtonLabel={card.secondaryButtonLabel}
             disabled={savingTrial}
             onClick={card.onClick}
+            onSecondaryClick={card.onSecondaryClick}
           />
         ))}
       </div>
@@ -3450,7 +3647,49 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
   );
 }
 
-function RequirementCard({ number, title, body, footer, status, statusDetail, feedback, score, buttonLabel, disabled, onClick }) {
+function LeadershipStoryCard({ story }) {
+  const hasStory = hasText(story?.title) || hasText(story?.full_story);
+  const lessons = Array.isArray(story?.lessons) ? story.lessons.filter(hasText) : [];
+  const fullStory = String(story?.full_story || "");
+
+  if (!hasStory) return null;
+
+  return (
+    <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+        Leadership Story
+      </p>
+      {hasText(story?.title) && (
+        <h3 className="mt-2 text-xl font-semibold text-slate-950">{story.title}</h3>
+      )}
+      {hasText(story?.theme) && (
+        <p className="mt-1 text-sm font-semibold text-slate-600">Theme: {story.theme}</p>
+      )}
+      {hasText(fullStory) && (
+        <p className="mt-4 whitespace-pre-line text-sm leading-6 text-slate-700">
+          {fullStory}
+        </p>
+      )}
+      {lessons.length > 0 && (
+        <div className="mt-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+            Key Lessons
+          </p>
+          <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-700">
+            {lessons.map((lesson) => (
+              <li key={lesson} className="flex gap-2">
+                <span aria-hidden="true">-</span>
+                <span>{lesson}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function RequirementCard({ number, title, body, footer, status, statusDetail, feedback, score, buttonLabel, secondaryButtonLabel, disabled, onClick, onSecondaryClick }) {
   return (
     <article className="rounded-lg border border-slate-200 bg-[#fbfaf7] p-4">
       <div className="flex items-start gap-3">
@@ -3481,15 +3720,29 @@ function RequirementCard({ number, title, body, footer, status, statusDetail, fe
               <p className="mt-2 text-xs leading-5 text-slate-700">{feedback}</p>
             </div>
           )}
+          {(buttonLabel || secondaryButtonLabel) && (
+            <div className="mt-4 flex flex-wrap gap-2">
           {buttonLabel && (
             <button
               type="button"
               disabled={disabled}
               onClick={onClick}
-              className="mt-4 rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="rounded-md bg-slate-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {buttonLabel}
             </button>
+          )}
+          {secondaryButtonLabel && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={onSecondaryClick}
+              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {secondaryButtonLabel}
+            </button>
+          )}
+            </div>
           )}
         </div>
       </div>

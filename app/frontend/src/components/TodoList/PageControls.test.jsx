@@ -89,9 +89,12 @@ describe('TodoTabs and TaskColumnHeader', () => {
 
     render(<TodoTabs activeTab="tasks" showTaskTrends onChangeTab={onChangeTab} />);
 
+    fireEvent.click(screen.getByRole('button', { name: 'Calendar' }));
     fireEvent.click(screen.getByRole('button', { name: 'Trends' }));
 
-    expect(onChangeTab).toHaveBeenCalledWith('trends');
+    expect(screen.getByRole('button', { name: 'List' })).toBeInTheDocument();
+    expect(onChangeTab).toHaveBeenNthCalledWith(1, 'calendar');
+    expect(onChangeTab).toHaveBeenNthCalledWith(2, 'trends');
   });
 
   it('sorts task columns through the provided callback', () => {

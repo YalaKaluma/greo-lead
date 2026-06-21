@@ -6,7 +6,7 @@ from app.db import get_db
 from app.models import JourneyGoal, Task
 from pydantic import BaseModel
 from datetime import datetime, date, timedelta
-from typing import Optional, List
+from typing import Optional, List, Union
 from app.services.task_enrichment_service import enrich_task
 from app.services.timezone_service import get_user_timezone, today_for_timezone
 from app.services.task_mtn_trend_service import get_task_mtn_trends
@@ -43,7 +43,7 @@ class TaskCreate(BaseModel):
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     notes: Optional[str] = None
-    due_date: Optional[date] = None
+    due_date: Optional[Union[datetime, date]] = None
     priority: Optional[str] = None
     status: Optional[str] = None
     project: Optional[str] = None

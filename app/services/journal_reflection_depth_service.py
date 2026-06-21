@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.config import OPENAI_MODEL
 from app.models import Message
+from app.services.onboarding_seed_service import is_starter_journal_example
 from app.services.openai_service import client
 
 
@@ -356,7 +357,11 @@ def _build_coaching(current: float | None, previous: float | None, entries: list
     }
 
 
-def get_reflection_depth_trends(user_number: str, db: Session) -> dict[str, Any]:
+def get_reflection_depth_trends(
+    user_number: str,
+    db: Session,
+    include_starter_examples: bool = True,
+) -> dict[str, Any]:
     end_date = datetime.utcnow().date()
     start_date = end_date - timedelta(days=89)
     previous_start = end_date - timedelta(days=59)
@@ -373,6 +378,8 @@ def get_reflection_depth_trends(user_number: str, db: Session) -> dict[str, Any]
         .order_by(Message.timestamp.asc())
         .all()
     )
+    if not include_starter_examples:
+        entries = [entry for entry in entries if not is_starter_journal_example(entry)]
 
     current_entries = [entry for entry in entries if entry.timestamp and entry.timestamp.date() >= current_start]
     previous_entries = [

@@ -1,15 +1,20 @@
+import KpiInfoButton from '../KpiInfoButton';
+
 const scoreLabels = {
   discipline_score: {
     title: 'Discipline Score',
-    description: 'Overall completion rate'
+    description: 'Overall completion rate',
+    info: 'The 90-day habit completion rate, scaled from 0 to 100.'
   },
   consistency_score: {
     title: 'Consistency Score',
-    description: 'Reliability across weeks'
+    description: 'Reliability across weeks',
+    info: 'A 0-100 score that rewards steady weekly completion and subtracts for volatility between weeks.'
   },
   momentum_score: {
     title: 'Momentum Score',
-    description: 'Direction of travel'
+    description: 'Direction of travel',
+    info: 'A 0-100 score based on how the last 7 days compare with the 90-day habit baseline.'
   }
 };
 
@@ -21,7 +26,8 @@ export default function HabitScores({ scores }) {
       {Object.entries(scoreLabels).map(([key, config]) => {
         const value = scores[key] || 0;
         return (
-          <div key={key} className="rounded-lg border bg-white p-4">
+          <div key={key} className="relative rounded-lg border bg-white p-4">
+            <KpiInfoButton label={`About ${config.title}`}>{config.info}</KpiInfoButton>
             <div className="text-sm font-semibold text-slate-700">{config.title}</div>
             <div className="mt-2 flex items-end gap-1">
               <span className="text-3xl font-bold text-slate-900">{value}</span>

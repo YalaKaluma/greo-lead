@@ -102,7 +102,7 @@ describe('TaskMtnTrendsTab', () => {
           average_score: 4.9,
           trend: { label: 'Rising', delta_vs_30: 1.2 },
         },
-        last_30_days: { total_score: 120, active_days: 18 },
+        last_30_days: { total_score: 120, average_score: 4, active_days: 18 },
         last_90_days: { total_score: 300, completed_tasks: 80 },
         procrastination_ranking: [{
           id: 10,
@@ -124,6 +124,9 @@ describe('TaskMtnTrendsTab', () => {
 
     expect(screen.getByText('Today')).toBeInTheDocument();
     expect(screen.getByText('8.5')).toBeInTheDocument();
+    expect(screen.getByText('4.9')).toBeInTheDocument();
+    expect(screen.getByText('34.0 total MTN')).toBeInTheDocument();
+    expect(screen.getByText('120.0 total MTN, 18 active day(s)')).toBeInTheDocument();
     expect(screen.getByText('Rising')).toBeInTheDocument();
     expect(screen.getByText('+1.2 vs 30-day avg')).toBeInTheDocument();
     expect(screen.getByText('90-Day Total')).toBeInTheDocument();

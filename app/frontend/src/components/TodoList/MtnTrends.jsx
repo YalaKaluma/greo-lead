@@ -1,5 +1,6 @@
 import { Component, useState } from 'react';
 import TrendRangeToggle from '../TrendRangeToggle';
+import KpiInfoButton from '../KpiInfoButton';
 import { dateKey, formatShortDate } from '../../utils/todoDateLogic.js';
 import {
   buildMtnDateTicks,
@@ -140,9 +141,10 @@ export function MtnBreakdownModal({ score, tasks, date, timezone, onClose }) {
   );
 }
 
-function StatTile({ label, value, detail }) {
+function StatTile({ label, value, detail, info }) {
   return (
-    <div className="rounded-lg border bg-white p-4">
+    <div className="relative rounded-lg border bg-white p-4">
+      {info && <KpiInfoButton label={`About ${label}`}>{info}</KpiInfoButton>}
       <div className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</div>
       <div className="mt-2 text-2xl font-semibold text-slate-900">{value}</div>
       {detail && <div className="mt-1 text-sm text-slate-500">{detail}</div>}
@@ -206,7 +208,10 @@ function TaskMtnTrendChart({ data }) {
   const baselineY = MTN_CHART_HEIGHT - MTN_CHART_BOTTOM_PADDING;
 
   return (
-    <div className="rounded-lg border bg-white p-4">
+    <div className="relative rounded-lg border bg-white p-4">
+      <KpiInfoButton label="About the MTN score trend">
+        Shows daily MTN from completed tasks plus the 7-day rolling average used for the short-term trend.
+      </KpiInfoButton>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">MTN Score Trend</h2>
@@ -286,7 +291,10 @@ function TaskMtnHeatmap({ data }) {
   });
 
   return (
-    <div className="rounded-lg border bg-white p-4">
+    <div className="relative rounded-lg border bg-white p-4">
+      <KpiInfoButton label="About the MTN heatmap">
+        Shows the last 90 days of daily MTN activity. Darker green means higher MTN contribution on that day.
+      </KpiInfoButton>
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-800">MTN Heatmap</h2>
         <span className="text-xs text-slate-500">Last 90 days</span>
@@ -366,28 +374,35 @@ export function TaskMtnTrendsTab({ trends, loading, error }) {
           label="Today"
           value={formatMtnNumber(today.mtn_score)}
           detail={`${today.completed_tasks || 0} completed task(s)`}
+          info="Today's total MTN score from tasks completed today."
         />
         <StatTile
           label="Last 7 Days"
-          value={formatMtnNumber(last7.total_score)}
-          detail={`Avg ${formatMtnNumber(last7.average_score)} per day`}
+          value={formatMtnNumber(last7.average_score)}
+          detail={`${formatMtnNumber(last7.total_score)} total MTN`}
+          info="Average daily MTN over the last 7 days. This is the same headline MTN value used on the Executive dashboard."
         />
         <StatTile
           label="Last 30 Days"
-          value={formatMtnNumber(last30.total_score)}
-          detail={`${last30.active_days || 0} active day(s)`}
+          value={formatMtnNumber(last30.average_score)}
+          detail={`${formatMtnNumber(last30.total_score)} total MTN, ${last30.active_days || 0} active day(s)`}
+          info="Average daily MTN over the last 30 days. The Executive dashboard compares the 7-day average against this baseline."
         />
         <StatTile
           label="Momentum"
           value={last7.trend?.label || 'Stable'}
           detail={`${sign}${formatMtnNumber(delta)} vs 30-day avg`}
+          info="The difference between the 7-day average MTN score and the 30-day average MTN score."
         />
       </div>
 
       <TaskMtnTrendChart data={extractTrendChart(trends)} />
       <TaskMtnHeatmap data={extractTrendChart(trends)} />
 
-      <div className="rounded-lg border bg-white p-4">
+      <div className="relative rounded-lg border bg-white p-4">
+        <KpiInfoButton label="About 90-day total">
+          The cumulative MTN score from completed tasks over the last 90 days.
+        </KpiInfoButton>
         <h2 className="text-lg font-semibold text-slate-800">90-Day Total</h2>
         <div className="mt-2 text-3xl font-semibold text-slate-900">
           {formatMtnNumber(last90.total_score)}
@@ -406,7 +421,10 @@ function ProcrastinationRanking({ tasks }) {
   const rankedTasks = Array.isArray(tasks) ? tasks : [];
 
   return (
-    <div className="rounded-lg border bg-white p-4">
+    <div className="relative rounded-lg border bg-white p-4">
+      <KpiInfoButton label="About procrastination ranking">
+        Open tasks ranked by how often they were postponed, with MTN score used as a tie-breaker.
+      </KpiInfoButton>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Procrastination Ranking</h2>

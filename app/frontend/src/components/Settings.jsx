@@ -1,6 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useLanguage } from '../i18n/LanguageContext';
+import {
+  disableNotifications,
+  enableNotifications,
+  getIosInstallHint,
+  getNotificationStatus,
+  getNotificationSupport,
+  sendTestNotification,
+  updateNotificationPreferences
+} from '../services/notifications';
 
 const TIMEZONE_OPTIONS = [
   { value: 'America/New_York', label: 'Eastern Time - New York' },
@@ -254,20 +263,211 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
         )}
 
         {activeTab === 'notifications' && (
-          <section className="py-8">
-            <div className="max-w-xl">
-              <h2 className="text-sm font-semibold text-slate-900">Notifications</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                Notification preferences are handled through your Alfred conversation for now.
-              </p>
-            </div>
-          </section>
+          <NotificationSettingsPanel apiUrl={apiUrl} userNumber={userNumber} />
         )}
 
         {activeTab === 'admin' && currentUser?.is_admin && (
           <AdminUserManagement apiUrl={apiUrl} userNumber={userNumber} />
         )}
       </div>
+    </div>
+  );
+}
+
+function NotificationSettingsPanel({ apiUrl, userNumber }) {
+  const [support, setSupport] = useState(() => getNotificationSupport());
+  const [status, setStatus] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isWorking, setIsWorking] = useState(false);
+  const [message, setMessage] = useState(null);
+  const [error, setError] = useState(null);
+
+  const iosHint = getIosInstallHint();
+  const activeCount = status?.active_subscription_count || 0;
+  const permissionLabel = support.permission === 'default' ? 'Not asked yet' : support.permission;
+  const canEnable = support.supported && support.permission !== 'denied' && Boolean(status?.vapid_public_key);
+
+  const refreshStatus = async () => {
+    if (!userNumber) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      setSupport(getNotificationSupport());
+      const nextStatus = await getNotificationStatus(apiUrl, userNumber);
+      setStatus(nextStatus);
+    } catch (requestError) {
+      setError(requestError.message || 'Alfred could not load notification status.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshStatus();
+  }, [apiUrl, userNumber]);
+
+  const runAction = async (action, successMessage) => {
+    setIsWorking(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const result = await action();
+      setMessage(successMessage(result));
+      await refreshStatus();
+    } catch (actionError) {
+      setError(actionError.message || 'Alfred could not update notifications yet.');
+    } finally {
+      setIsWorking(false);
+    }
+  };
+
+  const handleEnable = () => runAction(
+    () => enableNotifications(apiUrl, userNumber),
+    () => 'Notifications are enabled on this device.'
+  );
+
+  const handleDisableDevice = () => runAction(
+    () => disableNotifications(apiUrl, userNumber),
+    () => 'Notifications are disabled on this device.'
+  );
+
+  const handleGlobalToggle = () => runAction(
+    () => updateNotificationPreferences(apiUrl, userNumber, {
+      notifications_enabled: !status?.notifications_enabled
+    }),
+    () => status?.notifications_enabled ? 'Notifications are paused.' : 'Notifications are allowed.'
+  );
+
+  const handleTest = () => runAction(
+    () => sendTestNotification(apiUrl, userNumber),
+    (result) => {
+      const sent = result?.result?.sent || 0;
+      const reason = result?.result?.reason;
+      if (sent > 0) return 'Test notification sent.';
+      if (reason === 'no_active_subscriptions') return 'No active device is subscribed yet.';
+      if (reason === 'notifications_disabled') return 'Notifications are paused in your preferences.';
+      if (reason === 'vapid_not_configured') return 'Notification keys are not configured yet.';
+      return 'Test notification attempted.';
+    }
+  );
+
+  return (
+    <section className="py-8">
+      <div className="max-w-2xl">
+        <h2 className="text-sm font-semibold text-slate-900">Notifications</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-500">
+          Enable Alfred alerts for this browser. Each phone, tablet, or desktop can be managed separately.
+        </p>
+
+        <div className="mt-6 grid gap-3 text-sm sm:grid-cols-2">
+          <StatusRow label="Browser support" value={support.supported ? 'Supported' : 'Not supported'} />
+          <StatusRow label="Permission" value={permissionLabel} />
+          <StatusRow label="Notification keys" value={status?.vapid_public_key ? 'Configured' : 'Not configured'} />
+          <StatusRow label="Active devices" value={isLoading ? 'Loading...' : String(activeCount)} />
+        </div>
+
+        {iosHint && (
+          <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+            {iosHint}
+          </p>
+        )}
+
+        {!support.supported && (
+          <p className="mt-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600">
+            This browser cannot receive Alfred notifications. Use a supported desktop browser, Android Chrome, or an installed iPhone/iPad Home Screen app.
+          </p>
+        )}
+
+        {support.permission === 'denied' && (
+          <p className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-700">
+            Notifications are blocked in this browser. Update site permissions, then return here to enable Alfred alerts.
+          </p>
+        )}
+
+        {status && !status.vapid_public_key && (
+          <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+            Alfred needs VAPID keys configured before browsers can subscribe.
+          </p>
+        )}
+
+        <div className="mt-6 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={handleEnable}
+            disabled={!canEnable || isWorking || isLoading}
+            className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            {isWorking ? 'Working...' : 'Enable on this device'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDisableDevice}
+            disabled={isWorking || isLoading || activeCount === 0}
+            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+          >
+            Disable this device
+          </button>
+
+          <button
+            type="button"
+            onClick={handleGlobalToggle}
+            disabled={isWorking || isLoading || !status}
+            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+          >
+            {status?.notifications_enabled ? 'Pause all notifications' : 'Allow all notifications'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleTest}
+            disabled={isWorking || isLoading || activeCount === 0}
+            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+          >
+            Send test
+          </button>
+        </div>
+
+        {status?.subscriptions?.length > 0 && (
+          <div className="mt-6 overflow-hidden rounded-lg border border-slate-200">
+            <div className="grid grid-cols-[1fr_auto] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase text-slate-500">
+              <span>Device</span>
+              <span>Status</span>
+            </div>
+            {status.subscriptions.map((subscription) => (
+              <div key={subscription.id} className="grid grid-cols-[1fr_auto] gap-3 border-b border-slate-100 px-4 py-3 text-sm last:border-b-0">
+                <div>
+                  <p className="font-medium text-slate-900">
+                    {subscription.device_label || subscription.browser || 'Device'}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {subscription.platform || 'Unknown platform'}
+                  </p>
+                </div>
+                <span className={subscription.is_active ? 'text-emerald-700' : 'text-slate-400'}>
+                  {subscription.is_active ? 'Active' : 'Off'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {message && (
+          <p className="mt-4 text-sm text-emerald-700">{message}</p>
+        )}
+        {error && (
+          <p className="mt-4 text-sm text-rose-700">{error}</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function StatusRow({ label, value }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-white px-4 py-3">
+      <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
+      <p className="mt-1 font-medium text-slate-900">{value}</p>
     </div>
   );
 }

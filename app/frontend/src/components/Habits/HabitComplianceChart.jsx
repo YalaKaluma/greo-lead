@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import TrendRangeToggle from '../TrendRangeToggle';
+import KpiInfoButton from '../KpiInfoButton';
 
 const WIDTH = 720;
 const HEIGHT = 220;
@@ -110,7 +111,10 @@ export default function HabitComplianceChart({ data, energyData }) {
   const energyAxisValues = [0, 1, 2, 3, 4, 5];
 
   return (
-    <div className="rounded-lg border bg-white p-4">
+    <div className="relative rounded-lg border bg-white p-4">
+      <KpiInfoButton label="About the compliance trend">
+        Shows daily habit completion rate, the 7-day rolling average, and energy check-ins on the same timeline.
+      </KpiInfoButton>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-800">Compliance Trend</h2>

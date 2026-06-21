@@ -1,3 +1,5 @@
+import KpiInfoButton from '../KpiInfoButton';
+
 const colorForRate = (rate, expected) => {
   if (!expected) return 'bg-slate-100';
   if (rate >= 85) return 'bg-emerald-700';
@@ -19,7 +21,10 @@ export default function HabitHeatmap({ data }) {
   });
 
   return (
-    <div className="rounded-lg border bg-white p-4">
+    <div className="relative rounded-lg border bg-white p-4">
+      <KpiInfoButton label="About the habit heatmap">
+        Shows the last 90 days of habit completion. Each square is one day, colored by completion rate.
+      </KpiInfoButton>
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-800">Habit Heatmap</h2>
         <span className="text-xs text-slate-500">Last 90 days</span>

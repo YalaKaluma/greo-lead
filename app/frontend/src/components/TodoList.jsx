@@ -5,6 +5,7 @@ import TaskModal from './TodoList/TaskModal';
 import BulkActionModal from './TodoList/BulkActionModal';
 import FilterSection from './TodoList/FilterSection';
 import TaskListPanel from './TodoList/TaskListPanel';
+import TodoCalendarView from './TodoList/TodoCalendarView';
 import { DailyMtnNeedle, MtnBreakdownModal, TaskMtnTrendsTab, TrendsErrorBoundary } from './TodoList/MtnTrends';
 import {
   DeferNonTop10Modal,
@@ -16,6 +17,7 @@ import {
 } from './TodoList/PageControls';
 import { getTodayET, getETDate, formatDateForInput, isOverdueET, getLongTermGoals, MTN_TAG_OPTIONS } from '../utils/taskHelpers';
 import { buildDailyMtnBenchmark } from '../utils/todoMtnTrends.js';
+import { replaceTaskDueDate } from '../utils/todoCalendarLogic.js';
 import { getSortedTasks as sortTodoTasks, getVisibleTaskScore as resolveVisibleTaskScore } from '../utils/todoListLogic';
 import { useLanguage } from '../i18n/LanguageContext';
 import { usePriority } from '../hooks/usePriority';
@@ -130,7 +132,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       return;
     }
     fetchTasks();
-  }, [apiUrl, userNumber, filterType, selectedGoal, timezone]);
+  }, [apiUrl, userNumber, filterType, selectedGoal, timezone, activeTab]);
 
   useEffect(() => {
     if (apiUrl == null || !userNumber) return;
@@ -148,7 +150,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     }, 60000);
 
     return () => clearInterval(timer);
-  }, [apiUrl, userNumber, timezone]);
+  }, [apiUrl, userNumber, timezone, activeTab, filterType, selectedGoal]);
 
   const fetchFilters = async () => {
     if (apiUrl == null || !userNumber) return;
@@ -188,7 +190,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     try {
       const params = {
         user_number: userNumber,
-        // If a goal is selected, show ALL tasks for that goal, not just due today
+        // If a goal is selected, show ALL tasks for that goal, not just due today.
         filter_type: selectedGoal ? 'all' : filterType
       };
       if (selectedGoal) params.goal_id = parseInt(selectedGoal);
@@ -335,6 +337,47 @@ export default function TodoList({ apiUrl, userNumber }) {
     const newOrder = items.map(task => task.id);
     setColumnSort(null);
     saveSortOrder(newOrder);
+  };
+
+  const handleChangeTab = (nextTab) => {
+    setActiveTab(nextTab);
+    if (nextTab === 'calendar') {
+      if (filterType === 'due_today') {
+        setFilterType('next_7_days');
+      }
+      if (selectedMtnTags.length === 0) {
+        setSelectedMtnTags(['Transformational', 'Strategic']);
+      }
+    }
+  };
+
+  const handleCalendarReschedule = async (task, targetDate) => {
+    if (!task || !targetDate) return;
+    const nextDueDate = replaceTaskDueDate(task.due_date, targetDate);
+    if (nextDueDate === task.due_date || targetDate === String(task.due_date || '').split('T')[0]) return;
+
+    const previousTasks = tasks;
+    setTasks(currentTasks =>
+      currentTasks.map(currentTask =>
+        currentTask.id === task.id
+          ? { ...currentTask, due_date: nextDueDate }
+          : currentTask
+      )
+    );
+
+    try {
+      await axios.put(
+        `${apiUrl}/api/tasks/${task.id}`,
+        { due_date: nextDueDate },
+        { params: { user_number: userNumber } }
+      );
+      await fetchTasks();
+      if (showTaskTrends) fetchMtnTrends();
+    } catch (err) {
+      console.error('Error rescheduling task:', err);
+      setTasks(previousTasks);
+      alert(err.response?.data?.detail || 'Failed to reschedule task');
+    }
   };
 
   const toggleTaskComplete = async (taskId) => {
@@ -630,12 +673,12 @@ export default function TodoList({ apiUrl, userNumber }) {
           <TodoTabs
             activeTab={activeTab}
             showTaskTrends={showTaskTrends}
-            onChangeTab={setActiveTab}
+            onChangeTab={handleChangeTab}
           />
         )}
 
         {/* Filters Section */}
-        {!selectionMode && activeTab === 'tasks' && (
+        {!selectionMode && (activeTab === 'tasks' || activeTab === 'calendar') && (
           <FilterSection
             filtersCollapsed={filtersCollapsed}
             setFiltersCollapsed={setFiltersCollapsed}
@@ -670,33 +713,50 @@ export default function TodoList({ apiUrl, userNumber }) {
           </TrendsErrorBoundary>
         )}
 
-        <TaskListPanel
-          activeTab={activeTab}
-          sortedTasks={sortedTasks}
-          hasActiveFilters={hasActiveFilters}
-          emptyText={t('tasks.empty')}
-          emptyFilteredText={t('tasks.emptyFiltered')}
-          emptyNewText={t('tasks.emptyNew')}
-          selectionMode={selectionMode}
-          columnSort={columnSort}
-          onSort={toggleColumnSort}
-          onDragEnd={handleDragEnd}
-          completingTasks={completingTasks}
-          selectedTasks={selectedTasks}
-          onToggleTask={toggleTaskComplete}
-          onStartEdit={(task) => {
-            setEditingTask(task);
-            setShowTaskModal(true);
-          }}
-          onLongPress={enterSelectionMode}
-          onSelectToggle={toggleTaskSelection}
-          onFollowUp={openFollowUpModal}
-          goals={goals}
-          priorityMode={priorityMode}
-          getVisibleTaskScore={getVisibleTaskScore}
-          onMtnFeedback={handleMtnFeedback}
-          timezone={timezone}
-        />
+        {activeTab === 'calendar' ? (
+          <TodoCalendarView
+            activeTab={activeTab}
+            tasks={tasks}
+            todayKey={todayKey}
+            selectedMtnTags={selectedMtnTags}
+            searchQuery={searchQuery}
+            goals={goals}
+            getTaskScore={getTaskScore}
+            onStartEdit={(task) => {
+              setEditingTask(task);
+              setShowTaskModal(true);
+            }}
+            onReschedule={handleCalendarReschedule}
+          />
+        ) : (
+          <TaskListPanel
+            activeTab={activeTab}
+            sortedTasks={sortedTasks}
+            hasActiveFilters={hasActiveFilters}
+            emptyText={t('tasks.empty')}
+            emptyFilteredText={t('tasks.emptyFiltered')}
+            emptyNewText={t('tasks.emptyNew')}
+            selectionMode={selectionMode}
+            columnSort={columnSort}
+            onSort={toggleColumnSort}
+            onDragEnd={handleDragEnd}
+            completingTasks={completingTasks}
+            selectedTasks={selectedTasks}
+            onToggleTask={toggleTaskComplete}
+            onStartEdit={(task) => {
+              setEditingTask(task);
+              setShowTaskModal(true);
+            }}
+            onLongPress={enterSelectionMode}
+            onSelectToggle={toggleTaskSelection}
+            onFollowUp={openFollowUpModal}
+            goals={goals}
+            priorityMode={priorityMode}
+            getVisibleTaskScore={getVisibleTaskScore}
+            onMtnFeedback={handleMtnFeedback}
+            timezone={timezone}
+          />
+        )}
       </div>
 
       {selectionMode && (

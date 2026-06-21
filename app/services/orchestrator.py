@@ -26,6 +26,7 @@ from app.models import Task, JourneyGoal, GoalReviewSession, User
 from app.services.task_service import create_task
 from app.services.people_review_orchestrator import handle_people_review_session
 from app.services.language import normalize_language, response_language_instruction
+from app.services.journal_reflection_depth_service import score_reflection_depth
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -51,7 +52,8 @@ def orchestrate(
         user_number: str,
         user_message: str,
         channel: str = "whatsapp",
-        preferred_language: str | None = None
+        preferred_language: str | None = None,
+        conversation_type: str | None = None
 ) -> OrchestrationResult:
     """
     Main orchestration entry point.
@@ -81,8 +83,10 @@ def orchestrate(
         user = db.query(User).filter(User.phone_number == user_number).first()
         preferred_language = getattr(user, "language_preference", None)
     preferred_language = normalize_language(preferred_language)
+    normalized_conversation_type = (conversation_type or "").strip().lower()
     print(f"Message: {user_message[:100]}...")
     print(f"Preferred language: {preferred_language}")
+    print(f"Conversation type: {normalized_conversation_type or 'default'}")
     print(f"{'=' * 60}")
 
     # Step 1: Load conversation state
@@ -162,6 +166,16 @@ def orchestrate(
                 explicit_execution=explicit_execution,
                 user_message=user_message
             )
+    elif (
+        normalized_conversation_type == "journal"
+        and state.current_state not in {
+            States.GOAL_REVIEW,
+            States.PEOPLE_REVIEW,
+            States.LEADERSHIP_COACHING,
+        }
+    ):
+        new_state = States.JOURNAL_COACHING
+        reason = "journal_conversation_type"
     else:
         # Step 3: Determine state transition
         new_state, reason = transition_state(
@@ -186,6 +200,7 @@ def orchestrate(
         States.GOAL_REVIEW: handle_goal_review,
         States.PEOPLE_REVIEW: handle_people_review,
         States.LEADERSHIP_COACHING: handle_leadership_coaching,
+        States.JOURNAL_COACHING: handle_journal_coaching,
     }
 
     handler = handlers.get(new_state, handle_idle)
@@ -347,6 +362,88 @@ CONTEXT:
         state=States.COACHING,
         actions=['capture_journey_signals'],
         data={"prompt_version": prompt_version}
+    )
+
+
+def handle_journal_coaching(
+        db: Session,
+        user_number: str,
+        user_message: str,
+        intents: List[Dict],
+        explicit_execution: bool,
+        current_state: Any,
+        reason: str,
+        preferred_language: str = "en"
+) -> OrchestrationResult:
+    """
+    Handle Growth Journal mode.
+
+    The goal is to help the user deepen the reflection, not to challenge them
+    with the sharper executive coaching prompt or expose the internal score.
+    """
+
+    print(f"ðŸ““ JOURNAL COACHING MODE ACTIVE")
+
+    if explicit_execution and any(i['name'] == 'EXECUTE' for i in intents if i['confidence'] > 0.7):
+        return OrchestrationResult(
+            response="Would you like me to capture this as a task?",
+            state=States.AWAITING_APPROVAL,
+            data={'pending_action': 'PROPOSE_TASK'}
+        )
+
+    prompt = load_prompt("app/prompts/coaching/journal_coaching_v1.yaml")
+    prompt_version = prompt.get("version", "unknown")
+    system_rules = prompt["system_prompt"]
+    style_guidelines = prompt.get("style_guidelines", "").strip()
+
+    journey_context = build_journey_context(db, user_number)
+    history = load_conversation_history(db, user_number, conversation_type="journal", limit=6)
+    depth = score_reflection_depth(user_message)
+    depth_level = depth.get("level")
+    depth_label = depth.get("level_label")
+    depth_recommendations = depth.get("recommendations") or []
+
+    system_prompt = f"""{system_rules}
+
+{style_guidelines}
+
+{response_language_instruction(preferred_language)}
+
+PRIVATE DEPTH GUIDANCE:
+- Current reflection level: {depth_level} ({depth_label})
+- Helpful next moves: {json.dumps(depth_recommendations, ensure_ascii=False)}
+- Use this only to choose your next question. Never mention the level, score, rubric, assessment, or scoring process.
+
+JOURNEY MEMORY:
+{journey_context}
+"""
+
+    response = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            *history,
+            {"role": "user", "content": user_message},
+        ],
+        temperature=0.55,
+        max_tokens=190
+    )
+
+    journal_response = (response.choices[0].message.content or "").strip()
+    hard_max = 520
+    if len(journal_response) > hard_max:
+        journal_response = journal_response[:hard_max].rsplit(" ", 1)[0].strip() + "..."
+
+    print(f"ðŸ·ï¸ Journal coaching prompt version: {prompt_version}")
+
+    return OrchestrationResult(
+        response=journal_response,
+        state=States.JOURNAL_COACHING,
+        actions=['deepen_journal_reflection'],
+        data={
+            "prompt_version": prompt_version,
+            "reflection_depth_result": depth,
+        }
     )
 
 

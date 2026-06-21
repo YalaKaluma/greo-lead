@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 #from app.models.message import Message
 from app.models import Message
-from app.services.journal_reflection_depth_service import apply_reflection_depth
+from app.services.journal_reflection_depth_service import apply_reflection_depth, apply_reflection_depth_result
 from app.services.message_signal_classifier import classify_message_signals
 
 def save_message(
@@ -11,7 +11,8 @@ def save_message(
     content: str,
     message_type: str = "chat",
     conversation_type: str | None = None,
-    is_read: bool = True
+    is_read: bool = True,
+    reflection_depth_result: dict | None = None
 ):
     resolved_conversation_type = conversation_type or infer_conversation_type(message_type)
     msg = Message(
@@ -29,7 +30,10 @@ def save_message(
 
     if sender == "user":
         try:
-            apply_reflection_depth(msg, content)
+            if reflection_depth_result:
+                apply_reflection_depth_result(msg, reflection_depth_result)
+            else:
+                apply_reflection_depth(msg, content)
             db.commit()
             db.refresh(msg)
         except Exception as error:

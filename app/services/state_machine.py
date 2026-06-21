@@ -29,6 +29,7 @@ class States:
     GOAL_REVIEW = "GOAL_REVIEW"
     PEOPLE_REVIEW = "PEOPLE_REVIEW"
     LEADERSHIP_COACHING = "LEADERSHIP_COACHING"
+    JOURNAL_COACHING = "JOURNAL_COACHING"
 
 
 
@@ -42,6 +43,7 @@ STATE_TIMEOUTS = {
     States.GOAL_REVIEW: 60,
     States.PEOPLE_REVIEW: 60,
     States.LEADERSHIP_COACHING: 60,
+    States.JOURNAL_COACHING: 10,
 }
 
 
@@ -148,6 +150,9 @@ def transition_state(
     
     elif current == States.COACHING:
         return _transition_from_coaching(intent_name, confidence, explicit_execution)
+
+    elif current == States.JOURNAL_COACHING:
+        return _transition_from_journal_coaching(intent_name, confidence, explicit_execution, user_message)
     
     elif current == States.CLARIFYING:
         return _transition_from_clarifying(user_message)
@@ -216,6 +221,9 @@ def _transition_from_idle(intent: str, confidence: float, explicit: bool) -> tup
     if intent == "PEOPLE_REVIEW" and confidence > 0.6:
         return States.PEOPLE_REVIEW, "people_review_requested"
 
+    if intent == "LEADERSHIP_COACHING" and confidence > 0.6:
+        return States.LEADERSHIP_COACHING, "leadership_coaching_requested"
+
     if intent == "ORGANIZE":
         return States.DRAFTING, "organization_request"
     
@@ -239,6 +247,36 @@ def _transition_from_coaching(intent: str, confidence: float, explicit: bool) ->
     
     # Any other intent - stay in coaching unless user explicitly breaks out
     return States.COACHING, "maintain_coaching_mode"
+
+
+def _transition_from_journal_coaching(
+    intent: str,
+    confidence: float,
+    explicit: bool,
+    message: str,
+) -> tuple[str, str]:
+    """Keep free-form journal replies in the journal coaching lane."""
+
+    msg = (message or "").lower()
+    if any(w in msg for w in ["cancel", "stop", "exit", "nevermind", "never mind"]):
+        return States.IDLE, "journal_coaching_cancelled"
+
+    if intent == "META":
+        return States.LEARNING, "meta_correction"
+
+    if intent == "EXECUTE" and explicit and confidence > 0.7:
+        return States.AWAITING_APPROVAL, "explicit_action_from_journal"
+
+    if intent == "GOAL_REVIEW" and confidence > 0.6:
+        return States.GOAL_REVIEW, "goal_review_requested"
+
+    if intent == "PEOPLE_REVIEW" and confidence > 0.6:
+        return States.PEOPLE_REVIEW, "people_review_requested"
+
+    if intent == "LEADERSHIP_COACHING" and confidence > 0.6:
+        return States.LEADERSHIP_COACHING, "leadership_coaching_requested"
+
+    return States.JOURNAL_COACHING, "continue_journal_coaching"
 
 
 def _transition_from_clarifying(message: str) -> tuple[str, str]:

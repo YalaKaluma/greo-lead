@@ -22,6 +22,11 @@ MAILGUN_API_KEY = os.getenv("MAILGUN_API_KEY")
 MAILGUN_DOMAIN = os.getenv("MAILGUN_DOMAIN")
 MAILGUN_FROM = os.getenv("MAILGUN_FROM")
 
+# Web push notifications
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
+VAPID_SUBJECT = os.getenv("VAPID_SUBJECT", "mailto:admin@alfred.local")
+
 # User
 DEFAULT_USER_NUMBER = os.getenv("DEFAULT_USER_NUMBER")
 
