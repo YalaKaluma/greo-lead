@@ -1166,7 +1166,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   const handleSelectDimension = (dimensionId) => {
     const nextDimension = DIMENSIONS.find((dimension) => dimension.id === dimensionId);
     setSelectedDimensionId(dimensionId);
-    setSelectedTrialBeltId(null);
     if (nextDimension?.topics?.length) {
       setActiveTopic(nextDimension.topics[0].label);
     }
@@ -1174,7 +1173,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
 
   const handleSelectSubdomain = (dimensionId, topic) => {
     setSelectedDimensionId(dimensionId);
-    setSelectedTrialBeltId(null);
     setActiveTopic(topic.label);
   };
 
@@ -1709,7 +1707,9 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
 
           <section className="space-y-5">
             <BeltStepSummary
+              dimension={selectedDimension}
               targetBelt={viewedBelt}
+              requirements={viewedBeltRequirements}
             />
 
             <LeadershipStoryCard story={viewedBeltRequirements?.story} />
@@ -3410,19 +3410,26 @@ function normalizeRequirements(requirements, dimensionId) {
   };
 }
 
-function BeltStepSummary({ targetBelt }) {
+function getFirstSentence(value) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  const match = text.match(/^.*?[.!?](?:\s|$)/);
+  return (match ? match[0] : text).trim();
+}
+
+function BeltStepSummary({ dimension, targetBelt, requirements }) {
   const stepGuide = BELT_GUIDE.find((guide) => guide.id === targetBelt?.id) || BELT_GUIDE[0];
+  const purpose = getFirstSentence(requirements?.criteria) || stepGuide.description;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
         Purpose of This Step
       </p>
-      <h3 className="mt-2 text-xl font-semibold text-slate-950">{targetBelt.name}</h3>
-      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{stepGuide.description}</p>
-      <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700">
-        {stepGuide.keyQuestion}
-      </p>
+      <h3 className="mt-2 text-xl font-semibold text-slate-950">
+        {targetBelt.name} in {dimension.name}
+      </h3>
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{purpose}</p>
     </div>
   );
 }

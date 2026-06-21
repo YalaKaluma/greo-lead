@@ -1075,10 +1075,9 @@ dimensions:
     description: Growth, resilience, reflection, and continuous improvement.
     belts:
       white:
-        criteria: Understand how failures, mistakes, fears, and limitations have shaped your identity, beliefs, and growth
-          patterns. Begin developing a growth-oriented mindset.
+        criteria: Learn from failure by transforming setbacks, disappointments, and scars into self-knowledge.
         reflection:
-          title: Reflection Trial
+          title: Failure as Teacher
           prompt: Reflect on one of the most difficult failures, disappointments, or setbacks in your life. What did it teach
             you about yourself?
           grading_focus:
@@ -1086,18 +1085,18 @@ dimensions:
           - identity insight
           - honesty
           - growth mindset
-          completion_hint: Extract self-knowledge from a difficult setback without collapsing into shame.
+          completion_hint: Extract self-knowledge from a difficult setback without hiding from it.
           display_order: 1
         real_world:
-          active: false
-          title: Real-World Trial
+          active: true
+          title: Expose the Blind Spot
           prompt: Have an honest conversation with someone you trust about a personal weakness, fear, or growth area you typically
             avoid discussing openly.
           completion_hint: Practice vulnerable learning through a conversation you would normally avoid.
           display_order: 2
         behavioral:
-          title: Behavioral Evidence
-          prompt: Complete development opportunities, scars, and failures in Alfred.
+          title: Capture Your Scars
+          prompt: Complete the Development Opportunities, Scars, and Failures sections in Alfred.
           signals:
           - development_opportunities_completed
           - scars_completed
@@ -1105,16 +1104,54 @@ dimensions:
           completion_hint: Alfred looks for your growth landscape to be explicitly captured.
           display_order: 3
         story:
-          title: ''
-          theme: ''
-          full_story: ''
-          lessons: []
-          discussion_question: ''
+          title: Thomas Edison and the 10,000 Attempts
+          theme: Learn from Failure
+          full_story: |-
+            Thomas Edison was repeatedly criticized for the thousands of unsuccessful attempts he made while developing the light bulb.
+
+            Many people saw those attempts as failures.
+
+            Edison saw them differently.
+
+            When asked about his repeated failures, he famously responded:
+
+            "I have not failed. I've just found 10,000 ways that won't work."
+
+            Most people interpret failure as evidence that they should stop.
+
+            Edison viewed failure as information.
+
+            Each unsuccessful attempt taught him something.
+
+            Each setback brought him closer to success.
+
+            His breakthrough was not the result of avoiding failure.
+
+            It was the result of learning from it.
+
+            The lesson is timeless.
+
+            Failure is often the tuition we pay for growth.
+
+            The people who grow the most are not the people who fail the least.
+
+            They are the people who learn the most from failure.
+          leadership_lesson: |-
+            Failures, setbacks, disappointments, and scars are among life's greatest teachers.
+
+            Growth begins when we stop hiding from failure and start learning from it.
+          key_message: Every scar contains a lesson.
+          belt_purpose: Help users recognize that setbacks are not obstacles to growth. They are the raw material of growth.
+          lessons:
+          - Failures, setbacks, disappointments, and scars are among life's greatest teachers.
+          - Growth begins when we stop hiding from failure and start learning from it.
+          - Every scar contains a lesson.
+          discussion_question: What lesson is one of your scars still trying to teach you?
       yellow:
-        criteria: Apply intentional learning, reflection, and behavioral change to accelerate personal growth and self-improvement.
+        criteria: Recognize the recurring beliefs, fears, assumptions, and behaviors that limit your growth.
         reflection:
-          title: Reflection Trial
-          prompt: What recurring pattern, fear, or belief has limited your growth the most?
+          title: The Recurring Pattern
+          prompt: What recurring pattern, fear, belief, or behavior has limited your growth the most?
           grading_focus:
           - limiting belief
           - pattern recognition
@@ -1123,66 +1160,143 @@ dimensions:
           completion_hint: Name the recurring inner pattern that most constrains your growth.
           display_order: 1
         real_world:
-          title: Real-World Trial
-          active: false
-          prompt: Choose one meaningful growth area and intentionally work on it for two weeks through exercises, habit changes,
-            learning, or behavioral experiments.
-          completion_hint: Turn one growth area into a two-week behavioral experiment.
+          title: Pattern Hunt
+          active: true
+          prompt: Over a two-week period, observe your reactions, frustrations, fears, conflicts, and setbacks. Identify at
+            least one recurring pattern that repeatedly influences your behavior.
+          completion_hint: Observe your reactions long enough to identify a pattern behind them.
           display_order: 2
         behavioral:
-          title: Behavioral Evidence
-          prompt: Complete 3 journal reflections on how scars and past failures impact your behavior.
+          title: Pattern Reflection Journal
+          prompt: Complete 3 journal reflections exploring how past scars, failures, and recurring patterns continue to influence
+            your current behavior.
           signals:
           - three_behavior_change_journals
           - self_awareness_reflections
           - scars_failures_behavior_reflections
-          completion_hint: Alfred looks for repeated reflection on behavior change, self-awareness, scars, and failures.
+          completion_hint: Alfred looks for repeated reflection on how past experiences and patterns shape current behavior.
           display_order: 3
         story:
-          title: ''
-          theme: ''
-          full_story: ''
-          lessons: []
-          discussion_question: ''
+          title: Carl Jung and the Shadow
+          theme: Recognize Your Patterns
+          full_story: |-
+            Carl Jung observed that many people experience the same problems over and over throughout their lives.
+
+            Different jobs.
+
+            Different relationships.
+
+            Different environments.
+
+            Yet the same conflicts continue to appear.
+
+            Jung believed these recurring patterns often operate beneath our awareness.
+
+            He called this hidden part of ourselves "the shadow."
+
+            Many people assume life keeps happening to them.
+
+            Jung suggested something different.
+
+            Often, we unconsciously recreate the same situations because we have not yet understood the patterns driving our behavior.
+
+            He famously wrote:
+
+            "Until you make the unconscious conscious, it will direct your life and you will call it fate."
+
+            The challenge is not simply to learn from a single failure.
+
+            The challenge is to recognize the pattern behind the failure.
+
+            Only then can meaningful change begin.
+          leadership_lesson: |-
+            The obstacle is rarely the event itself.
+
+            The obstacle is the recurring pattern behind the event.
+          key_message: What you do not understand will continue to repeat itself.
+          belt_purpose: Help users identify the recurring beliefs, fears, assumptions, and behaviors that limit their growth.
+          lessons:
+          - The obstacle is rarely the event itself.
+          - The obstacle is the recurring pattern behind the event.
+          - What you do not understand will continue to repeat itself.
+          discussion_question: What pattern might be repeating itself in your life right now?
       green:
-        criteria: Integrate learning, resilience, humility, and self-awareness into a continuous process of personal evolution
-          and adaptation.
+        criteria: Intentionally transform self-awareness into meaningful behavioral change.
         reflection:
-          title: Reflection Trial
-          prompt: What pattern keeps showing up in your life, and what is it trying to teach you?
+          title: Growth Blueprint
+          prompt: Which pattern are you intentionally working to change? What specific behaviors, habits, practices, or routines
+            will help you become a better version of yourself?
           grading_focus:
           - resilience
           - identity
           - growth integration
           - humility
-          completion_hint: Show how past pain has become useful perspective and capacity.
+          completion_hint: Translate self-awareness into specific behaviors and practices.
           display_order: 1
         real_world:
-          title: Real-World Trial
-          prompt: What pattern keeps showing up in your life, and what is it trying to teach you?
-          completion_hint: Return to an old experience and find a more mature lesson inside it.
+          title: Deliberate Practice
+          prompt: Choose one meaningful growth area and intentionally work on it for two weeks through exercises, habit changes,
+            learning activities, coaching, or behavioral experiments.
+          completion_hint: Turn one growth area into a deliberate two-week practice.
           display_order: 2
         behavioral:
-          title: Behavioral Evidence
-          prompt: Complete 7 journal reflections on behavioral change and self-awareness, including how scars and failures
-            impact your behavior.
+          title: Growth Journal
+          prompt: Complete 7 journal reflections focused on behavioral change, self-awareness, and progress against your growth
+            objective.
           signals:
           - seven_behavior_change_journals
           - self_awareness_reflections
           - scars_failures_behavior_reflections
-          completion_hint: Alfred looks for deeper repeated reflection on behavior change, self-awareness, scars, and failures.
+          completion_hint: Alfred looks for deeper repeated reflection on behavior change, self-awareness, and growth progress.
           display_order: 3
         story:
-          title: ''
-          theme: ''
-          full_story: ''
-          lessons: []
-          discussion_question: ''
+          title: Benjamin Franklin's Virtue System
+          theme: Deliberate Growth
+          full_story: |-
+            Benjamin Franklin believed personal growth should be intentional.
+
+            He did not wait for improvement to happen naturally.
+
+            Instead, he identified specific virtues he wanted to develop:
+
+            - Discipline
+            - Humility
+            - Temperance
+            - Patience
+            - Order
+
+            Every day he tracked his behavior.
+
+            Every week he reviewed his progress.
+
+            Every month he adjusted his focus.
+
+            Franklin treated personal growth as a practice.
+
+            He understood that awareness alone does not create change.
+
+            Real growth happens when insights are translated into consistent action.
+
+            Over time, his system helped shape the leader, inventor, diplomat, and thinker he became.
+
+            Franklin's example reminds us that becoming a better person is not an accident.
+
+            It is the result of deliberate effort applied consistently over time.
+          leadership_lesson: |-
+            Self-awareness is valuable.
+
+            But self-awareness without action does not create growth.
+          key_message: The person you become is shaped by what you practice repeatedly.
+          belt_purpose: Help users intentionally transform self-awareness into meaningful behavioral change.
+          lessons:
+          - Self-awareness is valuable.
+          - Self-awareness without action does not create growth.
+          - The person you become is shaped by what you practice repeatedly.
+          discussion_question: What are you deliberately practicing becoming?
       brown:
-        criteria: Develop the ability to help others grow through mentorship, perspective, vulnerability, and wisdom earned
-          through lived experience.
+        criteria: Help others grow by using questions, coaching, support, and feedback to develop greater self-awareness.
         reflection:
-          title: Reflection Trial
+          title: Wisdom Worth Sharing
           prompt: What lessons from your journey do you most hope others can learn without having to suffer the same mistakes?
           grading_focus:
           - mentorship
@@ -1192,26 +1306,66 @@ dimensions:
           completion_hint: Distill the hard-won lessons that could help someone else grow with less suffering.
           display_order: 1
         real_world:
-          title: Real-World Trial
-          prompt: Mentor, coach, or support another person through a meaningful growth challenge while helping them build
-            resilience, self-awareness, and confidence.
-          completion_hint: Support another person's growth while helping them keep ownership of their path.
+          title: Coaching Through Questions
+          prompt: Help another person work through a meaningful challenge. Focus on asking questions that help them identify
+            their own patterns, assumptions, blind spots, and opportunities for growth.
+          completion_hint: Help another person see their own patterns without taking ownership away from them.
           display_order: 2
         behavioral:
-          title: Behavioral Evidence
-          prompt: Complete 3 journal reflections on behavioral change among others, including how scars and failures impact
-            your behavior.
+          title: Growth Catalyst Journal
+          prompt: Complete 3 journal reflections documenting occasions where your coaching, questions, support, or feedback
+            helped another person gain self-awareness, overcome a challenge, or make meaningful progress.
           signals:
           - three_others_behavior_change_journals
           - scars_failures_behavior_reflections
-          completion_hint: Alfred looks for your growth work becoming useful in how you support others.
+          completion_hint: Alfred looks for evidence that your growth work is helping others develop self-awareness and make
+            progress.
           display_order: 3
         story:
-          title: ''
-          theme: ''
-          full_story: ''
-          lessons: []
-          discussion_question: ''
+          title: Socrates and the Art of Questions
+          theme: Help Others Grow
+          full_story: |-
+            Socrates is considered one of history's greatest teachers.
+
+            Yet he rarely taught by giving answers.
+
+            Instead, he asked questions.
+
+            Powerful questions.
+
+            Questions that challenged assumptions.
+
+            Questions that exposed blind spots.
+
+            Questions that helped people discover truths for themselves.
+
+            Socrates understood something many leaders still struggle to understand today:
+
+            People rarely change because they are told what to do.
+
+            People change when they see something new about themselves.
+
+            His gift was helping others recognize patterns they could not yet see.
+
+            Rather than solving people's problems for them, he helped them think differently.
+
+            His approach became known as the Socratic Method and remains one of the most powerful coaching techniques ever developed.
+
+            The highest expression of learning is not accumulating wisdom for yourself.
+
+            It is helping others discover wisdom for themselves.
+          leadership_lesson: |-
+            Great leaders do not simply provide answers.
+
+            They help others see what they could not previously see.
+          key_message: Great leaders help others recognize the patterns shaping their lives.
+          belt_purpose: Help users become catalysts for growth by mentoring, coaching, and helping others develop greater
+            self-awareness.
+          lessons:
+          - Great leaders do not simply provide answers.
+          - They help others see what they could not previously see.
+          - Great leaders help others recognize the patterns shaping their lives.
+          discussion_question: What question could help someone see a pattern they cannot yet see?
       black:
         criteria: Helps others grow.
         reflection:
@@ -1224,11 +1378,13 @@ dimensions:
           - transmission
           completion_hint: Distill what is worth passing on.
           display_order: 1
+          active: false
         real_world:
           title: Real-World Trial
           prompt: Mentor someone deeply through a growth challenge.
           completion_hint: Support another person's development without owning it for them.
           display_order: 2
+          active: false
         behavioral:
           title: Behavioral Evidence
           prompt: Capture long-term mentorship patterns.
@@ -1238,6 +1394,7 @@ dimensions:
           - development_support
           completion_hint: Alfred looks for your learning becoming service.
           display_order: 3
+          active: false
         story:
           title: ''
           theme: ''
