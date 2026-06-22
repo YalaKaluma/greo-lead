@@ -37,9 +37,12 @@ New production schema changes should be added as Alembic revisions in `alembic/v
 - `2026-06-08_add_synthetic_user_flags.sql` adds synthetic-user markers and lookup index.
 - `2026-06-09_resync_production_schema.sql` converges production schema drift, backfills procrastination pattern reason/strategy fields, and removes legacy duplicate columns.
 - `alembic/versions/20260614_0001_cto_director.py` adds CTO Director reviews and findings. This is the first post-baseline Alembic-managed migration.
+- `alembic/versions/20260614_0002_task_completed_at.py` adds `tasks.completed_at`, backfills completed tasks from `updated_at`, and indexes user/status/completion lookups.
+- `alembic/versions/20260620_0001_notifications.py` adds generic push notification subscriptions, preferences, and delivery logs.
 
 ## Migration Conventions
 
+- Run Alembic against Neon with `DIRECT_DATABASE_URL` when possible. `DATABASE_URL` remains the runtime connection string used by the app.
 - Keep migrations idempotent where practical.
 - Name files with date plus a concise action.
 - Preserve user data; avoid destructive changes unless there is an explicit backup/recovery path.

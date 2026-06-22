@@ -4,6 +4,7 @@ This folder contains the main React UI surfaces for Alfred.
 
 ## Core Screens
 
+- `Home.jsx` renders the activation-aware dashboard snapshot and helps route users into the right next workflow.
 - `goals/MyGoals.jsx` renders Vision/Pillar/Outcome goals and coordinates goal panels, tree/list views, goal reviews, linked tasks, and the transformation roadmap.
 - `MyLeadershipJourney.jsx` renders Journey 2.0: leadership wheel, clickable subdomains, belt trials, readiness assessment, trial response modal, evidence library, and subdomain add/edit modal.
 - `TodoList.jsx` coordinates task data, filters, task mutations, and page-level orchestration while focused TodoList modules render list, modal, trend, and action surfaces.
@@ -12,6 +13,7 @@ This folder contains the main React UI surfaces for Alfred.
 - `MyJournal.jsx` renders journal/reflection content, journal trends, and reflection-depth details.
 - `MyCoachingSessions.jsx` renders dedicated leadership coaching sessions.
 - `Settings.jsx` renders user preferences for language and timezone.
+- Settings also hosts notification subscription, preference, status, and test-send controls.
 - `Sidebar.jsx` controls main navigation.
 - `AlfredChat.jsx` provides in-app chat access.
 - `PageIntroBanner.jsx` shows a short first-visit explanation for each page.
@@ -22,6 +24,7 @@ This folder contains the main React UI surfaces for Alfred.
 - `VoiceRecorder.jsx`, `ReadAloudButton.jsx`, and backend audio endpoints support speech input/output.
 - `GoalReviewBanner.jsx` surfaces active goal review state.
 - `JournalDepthModal.jsx` explains journal reflection-depth scoring.
+- Admin-related panels in the app shell connect to backend admin endpoints for users, feedback, usage, system health, Operations Director, CTO Director, and AI briefings.
 - `goals/` contains focused goal, roadmap, review, and linked-task components.
 - `Habits/` contains habit analytics and coaching components.
 - `TodoList/` contains task item, task-list, filter, modal, bulk-action, page-control, and MTN trend components.

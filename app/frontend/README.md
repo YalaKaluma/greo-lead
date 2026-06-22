@@ -15,6 +15,7 @@ This folder contains Alfred's Vite/React frontend.
 
 ## Main Screens
 
+- Home
 - My Vision & Goals
 - My Journey / Journey 2.0
 - My Tasks
@@ -25,6 +26,8 @@ This folder contains Alfred's Vite/React frontend.
 - Alfred in-app chat
 - Settings for language and timezone
 
+Admin-only surfaces are exposed through the authenticated app shell and backend admin endpoints, including user management, feedback review, usage analytics, system health, Operations Director, CTO Director, and AI briefings.
+
 ## Internationalization And Timezone
 
 The frontend language/timezone layer lives in `src/i18n/`.
@@ -33,7 +36,7 @@ The frontend language/timezone layer lives in `src/i18n/`.
 - `src/i18n/LanguageContext.jsx` loads the current user's backend language and timezone settings, falls back to `localStorage`, and updates visible labels immediately.
 - `src/components/Settings.jsx` lets users choose English/French and a timezone.
 - API calls that generate Alfred responses include the selected language so new chat and coaching content follows the user's preference.
-- Task and habit date helpers use timezone-aware logic so "today", overdue, streaks, trends, and energy check-ins align with the user's preference.
+- Task, habit, notification, and dashboard helpers use timezone-aware logic so "today", overdue, streaks, trends, energy check-ins, and notification timing align with the user's preference.
 
 Existing chat history and user-generated content are not translated retroactively.
 
@@ -63,6 +66,10 @@ When adding a new page or component, do not hardcode user-facing text directly i
 - Reflection and real-world trial submission modal.
 - Subdomain add/edit/delete modal connected to Journey API endpoints.
 
+## Notifications
+
+The Settings surface manages browser push notification status, preferences, and test sends through `/api/notifications/...`. Production push requires VAPID keys on the backend and HTTPS-capable deployment.
+
 ## Development
 
 Expected local commands when Node/npm are available:
@@ -70,6 +77,8 @@ Expected local commands when Node/npm are available:
 ```bash
 npm install
 npm run dev
+npm run i18n:check
+npm run test
 npm run build
 ```
 

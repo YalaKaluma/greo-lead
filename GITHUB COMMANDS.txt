@@ -1,19 +1,32 @@
-# Make sure I am on dev
+# Alfred branch workflow
+#
+# main = active development / Railway development
+# prod = stable production / Railway production
+# Do not commit secrets or .env files.
 
 git checkout main
 git pull origin main
 
 # make changes
+# run focused checks before pushing:
+# pytest
+# cd app/frontend
+# npm run i18n:check
+# npm run test
+# npm run build
 
 git add .
 git commit -m "Feature name"
 git push origin main
 
-# test dev
+# test Railway development
+# open a PR from main to prod, or merge intentionally after release checks
 
 git checkout prod
 git pull origin prod
 git merge main
+# run production migrations intentionally, when needed:
+# DIRECT_DATABASE_URL="postgresql://..." alembic upgrade head
 git push origin prod
 
 git checkout main

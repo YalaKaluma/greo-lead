@@ -27,6 +27,14 @@ This folder contains Alfred's orchestration and business logic. Services are whe
 - `morning_briefing_service.py` supports proactive briefing/nudge behavior.
 - `onboarding_service.py` supports onboarding data extraction and setup.
 - `users.py` contains user lookup and preference helpers.
+- `home_dashboard_service.py` builds and refreshes activation-aware home dashboard snapshots.
+- `intro_cards.py` supports page intro card state/content.
+- `notifications/push_service.py` and the notification service package manage web push subscriptions, preferences, delivery attempts, and logs.
+- `admin_system_health_service.py`, `admin_ai_briefing_service.py`, and `admin_bootstrap.py` support admin health, AI briefings, and admin schema/seed behavior.
+- `operations_director/` turns health events into reviewable issue drafts and GitHub-ready briefs.
+- `cto_director/` runs architecture, security, maintainability, test coverage, and release-readiness reviews.
+- `github/` wraps GitHub repository and issue operations used by admin review flows.
+- `audit_log_service.py` records audit events for sensitive admin and operational actions.
 
 ## Design Intent
 
@@ -37,6 +45,7 @@ Services should:
 - Make behavior easier to test independently from API transport.
 - Keep database writes explicit and user-scoped.
 - Own calculations that must stay consistent across UI surfaces, webhooks, and chat.
+- Keep operational review outputs sanitized before storing, displaying, or sending to GitHub.
 
 ## Journey 2.0 Notes
 

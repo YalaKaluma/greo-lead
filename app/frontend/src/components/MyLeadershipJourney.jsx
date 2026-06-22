@@ -3617,7 +3617,7 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
       if (normalizeStatus(realWorldTrial?.status) === "needs_revision") return "Resubmit";
       return realWorldTrial ? "Continue Response" : "Submit Response";
     }
-    if (isViewingPastBelt && realWorldTrial) return "Review Response";
+    if (isViewingPastBelt) return realWorldTrial ? "Review Response" : "Submit Response";
     return null;
   };
   const trialState = {

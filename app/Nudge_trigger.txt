@@ -6,3 +6,8 @@ curl "https://greo-lead-production.up.railway.app/api/nudge/sunday_review"
 Dev/staging examples use the same clean endpoint against their own Railway/database environment:
 curl "https://<dev-domain>/api/nudge/morning"
 curl "https://<staging-domain>/api/nudge/morning"
+
+When no user_number is supplied, the nudge endpoint targets active users in that environment. Use a user_number query parameter only for a deliberate single-user test:
+curl "https://<dev-domain>/api/nudge/morning?user_number=synthetic%3Aexecutive_alex"
+
+Before production nudge testing, confirm APP_ENV, ENVIRONMENT, or RAILWAY_ENVIRONMENT_NAME identifies the intended environment.

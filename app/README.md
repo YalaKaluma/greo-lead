@@ -5,7 +5,7 @@ This folder contains the FastAPI backend for Alfred / Leadership OS.
 ## What Lives Here
 
 - `main.py` creates the FastAPI app, checks core environment variables, registers routers, configures CORS, serves the built React frontend from `static/`, exposes `/api/health`, and starts the email polling loop.
-- `models.py` contains SQLAlchemy models for users, messages, tasks, opportunities, habits, Journey memory, priority review, goal reviews, leadership coaching, and settings.
+- `models.py` contains SQLAlchemy models for users, messages, tasks, opportunities, habits, Journey memory, priority review, goal reviews, leadership coaching, settings, notifications, usage, admin operations, CTO review, and system health.
 - `db.py` manages the SQLAlchemy engine/session connection to Neon/PostgreSQL.
 - `config.py` centralizes environment-backed settings.
 - `journey_trials.yaml` is the Journey 2.0 belt curriculum source of truth.
@@ -24,9 +24,11 @@ On startup the backend:
 - Loads `.env` through `app/config.py`.
 - Verifies the presence of required database, OpenAI, Twilio, Mailgun, and default-user settings.
 - Creates/verifies SQLAlchemy tables with `Base.metadata.create_all`.
+- Ensures admin schema and seed data are present through `ensure_admin_schema_and_seed`.
 - Registers API routers under `/api/...`.
 - Serves built frontend assets from repository-level `static/` when present.
 - Starts `app.email_poller.run_email_loop` in a daemon thread.
+- Records slow or failing API requests as system health events for admin review.
 
 ## Environment Variables
 
@@ -70,6 +72,11 @@ CTO Director review:
 - `GITHUB_COPILOT_CTO_URL`, defaulting to `https://models.github.ai/inference/chat/completions`
 - `GITHUB_COPILOT_CTO_MODEL`, defaulting to `gpt-4o`
 
+GitHub issue creation from Operations Director and CTO Director findings:
+
+- `GITHUB_TOKEN` or a service token with repository issue permissions.
+- Repository settings are resolved by the GitHub helper services in `app/services/github/`.
+
 ## Current Product Shape
 
 Alfred combines:
@@ -79,6 +86,9 @@ Alfred combines:
 - Journey 2.0 domains, subdomains, belts, trials, readiness assessment, and behavioral evidence.
 - Vision/Pillar/Outcome goals, transformation roadmap waves, goal progress reviews, and AI-assisted opportunity suggestions.
 - Task, habit, people, journal, priority review, message feedback, signal classification, audio, settings, and coaching workflows.
+- Home dashboard snapshots that route activated users to Home and new users toward goals.
+- Browser push notification subscriptions, preferences, delivery logs, and settings-page test notifications.
+- Admin surfaces for user management, feedback review, usage analytics, system health, AI briefings, Operations Director drafts, and CTO Director findings.
 - Persisted language and timezone preferences used by UI and time-sensitive product logic.
 
 ## Development
@@ -94,6 +104,12 @@ Useful local endpoints:
 - `/api/health` - backend and dependency health check.
 - `/docs` - generated FastAPI API docs.
 - `/` - built React app, when `static/index.html` exists.
+
+Useful local checks:
+
+```bash
+pytest
+```
 
 ## Journey 2.0 Notes
 

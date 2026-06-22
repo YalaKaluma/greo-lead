@@ -1,6 +1,6 @@
 # Alfred Production Readiness Runbook
 
-Last reviewed: 2026-06-07
+Last reviewed: 2026-06-22
 
 Use this runbook before onboarding beta users and during production incidents. Keep production secrets out of this file. Store exact URLs, tokens, and credentials only in approved secret stores.
 
@@ -35,6 +35,10 @@ SELECT count(*) FROM tasks;
 SELECT count(*) FROM journal_entries;
 SELECT count(*) FROM habits;
 SELECT count(*) FROM journey_goals;
+SELECT count(*) FROM push_subscriptions;
+SELECT count(*) FROM notification_delivery_logs;
+SELECT count(*) FROM system_health_events;
+SELECT count(*) FROM cto_reviews;
 ```
 
 ### Backup Procedure Before Risky Changes
@@ -210,6 +214,20 @@ Review these in Railway production service variables before launch and after any
 - [ ] `RAILWAY_TOKEN_TYPE` is set if the token requires a non-default auth type.
 - [ ] `RAILWAY_GRAPHQL_URL` is left as default unless Railway changes the endpoint.
 
+### Browser Push Notifications
+
+- [ ] `VAPID_PUBLIC_KEY` is set.
+- [ ] `VAPID_PRIVATE_KEY` is set.
+- [ ] `VAPID_SUBJECT` is set to a monitored support/admin contact.
+- [ ] Production serves the app over HTTPS so browser push subscriptions can be created.
+- [ ] Settings-page notification status and test-send flow work for a production test user.
+
+### GitHub Operational Review Integration
+
+- [ ] `GITHUB_TOKEN` or the relevant GitHub service token is set if Operations Director or CTO Director should create GitHub issues.
+- [ ] The configured repository target is correct for production issue creation.
+- [ ] Admin reviewers know that Operations Director and CTO Director drafts require human review before issue creation.
+
 ### Safety Checks
 
 - [ ] No dev Neon URL is present in production.
@@ -239,6 +257,8 @@ Run this after every production deploy, rollback, database restore, or critical 
 - [ ] Confirm Settings loads.
 - [ ] Confirm User Management loads.
 - [ ] Confirm System Health loads.
+- [ ] Confirm Operations Director loads.
+- [ ] Confirm CTO Director loads.
 - [ ] Confirm no unexpected recent critical errors appear.
 
 ### User Management
@@ -253,10 +273,13 @@ Run this after every production deploy, rollback, database restore, or critical 
 ### Core User Workflows
 
 - [ ] Log in as a non-admin test user.
+- [ ] Open Home.
 - [ ] Open My Goals.
 - [ ] Open Todo List.
 - [ ] Open My Journey.
 - [ ] Open My Journal.
+- [ ] Open My Habits.
+- [ ] Open Settings and confirm language, timezone, and notification status load.
 - [ ] Send a message to Alfred.
 - [ ] Confirm Alfred responds.
 - [ ] Create or update a task.
@@ -274,6 +297,8 @@ Run this after every production deploy, rollback, database restore, or critical 
 
 - [ ] Check Railway deployment logs for startup errors.
 - [ ] Check Alfred System Health recent errors.
+- [ ] Check Operations Director for new high/critical drafts.
+- [ ] Check CTO Director only after intentionally running a review.
 - [ ] Check OpenAI failure count.
 - [ ] Check database failure count.
 - [ ] Check Railway log errors in Alfred if the Railway integration is configured.

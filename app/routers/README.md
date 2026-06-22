@@ -19,12 +19,26 @@ This folder contains FastAPI routers. Routers should stay thin: validate request
 - `habits.py` under `/api/habits` for habit CRUD, daily tracking, energy check-ins, trends, history, and coaching refresh.
 - `chat.py` under `/api` for in-app chat, goal review chat controls, nudges, welcome, and notifications.
 - `settings.py` under `/api` for language, timezone, and journal reflection-depth backfill.
+- `notifications.py` under `/api/notifications` for push subscription management, notification preferences, status, and test sends.
+- `admin.py` under `/api/admin` for admin auth-gated user management, feedback review, usage/system summaries, and AI briefings.
+- `admin_operations.py` under `/api/admin` for Operations Director health-event review, issue drafts, approval/status changes, chat, and GitHub issue creation.
+- `admin_cto.py` under `/api/admin` for CTO Director reviews, findings, executive summaries, status changes, and GitHub issue creation.
 - `audio.py` under `/api/audio` for transcription and speech.
 - `message_feedback.py` under `/api` for message feedback capture.
 - `message_signals.py` under `/api/message-signals` for signal classification and backfill.
 - `opportunities.py` under `/api/opportunities` for opportunity generation and accept/decline actions.
 - `priority.py` under `/api/priority` for priority review, recommendations, decisions, feedback, apply actions, history, and learning insights.
+- `usage.py` under `/api` for usage event capture.
+- `home.py` under `/api/home` for activation-aware dashboard snapshots and manual refresh.
 - `leadership_coaching_router.py` under `/api/leadership-coaching` for dedicated coaching sessions.
+
+## Admin And Operational API Surface
+
+- `/api/admin/users` and related admin endpoints manage users, roles, active status, password resets, and audit logging.
+- `/api/admin/system-health` and Operations Director endpoints turn recorded runtime events into reviewable operational signals.
+- `/api/admin/cto/...` runs and stores architecture/release-readiness reviews with findings that can become GitHub issues.
+- `/api/notifications/...` stores push subscriptions, updates preferences, reports status, and sends test notifications.
+- `/api/home/dashboard` returns or refreshes a stored dashboard snapshot used by the frontend startup route.
 
 ## Journey 2.0 API Surface
 
@@ -47,6 +61,7 @@ Important endpoints in `journey.py`:
 ## Conventions
 
 - Keep user isolation explicit with `user_number` filters.
+- Keep admin-only endpoints behind `require_admin`.
 - Prefer response models for API stability.
 - Avoid putting long orchestration logic in routers; move it into `services/` when behavior grows.
 - When adding a database-backed UI feature, update `models.py`, add a migration in `db_migrations/`, and expose the narrowest API endpoint needed.
