@@ -512,10 +512,10 @@ def get_behavioral_trial_status(db: Session, user_number: str, dimension_id: str
 
 
 def get_observable_real_world_trial_status(db: Session, user_number: str, dimension_id: str, belt_id: str) -> Optional[str]:
-    if belt_id != "yellow":
-        return None
-
-    result = validate_yellow_belt_trial_type(db, user_number, dimension_id, "real_world")
+    if belt_id == "yellow":
+        result = validate_yellow_belt_trial_type(db, user_number, dimension_id, "real_world")
+    else:
+        result = validate_belt_trial_type(db, user_number, belt_id, dimension_id, "real_world")
     if not result["signals"]:
         return None
     if result["passed"]:

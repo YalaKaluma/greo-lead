@@ -1,13 +1,13 @@
 # Alfred / Leadership OS
 
-Alfred is an executive operating system for leaders. It combines AI coaching, task execution, goals, habits, people review, journaling, message intelligence, and Journey 2.0 leadership development.
+Alfred is an executive operating system for leaders. It combines AI coaching, task execution, goals, habits, people review, journaling, message intelligence, notifications, admin operations, and Journey 2.0 leadership development.
 
 The application is a FastAPI backend with a Vite/React frontend, backed by PostgreSQL/Neon through SQLAlchemy.
 
 ## Current Documentation
 
 - `Leadership_OS_Documentation_v6_CURRENT.docx` - broader product and technical overview.
-- `app/README.md` - backend application map and runtime notes.
+- `app/README.md` - backend application map, runtime notes, and environment variables.
 - `app/routers/README.md` - API router map.
 - `app/services/README.md` - orchestration and service-layer map.
 - `app/frontend/README.md` - frontend setup and UI map.
@@ -24,6 +24,7 @@ The application is a FastAPI backend with a Vite/React frontend, backed by Postg
 - Journey subdomain prompts: `app/journey_subdomain_prompts.yaml`
 - Prompt assets: `app/prompts/` and `app/nudge_prompts.yaml`
 - Migrations: SQL files in `db_migrations/`
+- Alembic revisions: `alembic/versions/`
 
 ## Product Surfaces
 
@@ -36,7 +37,10 @@ Alfred currently includes:
 - People review, relationship context, review history, and synthesis.
 - Journaling with reflection-depth scoring and trend views.
 - In-app chat, WhatsApp, email, nudges, audio transcription, and text-to-speech.
+- Browser push notifications with per-user subscriptions, preferences, delivery logs, and settings-page test sends.
 - Message feedback and signal classification for response quality and behavioral telemetry.
+- Admin user management, feedback review, usage analytics, system health, AI briefings, Operations Director issue drafting, and CTO Director review.
+- Home dashboard snapshots for activation-aware startup routing.
 - User settings for English/French language preference and timezone preference.
 
 ## Local Development
@@ -59,6 +63,9 @@ GMAIL_CLIENT_ID=...
 GMAIL_CLIENT_SECRET=...
 GMAIL_REFRESH_TOKEN=...
 GMAIL_SENDER_EMAIL=...
+VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+VAPID_SUBJECT=mailto:admin@alfred.local
 ```
 
 Install and run the backend:
@@ -133,12 +140,21 @@ Set `APP_ENV`, `ENVIRONMENT`, or `RAILWAY_ENVIRONMENT_NAME` to `production`, `de
 
 ## Database
 
-`app/main.py` calls `Base.metadata.create_all(bind=engine)` at startup so declared tables are verified. Schema changes should still be captured as explicit SQL migrations in `db_migrations/` so Neon environments can be updated intentionally.
+`app/main.py` calls `Base.metadata.create_all(bind=engine)` at startup so declared tables are verified. Alembic is now the source of truth for new schema changes after the baseline migration. Historical SQL migrations remain in `db_migrations/` as reference.
+
+Use `DIRECT_DATABASE_URL` when running migrations against Neon:
+
+```bash
+alembic current
+alembic heads
+alembic revision --autogenerate -m "describe schema change"
+alembic upgrade head
+```
 
 When adding database-backed behavior:
 
 - Add or update SQLAlchemy models in `app/models.py`.
-- Add an idempotent migration in `db_migrations/`.
+- Add an Alembic revision in `alembic/versions/`.
 - Keep reads and writes scoped by `user_number`.
 - Update the relevant README if a new product surface or endpoint appears.
 
@@ -154,3 +170,17 @@ Journey 2.0 is the current leadership development engine. It uses:
 - Existing `journey_*` tables for subdomain evidence.
 
 The primary UI implementation is `app/frontend/src/components/MyLeadershipJourney.jsx`. The primary API implementation is `app/routers/journey.py`.
+
+## Verification
+
+Use focused checks before release or after documentation-sensitive changes:
+
+```bash
+pytest
+cd app/frontend
+npm run i18n:check
+npm run test
+npm run build
+```
+
+Current focused backend test coverage includes CTO Director, Operations Director, notifications, nudge targeting, onboarding starter goals, priority timezone behavior, security hardening, task MTN trends, habits, and Journey roadmap imports.

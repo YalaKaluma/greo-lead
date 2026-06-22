@@ -23,54 +23,83 @@ const VISIBLE_BELTS = BELTS.filter((belt) => belt.id !== "black");
 const BELT_GUIDE = [
   {
     id: "white",
+    earnedBeltId: "yellow",
     statement: "I see the pieces.",
-    description: "At White Belt, you begin to observe leadership intentionally.",
-    focus: ["Goals", "Habits", "Relationships", "Energy", "Learning", "Execution"],
+    description: "At White Belt, you begin discovering the dimensions that shape your life and leadership.",
+    focusIntro: "You begin to explore",
+    focus: [
+      "Your vision and values",
+      "Your relationships",
+      "Your execution habits",
+      "Your energy patterns",
+      "Your growth opportunities",
+    ],
+    closing: "You are building awareness of the forces that influence your behavior and results.",
     objective: "Awareness",
-    keyQuestion: "What are the elements that shape my life and leadership?",
+    keyQuestion: "What are the forces shaping my life and leadership?",
   },
   {
     id: "yellow",
+    earnedBeltId: "green",
     statement: "I understand the pieces.",
-    description: "At Yellow Belt, you move beyond awareness into understanding.",
+    description: "At Yellow Belt, you move beyond awareness and begin understanding the patterns behind your behavior.",
+    focusIntro: "You begin to understand",
     focus: [
-      "Why you behave the way you do",
-      "What drives your decisions",
-      "Your strengths and blind spots",
-      "The patterns that help or hurt your progress",
+      "Why you make certain decisions",
+      "What motivates or drains you",
+      "The emotions behind your actions",
+      "The recurring patterns in your life",
+      "The forces helping or limiting your growth",
     ],
-    objective: "Self-understanding",
-    keyQuestion: "Why do these pieces matter, and how do they affect me?",
+    closing: "You are no longer simply observing yourself. You are learning why you operate the way you do.",
+    objective: "Understanding",
+    keyQuestion: "Why do I think, feel, and behave this way?",
   },
   {
     id: "green",
-    statement: "I connect the pieces.",
-    description: "At Green Belt, leadership becomes a system rather than a collection of tools.",
+    earnedBeltId: "brown",
+    statement: "I build the system.",
+    description: "At Green Belt, leadership becomes operational. You begin translating insight into action by building systems that support the person you want to become.",
+    focusIntro: "You learn to connect",
     focus: [
       "Goals to daily actions",
       "Values to decisions",
       "Energy to performance",
-      "Relationships to outcomes",
       "Learning to growth",
+      "Relationships to leadership impact",
     ],
-    objective: "Integration",
-    keyQuestion: "How do all these pieces work together?",
+    closing: "You stop relying on motivation and begin relying on habits, routines, reviews, structures, and deliberate practice. Leadership becomes a system rather than a collection of insights.",
+    objective: "Operationalization",
+    keyQuestion: "What systems will consistently produce the outcomes I want?",
   },
   {
     id: "brown",
-    statement: "I can teach the pieces.",
+    earnedBeltId: "black",
+    statement: "I help others build the system.",
     description: "At Brown Belt, leadership becomes transferable.",
+    focusIntro: "You begin to",
     focus: [
-      "Explain principles clearly",
-      "Coach others",
-      "Share lessons from experience",
-      "Help others avoid mistakes",
-      "Create clarity where others see confusion",
+      "Develop others intentionally",
+      "Share hard-earned wisdom",
+      "Create clarity and direction",
+      "Build systems that outlast you",
+      "Help others grow without dependence",
     ],
+    closing: "Leadership is no longer only about your success. It becomes about the growth, capability, and impact you create in others.",
     objective: "Multiplication",
-    keyQuestion: "Can I help someone else grow?",
+    keyQuestion: "How can I help others grow?",
   },
 ];
+
+const LEADERSHIP_ARC = BELT_GUIDE.map((guide) => ({
+  belt: getBeltById(guide.earnedBeltId || guide.id).name,
+  focus: {
+    white: "Self-Awareness",
+    yellow: "Self-Understanding",
+    green: "Personal Operating System",
+    brown: "Multiplying Leadership",
+  }[guide.id],
+}));
 
 const DIMENSIONS = [
   {
@@ -754,7 +783,7 @@ function getSignalUnit(signal) {
   if (signal?.signal === "mtn_classifications_reviewed" || signal?.signal === "move_the_needle_actions_flagged") return "reviews";
   if (signal?.signal === "vision_linked_to_values") return "visions";
   if (signal?.signal === "five_team_members_entered") return "team members";
-  if (signal?.signal === "tasks_consistently_entered" || signal?.signal === "tasks_maintained") return "tasks";
+  if (signal?.signal === "ten_tasks_created" || signal?.signal === "tasks_consistently_entered" || signal?.signal === "tasks_maintained") return "tasks";
   if (
     signal?.signal === "values_strengths_energy_journals" ||
     signal?.signal === "three_behavior_change_journals" ||
@@ -798,6 +827,7 @@ function getPrimaryProgressSignal(signals) {
     "values_strengths_energy_journals",
     "three_energy_level_journals",
     "five_team_members_entered",
+    "ten_tasks_created",
     "high_energy_habits_identified",
     "tasks_consistently_entered",
   ];
@@ -1105,8 +1135,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
     let cancelled = false;
     const fetchBeltValidations = async () => {
       try {
-        const [yellowResponse, greenResponse] = await Promise.allSettled(
-          ["yellow", "green"].map((belt) =>
+        const [whiteResponse, yellowResponse, greenResponse] = await Promise.allSettled(
+          ["white", "yellow", "green"].map((belt) =>
             axios.get(`${apiUrl}/api/journey/validation/${belt}`, {
               params: { user_number: userNumber },
             })
@@ -1115,6 +1145,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
         if (!cancelled) {
           setBeltValidations((current) => ({
             ...current,
+            white: whiteResponse.status === "fulfilled" ? whiteResponse.value.data || null : current.white,
             yellow: yellowResponse.status === "fulfilled" ? yellowResponse.value.data || null : current.yellow,
             green: greenResponse.status === "fulfilled" ? greenResponse.value.data || null : current.green,
           }));
@@ -1674,18 +1705,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           <div className="flex flex-wrap gap-6">
           <button
             type="button"
-            onClick={() => setActiveJourneyTab("leadership")}
-            className={`relative px-2 pb-3 font-medium transition-colors ${
-              activeJourneyTab === "leadership" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            My Leadership
-            {activeJourneyTab === "leadership" && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-            )}
-          </button>
-          <button
-            type="button"
             onClick={() => setActiveJourneyTab("dojo")}
             className={`relative px-2 pb-3 font-medium transition-colors ${
               activeJourneyTab === "dojo" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
@@ -1693,6 +1712,18 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           >
             My Dojo
             {activeJourneyTab === "dojo" && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveJourneyTab("leadership")}
+            className={`relative px-2 pb-3 font-medium transition-colors ${
+              activeJourneyTab === "leadership" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            My Leadership
+            {activeJourneyTab === "leadership" && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
             )}
           </button>
@@ -1770,33 +1801,20 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           <LeadershipCoachingSessionsTab apiUrl={apiUrl} userNumber={userNumber} />
         ) : (
         <div className="grid gap-6 xl:grid-cols-[520px_minmax(0,1fr)]">
-          <section className="space-y-5">
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <LeadershipWheel
-                selectedDimensionId={selectedDimensionId}
-                activeTopic={activeTopic}
-                dimensionStates={dimensionStates}
-                topicData={topicData}
-                journeyBelt={journeyCurrentBelt}
-                onSelectDimension={handleSelectDimension}
-                onSelectSubdomain={handleSelectSubdomain}
-                onSelectCenter={() => setShowWheelModal(true)}
-              />
-            </div>
-
-            <TopicEvidencePanel
-              dimension={selectedDimension}
+          <div className="order-1 rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-start-1 xl:row-start-1">
+            <LeadershipWheel
+              selectedDimensionId={selectedDimensionId}
               activeTopic={activeTopic}
-              setActiveTopic={setActiveTopic}
-              items={topicItems}
-              promptConfig={subdomainPromptConfig}
-              onNavigate={onNavigate}
-              onAddItem={handleAddSubdomainItem}
-              onEditItem={handleEditSubdomainItem}
+              dimensionStates={dimensionStates}
+              topicData={topicData}
+              journeyBelt={journeyCurrentBelt}
+              onSelectDimension={handleSelectDimension}
+              onSelectSubdomain={handleSelectSubdomain}
+              onSelectCenter={() => setShowWheelModal(true)}
             />
-          </section>
+          </div>
 
-          <section className="space-y-5">
+          <section className="order-2 space-y-5 xl:col-start-2 xl:row-span-2 xl:row-start-1">
             <BeltStepSummary
               dimension={selectedDimension}
               targetBelt={viewedBelt}
@@ -1824,6 +1842,19 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
 
             {selectedDimension.mvp && <TelemetryPanel telemetry={telemetry} loading={loadingSignals} />}
           </section>
+
+          <div className="order-3 xl:col-start-1 xl:row-start-2">
+            <TopicEvidencePanel
+              dimension={selectedDimension}
+              activeTopic={activeTopic}
+              setActiveTopic={setActiveTopic}
+              items={topicItems}
+              promptConfig={subdomainPromptConfig}
+              onNavigate={onNavigate}
+              onAddItem={handleAddSubdomainItem}
+              onEditItem={handleEditSubdomainItem}
+            />
+          </div>
         </div>
         )}
       </div>
@@ -2250,15 +2281,18 @@ function LeadershipWheelModal({ dimensionStates, topicData, journeyBelt, onClose
 function BeltGuideModal({ onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 md:p-6">
-      <div className="flex max-h-[92vh] w-full max-w-[1480px] flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+      <div className="flex max-h-[92vh] w-full max-w-7xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 md:px-6">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Belt Progression</p>
-            <h3 className="mt-1 text-2xl font-semibold text-slate-950">Leadership is not a destination.</h3>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              It is a progression. Each belt represents a different relationship with leadership. As you advance, the
-              goal is not simply to gain knowledge, but to transform how you think, act, and influence others.
-            </p>
+            <h3 className="mt-1 text-2xl font-semibold text-slate-950">Leadership Is Not a Destination</h3>
+            <div className="mt-2 max-w-3xl space-y-2 text-sm leading-6 text-slate-600">
+              <p>Leadership is not something you achieve once.</p>
+              <p>
+                It is a lifelong journey of becoming more aware, more intentional, and more capable of helping others
+                grow.
+              </p>
+            </div>
           </div>
           <button
             type="button"
@@ -2271,12 +2305,12 @@ function BeltGuideModal({ onClose }) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-4 py-5 md:px-6">
-          <div className="grid min-w-[960px] gap-4 xl:grid-cols-4">
+          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
             {BELT_GUIDE.map((guide) => {
-              const belt = getBeltById(guide.id);
+              const belt = getBeltById(guide.earnedBeltId || guide.id);
 
               return (
-                <article key={guide.id} className="flex min-h-[520px] flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <article key={guide.id} className="flex min-h-[560px] flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-start gap-3">
                     <span
                       className="mt-1 h-4 w-4 flex-none rounded-full border border-slate-300"
@@ -2291,7 +2325,7 @@ function BeltGuideModal({ onClose }) {
                   <p className="mt-4 text-sm leading-6 text-slate-700">{guide.description}</p>
 
                   <div className="mt-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">You begin to</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{guide.focusIntro}</p>
                     <ul className="mt-2 grid gap-1.5 text-sm leading-6 text-slate-700 sm:grid-cols-2">
                       {guide.focus.map((item) => (
                         <li key={item} className="flex gap-2">
@@ -2302,15 +2336,48 @@ function BeltGuideModal({ onClose }) {
                     </ul>
                   </div>
 
+                  <p className="mt-4 text-sm leading-6 text-slate-700">{guide.closing}</p>
+
                   <div className="mt-auto rounded-md border border-slate-200 bg-slate-50 p-3">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Objective</p>
                     <p className="mt-1 text-sm font-semibold text-slate-900">{guide.objective}</p>
                     <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Key Question</p>
-                    <p className="mt-1 text-sm leading-6 text-slate-700">"{guide.keyQuestion}"</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-700">{guide.keyQuestion}</p>
                   </div>
                 </article>
               );
             })}
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm md:p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">The Leadership Arc</p>
+              <div className="mt-4 overflow-hidden rounded-md border border-slate-200">
+                {LEADERSHIP_ARC.map((row, index) => (
+                  <div
+                    key={row.belt}
+                    className={`grid grid-cols-[minmax(120px,0.8fr)_1fr] gap-4 px-4 py-3 text-sm ${
+                      index === 0 ? "" : "border-t border-slate-200"
+                    }`}
+                  >
+                    <p className="font-semibold text-slate-900">{row.belt}</p>
+                    <p className="text-slate-700">{row.focus}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm md:p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">A Note on Mastery</p>
+              <div className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
+                <p>There is no final destination.</p>
+                <p>The purpose of the Leadership Operating System is not to earn a belt.</p>
+                <p>
+                  It is to continually deepen your awareness, strengthen your operating system, and help others grow
+                  through the lessons you have earned.
+                </p>
+              </div>
+            </section>
           </div>
         </div>
       </div>
@@ -3548,9 +3615,9 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
   const getRealWorldButtonLabel = () => {
     if (isViewingCurrentBelt) {
       if (normalizeStatus(realWorldTrial?.status) === "needs_revision") return "Resubmit";
-      return realWorldTrial ? "Log Trial" : "Start Trial";
+      return realWorldTrial ? "Continue Response" : "Submit Response";
     }
-    if (isViewingPastBelt && realWorldTrial) return "Review Trial";
+    if (isViewingPastBelt) return realWorldTrial ? "Review Response" : "Submit Response";
     return null;
   };
   const trialState = {

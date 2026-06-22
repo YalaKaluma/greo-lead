@@ -32,10 +32,24 @@ YELLOW_BELT_DIMENSION_SIGNALS = {
     "learning": ["scars_failures_behavior_reflections"],
 }
 
+WHITE_BELT_DIMENSION_SIGNALS = {
+    "execute": [],
+    "energy": [],
+}
+
 YELLOW_BELT_TRIAL_SIGNALS = {
     "energy": {
         "real_world": ["three_energy_level_journals"],
         "behavioral": ["high_energy_habits_identified"],
+    },
+}
+
+WHITE_BELT_TRIAL_SIGNALS = {
+    "execute": {
+        "real_world": ["ten_tasks_created"],
+    },
+    "energy": {
+        "real_world": ["three_energy_level_journals"],
     },
 }
 
@@ -57,11 +71,13 @@ GREEN_BELT_TRIAL_SIGNALS = {
 }
 
 BELT_DIMENSION_SIGNALS = {
+    "white": WHITE_BELT_DIMENSION_SIGNALS,
     "yellow": YELLOW_BELT_DIMENSION_SIGNALS,
     "green": GREEN_BELT_DIMENSION_SIGNALS,
 }
 
 BELT_TRIAL_SIGNALS = {
+    "white": WHITE_BELT_TRIAL_SIGNALS,
     "yellow": YELLOW_BELT_TRIAL_SIGNALS,
     "green": GREEN_BELT_TRIAL_SIGNALS,
 }
@@ -276,6 +292,24 @@ def validate_tasks_consistently_entered(db: Session, user_number: str) -> dict[s
         required,
         actual,
         message,
+        [_evidence_item(item, ["title", "status", "created_at", "updated_at"]) for item in tasks[:20]],
+    )
+
+
+def validate_ten_tasks_created(db: Session, user_number: str) -> dict[str, Any]:
+    tasks = db.query(Task).filter(Task.user_number == user_number).all()
+    required = 10
+    actual = len(tasks)
+    return _signal_result(
+        "ten_tasks_created",
+        actual >= required,
+        required,
+        actual,
+        (
+            f"You have created {actual} tasks in Alfred."
+            if actual >= required
+            else f"Create {max(required - actual, 0)} more tasks in Alfred's todo list."
+        ),
         [_evidence_item(item, ["title", "status", "created_at", "updated_at"]) for item in tasks[:20]],
     )
 
@@ -533,6 +567,7 @@ YELLOW_BELT_SIGNAL_VALIDATORS: dict[str, Callable[[Session, str], dict[str, Any]
     "values_strengths_energy_journals": validate_values_strengths_energy_journals,
     "fulfillment_reflections": validate_fulfillment_reflections,
     "five_team_members_entered": validate_five_team_members_entered,
+    "ten_tasks_created": validate_ten_tasks_created,
     "tasks_consistently_entered": validate_tasks_consistently_entered,
     "tasks_maintained": validate_tasks_maintained,
     "high_energy_habits_identified": validate_high_energy_habits_identified,
@@ -561,6 +596,7 @@ def _next_action_for_signal(signal: dict[str, Any]) -> Optional[str]:
         "values_strengths_energy_journals": f"Add {remaining} more journal reflections about how values, strengths, or vision affected your energy and fulfillment.",
         "fulfillment_reflections": "Add one journal reflection about fulfillment or meaning.",
         "five_team_members_entered": f"Complete {remaining} more team member profiles with strengths, growth areas, and aspirations.",
+        "ten_tasks_created": f"Create {remaining} more tasks in Alfred's todo list.",
         "tasks_consistently_entered": f"Log {remaining} more tasks in Alfred's todo list.",
         "tasks_maintained": "Update, complete, reprioritize, or reschedule tasks across at least 3 days.",
         "high_energy_habits_identified": f"Track {remaining} more active habits in MyHabits.",

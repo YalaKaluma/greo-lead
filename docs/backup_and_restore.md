@@ -52,6 +52,13 @@ DATABASE_URL="postgresql://..." python scripts/db_health_check.py
    - journal_entries
    - journey_goals
    - journey_belt_trials
+   - belt_assessments
+   - push_subscriptions
+   - notification_preferences
+   - notification_delivery_logs
+   - system_health_events
+   - cto_reviews
+   - cto_findings
    - messages
 5. Confirm sample user data is present.
 6. Do not point production to restored branch until manually approved.
@@ -80,6 +87,8 @@ Also verify:
 - The Journey page loads.
 - The task list loads.
 - Journal list loads, without checking private content in logs.
+- Settings notification status loads.
+- Admin System Health loads for an admin user.
 
 ## Avoiding Production Overwrite
 

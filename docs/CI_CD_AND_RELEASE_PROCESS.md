@@ -31,6 +31,16 @@ git push origin main
 
 Pushing to `main` runs the lightweight Dev CI workflow and Railway deploys development.
 
+Before promoting to production, run the local checks that match the active surfaces:
+
+```bash
+pytest
+cd app/frontend
+npm run i18n:check
+npm run test
+npm run build
+```
+
 ## Production Release Workflow
 
 Preferred release path:
@@ -100,6 +110,8 @@ DIRECT_DATABASE_URL="postgresql://..." alembic upgrade head
 ```
 
 Run this only after reviewing the migration and confirming backup/restore readiness.
+
+Current post-baseline revisions include CTO Director persistence, `tasks.completed_at`, and generic notification tables. Confirm each target environment has applied the same Alembic head before comparing behavior.
 
 ## Rollback Notes
 

@@ -10,6 +10,8 @@ Use this checklist before every production release to `prod`.
 - [ ] Confirm rollback plan and restore decision owner.
 - [ ] Confirm no secrets were committed.
 - [ ] Confirm frontend build succeeds.
+- [ ] Confirm frontend tests and `npm run i18n:check` pass.
+- [ ] Confirm backend tests pass, including notifications, Operations Director, CTO Director, nudge targeting, priority timezone behavior, and security hardening.
 - [ ] Confirm staging smoke test passed.
 - [ ] Confirm `scripts/db_health_check.py` can run against the intended database without exposing private content.
 
@@ -20,10 +22,14 @@ Use this checklist before every production release to `prod`.
 - [ ] `GET /api/tasks?user_number=<test-user>`
 - [ ] `GET /api/journey/goals?user_number=<test-user>`
 - [ ] `GET /api/journal?user_id=<test-user-id>`
+- [ ] `GET /api/home/dashboard?user_number=<test-user>`
+- [ ] `GET /api/notifications/status?user_number=<test-user>`
 - [ ] Settings page
+- [ ] Home page
 - [ ] Journey page
 - [ ] Journal page
 - [ ] Task list
+- [ ] Admin System Health page for admin users
 
 ## After Release
 
@@ -33,6 +39,8 @@ Use this checklist before every production release to `prod`.
 - [ ] Check task list.
 - [ ] Check Journey page.
 - [ ] Check journal page.
+- [ ] Check habits page.
+- [ ] Check notification status and settings-page test notification in the intended browser/environment.
 - [ ] Check Alfred System Health or error logs.
 - [ ] Confirm no unexpected authentication, database, OpenAI, or email errors.
 
