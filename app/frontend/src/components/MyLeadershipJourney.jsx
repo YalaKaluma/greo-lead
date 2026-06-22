@@ -23,6 +23,7 @@ const VISIBLE_BELTS = BELTS.filter((belt) => belt.id !== "black");
 const BELT_GUIDE = [
   {
     id: "white",
+    earnedBeltId: "yellow",
     statement: "I see the pieces.",
     description: "At White Belt, you begin discovering the dimensions that shape your life and leadership.",
     focusIntro: "You begin to explore",
@@ -39,6 +40,7 @@ const BELT_GUIDE = [
   },
   {
     id: "yellow",
+    earnedBeltId: "green",
     statement: "I understand the pieces.",
     description: "At Yellow Belt, you move beyond awareness and begin understanding the patterns behind your behavior.",
     focusIntro: "You begin to understand",
@@ -55,6 +57,7 @@ const BELT_GUIDE = [
   },
   {
     id: "green",
+    earnedBeltId: "brown",
     statement: "I build the system.",
     description: "At Green Belt, leadership becomes operational. You begin translating insight into action by building systems that support the person you want to become.",
     focusIntro: "You learn to connect",
@@ -71,6 +74,7 @@ const BELT_GUIDE = [
   },
   {
     id: "brown",
+    earnedBeltId: "black",
     statement: "I help others build the system.",
     description: "At Brown Belt, leadership becomes transferable.",
     focusIntro: "You begin to",
@@ -87,19 +91,15 @@ const BELT_GUIDE = [
   },
 ];
 
-const LEADERSHIP_PROGRESSION = [
-  { label: "Awareness", beltId: "white" },
-  { label: "Understanding", beltId: "yellow" },
-  { label: "Operationalization", beltId: "green" },
-  { label: "Multiplication", beltId: "brown" },
-];
-
-const LEADERSHIP_ARC = [
-  { belt: "White Belt", focus: "Self-Awareness" },
-  { belt: "Yellow Belt", focus: "Self-Understanding" },
-  { belt: "Green Belt", focus: "Personal Operating System" },
-  { belt: "Brown Belt", focus: "Multiplying Leadership" },
-];
+const LEADERSHIP_ARC = BELT_GUIDE.map((guide) => ({
+  belt: getBeltById(guide.earnedBeltId || guide.id).name,
+  focus: {
+    white: "Self-Awareness",
+    yellow: "Self-Understanding",
+    green: "Personal Operating System",
+    brown: "Multiplying Leadership",
+  }[guide.id],
+}));
 
 const DIMENSIONS = [
   {
@@ -783,7 +783,7 @@ function getSignalUnit(signal) {
   if (signal?.signal === "mtn_classifications_reviewed" || signal?.signal === "move_the_needle_actions_flagged") return "reviews";
   if (signal?.signal === "vision_linked_to_values") return "visions";
   if (signal?.signal === "five_team_members_entered") return "team members";
-  if (signal?.signal === "tasks_consistently_entered" || signal?.signal === "tasks_maintained") return "tasks";
+  if (signal?.signal === "ten_tasks_created" || signal?.signal === "tasks_consistently_entered" || signal?.signal === "tasks_maintained") return "tasks";
   if (
     signal?.signal === "values_strengths_energy_journals" ||
     signal?.signal === "three_behavior_change_journals" ||
@@ -827,6 +827,7 @@ function getPrimaryProgressSignal(signals) {
     "values_strengths_energy_journals",
     "three_energy_level_journals",
     "five_team_members_entered",
+    "ten_tasks_created",
     "high_energy_habits_identified",
     "tasks_consistently_entered",
   ];
@@ -1134,8 +1135,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
     let cancelled = false;
     const fetchBeltValidations = async () => {
       try {
-        const [yellowResponse, greenResponse] = await Promise.allSettled(
-          ["yellow", "green"].map((belt) =>
+        const [whiteResponse, yellowResponse, greenResponse] = await Promise.allSettled(
+          ["white", "yellow", "green"].map((belt) =>
             axios.get(`${apiUrl}/api/journey/validation/${belt}`, {
               params: { user_number: userNumber },
             })
@@ -1144,6 +1145,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
         if (!cancelled) {
           setBeltValidations((current) => ({
             ...current,
+            white: whiteResponse.status === "fulfilled" ? whiteResponse.value.data || null : current.white,
             yellow: yellowResponse.status === "fulfilled" ? yellowResponse.value.data || null : current.yellow,
             green: greenResponse.status === "fulfilled" ? greenResponse.value.data || null : current.green,
           }));
@@ -2290,10 +2292,6 @@ function BeltGuideModal({ onClose }) {
                 It is a lifelong journey of becoming more aware, more intentional, and more capable of helping others
                 grow.
               </p>
-              <p>
-                As you progress, the goal is not simply to gain knowledge. The goal is to transform how you think, act,
-                lead, and influence others.
-              </p>
             </div>
           </div>
           <button
@@ -2307,36 +2305,9 @@ function BeltGuideModal({ onClose }) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-4 py-5 md:px-6">
-          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm md:p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">The Leadership Progression</p>
-            <div className="mt-4 grid gap-3 md:grid-cols-4">
-              {LEADERSHIP_PROGRESSION.map((step, index) => {
-                const belt = getBeltById(step.beltId);
-
-                return (
-                  <div key={step.label} className="relative">
-                    <div className="flex h-full items-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
-                      <span
-                        className="h-3 w-3 flex-none rounded-full border border-slate-300"
-                        style={{ backgroundColor: belt.color }}
-                      />
-                      <span className="text-sm font-semibold text-slate-900">{step.label}</span>
-                    </div>
-                    {index < LEADERSHIP_PROGRESSION.length - 1 && (
-                      <span className="mx-auto block py-1 text-center text-slate-400 md:absolute md:-right-3 md:top-1/2 md:mx-0 md:-translate-y-1/2 md:py-0">
-                        <span className="md:hidden">{"\u2193"}</span>
-                        <span className="hidden md:inline">{"\u2192"}</span>
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          <div className="mt-5 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
             {BELT_GUIDE.map((guide) => {
-              const belt = getBeltById(guide.id);
+              const belt = getBeltById(guide.earnedBeltId || guide.id);
 
               return (
                 <article key={guide.id} className="flex min-h-[560px] flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -3644,9 +3615,9 @@ function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBelt, req
   const getRealWorldButtonLabel = () => {
     if (isViewingCurrentBelt) {
       if (normalizeStatus(realWorldTrial?.status) === "needs_revision") return "Resubmit";
-      return realWorldTrial ? "Log Trial" : "Start Trial";
+      return realWorldTrial ? "Continue Response" : "Submit Response";
     }
-    if (isViewingPastBelt && realWorldTrial) return "Review Trial";
+    if (isViewingPastBelt && realWorldTrial) return "Review Response";
     return null;
   };
   const trialState = {
