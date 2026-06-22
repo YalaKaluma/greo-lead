@@ -54,7 +54,7 @@ dimensions:
           display_order: 3
         behavioral:
           title: Foundation Complete
-          prompt: Complete vision, values, and strengths in Alfred.
+          prompt: Complete vision, values, and strengths in Alfred's evidence library.
           signals:
           - vision_completed
           - values_completed
@@ -285,12 +285,12 @@ dimensions:
         real_world:
           active: true
           title: Leadership Feedback
-          prompt: Ask one person for feedback on how they experience your leadership.
+          prompt: Ask one person for feedback on how they experience your leadership and share what you learned.
           completion_hint: Invite reality from outside your own interpretation.
           display_order: 1
         behavioral:
           title: Team Foundations
-          prompt: Complete team composition, inspire, and delegate section in Alfred.
+          prompt: Complete team composition, inspire, and delegate section in Alfred's evidence library.
           signals:
           - relationship_reflections
           - people_reviews
@@ -535,7 +535,7 @@ dimensions:
           display_order: 2
         behavioral:
           title: Behavioral Evidence
-          prompt: Fill in your prioritization and procrastination tendency, and current executive system.
+          prompt: Fill in your prioritization and procrastination tendency, and current executive system in Alfred's evidence library.
           signals:
           - prioritization_tendency_completed
           - procrastination_tendency_completed
@@ -897,7 +897,7 @@ dimensions:
           display_order: 2
         behavioral:
           title: Map Your Energy Landscape
-          prompt: Complete the Energy Sources, Energy Drains, and Recovery sections in Alfred.
+          prompt: Complete the Energy Sources, Energy Drains, and Recovery sections in Alfred's evidence library.
           signals:
           - energy_drains_completed
           - energy_sources_completed
@@ -1159,7 +1159,7 @@ dimensions:
           active: true
           title: Expose the Blind Spot
           prompt: Have an honest conversation with someone you trust about a personal weakness, fear, or growth area you typically
-            avoid discussing openly.
+            avoid discussing openly. Share here what you learned.
           completion_hint: Practice vulnerable learning through a conversation you would normally avoid.
           display_order: 2
         behavioral:
