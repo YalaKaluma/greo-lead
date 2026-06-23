@@ -1,9 +1,11 @@
 import {
   BELTS,
+  BELT_IDS,
   CENTER,
   DIMENSIONS,
   R_BELT,
-  TOPIC_FORM_FIELDS
+  TOPIC_FORM_FIELDS,
+  WHY_IT_MATTERS
 } from "./journeyData";
 
 function getSubdomainQuestion(promptConfig, topic) {
