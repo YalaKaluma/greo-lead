@@ -8,6 +8,7 @@ import {
   normalizeGoalLevel,
   normalizeRequirements,
 } from "./journeyModel";
+import { DIMENSIONS } from "./journeyData";
 
 describe("journey model helpers", () => {
   it("normalizes legacy belt and goal aliases", () => {
@@ -25,6 +26,16 @@ describe("journey model helpers", () => {
     expect(requirements.reflection.prompt).toBe("Reflect");
     expect(requirements.real_world.prompt).toBeTruthy();
     expect(getActiveTrialTypes(requirements)).toEqual(["reflection", "real_world", "behavioral"]);
+  });
+
+  it("runs journey topic filters without missing helper references", () => {
+    const sampleItem = { category: "prioritization", time_horizon: "long_term" };
+    const filteredTopics = DIMENSIONS.flatMap((dimension) => dimension.topics).filter((topic) => topic.filter);
+
+    expect(filteredTopics.length).toBeGreaterThan(0);
+    filteredTopics.forEach((topic) => {
+      expect(() => topic.filter(sampleItem)).not.toThrow();
+    });
   });
 
   it("builds stable dimension states from telemetry and trials", () => {
