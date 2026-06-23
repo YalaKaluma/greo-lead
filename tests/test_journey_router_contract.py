@@ -1,8 +1,29 @@
-from app.routers import journey
+from app.routers import (
+    journey,
+    journey_belts,
+    journey_goals,
+    journey_profile,
+    journey_profile_artifacts,
+    journey_profile_systems,
+)
+
+
+JOURNEY_ROUTERS = (
+    journey.router,
+    journey_belts.router,
+    journey_goals.router,
+    journey_profile.router,
+    journey_profile_artifacts.router,
+    journey_profile_systems.router,
+)
+
+
+def _route_paths(router):
+    return {route.path for route in router.routes if hasattr(route, "path")}
 
 
 def test_journey_router_keeps_public_route_contract():
-    route_paths = {route.path for route in journey.router.routes if hasattr(route, "path")}
+    route_paths = set().union(*(_route_paths(router) for router in JOURNEY_ROUTERS))
 
     expected_paths = {
         "/trial-config",
