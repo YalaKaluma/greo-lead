@@ -87,7 +87,7 @@ const BELT_GUIDE = [
 ];
 
 const LEADERSHIP_ARC = BELT_GUIDE.map((guide) => ({
-  belt: getBeltById(guide.earnedBeltId || guide.id).name,
+  belt: (BELTS.find((belt) => belt.id === (guide.earnedBeltId || guide.id)) || BELTS[0]).name,
   focus: {
     white: "Self-Awareness",
     yellow: "Self-Understanding",
