@@ -7,7 +7,8 @@ from app.routers import journey_profile_artifacts, journey_profile_systems
 router.include_router(journey_profile_artifacts.router)
 router.include_router(journey_profile_systems.router)
 for _route in journey_profile_artifacts.router.routes + journey_profile_systems.router.routes:
-    globals()[_route.endpoint.__name__] = _route.endpoint
+    if hasattr(_route, "endpoint"):
+        globals()[_route.endpoint.__name__] = _route.endpoint
 
 # STRENGTHS
 # ========================================

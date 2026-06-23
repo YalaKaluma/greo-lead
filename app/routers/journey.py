@@ -48,7 +48,8 @@ generate_roadmap = journey_goals.generate_roadmap
 from app.routers import journey_profile
 router.include_router(journey_profile.router)
 for _route in journey_profile.router.routes:
-    globals()[_route.endpoint.__name__] = _route.endpoint
+    if hasattr(_route, "endpoint"):
+        globals()[_route.endpoint.__name__] = _route.endpoint
 
 # ============================================================
 
