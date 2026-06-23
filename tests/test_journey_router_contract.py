@@ -2,7 +2,7 @@ from app.routers import journey
 
 
 def test_journey_router_keeps_public_route_contract():
-    route_paths = {route.path for route in journey.router.routes}
+    route_paths = {route.path for route in journey.router.routes if hasattr(route, "path")}
 
     expected_paths = {
         "/trial-config",
