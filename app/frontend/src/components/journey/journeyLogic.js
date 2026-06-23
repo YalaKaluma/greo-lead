@@ -5,6 +5,7 @@ import {
   DIMENSIONS,
   R_BELT,
   TOPIC_FORM_FIELDS,
+  TOPICS_REQUIRING_TITLES,
   WHY_IT_MATTERS
 } from "./journeyData";
 
