@@ -96,6 +96,27 @@ const LEADERSHIP_ARC = BELT_GUIDE.map((guide) => ({
   }[guide.id],
 }));
 
+function normalizeCategory(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeGoalLevel(value) {
+  const normalized = String(value || "vision").toLowerCase();
+  const aliases = {
+    long: "vision",
+    long_term: "vision",
+    vision: "vision",
+    medium: "pillar",
+    medium_term: "pillar",
+    pillar: "pillar",
+    short: "outcome",
+    short_term: "outcome",
+    outcome: "outcome",
+  };
+
+  return aliases[normalized] || normalized;
+}
+
 const DIMENSIONS = [
   {
     id: "vision",
