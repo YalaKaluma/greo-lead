@@ -38,6 +38,9 @@ describe("journey model helpers", () => {
 
     expect(states.vision.name).toBe("Vision");
     expect(states.vision.currentBeltId).toBe("white");
-    expect(states.vision.completionScore).toBeGreaterThan(0);
+    expect(states.vision.activeBeltId).toBe("white");
+    expect(states.vision.completionScore).toBe(0);
+    expect(states.vision.assessment).toContain("White Belt requirements");
+    expect(states.vision.assessment).toContain("Yellow Belt");
   });
 });

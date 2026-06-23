@@ -1,9 +1,11 @@
 import {
   BELTS,
+  BELT_IDS,
   CENTER,
   DIMENSIONS,
   R_BELT,
-  TOPIC_FORM_FIELDS
+  TOPIC_FORM_FIELDS,
+  WHY_IT_MATTERS
 } from "./journeyData";
 
 function getSubdomainQuestion(promptConfig, topic) {
@@ -582,11 +584,13 @@ function buildDimensionStates(telemetry, trialRecords, trialConfig, topicData, b
     const nextBelt = getBeltById(progression.nextBeltId);
 
     states[dimension.id] = {
+      name: dimension.name,
       beltIndex: progression.currentBeltIndex,
       currentBeltId: progression.currentBeltId,
       activeBeltId: progression.activeBeltId,
       nextBeltId: progression.nextBeltId,
       progress: progression.progress,
+      completionScore: progression.progress,
       momentum: progression.progress >= 55 && progression.currentBeltId !== "black",
       assessment: progression.currentBeltId === "black"
         ? `You are working the ${activeBelt.name} trials for this dimension. The work now is transmission: helping others develop this capability with judgment and humility.`
