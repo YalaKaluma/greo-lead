@@ -40,6 +40,7 @@ describe("journey model helpers", () => {
     expect(states.vision.currentBeltId).toBe("white");
     expect(states.vision.activeBeltId).toBe("white");
     expect(states.vision.completionScore).toBe(0);
-    expect(states.vision.assessment).toContain("Start the White Belt trials");
+    expect(states.vision.assessment).toContain("White Belt requirements");
+    expect(states.vision.assessment).toContain("Yellow Belt");
   });
 });
