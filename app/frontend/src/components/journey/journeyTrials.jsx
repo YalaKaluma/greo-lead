@@ -223,7 +223,7 @@ export function LeadershipStoryCard({ story }) {
           <img
             src={story.image_src}
             alt={story.image_alt || story.title || "Leadership story image"}
-            className="aspect-[16/9] w-full object-cover"
+            className="h-auto w-full object-contain"
           />
           {tagline && (
             <figcaption className="border-t border-slate-200 bg-white px-4 py-3 text-center text-base font-semibold leading-6 text-slate-950">

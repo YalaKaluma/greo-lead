@@ -116,6 +116,9 @@ dimensions:
         story:
           title: The Mexican Fisherman
           theme: Authenticity
+          image_src: /vision-fisherman.png
+          image_alt: A businessman speaking with a fisherman and his family at sunset.
+          tagline: Be careful not to spend your life climbing a mountain you never wanted to stand on.
           full_story: |-
             An investment banker is vacationing in a small coastal village.
 
@@ -358,6 +361,9 @@ dimensions:
         story:
           title: The Ripple Effect
           theme: Impact
+          image_src: /people-ripple-effect.png
+          image_alt: A leader teaching a child about ripples spreading across a lake.
+          tagline: Great leaders see the ripples, not just the stone.
           full_story: |-
             A teacher walks to a lake with a student.
 
@@ -629,6 +635,9 @@ dimensions:
         story:
           title: Odysseus and the Sirens
           theme: Understanding Resistance
+          image_src: /execute-odysseus-sirens.png
+          image_alt: Odysseus tied to a ship mast while resisting the Sirens.
+          tagline: The greatest obstacle to execution is often yourself.
           full_story: |-
             In Greek mythology, Odysseus must sail past the Sirens.
 
@@ -928,6 +937,9 @@ dimensions:
         story:
           title: Sharpen the Saw
           theme: Recovery
+          image_src: /energy-sharpen-saw.png
+          image_alt: One woodcutter keeps sawing while another sharpens his saw.
+          tagline: Recovery is not a distraction from performance. Recovery is performance.
           full_story: |-
             Stephen Covey tells the story of a woodcutter who spends all day cutting trees.
             A passerby notices that the woodcutter is struggling and asks:
@@ -1288,6 +1300,9 @@ dimensions:
         story:
           title: Benjamin Franklin's Virtue System
           theme: Deliberate Growth
+          image_src: /learning-benjamin-franklin.png
+          image_alt: A person standing before many roads leading toward different futures.
+          tagline: Growth begins when insight becomes practice.
           full_story: |-
             As a young man, Benjamin Franklin was ambitious, intelligent, and successful.
 
