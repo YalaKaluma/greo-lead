@@ -210,6 +210,14 @@ export function LeadershipStoryCard({ story }) {
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
         Leadership Story
       </p>
+      {hasText(story?.title) && (
+        <h3 className="mt-2 text-xl font-semibold text-slate-950">
+          {story.title}
+        </h3>
+      )}
+      {hasText(story?.theme) && (
+        <p className="mt-1 text-sm font-semibold text-slate-600">Theme: {story.theme}</p>
+      )}
       {hasImage && (
         <figure className="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
           <img
@@ -223,14 +231,6 @@ export function LeadershipStoryCard({ story }) {
             </figcaption>
           )}
         </figure>
-      )}
-      {hasText(story?.title) && (
-        <h3 className={hasImage ? "mt-4 text-xl font-semibold text-slate-950" : "mt-2 text-xl font-semibold text-slate-950"}>
-          {story.title}
-        </h3>
-      )}
-      {hasText(story?.theme) && (
-        <p className="mt-1 text-sm font-semibold text-slate-600">Theme: {story.theme}</p>
       )}
       {(hasText(fullStory) || lessons.length > 0) && (
         <details className="group mt-4" open={!hasImage}>
