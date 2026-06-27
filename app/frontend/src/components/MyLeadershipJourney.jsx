@@ -677,6 +677,32 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
             nextBelt={journeyNextBelt}
             latestAssessment={latestAssessment}
           />
+        ) : activeJourneyTab === "story" ? (
+          <div className="grid gap-6 xl:grid-cols-[520px_minmax(0,1fr)]">
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <LeadershipWheel
+                selectedDimensionId={selectedDimensionId}
+                activeTopic={activeTopic}
+                dimensionStates={dimensionStates}
+                topicData={topicData}
+                journeyBelt={journeyCurrentBelt}
+                onSelectDimension={handleSelectDimension}
+                onSelectSubdomain={handleSelectSubdomain}
+                onSelectCenter={() => setShowWheelModal(true)}
+              />
+            </div>
+
+            <TopicEvidencePanel
+              dimension={selectedDimension}
+              activeTopic={activeTopic}
+              setActiveTopic={setActiveTopic}
+              items={topicItems}
+              promptConfig={subdomainPromptConfig}
+              onNavigate={onNavigate}
+              onAddItem={handleAddSubdomainItem}
+              onEditItem={handleEditSubdomainItem}
+            />
+          </div>
         ) : !isAssessmentLockedUntilYellow && activeJourneyTab === "assessment" ? (
           <BeltAssessmentTab
             readinessStatus={readinessStatus}
@@ -699,21 +725,48 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
         ) : activeJourneyTab === "coaching" ? (
           <LeadershipCoachingSessionsTab apiUrl={apiUrl} userNumber={userNumber} />
         ) : (
-        <div className="grid gap-6 xl:grid-cols-[520px_minmax(0,1fr)]">
-          <div className="order-1 rounded-lg border border-slate-200 bg-white p-4 shadow-sm xl:col-start-1 xl:row-start-1">
-            <LeadershipWheel
-              selectedDimensionId={selectedDimensionId}
-              activeTopic={activeTopic}
-              dimensionStates={dimensionStates}
-              topicData={topicData}
-              journeyBelt={journeyCurrentBelt}
-              onSelectDimension={handleSelectDimension}
-              onSelectSubdomain={handleSelectSubdomain}
-              onSelectCenter={() => setShowWheelModal(true)}
-            />
-          </div>
+          <section className="space-y-5">
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="mx-auto max-w-[560px]">
+                <LeadershipWheel
+                  selectedDimensionId={selectedDimensionId}
+                  activeTopic={activeTopic}
+                  dimensionStates={dimensionStates}
+                  topicData={topicData}
+                  journeyBelt={journeyCurrentBelt}
+                  onSelectDimension={handleSelectDimension}
+                  onSelectSubdomain={handleSelectSubdomain}
+                  onSelectCenter={() => setShowWheelModal(true)}
+                />
+              </div>
+            </div>
 
-          <section className="order-2 space-y-5 xl:col-start-2 xl:row-span-2 xl:row-start-1">
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Dojo Focus</p>
+                  <h2 className="mt-1 text-xl font-semibold text-slate-950">{selectedDimension.name}</h2>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">{selectedDimension.brief}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {DIMENSIONS.map((dimension) => (
+                    <button
+                      key={dimension.id}
+                      type="button"
+                      onClick={() => handleSelectDimension(dimension.id)}
+                      className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${
+                        selectedDimensionId === dimension.id
+                          ? "border-slate-950 bg-slate-950 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                      }`}
+                    >
+                      {dimension.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             <BeltStepSummary
               dimension={selectedDimension}
               targetBelt={viewedBelt}
@@ -741,20 +794,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
 
             {selectedDimension.mvp && <TelemetryPanel telemetry={telemetry} loading={loadingSignals} />}
           </section>
-
-          <div className="order-3 xl:col-start-1 xl:row-start-2">
-            <TopicEvidencePanel
-              dimension={selectedDimension}
-              activeTopic={activeTopic}
-              setActiveTopic={setActiveTopic}
-              items={topicItems}
-              promptConfig={subdomainPromptConfig}
-              onNavigate={onNavigate}
-              onAddItem={handleAddSubdomainItem}
-              onEditItem={handleEditSubdomainItem}
-            />
-          </div>
-        </div>
         )}
       </div>
 
