@@ -1,10 +1,12 @@
 from types import SimpleNamespace
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.services.journal_reflection_depth_service import get_reflection_depth_trends
 from app.services.onboarding_seed_service import (
     STARTER_JOURNAL_DEPTH_EXPLANATION,
     STARTER_JOURNAL_EXAMPLES,
+    STARTER_TASK_TITLES,
+    ensure_starter_tasks_visible_today,
     is_starter_goal_example,
     is_starter_journal_example,
 )
@@ -64,6 +66,35 @@ class FakeDb:
 
     def query(self, *args):
         return FakeQuery(self.entries)
+
+
+def test_starter_task_date_repair_only_updates_undated_tasks(monkeypatch):
+    today = datetime(2026, 6, 27)
+    future_due = today + timedelta(days=7)
+    undated = SimpleNamespace(
+        title=STARTER_TASK_TITLES[0],
+        due_date=None,
+        current_bucket="today",
+        updated_at=None,
+    )
+    postponed = SimpleNamespace(
+        title=STARTER_TASK_TITLES[1],
+        due_date=future_due,
+        current_bucket="today",
+        updated_at=None,
+    )
+
+    monkeypatch.setattr(
+        "app.services.onboarding_seed_service._starter_due_datetime",
+        lambda db, user_number: today,
+    )
+
+    repaired_count = ensure_starter_tasks_visible_today(FakeDb([undated, postponed]), "user-1")
+
+    assert repaired_count == 1
+    assert undated.due_date == today
+    assert undated.current_bucket == "today"
+    assert postponed.due_date == future_due
 
 
 def test_reflection_trends_can_exclude_starter_journal_examples():
