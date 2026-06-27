@@ -200,6 +200,8 @@ export function LeadershipStoryCard({ story }) {
   const hasStory = hasText(story?.title) || hasText(story?.full_story);
   const lessons = Array.isArray(story?.lessons) ? story.lessons.filter(hasText) : [];
   const fullStory = String(story?.full_story || "");
+  const hasImage = hasText(story?.image_src);
+  const tagline = String(story?.tagline || "").trim();
 
   if (!hasStory) return null;
 
@@ -208,31 +210,59 @@ export function LeadershipStoryCard({ story }) {
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
         Leadership Story
       </p>
+      {hasImage && (
+        <figure className="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+          <img
+            src={story.image_src}
+            alt={story.image_alt || story.title || "Leadership story image"}
+            className="aspect-[16/9] w-full object-cover"
+          />
+          {tagline && (
+            <figcaption className="border-t border-slate-200 bg-white px-4 py-3 text-center text-base font-semibold leading-6 text-slate-950">
+              {tagline}
+            </figcaption>
+          )}
+        </figure>
+      )}
       {hasText(story?.title) && (
-        <h3 className="mt-2 text-xl font-semibold text-slate-950">{story.title}</h3>
+        <h3 className={hasImage ? "mt-4 text-xl font-semibold text-slate-950" : "mt-2 text-xl font-semibold text-slate-950"}>
+          {story.title}
+        </h3>
       )}
       {hasText(story?.theme) && (
         <p className="mt-1 text-sm font-semibold text-slate-600">Theme: {story.theme}</p>
       )}
-      {hasText(fullStory) && (
-        <p className="mt-4 whitespace-pre-line text-sm leading-6 text-slate-700">
-          {fullStory}
-        </p>
-      )}
-      {lessons.length > 0 && (
-        <div className="mt-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
-            Key Lessons
-          </p>
-          <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-700">
-            {lessons.map((lesson) => (
-              <li key={lesson} className="flex gap-2">
-                <span aria-hidden="true">-</span>
-                <span>{lesson}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+      {(hasText(fullStory) || lessons.length > 0) && (
+        <details className="group mt-4" open={!hasImage}>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100">
+            <span>{hasImage ? "Read full story" : "Full story"}</span>
+            <span className="text-slate-500 transition-transform group-open:rotate-180" aria-hidden="true">
+              v
+            </span>
+          </summary>
+          <div className="pt-4">
+            {hasText(fullStory) && (
+              <p className="whitespace-pre-line text-sm leading-6 text-slate-700">
+                {fullStory}
+              </p>
+            )}
+            {lessons.length > 0 && (
+              <div className="mt-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
+                  Key Lessons
+                </p>
+                <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-700">
+                  {lessons.map((lesson) => (
+                    <li key={lesson} className="flex gap-2">
+                      <span aria-hidden="true">-</span>
+                      <span>{lesson}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </details>
       )}
     </article>
   );

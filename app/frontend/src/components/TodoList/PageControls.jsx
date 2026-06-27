@@ -311,20 +311,20 @@ export function TaskColumnHeader({ columnSort, onSort }) {
 
 export function MobileTaskSortControl({ columnSort, onSort }) {
   return (
-    <div className="mb-2 grid grid-cols-2 gap-2 sm:hidden">
+    <div className="mb-2 flex items-center justify-between px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400 sm:hidden">
       <SortHeaderButton
         label="Urgency"
         sortKey="urgency"
         columnSort={columnSort}
         onSort={onSort}
-        className="h-9 justify-center rounded border border-slate-200 bg-white px-3 text-xs font-semibold uppercase tracking-wide text-slate-500"
+        className="justify-start"
       />
       <SortHeaderButton
         label="Importance"
         sortKey="importance"
         columnSort={columnSort}
         onSort={onSort}
-        className="h-9 justify-center rounded border border-slate-200 bg-white px-3 text-xs font-semibold uppercase tracking-wide text-slate-500"
+        className="justify-end"
       />
     </div>
   );

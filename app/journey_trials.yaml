@@ -64,6 +64,9 @@ dimensions:
         story:
           title: The Stonecutter
           theme: Meaning
+          image_src: /vision-stonecutter.png
+          image_alt: Stonecutter working in front of a cathedral under construction.
+          tagline: I am not cutting stones. I am building a cathedral.
           full_story: |-
             Three stonecutters are asked what they are doing.
 
