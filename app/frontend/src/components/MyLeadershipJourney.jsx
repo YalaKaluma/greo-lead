@@ -726,8 +726,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           <LeadershipCoachingSessionsTab apiUrl={apiUrl} userNumber={userNumber} />
         ) : (
           <section className="space-y-5">
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="mx-auto max-w-[560px]">
+            <div className="grid gap-6 xl:grid-cols-[520px_minmax(0,1fr)]">
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                 <LeadershipWheel
                   selectedDimensionId={selectedDimensionId}
                   activeTopic={activeTopic}
@@ -739,32 +739,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
                   onSelectCenter={() => setShowWheelModal(true)}
                 />
               </div>
-            </div>
 
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Dojo Focus</p>
-                  <h2 className="mt-1 text-xl font-semibold text-slate-950">{selectedDimension.name}</h2>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">{selectedDimension.brief}</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {DIMENSIONS.map((dimension) => (
-                    <button
-                      key={dimension.id}
-                      type="button"
-                      onClick={() => handleSelectDimension(dimension.id)}
-                      className={`rounded-md border px-3 py-2 text-xs font-semibold transition ${
-                        selectedDimensionId === dimension.id
-                          ? "border-slate-950 bg-slate-950 text-white"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
-                      }`}
-                    >
-                      {dimension.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <LeadershipStoryCard story={viewedBeltRequirements?.story} />
             </div>
 
             <BeltStepSummary
@@ -772,8 +748,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
               targetBelt={viewedBelt}
               requirements={viewedBeltRequirements}
             />
-
-            <LeadershipStoryCard story={viewedBeltRequirements?.story} />
 
             <PathToNextBeltPanel
               dimension={selectedDimension}
