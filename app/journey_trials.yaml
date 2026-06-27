@@ -303,6 +303,9 @@ dimensions:
         story:
           title: The Young Samurai and the Mirror
           theme: Self-Awareness
+          image_src: /people-mirror.png
+          image_alt: A teacher holding a mirror to help a young leader see himself clearly.
+          tagline: Before you can lead others, you must first learn to see yourself clearly.
           full_story: |-
             A young samurai asks his master:
 
@@ -548,6 +551,9 @@ dimensions:
         story:
           title: The Aggregation of Marginal Gains
           theme: Discipline Compounds
+          image_src: /execute-marginal-gains.png
+          image_alt: British cycling scene illustrating one percent improvements and marginal gains.
+          tagline: Small improvements, repeated consistently, create extraordinary results.
           full_story: |-
             In 2003, British Cycling was struggling.
 
@@ -861,6 +867,9 @@ dimensions:
         story:
           title: Life Is a Marathon, Not a Sprint
           theme: Energy Awareness
+          image_src: /energy-marathon.png
+          image_alt: A runner choosing the marathon path over a sprint at sunrise.
+          tagline: Success is not measured by how fast you run, but by how long you can keep running.
           full_story: |-
             At the begining of the leadership journey, one often believes success comes from effort alone.
             Work longer.
@@ -1128,6 +1137,9 @@ dimensions:
         story:
           title: Thomas Edison and the 10,000 Attempts
           theme: Learn from Failure
+          image_src: /learning-edison.png
+          image_alt: Thomas Edison studying a light bulb after many failed experiments.
+          tagline: I have not failed. I've just found 10,000 ways that won't work.
           full_story: |-
             Thomas Edison was repeatedly criticized for the thousands of unsuccessful attempts he made while developing the light bulb.
 
