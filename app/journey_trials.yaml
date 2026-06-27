@@ -1289,6 +1289,8 @@ dimensions:
         story:
           title: Carl Jung and the Shadow
           theme: Recognize Your Patterns
+          image_src: /learning-carl-jung.png
+          image_alt: A person standing before many roads leading toward different futures.
           full_story: |-
             Carl Jung observed that many people experience the same problems over and over throughout their lives.
 
@@ -1362,8 +1364,8 @@ dimensions:
         story:
           title: Benjamin Franklin's Virtue System
           theme: Deliberate Growth
-          image_src: /learning-benjamin-franklin.png
-          image_alt: A person standing before many roads leading toward different futures.
+          image_src: /learning-benjamin-franklin.webp
+          image_alt: Portrait of Benjamin Franklin.
           tagline: Growth begins when insight becomes practice.
           full_story: |-
             As a young man, Benjamin Franklin was ambitious, intelligent, and successful.
