@@ -55,6 +55,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [showMtnBreakdown, setShowMtnBreakdown] = useState(false);
   const [todayKey, setTodayKey] = useState(getTodayET(timezone));
   const mtnBackfillRequestsRef = useRef(new Set());
+  const appliedPrioritySortRef = useRef(null);
 
   const {
     selectedTasks,
@@ -346,7 +347,7 @@ export default function TodoList({ apiUrl, userNumber }) {
         setFilterType('next_7_days');
       }
       if (selectedMtnTags.length === 0) {
-        setSelectedMtnTags(['Transformational', 'Strategic']);
+        setSelectedMtnTags(['1. Transformation', '2. Strategic']);
       }
     }
   };
@@ -582,11 +583,15 @@ export default function TodoList({ apiUrl, userNumber }) {
     const result = await runPrioritization();
     if (!result.success) {
       setError(result.error);
+      return;
     }
+    await fetchTasks({ skipMtnBackfill: true });
   };
 
   const handleApplyPrioritySort = () => {
     const scoredTasks = priorityRecommendation?.all_scored_tasks || [];
+    if (scoredTasks.length === 0 || tasks.length === 0) return;
+
     const scoredOrder = [...scoredTasks]
       .sort((a, b) => b.score - a.score)
       .map(scoredTask => scoredTask.task_id);
@@ -599,10 +604,18 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   useEffect(() => {
-    if (priorityMode && priorityRecommendation?.all_scored_tasks) {
+    const recommendationKey = priorityRecommendation?.recommendation_id || priorityRecommendation?.context_id;
+    if (
+      priorityMode &&
+      recommendationKey &&
+      appliedPrioritySortRef.current !== recommendationKey &&
+      priorityRecommendation?.all_scored_tasks?.length &&
+      tasks.length > 0
+    ) {
       handleApplyPrioritySort();
+      appliedPrioritySortRef.current = recommendationKey;
     }
-  }, [priorityMode, priorityRecommendation]);
+  }, [priorityMode, priorityRecommendation, tasks]);
 
   const handleMtnFeedback = async (taskId, rating, feedback, tag, recommendationId) => {
     const result = await submitMtnFeedback(taskId, rating, feedback, tag, recommendationId);

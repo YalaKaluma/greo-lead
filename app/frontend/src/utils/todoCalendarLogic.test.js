@@ -22,7 +22,7 @@ describe('todoCalendarLogic', () => {
     const result = getCalendarTasks({
       tasks,
       todayKey: '2026-06-19',
-      selectedMtnTags: ['Transformational', 'Strategic'],
+      selectedMtnTags: ['1. Transformation', '2. Strategic'],
     });
 
     expect(result.days).toHaveLength(7);
@@ -40,7 +40,7 @@ describe('todoCalendarLogic', () => {
       task({ id: 3, title: 'No score', due_date: '2026-06-20' }),
     ];
 
-    const operational = getCalendarTasks({ tasks, todayKey: '2026-06-19', selectedMtnTags: ['Important'] });
+    const operational = getCalendarTasks({ tasks, todayKey: '2026-06-19', selectedMtnTags: ['3. Important'] });
     expect(operational.groupedTasks['2026-06-19'].map(item => item.title)).toEqual(['Important work']);
 
     const searchFiltered = getCalendarTasks({ tasks, todayKey: '2026-06-19', searchQuery: 'No score' });
@@ -49,7 +49,7 @@ describe('todoCalendarLogic', () => {
     const focus = getCalendarTasks({
       tasks,
       todayKey: '2026-06-19',
-      selectedMtnTags: ['Transformational', 'Strategic'],
+      selectedMtnTags: ['1. Transformation', '2. Strategic'],
     });
     expect(focus.overdueTasks.map(item => item.title)).toEqual(['Overdue strategic']);
   });

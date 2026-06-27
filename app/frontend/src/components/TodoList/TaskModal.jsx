@@ -45,7 +45,6 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
 
       setAlfredInsights({
         strategic_intent: task.strategic_intent,
-        move_the_needle_score: task.move_the_needle_score,
         estimated_effort: task.estimated_effort,
 
         suggested_subtasks: task.suggested_subtasks || [],
@@ -107,7 +106,6 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
         : null,
 
       strategic_intent: alfredInsights?.strategic_intent,
-      move_the_needle_score: alfredInsights?.move_the_needle_score,
       estimated_effort: alfredInsights?.estimated_effort,
 
       suggested_subtasks: alfredInsights?.suggested_subtasks,
@@ -446,10 +444,6 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
           ✨ Alfred Insights
         </h3>
 
-      </div>
-
-      <div className="text-sm font-medium text-purple-700">
-        Move the Needle: {alfredInsights.move_the_needle_score}/10
       </div>
 
     </button>

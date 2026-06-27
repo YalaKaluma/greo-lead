@@ -102,8 +102,8 @@ describe('TodoTabs and TaskColumnHeader', () => {
 
     render(<TaskColumnHeader columnSort={{ key: 'importance', direction: 'desc' }} onSort={onSort} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Sort by urgency' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Sort by importance' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Sort by urgency' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Sort by importance' })[0]);
 
     expect(onSort).toHaveBeenNthCalledWith(1, 'urgency');
     expect(onSort).toHaveBeenNthCalledWith(2, 'importance');

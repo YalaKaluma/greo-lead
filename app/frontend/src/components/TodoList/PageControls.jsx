@@ -287,20 +287,44 @@ export function FloatingSelectionBar({ selectedCount, onCancel, onEditSelected }
 
 export function TaskColumnHeader({ columnSort, onSort }) {
   return (
-    <div className="hidden sm:grid grid-cols-[3.75rem_minmax(0,1fr)_10rem_1.75rem] items-center px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+    <>
+      <MobileTaskSortControl columnSort={columnSort} onSort={onSort} />
+      <div className="hidden sm:grid grid-cols-[3.75rem_minmax(0,1fr)_10rem_1.75rem] items-center px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        <SortHeaderButton
+          label="Urgency"
+          sortKey="urgency"
+          columnSort={columnSort}
+          onSort={onSort}
+          className="col-start-1 justify-self-start"
+        />
+        <SortHeaderButton
+          label="Importance"
+          sortKey="importance"
+          columnSort={columnSort}
+          onSort={onSort}
+          className="col-start-3 justify-self-end"
+        />
+      </div>
+    </>
+  );
+}
+
+export function MobileTaskSortControl({ columnSort, onSort }) {
+  return (
+    <div className="mb-2 grid grid-cols-2 gap-2 sm:hidden">
       <SortHeaderButton
         label="Urgency"
         sortKey="urgency"
         columnSort={columnSort}
         onSort={onSort}
-        className="col-start-1 justify-self-start"
+        className="h-9 justify-center rounded border border-slate-200 bg-white px-3 text-xs font-semibold uppercase tracking-wide text-slate-500"
       />
       <SortHeaderButton
         label="Importance"
         sortKey="importance"
         columnSort={columnSort}
         onSort={onSort}
-        className="col-start-3 justify-self-end"
+        className="h-9 justify-center rounded border border-slate-200 bg-white px-3 text-xs font-semibold uppercase tracking-wide text-slate-500"
       />
     </div>
   );
