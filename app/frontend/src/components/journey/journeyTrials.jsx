@@ -201,6 +201,7 @@ export function LeadershipStoryCard({ story }) {
   const lessons = Array.isArray(story?.lessons) ? story.lessons.filter(hasText) : [];
   const fullStory = String(story?.full_story || "");
   const hasImage = hasText(story?.image_src);
+  const imageSrc = resolveStoryImageSrc(story?.image_src);
   const tagline = String(story?.tagline || "").trim();
 
   if (!hasStory) return null;
@@ -221,7 +222,7 @@ export function LeadershipStoryCard({ story }) {
       {hasImage && (
         <figure className="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
           <img
-            src={story.image_src}
+            src={imageSrc}
             alt={story.image_alt || story.title || "Leadership story image"}
             className="h-auto w-full object-contain"
           />
@@ -266,6 +267,13 @@ export function LeadershipStoryCard({ story }) {
       )}
     </article>
   );
+}
+
+function resolveStoryImageSrc(src) {
+  const value = String(src || "").trim();
+  if (!value) return "";
+  if (/^(https?:|data:|blob:)/i.test(value)) return value;
+  return value.replace(/^\/+/, "");
 }
 
 export function RequirementCard({ number, title, body, footer, status, statusDetail, feedback, score, buttonLabel, secondaryButtonLabel, disabled, onClick, onSecondaryClick }) {
