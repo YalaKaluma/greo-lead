@@ -4,7 +4,15 @@ This frontend is configured as a Capacitor app for Android.
 
 ## API Target
 
-Mobile builds use `VITE_API_URL` from `.env` so the bundled app can call the hosted FastAPI backend:
+Mobile builds use `VITE_API_URL` so the bundled app can call the hosted FastAPI backend.
+
+The GitHub debug APK workflow defaults to the Railway development backend:
+
+```env
+VITE_API_URL=https://greo-lead-development.up.railway.app
+```
+
+The local frontend `.env` may point at production for normal web work:
 
 ```env
 VITE_API_URL=https://greo-lead-production.up.railway.app
@@ -45,7 +53,7 @@ If you cannot install Android Studio locally, use the GitHub Actions workflow in
 3. Go to **Actions**.
 4. Select **Android APK**.
 5. Click **Run workflow**.
-6. Keep the default API URL unless you want a staging backend.
+6. Keep the default API URL to build against Railway development, or override it intentionally.
 7. Wait for the run to finish.
 8. Open the completed run and download the **alfred-debug-apk** artifact.
 

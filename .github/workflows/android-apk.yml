@@ -6,7 +6,7 @@ on:
       api_url:
         description: "Backend API URL used by the mobile app"
         required: true
-        default: "https://greo-lead-production.up.railway.app"
+        default: "https://greo-lead-development.up.railway.app"
   push:
     branches:
       - main
@@ -20,7 +20,7 @@ jobs:
     name: Build debug APK
     runs-on: ubuntu-latest
     env:
-      VITE_API_URL: ${{ github.event.inputs.api_url || 'https://greo-lead-production.up.railway.app' }}
+      VITE_API_URL: ${{ github.event.inputs.api_url || 'https://greo-lead-development.up.railway.app' }}
 
     steps:
       - name: Check out repository
