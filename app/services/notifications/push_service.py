@@ -254,6 +254,7 @@ class NotificationService:
 
         result = NotificationResult(attempted=len(subscriptions))
         data = payload.to_push_json()
+        failure_reasons: set[str] = set()
         for subscription in subscriptions:
             try:
                 logger.info(
@@ -277,8 +278,10 @@ class NotificationService:
                         vapid_claims={"sub": VAPID_SUBJECT},
                     )
             except Exception as error:
+                error_reason = str(error)
+                failure_reasons.add(error_reason)
                 result.failed += 1
-                self._record_failure(subscription, payload, str(error))
+                self._record_failure(subscription, payload, error_reason)
                 if _is_invalid_subscription_error(error):
                     subscription.is_active = False
                     logger.info(
@@ -286,11 +289,14 @@ class NotificationService:
                         payload.user_number,
                         subscription.id,
                     )
-                result.deliveries.append(NotificationDelivery(subscription.id, "failed", str(error)))
+                result.deliveries.append(NotificationDelivery(subscription.id, "failed", error_reason))
             else:
                 result.sent += 1
                 self._record_success(subscription, payload)
                 result.deliveries.append(NotificationDelivery(subscription.id, "sent"))
+
+        if result.failed == result.attempted and len(failure_reasons) == 1:
+            result.reason = next(iter(failure_reasons))
 
         self.db.commit()
         return result
