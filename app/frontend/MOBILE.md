@@ -50,7 +50,7 @@ If you cannot install Android Studio locally, use the GitHub Actions workflow in
 8. Open the completed run and download the **alfred-debug-apk** artifact.
 
 The artifact contains `app-debug.apk`, which can be sideloaded onto an Android device for testing.
-The workflow uses `npm install` to match the existing frontend CI path.
+The workflow uses `npm install` to match the existing frontend CI path, and Node 22 because Capacitor CLI 8 requires Node 22 or newer.
 
 ## Requirements
 
