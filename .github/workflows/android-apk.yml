@@ -1,0 +1,74 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: "Backend API URL used by the mobile app"
+        required: true
+        default: "https://greo-lead-production.up.railway.app"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/android-apk.yml"
+      - "app/frontend/**"
+      - "static/**"
+
+jobs:
+  build-android-apk:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+    env:
+      VITE_API_URL: ${{ github.event.inputs.api_url || 'https://greo-lead-production.up.railway.app' }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+
+      - name: Install frontend dependencies
+        working-directory: app/frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web bundle
+        working-directory: app/frontend
+        run: pnpm build
+
+      - name: Sync Capacitor Android project
+        working-directory: app/frontend
+        run: pnpm exec cap sync android
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Build debug APK
+        working-directory: app/frontend/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: alfred-debug-apk
+          path: app/frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

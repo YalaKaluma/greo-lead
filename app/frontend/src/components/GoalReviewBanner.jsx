@@ -1,5 +1,6 @@
 import React from 'react';
 import axios from 'axios';
+import { API_URL } from '../config';
 
 const GoalReviewBanner = ({ status, userNumber, onSessionEnd }) => {
   const [isEnding, setIsEnding] = React.useState(false);
@@ -15,7 +16,7 @@ const GoalReviewBanner = ({ status, userNumber, onSessionEnd }) => {
 
     setIsEnding(true);
     try {
-      await axios.post(`/api/goal-review/end?user_number=${encodeURIComponent(userNumber)}`);
+      await axios.post(`${API_URL}/api/goal-review/end?user_number=${encodeURIComponent(userNumber)}`);
       if (onSessionEnd) {
         onSessionEnd();
       }

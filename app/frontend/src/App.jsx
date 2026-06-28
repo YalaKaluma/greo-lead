@@ -17,11 +17,7 @@ import Login from "./Login";
 import Welcome from "./Welcome";
 import Waitlist from "./Waitlist";
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
-
-// API URL handling
-const API_URL = import.meta.env.PROD
-  ? ''
-  : (import.meta.env.VITE_API_URL || 'http://localhost:8000');
+import { API_URL } from './config';
 
 const HOME_PAGE = 'home';
 const NEW_USER_DEFAULT_PAGE = 'my-goals';

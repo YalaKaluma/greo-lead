@@ -2,6 +2,7 @@
 import { getTodayET, getETDate, formatDateForInput, formatDateForDisplay, normalizeDateString, getNextMonday } from '../../utils/taskHelpers';
 import { useState, useEffect } from 'react';
 import VoiceRecorder from '../VoiceRecorder';
+import { API_URL } from '../../config';
 
 /**
  * TaskModal Component
@@ -132,7 +133,7 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
   setAlfredLoading(true);
 
   try {
-    const response = await fetch('/api/tasks/enrich', {
+    const response = await fetch(`${API_URL}/api/tasks/enrich`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
