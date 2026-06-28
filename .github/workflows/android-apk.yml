@@ -31,22 +31,17 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.7.0
-
       - name: Install frontend dependencies
         working-directory: app/frontend
-        run: pnpm install --no-frozen-lockfile
+        run: npm install
 
       - name: Build web bundle
         working-directory: app/frontend
-        run: pnpm build
+        run: npm run build
 
       - name: Sync Capacitor Android project
         working-directory: app/frontend
-        run: pnpm exec cap sync android
+        run: npx cap sync android
 
       - name: Set up Java
         uses: actions/setup-java@v4
