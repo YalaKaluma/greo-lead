@@ -285,7 +285,13 @@ function NotificationSettingsPanel({ apiUrl, userNumber }) {
   const iosHint = getIosInstallHint();
   const activeCount = status?.active_subscription_count || 0;
   const permissionLabel = support.permission === 'default' ? 'Not asked yet' : support.permission;
-  const canEnable = support.supported && support.permission !== 'denied' && Boolean(status?.vapid_public_key);
+  const supportLabel = support.nativeApp ? 'Installed app' : (support.supported ? 'Supported' : 'Not supported');
+  const keysLabel = support.nativeApp
+    ? (status?.native_push_configured ? 'Configured' : 'Needs Firebase')
+    : (status?.vapid_public_key ? 'Configured' : 'Not configured');
+  const canEnable = support.supported && support.permission !== 'denied' && (
+    support.nativeApp ? Boolean(status?.native_push_configured) : Boolean(status?.vapid_public_key)
+  );
 
   const refreshStatus = async () => {
     if (!userNumber) return;
@@ -356,13 +362,13 @@ function NotificationSettingsPanel({ apiUrl, userNumber }) {
       <div className="max-w-2xl">
         <h2 className="text-sm font-semibold text-slate-900">Notifications</h2>
         <p className="mt-2 text-sm leading-6 text-slate-500">
-          Enable Alfred alerts for this browser. Each phone, tablet, or desktop can be managed separately.
+          Enable Alfred alerts for this device. Each phone, tablet, or desktop can be managed separately.
         </p>
 
         <div className="mt-6 grid gap-3 text-sm sm:grid-cols-2">
-          <StatusRow label="Browser support" value={support.supported ? 'Supported' : 'Not supported'} />
+          <StatusRow label="Device support" value={supportLabel} />
           <StatusRow label="Permission" value={permissionLabel} />
-          <StatusRow label="Notification keys" value={status?.vapid_public_key ? 'Configured' : 'Not configured'} />
+          <StatusRow label="Notification keys" value={keysLabel} />
           <StatusRow label="Active devices" value={isLoading ? 'Loading...' : String(activeCount)} />
         </div>
 
@@ -384,9 +390,15 @@ function NotificationSettingsPanel({ apiUrl, userNumber }) {
           </p>
         )}
 
-        {status && !status.vapid_public_key && (
+        {status && !support.nativeApp && !status.vapid_public_key && (
           <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
             Alfred needs VAPID keys configured before browsers can subscribe.
+          </p>
+        )}
+
+        {status && support.nativeApp && !status.native_push_configured && (
+          <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">
+            Alfred needs Firebase Cloud Messaging configured before the installed app can receive nudges.
           </p>
         )}
 

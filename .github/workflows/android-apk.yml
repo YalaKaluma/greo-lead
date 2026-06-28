@@ -43,6 +43,19 @@ jobs:
         working-directory: app/frontend
         run: npx cap sync android
 
+      - name: Add Firebase Android config
+        working-directory: app/frontend/android/app
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          GOOGLE_SERVICES_JSON_B64: ${{ secrets.GOOGLE_SERVICES_JSON_B64 }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON_B64" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON_B64" | base64 --decode > google-services.json
+          else
+            printf '%s' "$GOOGLE_SERVICES_JSON" > google-services.json
+          fi
+        shell: bash
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:

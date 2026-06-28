@@ -18,6 +18,7 @@ import Welcome from "./Welcome";
 import Waitlist from "./Waitlist";
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { API_URL } from './config';
+import { initializeNotificationRouting } from './services/notifications';
 
 const HOME_PAGE = 'home';
 const NEW_USER_DEFAULT_PAGE = 'my-goals';
@@ -51,6 +52,12 @@ function App() {
       setUserNumber(storedUser);
       setIsLoggedIn(true);
     }
+  }, []);
+
+  useEffect(() => {
+    initializeNotificationRouting().catch((error) => {
+      console.warn('Could not initialize native notification routing:', error);
+    });
   }, []);
 
   // Handle URL parameters on load

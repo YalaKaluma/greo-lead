@@ -60,6 +60,25 @@ If you cannot install Android Studio locally, use the GitHub Actions workflow in
 The artifact contains `app-debug.apk`, which can be sideloaded onto an Android device for testing.
 The workflow uses `npm install` to match the existing frontend CI path, and Node 22 because Capacitor CLI 8 requires Node 22 or newer.
 
+## Native Push Notifications
+
+The installed Android app uses Firebase Cloud Messaging for nudge notifications. Browser/PWA notifications still use the existing VAPID Web Push path.
+
+For Android debug APK notifications to work:
+
+1. Create or open the Firebase project for Alfred.
+2. Add an Android app with package name `com.greo.alfred.dev` for debug builds.
+3. Download that app's `google-services.json`.
+4. Add the full JSON contents as a GitHub repository secret named `GOOGLE_SERVICES_JSON`, or add a base64-encoded version as `GOOGLE_SERVICES_JSON_B64`.
+5. Add backend Firebase sender credentials to the Railway development environment:
+   - `FIREBASE_SERVICE_ACCOUNT_JSON`: full Firebase service account JSON, or
+   - `FIREBASE_SERVICE_ACCOUNT_B64`: base64-encoded Firebase service account JSON
+   - Optional: `FIREBASE_PROJECT_ID` if it is not present in the service account JSON.
+6. Rebuild the Android APK workflow.
+7. In Alfred (dev), go to **Settings -> Notifications**, enable this device, then send a test notification.
+
+The future production app will need its own Firebase Android app for package `com.greo.alfred`.
+
 ## Requirements
 
 - Node.js and pnpm
