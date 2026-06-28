@@ -50,6 +50,7 @@ If you cannot install Android Studio locally, use the GitHub Actions workflow in
 8. Open the completed run and download the **alfred-debug-apk** artifact.
 
 The artifact contains `app-debug.apk`, which can be sideloaded onto an Android device for testing.
+This workflow intentionally uses a non-frozen frontend install because it is a convenience builder for test APKs; the regular CI workflows still provide stricter validation.
 
 ## Requirements
 
