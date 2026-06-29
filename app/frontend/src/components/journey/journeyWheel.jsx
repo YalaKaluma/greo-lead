@@ -36,7 +36,7 @@ export function LeadershipWheel({ selectedDimensionId, activeTopic, dimensionSta
       <g onClick={onSelectCenter} style={{ cursor: onSelectCenter ? "pointer" : "default" }}>
         <circle cx={CENTER.x} cy={CENTER.y} r={R_CENTER} fill="#101827" />
         <text x={CENTER.x} y={CENTER.y - 24} textAnchor="middle" fill="white" fontSize="27" fontWeight="700" pointerEvents="none">
-          Leadership
+          Executive
         </text>
         <text x={CENTER.x} y={CENTER.y + 8} textAnchor="middle" fill="#d9c8a6" fontSize="23" fontWeight="600" pointerEvents="none">
           Operating

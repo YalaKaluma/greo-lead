@@ -680,6 +680,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
         ) : activeJourneyTab === "story" ? (
           <div className="grid gap-6 xl:grid-cols-[520px_minmax(0,1fr)]">
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <h2 className="mb-3 text-lg font-semibold text-slate-950">Executive leadership wheel</h2>
               <LeadershipWheel
                 selectedDimensionId={selectedDimensionId}
                 activeTopic={activeTopic}
@@ -726,8 +727,15 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           <LeadershipCoachingSessionsTab apiUrl={apiUrl} userNumber={userNumber} />
         ) : (
           <section className="space-y-5">
+            <BeltStepSummary
+              dimension={selectedDimension}
+              targetBelt={viewedBelt}
+              requirements={viewedBeltRequirements}
+            />
+
             <div className="grid gap-6 xl:grid-cols-[520px_minmax(0,1fr)]">
               <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <h2 className="mb-3 text-lg font-semibold text-slate-950">Executive leadership wheel</h2>
                 <LeadershipWheel
                   selectedDimensionId={selectedDimensionId}
                   activeTopic={activeTopic}
@@ -742,12 +750,6 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
 
               <LeadershipStoryCard story={viewedBeltRequirements?.story} />
             </div>
-
-            <BeltStepSummary
-              dimension={selectedDimension}
-              targetBelt={viewedBelt}
-              requirements={viewedBeltRequirements}
-            />
 
             <PathToNextBeltPanel
               dimension={selectedDimension}
