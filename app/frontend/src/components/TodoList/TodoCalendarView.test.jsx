@@ -26,7 +26,7 @@ describe('TodoCalendarView', () => {
   const baseProps = {
     activeTab: 'calendar',
     todayKey: '2026-06-19',
-    selectedMtnTags: ['Transformational', 'Strategic'],
+    selectedMtnTags: ['1. Transformation', '2. Strategic'],
     searchQuery: '',
     goals: [{ id: 10, title: 'Launch goal' }],
     getTaskScore: () => null,
@@ -34,7 +34,7 @@ describe('TodoCalendarView', () => {
     onReschedule: () => {},
   };
 
-  it('renders seven day columns and defaults to Transformational and Strategic tasks', () => {
+  it('renders seven day columns and defaults to top importance tasks', () => {
     render(
       <TodoCalendarView
         {...baseProps}
@@ -70,7 +70,7 @@ describe('TodoCalendarView', () => {
     const { rerender } = render(
       <TodoCalendarView
         {...baseProps}
-        selectedMtnTags={['Important']}
+        selectedMtnTags={['3. Important']}
         tasks={[operationalTask]}
         onStartEdit={onStartEdit}
       />
@@ -87,7 +87,7 @@ describe('TodoCalendarView', () => {
     rerender(
       <TodoCalendarView
         {...baseProps}
-        selectedMtnTags={['Strategic']}
+        selectedMtnTags={['2. Strategic']}
         tasks={[operationalTask]}
         onStartEdit={onStartEdit}
       />

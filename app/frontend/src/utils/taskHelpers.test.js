@@ -73,11 +73,11 @@ describe('taskHelpers goal hierarchy', () => {
 
 describe('taskHelpers MTN labels', () => {
   it('maps scores to stable move-the-needle labels', () => {
-    expect(getMtnLabel(0.9)).toBe('Transformational');
-    expect(getMtnLabel(0.7)).toBe('Strategic');
-    expect(getMtnLabel(0.5)).toBe('Important');
-    expect(getMtnLabel(0.3)).toBe('Maintenance');
-    expect(getMtnLabel(0.1)).toBe('Low Leverage');
+    expect(getMtnLabel(0.9)).toBe('1. Transformation');
+    expect(getMtnLabel(0.7)).toBe('2. Strategic');
+    expect(getMtnLabel(0.5)).toBe('3. Important');
+    expect(getMtnLabel(0.3)).toBe('4. Maintenance');
+    expect(getMtnLabel(0.1)).toBe('5. Low Leverage');
     expect(getMtnLabel('not-a-score')).toBe('');
   });
 });

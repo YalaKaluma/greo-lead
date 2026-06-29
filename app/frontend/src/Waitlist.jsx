@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { API_URL } from "./config";
 
 export default function Waitlist() {
   const [email, setEmail] = useState("");
@@ -20,7 +21,7 @@ export default function Waitlist() {
     setError("");
 
     try {
-      const res = await fetch("/api/waitlist", {
+      const res = await fetch(`${API_URL}/api/waitlist`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, source: "waitlist_page" })

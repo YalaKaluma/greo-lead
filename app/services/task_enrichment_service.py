@@ -20,7 +20,6 @@ async def enrich_task(task_data):
     Return ONLY valid JSON with:
     - enhanced_title
     - strategic_intent
-    - move_the_needle_score
     - estimated_effort
     - suggested_subtasks (must be an array of strings)
     - alfred_help (must be an array of strings)
@@ -53,6 +52,7 @@ async def enrich_task(task_data):
     )
 
     result = json.loads(response.choices[0].message.content)
+    result.pop("move_the_needle_score", None)
 
     # Normalize arrays
 

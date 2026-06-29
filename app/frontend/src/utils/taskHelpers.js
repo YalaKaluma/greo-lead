@@ -222,28 +222,28 @@ export function getDueDateColor(dateString, timezone = DEFAULT_TIMEZONE) {
 // ============================================================================
 
 export const MTN_TAG_OPTIONS = [
-  'Transformational',
-  'Strategic',
-  'Important',
-  'Maintenance',
-  'Low Leverage'
+  '1. Transformation',
+  '2. Strategic',
+  '3. Important',
+  '4. Maintenance',
+  '5. Low Leverage'
 ];
 
 export const getMtnLabel = (score) => {
   const numericScore = Number(score);
   if (Number.isNaN(numericScore)) return '';
-  if (numericScore >= 0.85) return 'Transformational';
-  if (numericScore >= 0.7) return 'Strategic';
-  if (numericScore >= 0.5) return 'Important';
-  if (numericScore >= 0.3) return 'Maintenance';
-  return 'Low Leverage';
+  if (numericScore >= 0.85) return '1. Transformation';
+  if (numericScore >= 0.7) return '2. Strategic';
+  if (numericScore >= 0.5) return '3. Important';
+  if (numericScore >= 0.3) return '4. Maintenance';
+  return '5. Low Leverage';
 };
 
 export const getMtnStyle = (scoreOrLabel) => {
   const label = MTN_TAG_OPTIONS.includes(scoreOrLabel) ? scoreOrLabel : getMtnLabel(scoreOrLabel);
-  if (label === 'Transformational') return 'bg-blue-100 text-blue-800 border-blue-200';
-  if (label === 'Strategic') return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-  if (label === 'Important') return 'bg-amber-100 text-amber-800 border-amber-200';
-  if (label === 'Maintenance') return 'bg-slate-100 text-slate-700 border-slate-200';
-  return 'bg-rose-100 text-rose-800 border-rose-200';
+  if (label === '1. Transformation') return 'bg-blue-900 text-white border-blue-900';
+  if (label === '2. Strategic') return 'bg-blue-700 text-white border-blue-700';
+  if (label === '3. Important') return 'bg-blue-100 text-blue-800 border-blue-200';
+  if (label === '4. Maintenance') return 'bg-sky-50 text-sky-700 border-sky-200';
+  return 'bg-slate-50 text-slate-600 border-slate-200';
 };

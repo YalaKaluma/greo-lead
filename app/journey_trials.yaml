@@ -64,6 +64,9 @@ dimensions:
         story:
           title: The Stonecutter
           theme: Meaning
+          image_src: /vision-stonecutter.png
+          image_alt: Stonecutter working in front of a cathedral under construction.
+          tagline: I am not cutting stones. I am building a cathedral.
           full_story: |-
             Three stonecutters are asked what they are doing.
 
@@ -113,6 +116,9 @@ dimensions:
         story:
           title: The Mexican Fisherman
           theme: Authenticity
+          image_src: /vision-fisherman.png
+          image_alt: A businessman speaking with a fisherman and his family at sunset.
+          tagline: Be careful not to spend your life climbing a mountain you never wanted to stand on.
           full_story: |-
             An investment banker is vacationing in a small coastal village.
 
@@ -162,6 +168,9 @@ dimensions:
         story:
           title: The Big Rocks
           theme: Alignment
+          image_src: /vision-big-rocks.png
+          image_alt: A teacher demonstrating big rocks, gravel, sand, and water in a jar.
+          tagline: If you don't put the big rocks in first, everything else will take their place.
           full_story: |-
             A professor stands in front of a class with a large glass jar.
 
@@ -217,6 +226,9 @@ dimensions:
         story:
           title: The Old Man and the Trees
           theme: Stewardship
+          image_src: /vision-old-man-trees.png
+          image_alt: An old man planting young trees for future generations.
+          tagline: Great leaders plant trees whose shade they may never enjoy.
           full_story: |-
             An old man is planting trees.
 
@@ -300,6 +312,9 @@ dimensions:
         story:
           title: The Young Samurai and the Mirror
           theme: Self-Awareness
+          image_src: /people-mirror.png
+          image_alt: A teacher holding a mirror to help a young leader see himself clearly.
+          tagline: Before you can lead others, you must first learn to see yourself clearly.
           full_story: |-
             A young samurai asks his master:
 
@@ -352,6 +367,9 @@ dimensions:
         story:
           title: The Ripple Effect
           theme: Impact
+          image_src: /people-ripple-effect.png
+          image_alt: A leader teaching a child about ripples spreading across a lake.
+          tagline: Great leaders see the ripples, not just the stone.
           full_story: |-
             A teacher walks to a lake with a student.
 
@@ -401,27 +419,53 @@ dimensions:
           completion_hint: Alfred counts completed team reviews/check-ins in the background.
           display_order: 1
         story:
-          title: The King's Successor
-          theme: Empowerment
+          title: Martin Luther King Jr. and the Promised Land
+          theme: Legacy
+          image_src: /people-mlk-mountaintop.jpg
+          image_alt: Martin Luther King Jr. speaking to a large crowd.
+          tagline: Great leaders build movements that outlive them.
           full_story: |-
-            A king spends decades building a prosperous kingdom.
+            In April 1968, Martin Luther King Jr. stood before a crowd in Memphis.
 
-            As he grows older, his advisors ask, "Who will replace you?"
+            He had spent years leading the Civil Rights Movement.
 
-            The king begins preparing a successor. He teaches, coaches, delegates, and gives the successor real responsibility.
+            He had endured threats, imprisonment, violence, and constant pressure.
 
-            Over time, the successor becomes so capable that people begin seeking his advice instead of the king's.
+            By then, he knew his life was in danger.
 
-            The advisors panic. "Your successor is becoming too powerful."
+            Yet his message that evening was not about fear.
 
-            The king smiles and says, "Then I have succeeded."
+            It was about the future.
 
-            Weak leaders need to remain indispensable. Strong leaders build people who can thrive without them.
+            Drawing on the story of Moses, he reflected on the Promised Land.
+
+            Then he spoke words that would become some of the most memorable in history:
+
+            "I've been to the mountaintop... I've looked over... and I've seen the Promised Land. I may not get there with you."
+
+            Less than twenty-four hours later, he was assassinated.
+
+            Martin Luther King Jr. understood something that defines the highest form of leadership.
+
+            The mission was never about him.
+
+            The movement was bigger than any single leader.
+
+            His responsibility was not to finish the journey himself.
+
+            It was to inspire, prepare, and empower others to continue walking long after he was gone.
+
+            That is why his legacy still shapes the world today.
+          leadership_lesson: |-
+            Great leaders measure success not by how indispensable they become, but by how well the mission continues without them.
+
+            Leadership reaches its highest form when the cause becomes greater than the individual.
+          key_message: Leadership reaches its highest form when the cause becomes greater than the individual.
           lessons:
-          - Strong leaders build capability.
-          - Weak leaders create dependence.
-          - Leadership scales through trust, delegation, and empowerment.
-          discussion_question: Are you building people who need you, or people who can grow beyond you?
+          - Great leaders measure success by how well the mission continues without them.
+          - The highest form of leadership makes the cause greater than the individual.
+          - Legacy is built by inspiring, preparing, and empowering others to continue the work.
+          discussion_question: What mission are you preparing others to carry forward without you?
       brown:
         criteria: Develop the ability to elevate, mentor, and multiply others through trust, empowerment, emotional wisdom,
           and authentic leadership.
@@ -455,6 +499,9 @@ dimensions:
         story:
           title: The Candle
           theme: Multiplication
+          image_src: /people-candle.png
+          image_alt: A leader passing candlelight to others around a table.
+          tagline: A leader's success is measured by how much light remains after they are gone.
           full_story: |-
             A student asks a master, "How do I know I have become a successful leader?"
 
@@ -545,6 +592,9 @@ dimensions:
         story:
           title: The Aggregation of Marginal Gains
           theme: Discipline Compounds
+          image_src: /execute-marginal-gains.png
+          image_alt: British cycling scene illustrating one percent improvements and marginal gains.
+          tagline: Small improvements, repeated consistently, create extraordinary results.
           full_story: |-
             In 2003, British Cycling was struggling.
 
@@ -620,6 +670,9 @@ dimensions:
         story:
           title: Odysseus and the Sirens
           theme: Understanding Resistance
+          image_src: /execute-odysseus-sirens.png
+          image_alt: Odysseus tied to a ship mast while resisting the Sirens.
+          tagline: The greatest obstacle to execution is often yourself.
           full_story: |-
             In Greek mythology, Odysseus must sail past the Sirens.
 
@@ -681,6 +734,9 @@ dimensions:
         story:
           title: Atomic Habits
           theme: Systems Beat Motivation
+          image_src: /execute-atomic-habits.png
+          image_alt: Two paths showing willpower versus systems on the road to success.
+          tagline: Success should require less willpower, not more.
           full_story: |-
             Many people assume high performers have more motivation.
 
@@ -741,55 +797,73 @@ dimensions:
           completion_hint: Alfred looks for your execution system evolving from lived learning.
           display_order: 3
         story:
-          title: Toyota Production System
-          theme: Building an Operating Model
+          title: The Orchestra
+          theme: Conditions for Collective Performance
+          image_src: /execute-orchestra.png
+          image_alt: A conductor leading an orchestra with shared clarity and coordination.
+          tagline: The greatest leaders don't play every instrument. They conduct the orchestra.
           full_story: |-
-            In the 1950s Toyota was significantly smaller than its competitors.
+            A young musician asks the conductor,
 
-            Toyota could not compete through scale alone.
+            "Which instrument is the most important?"
 
-            Instead, it focused on creating an operating model that enabled reliable execution.
+            The conductor smiles.
 
-            Toyota became known for four principles:
+            He points to the violin.
 
-            1. Clarity
+            Then the trumpet.
 
-               * Everyone understands what success looks like.
-               * Processes are clearly defined.
+            Then the cello.
 
-            2. Ownership
+            Then the percussion.
 
-               * Every activity has a clear owner.
-               * Accountability is explicit.
+            Finally he says,
 
-            3. Accountability
+            "None of them."
 
-               * Performance is visible.
-               * Results are measured.
+            The musician looks confused.
 
-            4. Governance
+            The conductor continues,
 
-               * Teams operate through regular review rhythms.
-               * Issues are surfaced early and escalated appropriately.
+            "Beautiful music is not created by great musicians playing alone."
 
-            Toyota's success was not built on heroic employees.
+            He raises his baton.
 
-            It was built on an operating model that allowed ordinary people to consistently produce extraordinary results.
+            The orchestra begins.
+
+            Every musician knows:
+
+            when to start
+            when to pause
+            how loudly to play
+            how to support the others
+
+            No one tries to play every instrument.
+
+            No one competes for attention.
+
+            No one improvises at the expense of the ensemble.
+
+            When the final note fades, the audience applauds.
+
+            The conductor turns.
+
+            He points to the orchestra.
+
+            The music belonged to all of them.
           leadership_lesson: |-
-            As leaders grow, execution can no longer depend on personal effort alone.
+            Great leaders do not create extraordinary results through personal effort.
 
-            Execution must become embedded within teams through ownership, accountability, governance, and operating mechanisms.
-
-            The leader shifts from being the executor to being the architect.
-          key_message: Great leaders build operating models, not heroic teams.
+            They create the conditions that allow ordinary people to consistently achieve extraordinary results together.
+          key_message: Great leaders create the conditions for ordinary people to achieve extraordinary results together.
           belt_purpose: Teach users how to scale execution through teams by creating clarity, ownership, accountability, governance,
             and decision-making structures.
           lessons:
-          - As leaders grow, execution can no longer depend on personal effort alone.
-          - Execution must become embedded within teams through ownership, accountability, governance, and operating mechanisms.
-          - The leader shifts from being the executor to being the architect.
-          discussion_question: Where does your execution still depend too much on personal effort instead of an operating
-            model?
+          - Great leaders do not create extraordinary results through personal effort alone.
+          - Teams perform best when people know when to lead, when to pause, and how to support each other.
+          - Leadership creates the conditions for collective performance.
+          discussion_question: Where does your team still depend too much on individual effort instead of shared conditions for
+            performance?
       black:
         criteria: Helps others execute effectively.
         reflection:
@@ -858,6 +932,9 @@ dimensions:
         story:
           title: Life Is a Marathon, Not a Sprint
           theme: Energy Awareness
+          image_src: /energy-marathon.png
+          image_alt: A runner choosing the marathon path over a sprint at sunrise.
+          tagline: Success is not measured by how fast you run, but by how long you can keep running.
           full_story: |-
             At the begining of the leadership journey, one often believes success comes from effort alone.
             Work longer.
@@ -916,6 +993,9 @@ dimensions:
         story:
           title: Sharpen the Saw
           theme: Recovery
+          image_src: /energy-sharpen-saw.png
+          image_alt: One woodcutter keeps sawing while another sharpens his saw.
+          tagline: Recovery is not a distraction from performance. Recovery is performance.
           full_story: |-
             Stephen Covey tells the story of a woodcutter who spends all day cutting trees.
             A passerby notices that the woodcutter is struggling and asks:
@@ -972,6 +1052,9 @@ dimensions:
         story:
           title: Messi & LeBron
           theme: Strategic Energy
+          image_src: /energy-messi-lebron.jpg
+          image_alt: Lionel Messi and LeBron James representing strategic recovery and performance.
+          tagline: The best performers don't train harder. They recover smarter.
           full_story: |-
             Two of the greatest athletes of all time are:
             - Lionel Messi
@@ -1030,6 +1113,9 @@ dimensions:
         story:
           title: Nelson Mandela
           theme: Energy Multiplier
+          image_src: /energy-nelson-mandela.webp
+          image_alt: Portrait of Nelson Mandela.
+          tagline: The strongest leaders leave people with more hope than they found them.
           full_story: |-
             After spending 27 years in prison, Nelson Mandela emerged without bitterness or hatred.
             Many expected revenge.
@@ -1125,6 +1211,9 @@ dimensions:
         story:
           title: Thomas Edison and the 10,000 Attempts
           theme: Learn from Failure
+          image_src: /learning-edison.png
+          image_alt: Thomas Edison studying a light bulb after many failed experiments.
+          tagline: I have not failed. I've just found 10,000 ways that won't work.
           full_story: |-
             Thomas Edison was repeatedly criticized for the thousands of unsuccessful attempts he made while developing the light bulb.
 
@@ -1200,6 +1289,8 @@ dimensions:
         story:
           title: Carl Jung and the Shadow
           theme: Recognize Your Patterns
+          image_src: /learning-carl-jung.png
+          image_alt: A person standing before many roads leading toward different futures.
           full_story: |-
             Carl Jung observed that many people experience the same problems over and over throughout their lives.
 
@@ -1273,6 +1364,9 @@ dimensions:
         story:
           title: Benjamin Franklin's Virtue System
           theme: Deliberate Growth
+          image_src: /learning-benjamin-franklin.webp
+          image_alt: Portrait of Benjamin Franklin.
+          tagline: Growth begins when insight becomes practice.
           full_story: |-
             As a young man, Benjamin Franklin was ambitious, intelligent, and successful.
 
@@ -1369,6 +1463,9 @@ dimensions:
         story:
           title: Socrates and the Art of Questions
           theme: Help Others Grow
+          image_src: /learning-socrates.png
+          image_alt: Socrates asking questions while students listen in ancient Athens.
+          tagline: Great leaders give answers. Wise leaders ask better questions.
           full_story: |-
             Socrates is considered one of history's greatest teachers.
 

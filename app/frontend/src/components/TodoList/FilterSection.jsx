@@ -8,7 +8,7 @@ import { getLongTermGoals } from '../../utils/taskHelpers';
  * - Due date filter (due today, tomorrow, next 7 days, all)
  * - Search filter
  * - Goal filter with Vision/long-term goals
- * - MTN tag multi-select filter
+ * - Importance multi-select filter
  * - Clear all filters button
  */
 export default function FilterSection({
@@ -98,7 +98,7 @@ export default function FilterSection({
 
             {mtnTagOptions.length > 0 && (
               <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">MTN Tag</label>
+                <label className="text-xs font-medium text-slate-600 mb-1 block">Importance</label>
                 <div className="flex flex-wrap gap-2">
                   {mtnTagOptions.map(tag => {
                     const isSelected = selectedMtnTags.includes(tag);

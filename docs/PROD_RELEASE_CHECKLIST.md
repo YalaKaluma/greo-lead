@@ -15,11 +15,37 @@ Use this before a deliberate production release, typically Sunday.
 - [ ] Confirm Railway production deployment succeeds.
 - [ ] Run a production smoke test, including `/api/health`.
 - [ ] Smoke test Home, Goals, Tasks, Journey, Journal, Habits, Settings, notifications status, and admin System Health.
+- [ ] Build/upload/test Play Store internal testing app if this release includes Android.
 - [ ] Review Railway production logs.
 - [ ] Notify or invite users if needed.
 
-Production migration command:
+## Android Production App
+
+- [ ] Confirm this release should include a Play Store app update.
+- [ ] Confirm production app identity:
+  - App name: Alfred
+  - Package ID: com.greo.alfred
+  - API URL: production Railway URL
+- [ ] Confirm dev identity remains separate:
+  - App name: Alfred (dev)
+  - Package ID: com.greo.alfred.dev
+  - API URL: Railway development URL
+- [ ] Confirm app icon, splash screen, and display name are production-ready.
+- [ ] Confirm mobile notifications are either intentionally deferred or fully configured for production.
+- [ ] Build signed production Android App Bundle (`.aab`) in GitHub Actions.
+- [ ] Upload `.aab` to Play Console internal testing.
+- [ ] Complete or review Play Console requirements:
+  - Store listing
+  - Screenshots
+  - Privacy policy
+  - Data safety form
+  - App access instructions if login is required
+- [ ] Install the Play internal testing build from Google Play.
+- [ ] Smoke test the Play-installed app against production.
+- [ ] Confirm no dev API, dev app name, or dev package ID is present in the Play build.
+- [ ] Promote release track only after production backend smoke tests pass.
+
+## Production Migration Command
 
 ```bash
 DIRECT_DATABASE_URL="postgresql://..." alembic upgrade head
-```

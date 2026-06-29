@@ -1,18 +1,30 @@
 const SERVICE_WORKER_URL = '/sw.js';
+const NATIVE_PUSH_ENDPOINT_KEY = 'alfred_native_push_endpoint';
+
+export async function initializeNotificationRouting() {
+  if (!isNativeApp()) return;
+
+  const { PushNotifications } = await import('@capacitor/push-notifications');
+  PushNotifications.addListener('pushNotificationActionPerformed', (event) => {
+    navigateFromNotificationUrl(event?.notification?.data?.url || '/');
+  });
+}
 
 export function getNotificationSupport() {
   const hasWindow = typeof window !== 'undefined';
   const hasNavigator = typeof navigator !== 'undefined';
+  const nativeApp = isNativeApp();
   const isSecureContext = hasWindow && window.isSecureContext;
   const isLocalhost = hasWindow && ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
   const hasNotification = hasWindow && 'Notification' in window;
   const hasServiceWorker = hasNavigator && 'serviceWorker' in navigator;
   const hasPushManager = hasWindow && 'PushManager' in window;
-  const supported = Boolean((isSecureContext || isLocalhost) && hasNotification && hasServiceWorker && hasPushManager);
+  const supported = nativeApp || Boolean((isSecureContext || isLocalhost) && hasNotification && hasServiceWorker && hasPushManager);
 
   return {
     supported,
-    permission: hasNotification ? window.Notification.permission : 'unsupported',
+    permission: nativeApp ? 'native app' : (hasNotification ? window.Notification.permission : 'unsupported'),
+    nativeApp,
     isSecureContext: Boolean(isSecureContext || isLocalhost),
     hasNotification,
     hasServiceWorker,
@@ -31,6 +43,10 @@ export async function getNotificationStatus(apiUrl, userNumber) {
 }
 
 export async function enableNotifications(apiUrl, userNumber, deviceLabel) {
+  if (isNativeApp()) {
+    return enableNativeNotifications(apiUrl, userNumber, deviceLabel);
+  }
+
   const support = getNotificationSupport();
   if (!support.supported) {
     throw new Error('This browser does not support Alfred notifications yet.');
@@ -80,6 +96,25 @@ export async function enableNotifications(apiUrl, userNumber, deviceLabel) {
 }
 
 export async function disableNotifications(apiUrl, userNumber) {
+  if (isNativeApp()) {
+    const endpoint = localStorage.getItem(NATIVE_PUSH_ENDPOINT_KEY);
+    const response = await fetch(`${apiUrl}/api/notifications/unsubscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_number: userNumber,
+        endpoint
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(await readError(response, 'Could not disable this device for notifications.'));
+    }
+
+    localStorage.removeItem(NATIVE_PUSH_ENDPOINT_KEY);
+    return response.json();
+  }
+
   let endpoint = null;
   if ('serviceWorker' in navigator) {
     const registration = await navigator.serviceWorker.getRegistration(SERVICE_WORKER_URL);
@@ -144,6 +179,70 @@ export async function sendTestNotification(apiUrl, userNumber) {
   return response.json();
 }
 
+async function enableNativeNotifications(apiUrl, userNumber, deviceLabel) {
+  const [{ PushNotifications }, { Capacitor }] = await Promise.all([
+    import('@capacitor/push-notifications'),
+    import('@capacitor/core')
+  ]);
+
+  if (!Capacitor.isNativePlatform()) {
+    throw new Error('Native notifications are only available in the installed Alfred app.');
+  }
+
+  const permission = await PushNotifications.requestPermissions();
+  if (permission.receive !== 'granted') {
+    throw new Error('Notification permission was not granted.');
+  }
+
+  const token = await new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (handler, value) => {
+      if (settled) return;
+      settled = true;
+      handler(value);
+    };
+
+    PushNotifications.addListener('registration', (registrationToken) => {
+      finish(resolve, registrationToken.value);
+    });
+
+    PushNotifications.addListener('registrationError', (error) => {
+      finish(reject, new Error(error?.error || 'Could not register this device for notifications.'));
+    });
+
+    PushNotifications.register();
+
+    window.setTimeout(() => {
+      finish(reject, new Error('Notification registration timed out.'));
+    }, 15000);
+  });
+
+  const endpoint = `fcm:${token}`;
+  const response = await fetch(`${apiUrl}/api/notifications/subscribe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      user_number: userNumber,
+      endpoint,
+      keys: {
+        p256dh: 'native-fcm',
+        auth: 'native-fcm'
+      },
+      browser: 'Alfred Android app',
+      platform: Capacitor.getPlatform(),
+      device_label: deviceLabel || 'Alfred Android app'
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(await readError(response, 'Could not save this device for notifications.'));
+  }
+
+  localStorage.setItem(NATIVE_PUSH_ENDPOINT_KEY, endpoint);
+
+  return response.json();
+}
+
 export function getIosInstallHint() {
   const support = getNotificationSupport();
   if (!support.isIos || support.isStandalone) return null;
@@ -196,4 +295,14 @@ function isIos() {
 function isStandalone() {
   if (typeof window === 'undefined') return false;
   return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function isNativeApp() {
+  return typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.();
+}
+
+function navigateFromNotificationUrl(url) {
+  if (typeof url !== 'string') return;
+  if (!url.startsWith('/')) return;
+  window.location.href = url === '/settings' ? '/?page=settings' : url;
 }

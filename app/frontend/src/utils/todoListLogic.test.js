@@ -74,9 +74,9 @@ describe('todoListLogic filtering', () => {
     const strategicTask = task({ id: 2, mtn_score_today: 0.72 });
     const lowLeverageTask = task({ id: 3, mtn_score_today: 0.1 });
 
-    expect(taskMatchesSelectedMtnTags(strategicTask, ['Strategic'])).toBe(true);
-    expect(taskMatchesSelectedMtnTags(lowLeverageTask, ['Strategic'])).toBe(false);
-    expect(taskMatchesSelectedMtnTags(task({ id: 4 }), ['Strategic'])).toBe(false);
+    expect(taskMatchesSelectedMtnTags(strategicTask, ['2. Strategic'])).toBe(true);
+    expect(taskMatchesSelectedMtnTags(lowLeverageTask, ['2. Strategic'])).toBe(false);
+    expect(taskMatchesSelectedMtnTags(task({ id: 4 }), ['2. Strategic'])).toBe(false);
   });
 
   it('combines search and MTN tag filters without mutating tasks', () => {
@@ -88,7 +88,7 @@ describe('todoListLogic filtering', () => {
 
     expect(getVisibleTasks({
       tasks,
-      selectedMtnTags: ['Strategic'],
+      selectedMtnTags: ['2. Strategic'],
       searchQuery: 'strategic',
     }).map(item => item.id)).toEqual([1]);
     expect(tasks.map(item => item.id)).toEqual([1, 2, 3]);

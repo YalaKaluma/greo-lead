@@ -76,11 +76,11 @@ export const mtnSortValue = (task, getTaskScore = () => null) => {
   const scoreData = getVisibleTaskScore(task, getTaskScore);
   if (!scoreData) return 999;
   const labelOrder = {
-    Transformational: 0,
-    Strategic: 1,
-    Important: 2,
-    Maintenance: 3,
-    'Low Leverage': 4
+    '1. Transformation': 0,
+    '2. Strategic': 1,
+    '3. Important': 2,
+    '4. Maintenance': 3,
+    '5. Low Leverage': 4
   };
   return labelOrder[getMtnLabel(scoreData.score)] ?? 999;
 };

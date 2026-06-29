@@ -405,19 +405,9 @@ def ensure_starter_tasks_visible_today(db: Session, user_number: str) -> int:
 
     now = datetime.utcnow()
     local_due_at = _starter_due_datetime(db, user_number)
-    local_today = local_due_at.date()
     repaired_count = 0
     for task in tasks:
-        task_due_day = task.due_date.date() if isinstance(task.due_date, datetime) else task.due_date
-        should_repair = (
-            task.due_date is None
-            or (
-                task_due_day
-                and task_due_day > local_today
-                and (task.current_bucket in ("today", "this_week", None))
-            )
-        )
-        if not should_repair:
+        if task.due_date is not None:
             continue
 
         task.due_date = local_due_at

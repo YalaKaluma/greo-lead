@@ -2,6 +2,7 @@
 import { getTodayET, getETDate, formatDateForInput, formatDateForDisplay, normalizeDateString, getNextMonday } from '../../utils/taskHelpers';
 import { useState, useEffect } from 'react';
 import VoiceRecorder from '../VoiceRecorder';
+import { API_URL } from '../../config';
 
 /**
  * TaskModal Component
@@ -45,7 +46,6 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
 
       setAlfredInsights({
         strategic_intent: task.strategic_intent,
-        move_the_needle_score: task.move_the_needle_score,
         estimated_effort: task.estimated_effort,
 
         suggested_subtasks: task.suggested_subtasks || [],
@@ -107,7 +107,6 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
         : null,
 
       strategic_intent: alfredInsights?.strategic_intent,
-      move_the_needle_score: alfredInsights?.move_the_needle_score,
       estimated_effort: alfredInsights?.estimated_effort,
 
       suggested_subtasks: alfredInsights?.suggested_subtasks,
@@ -134,7 +133,7 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
   setAlfredLoading(true);
 
   try {
-    const response = await fetch('/api/tasks/enrich', {
+    const response = await fetch(`${API_URL}/api/tasks/enrich`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -446,10 +445,6 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
           ✨ Alfred Insights
         </h3>
 
-      </div>
-
-      <div className="text-sm font-medium text-purple-700">
-        Move the Needle: {alfredInsights.move_the_needle_score}/10
       </div>
 
     </button>

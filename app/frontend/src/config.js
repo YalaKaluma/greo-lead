@@ -2,6 +2,10 @@
 // API configuration that works in both dev and production
 
 const getApiBaseUrl = () => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+
   // In production (built static files), use relative URLs
   // This works because FastAPI serves both frontend and API
   if (import.meta.env.PROD) {
