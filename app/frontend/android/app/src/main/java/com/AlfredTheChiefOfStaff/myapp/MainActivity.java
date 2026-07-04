@@ -1,4 +1,4 @@
-package com.greo.alfred;
+package com.AlfredTheChiefOfStaff.myapp;
 
 import com.getcapacitor.BridgeActivity;
 

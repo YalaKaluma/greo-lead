@@ -1,0 +1,18 @@
+Please release Alfred to production.
+
+Context:
+- I have completed a Neon production database backup.
+- I want to promote the latest tested `main` branch to `prod`.
+- Use the repo’s documented production release process.
+- Do not force-push or overwrite `prod`.
+- If `main` and `prod` have diverged, open a PR from `main` to `prod` and only merge if it is mergeable.
+- Wait for GitHub release/security CI to pass before merging.
+- After merging, confirm Railway production deploy succeeds.
+- Verify `/api/health` returns 200, status `ok`, database `connected`, and the deployed commit matches the new `prod` commit.
+- Tell me anything you could not verify, especially production migrations or authenticated smoke tests.
+
+Release notes:
+- Main change I expect to deploy: [brief description]
+- Any known risk areas: [database / auth / frontend / notifications / admin / none]
+- Production migration needed? [yes/no/unknown]
+- If migration is needed, I have already run it / I need your help running it / only remind me.
