@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">Alfred</string>
     <string name="title_activity_main">Alfred</string>
-    <string name="package_name">com.greo.alfred</string>
-    <string name="custom_url_scheme">com.greo.alfred</string>
+    <string name="package_name">com.AlfredTheChiefOfStaff.myapp</string>
+    <string name="custom_url_scheme">com.AlfredTheChiefOfStaff.myapp</string>
 </resources>

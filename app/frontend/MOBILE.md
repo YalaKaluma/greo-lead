@@ -67,7 +67,7 @@ The installed Android app uses Firebase Cloud Messaging for nudge notifications.
 For Android debug APK notifications to work:
 
 1. Create or open the Firebase project for Alfred.
-2. Add an Android app with package name `com.greo.alfred.dev` for debug builds.
+2. Add an Android app with package name `com.AlfredTheChiefOfStaff.myapp.dev` for debug builds.
 3. Download that app's `google-services.json`.
 4. Add the full JSON contents as a GitHub repository secret named `GOOGLE_SERVICES_JSON`, or add a base64-encoded version as `GOOGLE_SERVICES_JSON_B64`.
 5. Add backend Firebase sender credentials to the Railway development environment:
@@ -77,7 +77,7 @@ For Android debug APK notifications to work:
 6. Rebuild the Android APK workflow.
 7. In Alfred (dev), go to **Settings -> Notifications**, enable this device, then send a test notification.
 
-The future production app will need its own Firebase Android app for package `com.greo.alfred`.
+The future production app will need its own Firebase Android app for package `com.AlfredTheChiefOfStaff.myapp`.
 
 ## Requirements
 
