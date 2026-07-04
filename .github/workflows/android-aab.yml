@@ -1,0 +1,96 @@
+name: Android AAB
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: "Backend API URL used by the mobile app"
+        required: true
+        default: "https://greo-lead-development.up.railway.app"
+
+jobs:
+  build-android-aab:
+    name: Build signed release AAB
+    runs-on: ubuntu-latest
+    env:
+      VITE_API_URL: ${{ github.event.inputs.api_url }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install frontend dependencies
+        working-directory: app/frontend
+        run: npm install
+
+      - name: Build web bundle
+        working-directory: app/frontend
+        run: npm run build
+
+      - name: Sync Capacitor Android project
+        working-directory: app/frontend
+        run: npx cap sync android
+
+      - name: Add Firebase Android config
+        working-directory: app/frontend/android/app
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          GOOGLE_SERVICES_JSON_B64: ${{ secrets.GOOGLE_SERVICES_JSON_B64 }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON_B64" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON_B64" | base64 --decode > google-services.json
+          else
+            printf '%s' "$GOOGLE_SERVICES_JSON" > google-services.json
+          fi
+        shell: bash
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platform-tools" "platforms;android-36"
+
+      - name: Decode upload keystore
+        env:
+          ANDROID_UPLOAD_KEYSTORE_B64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_B64 }}
+        run: |
+          test -n "$ANDROID_UPLOAD_KEYSTORE_B64"
+          mkdir -p "$RUNNER_TEMP/android-signing"
+          printf '%s' "$ANDROID_UPLOAD_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/android-signing/upload-keystore.jks"
+        shell: bash
+
+      - name: Build signed release AAB
+        working-directory: app/frontend/android
+        env:
+          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew bundleRelease \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/android-signing/upload-keystore.jks" \
+            -Pandroid.injected.signing.store.password="$ANDROID_UPLOAD_KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$ANDROID_UPLOAD_KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$ANDROID_UPLOAD_KEY_PASSWORD"
+        shell: bash
+
+      - name: Upload release AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: alfred-release-aab
+          path: app/frontend/android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error

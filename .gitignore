@@ -17,3 +17,8 @@ dist/
 build/
 
 *.log
+
+# Android signing keys must stay local / in GitHub Secrets.
+*.jks
+*.keystore
+.android-signing/
