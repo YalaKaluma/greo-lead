@@ -6,7 +6,7 @@ on:
       api_url:
         description: "Backend API URL used by the mobile app"
         required: true
-        default: "https://greo-lead-development.up.railway.app"
+        default: "https://greo-lead-production.up.railway.app"
 
 jobs:
   build-android-aab:
