@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VITE_API_URL: ${{ github.event.inputs.api_url }}
+      ANDROID_VERSION_CODE: ${{ github.run_number }}
+      ANDROID_VERSION_NAME: 1.0.${{ github.run_number }}
 
     steps:
       - name: Check out repository
