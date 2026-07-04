@@ -234,7 +234,7 @@ export function LeadershipStoryCard({ story }) {
         </figure>
       )}
       {(hasText(fullStory) || lessons.length > 0) && (
-        <details className="group mt-4" open={!hasImage}>
+        <details className="group mt-4">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100">
             <span>{hasImage ? "Read full story" : "Full story"}</span>
             <span className="text-slate-500 transition-transform group-open:rotate-180" aria-hidden="true">

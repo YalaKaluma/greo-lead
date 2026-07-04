@@ -419,6 +419,61 @@ dimensions:
           completion_hint: Alfred counts completed team reviews/check-ins in the background.
           display_order: 1
         story:
+          title: The Candle
+          theme: Multiplication
+          image_src: /people-candle.png
+          image_alt: A leader passing candlelight to others around a table.
+          tagline: A leader's success is measured by how much light remains after they are gone.
+          full_story: |-
+            A student asks a master, "How do I know I have become a successful leader?"
+
+            The master lights a candle.
+
+            Then he uses it to light another candle. Then another. Then another.
+
+            The room becomes brighter with every candle.
+
+            The first candle has lost nothing.
+
+            The master says, "A leader's success is not measured only by how brightly they shine. It is measured by how much light remains after they are gone."
+
+            Leadership reaches its highest form when it creates more leaders.
+          lessons:
+          - Leadership reaches its highest form when it creates more leaders.
+          - Influence is measured by what remains after you are gone.
+          - Great leaders multiply people.
+          discussion_question: Who is becoming stronger, clearer, or more confident because of your influence?
+      brown:
+        criteria: Develop the ability to elevate, mentor, and multiply others through trust, empowerment, emotional wisdom,
+          and authentic leadership.
+        reflection:
+          title: Leadership Legacy
+          prompt: Looking back on your leadership journey, what have your greatest successes and failures taught you about
+            developing people, and what kind of leader do you hope others become because of your influence?
+          grading_focus:
+          - transmission
+          - legacy
+          - humility
+          - people development
+          - emotional wisdom
+          completion_hint: Clarify the human impact you want your leadership to leave behind.
+          display_order: 1
+        real_world:
+          title: Develop Others
+          prompt: Mentor, coach, or support someone through a meaningful personal or professional challenge while helping
+            them build confidence, clarity, and ownership.
+          completion_hint: Help another person grow without taking ownership away from them.
+          display_order: 2
+        behavioral:
+          title: Leadership Multiplication
+          prompt: Complete at least 2 team reviews and 2 journal reflections focused on how you are developing, empowering,
+            and supporting the growth of others.
+          signals:
+          - two_development_empowerment_journals
+          - two_team_reviews_growth_focus
+          completion_hint: Alfred looks for evidence that your leadership consistently develops and empowers others.
+          display_order: 3
+        story:
           title: Martin Luther King Jr. and the Promised Land
           theme: Legacy
           image_src: /people-mlk-mountaintop.jpg
@@ -466,61 +521,6 @@ dimensions:
           - The highest form of leadership makes the cause greater than the individual.
           - Legacy is built by inspiring, preparing, and empowering others to continue the work.
           discussion_question: What mission are you preparing others to carry forward without you?
-      brown:
-        criteria: Develop the ability to elevate, mentor, and multiply others through trust, empowerment, emotional wisdom,
-          and authentic leadership.
-        reflection:
-          title: Leadership Legacy
-          prompt: Looking back on your leadership journey, what have your greatest successes and failures taught you about
-            developing people, and what kind of leader do you hope others become because of your influence?
-          grading_focus:
-          - transmission
-          - legacy
-          - humility
-          - people development
-          - emotional wisdom
-          completion_hint: Clarify the human impact you want your leadership to leave behind.
-          display_order: 1
-        real_world:
-          title: Develop Others
-          prompt: Mentor, coach, or support someone through a meaningful personal or professional challenge while helping
-            them build confidence, clarity, and ownership.
-          completion_hint: Help another person grow without taking ownership away from them.
-          display_order: 2
-        behavioral:
-          title: Leadership Multiplication
-          prompt: Complete at least 2 team reviews and 2 journal reflections focused on how you are developing, empowering,
-            and supporting the growth of others.
-          signals:
-          - two_development_empowerment_journals
-          - two_team_reviews_growth_focus
-          completion_hint: Alfred looks for evidence that your leadership consistently develops and empowers others.
-          display_order: 3
-        story:
-          title: The Candle
-          theme: Multiplication
-          image_src: /people-candle.png
-          image_alt: A leader passing candlelight to others around a table.
-          tagline: A leader's success is measured by how much light remains after they are gone.
-          full_story: |-
-            A student asks a master, "How do I know I have become a successful leader?"
-
-            The master lights a candle.
-
-            Then he uses it to light another candle. Then another. Then another.
-
-            The room becomes brighter with every candle.
-
-            The first candle has lost nothing.
-
-            The master says, "A leader's success is not measured only by how brightly they shine. It is measured by how much light remains after they are gone."
-
-            Leadership reaches its highest form when it creates more leaders.
-          lessons:
-          - Leadership reaches its highest form when it creates more leaders.
-          - Influence is measured by what remains after you are gone.
-          - Great leaders multiply people.
-          discussion_question: Who is becoming stronger, clearer, or more confident because of your influence?
       black:
         criteria: Merged into Brown Belt capstone for People. Do not render as an active People belt unless Black Belt is
           reintroduced later.
@@ -1287,51 +1287,71 @@ dimensions:
             current behavior.
           display_order: 3
         story:
-          title: Carl Jung and the Shadow
-          theme: Recognize Your Patterns
-          image_src: /learning-carl-jung.png
-          image_alt: A person standing before many roads leading toward different futures.
+          title: Michael Jordan and the Detroit Pistons
+          theme: Breaking Your Patterns
+          image_src: /learning-michael-jordan.png
+          image_alt: Michael Jordan walking with Chicago Bulls teammates on the basketball court.
           full_story: |-
-            Carl Jung observed that many people experience the same problems over and over throughout their lives.
+            As a young player, Michael Jordan was already the most gifted scorer in basketball.
 
-            Different jobs.
+            He won scoring titles.
 
-            Different relationships.
+            He filled arenas.
 
-            Different environments.
+            He produced spectacular performances.
 
-            Yet the same conflicts continue to appear.
+            Yet every year, his season ended the same way.
 
-            Jung believed these recurring patterns often operate beneath our awareness.
+            The Detroit Pistons eliminated the Chicago Bulls.
 
-            He called this hidden part of ourselves "the shadow."
+            Again.
 
-            Many people assume life keeps happening to them.
+            And again.
 
-            Jung suggested something different.
+            And again.
 
-            Often, we unconsciously recreate the same situations because we have not yet understood the patterns driving our behavior.
+            Many people blamed the Pistons.
 
-            He famously wrote:
+            Jordan eventually realized something different.
 
-            "Until you make the unconscious conscious, it will direct your life and you will call it fate."
+            The greatest obstacle wasn't his opponent.
 
-            The challenge is not simply to learn from a single failure.
+            It was his own pattern.
 
-            The challenge is to recognize the pattern behind the failure.
+            He relied almost entirely on individual brilliance.
 
-            Only then can meaningful change begin.
+            He wanted to carry the team himself.
+
+            Winning required something different.
+
+            He learned to trust his teammates.
+
+            He learned to lead rather than simply dominate.
+
+            Only after changing his own pattern did the results change.
+
+            The championships followed.
+
+            Not because the league became easier.
+
+            Because Michael Jordan became different.
           leadership_lesson: |-
-            The obstacle is rarely the event itself.
+            Many people keep changing jobs, teams, companies, or circumstances while repeating the same behaviors.
 
-            The obstacle is the recurring pattern behind the event.
-          key_message: What you do not understand will continue to repeat itself.
+            Growth begins when we stop asking:
+
+            "Why does this keep happening to me?"
+
+            and start asking:
+
+            "What pattern in me keeps creating this outcome?"
+          key_message: Growth begins when we recognize and change the patterns we keep repeating.
           belt_purpose: Help users identify the recurring beliefs, fears, assumptions, and behaviors that limit their growth.
           lessons:
-          - The obstacle is rarely the event itself.
-          - The obstacle is the recurring pattern behind the event.
-          - What you do not understand will continue to repeat itself.
-          discussion_question: What pattern might be repeating itself in your life right now?
+          - The greatest obstacle is sometimes your own pattern.
+          - Changing circumstances rarely helps if the same behavior keeps repeating.
+          - Results change when behavior changes.
+          discussion_question: What pattern in you might be creating a recurring outcome?
       green:
         criteria: Intentionally transform self-awareness into meaningful behavioral change.
         reflection:
