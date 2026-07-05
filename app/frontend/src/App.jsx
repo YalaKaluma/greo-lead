@@ -161,6 +161,14 @@ function App() {
     );
   }
 
+  if (window.location.pathname === "/account-deletion") {
+    return (
+      <LanguageProvider apiUrl={API_URL} userNumber={localStorage.getItem("user_number")}>
+        <TrustSecurity publicView initialTab="gdpr" focusSection="accountDeletion" />
+      </LanguageProvider>
+    );
+  }
+
   // Welcome page (first-time onboarding)
   // Only show if:
   // 1. Has numeric 'user' param (from onboarding link)
