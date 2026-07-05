@@ -352,9 +352,9 @@ export function TrialModal({ trial, draft, setDraft, saving, error, onClose, onS
   const reviewedAt = trial.reviewed_at || feedbackHistory[feedbackHistory.length - 1]?.reviewed_at;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
-      <div className="w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-2xl">
-        <div className="border-b border-slate-200 px-6 py-4">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/60 p-3 sm:items-center sm:p-4">
+      <div className="my-3 flex max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl sm:my-4 sm:max-h-[calc(100dvh-2rem)]">
+        <div className="flex-none border-b border-slate-200 px-4 py-4 sm:px-6">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">
@@ -373,7 +373,7 @@ export function TrialModal({ trial, draft, setDraft, saving, error, onClose, onS
           </div>
         </div>
 
-        <div className="px-6 py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           <div className="rounded-lg border border-[#ded7c8] bg-[#fbfaf7] p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7c4a2d]">
               Prompt
@@ -422,7 +422,7 @@ export function TrialModal({ trial, draft, setDraft, saving, error, onClose, onS
           )}
         </div>
 
-        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4 sm:flex-row sm:justify-end">
+        <div className="flex flex-none flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:flex-row sm:justify-end sm:px-6">
           <button
             type="button"
             disabled={saving || !draft.trim()}

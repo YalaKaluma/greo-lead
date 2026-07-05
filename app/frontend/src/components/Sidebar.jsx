@@ -113,6 +113,16 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onC
               {t('nav.story')}
             </button>
             <button
+              onClick={() => onNavigate('trust-security')}
+              className={`px-3 py-3 text-left rounded-lg transition-all duration-200 ${
+                currentPage === 'trust-security'
+                  ? 'bg-slate-800 text-white shadow-md'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              {t('nav.trustSecurity')}
+            </button>
+            <button
               onClick={() => onNavigate('settings')}
               className={`px-3 py-3 text-left rounded-lg transition-all duration-200 ${
                 currentPage === 'settings'
