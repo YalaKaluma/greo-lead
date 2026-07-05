@@ -12,6 +12,7 @@ import PageIntroBanner from './components/PageIntroBanner';
 import AlfredChat from './components/AlfredChat';
 import Settings from './components/Settings';
 import AlfredStory from './components/AlfredStory';
+import TrustSecurity from './components/TrustSecurity';
 import { useEffect, useRef, useState } from "react";
 import Login from "./Login";
 import Welcome from "./Welcome";
@@ -21,6 +22,7 @@ import { API_URL } from './config';
 import { initializeNotificationRouting } from './services/notifications';
 
 const HOME_PAGE = 'home';
+const TRUST_SECURITY_PAGE = 'trust-security';
 const NEW_USER_DEFAULT_PAGE = 'my-goals';
 const DEFAULT_PAGE = HOME_PAGE;
 const VALID_PAGE_IDS = new Set([
@@ -33,6 +35,7 @@ const VALID_PAGE_IDS = new Set([
   'coaching-sessions',
   'my-journal',
   'alfred-story',
+  TRUST_SECURITY_PAGE,
   'settings'
 ]);
 
@@ -150,6 +153,14 @@ function App() {
     return <Waitlist />;
   }
 
+  if (window.location.pathname === "/trust-security") {
+    return (
+      <LanguageProvider apiUrl={API_URL} userNumber={localStorage.getItem("user_number")}>
+        <TrustSecurity publicView />
+      </LanguageProvider>
+    );
+  }
+
   // Welcome page (first-time onboarding)
   // Only show if:
   // 1. Has numeric 'user' param (from onboarding link)
@@ -210,6 +221,7 @@ function MainAppShell({
     'coaching-sessions': t('page.coaching'),
     'my-journal': t('page.journal'),
     'alfred-story': t('page.story'),
+    [TRUST_SECURITY_PAGE]: t('trustSecurity.title'),
     settings: t('settings.title')
   };
 
@@ -327,6 +339,9 @@ function MainAppShell({
         )}
         {currentPage === 'alfred-story' && (
           <AlfredStory />
+        )}
+        {currentPage === TRUST_SECURITY_PAGE && (
+          <TrustSecurity onBack={() => handleNavigate('my-goals')} />
         )}
       </main>
 
