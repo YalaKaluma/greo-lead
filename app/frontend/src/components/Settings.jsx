@@ -72,7 +72,8 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
     const baseTabs = [
       { id: 'profile', label: 'Profile' },
       { id: 'preferences', label: 'Preferences' },
-      { id: 'notifications', label: 'Notifications' }
+      { id: 'notifications', label: 'Notifications' },
+      { id: 'privacy', label: 'Privacy & Data' }
     ];
     if (currentUser?.is_admin) {
       baseTabs.push({ id: 'admin', label: 'Admin' });
@@ -264,6 +265,31 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
 
         {activeTab === 'notifications' && (
           <NotificationSettingsPanel apiUrl={apiUrl} userNumber={userNumber} />
+        )}
+
+        {activeTab === 'privacy' && (
+          <section className="py-8">
+            <div className="max-w-2xl">
+              <h2 className="text-sm font-semibold text-slate-900">Privacy & Data</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                You can request deletion of your Alfred account and associated data from the public account deletion page.
+              </p>
+              <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <h3 className="text-base font-semibold text-slate-950">Account deletion</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Deletion requests are handled by email so Alfred can verify account ownership before removing account information and user-created content.
+                </p>
+                <a
+                  href="/account-deletion"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-4 inline-flex rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+                >
+                  Open account deletion page
+                </a>
+              </div>
+            </div>
+          </section>
         )}
 
         {activeTab === 'admin' && currentUser?.is_admin && (

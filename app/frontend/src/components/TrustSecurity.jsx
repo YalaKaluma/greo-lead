@@ -143,6 +143,22 @@ const TABS = [
           'trustSecurity.gdpr.rights.b5'
         ]
       },
+      {
+        id: 'accountDeletion',
+        headingKey: 'trustSecurity.gdpr.deletion.heading',
+        paragraphs: [
+          'trustSecurity.gdpr.deletion.p1',
+          'trustSecurity.gdpr.deletion.p2',
+          'trustSecurity.gdpr.deletion.p3'
+        ],
+        bullets: [
+          'trustSecurity.gdpr.deletion.b1',
+          'trustSecurity.gdpr.deletion.b2',
+          'trustSecurity.gdpr.deletion.b3'
+        ],
+        contactKey: 'trustSecurity.contact.privacy',
+        contactLabelKey: 'trustSecurity.gdpr.deletion.emailLabel'
+      },
       { headingKey: 'trustSecurity.gdpr.retention.heading', paragraphs: ['trustSecurity.gdpr.retention.p1', 'trustSecurity.gdpr.retention.p2'] },
       { headingKey: 'trustSecurity.gdpr.transfers.heading', paragraphs: ['trustSecurity.gdpr.transfers.p1'] },
       {
@@ -181,9 +197,11 @@ const TABS = [
   }
 ];
 
-export default function TrustSecurity({ onBack, publicView = false }) {
+export default function TrustSecurity({ onBack, publicView = false, initialTab = TABS[0].id, focusSection }) {
   const { language, setLanguage, t } = useLanguage();
-  const [activeTab, setActiveTab] = useState(TABS[0].id);
+  const [activeTab, setActiveTab] = useState(
+    TABS.some((tab) => tab.id === initialTab) ? initialTab : TABS[0].id
+  );
   const currentTab = useMemo(
     () => TABS.find((tab) => tab.id === activeTab) || TABS[0],
     [activeTab]
@@ -260,7 +278,12 @@ export default function TrustSecurity({ onBack, publicView = false }) {
           <h2 className="text-2xl font-bold text-slate-900">{t(currentTab.titleKey)}</h2>
           <div className="mt-6 space-y-8">
             {currentTab.sections.map((section) => (
-              <PolicySection key={section.headingKey} section={section} t={t} />
+              <PolicySection
+                key={section.headingKey}
+                section={section}
+                t={t}
+                highlighted={section.id && section.id === focusSection}
+              />
             ))}
           </div>
         </article>
@@ -269,9 +292,16 @@ export default function TrustSecurity({ onBack, publicView = false }) {
   );
 }
 
-function PolicySection({ section, t }) {
+function PolicySection({ section, t, highlighted = false }) {
   return (
-    <section className="border-t border-slate-100 pt-6 first:border-t-0 first:pt-0">
+    <section
+      id={section.id}
+      className={`border-t pt-6 first:border-t-0 first:pt-0 ${
+        highlighted
+          ? 'rounded-lg border border-blue-200 bg-blue-50/60 p-5 first:p-5'
+          : 'border-slate-100'
+      }`}
+    >
       <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
         {t(section.headingKey)}
       </h3>
@@ -289,7 +319,7 @@ function PolicySection({ section, t }) {
         {section.contactKey && (
           <p>
             <a className="font-semibold text-slate-950 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-950" href={`mailto:${t(section.contactKey)}`}>
-              {t(section.contactKey)}
+              {section.contactLabelKey ? t(section.contactLabelKey) : t(section.contactKey)}
             </a>
           </p>
         )}
