@@ -62,6 +62,9 @@ def ensure_admin_schema_and_seed() -> None:
         conn.execute(text("ALTER TABLE task_priority_decisions ADD COLUMN IF NOT EXISTS admin_reviewed_at TIMESTAMP"))
         conn.execute(text("ALTER TABLE task_priority_decisions ADD COLUMN IF NOT EXISTS admin_resolved_at TIMESTAMP"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_task_priority_decisions_admin_review_status ON task_priority_decisions(admin_review_status)"))
+        conn.execute(text("ALTER TABLE journey_people ADD COLUMN IF NOT EXISTS mission_statement TEXT"))
+        conn.execute(text("ALTER TABLE journey_people ADD COLUMN IF NOT EXISTS meeting_notes JSONB DEFAULT '[]'::jsonb"))
+        conn.execute(text("UPDATE journey_people SET meeting_notes = '[]'::jsonb WHERE meeting_notes IS NULL"))
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS usage_events (
                 id SERIAL PRIMARY KEY,
