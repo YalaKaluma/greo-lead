@@ -24,9 +24,19 @@ This folder contains Alfred's Vite/React frontend.
 - My Coaching Sessions
 - My Journal
 - Alfred in-app chat
+- Trust & Security
 - Settings for language and timezone
 
 Admin-only surfaces are exposed through the authenticated app shell and backend admin endpoints, including user management, feedback review, usage analytics, system health, Operations Director, CTO Director, and AI briefings.
+
+## Trust And Security
+
+`src/components/TrustSecurity.jsx` provides Alfred's privacy, terms, security, GDPR/account-deletion, and cookies content. It is available inside the authenticated sidebar and through public routes:
+
+- `/trust-security`
+- `/account-deletion`, which opens the GDPR tab focused on account deletion instructions
+
+The page uses the same English/French i18n system as the rest of the app, so policy copy changes must update both translation files.
 
 ## Internationalization And Timezone
 
@@ -70,6 +80,16 @@ When adding a new page or component, do not hardcode user-facing text directly i
 
 The Settings surface manages browser push notification status, preferences, and test sends through `/api/notifications/...`. Production push requires VAPID keys on the backend and HTTPS-capable deployment.
 
+## Android Packaging
+
+The frontend is also wrapped as a Capacitor Android app in `android/`. The project uses the built web bundle from repository-level `static/`, reads `VITE_API_URL` for hosted backend targeting, and supports:
+
+- debug APK builds through the Android APK GitHub workflow
+- signed release AAB builds through the Android AAB GitHub workflow
+- Firebase Cloud Messaging for installed Android push notifications when `google-services.json` and backend Firebase credentials are configured
+
+See `MOBILE.md` for current workflow details and package identity notes.
+
 ## Development
 
 Expected local commands when Node/npm are available:
@@ -83,3 +103,5 @@ npm run build
 ```
 
 The production build is served by the FastAPI backend from the repository-level `static/` directory.
+
+In this workspace, skip local frontend build/test/i18n validation unless explicitly requested because those commands can hang or fail locally. Use CI, Railway, GitHub Actions, or another known working environment for frontend validation.

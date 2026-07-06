@@ -14,7 +14,9 @@ This folder contains the main React UI surfaces for Alfred.
 - `MyCoachingSessions.jsx` renders dedicated leadership coaching sessions.
 - `Settings.jsx` renders user preferences for language and timezone.
 - Settings also hosts notification subscription, preference, status, and test-send controls.
+- Settings includes a Privacy & Data tab that links users to the public account deletion flow.
 - `Sidebar.jsx` controls main navigation.
+- `TrustSecurity.jsx` renders the privacy, terms, security, GDPR/account-deletion, and cookies policy center in authenticated and public modes.
 - `AlfredChat.jsx` provides in-app chat access.
 - `PageIntroBanner.jsx` shows a short first-visit explanation for each page.
 

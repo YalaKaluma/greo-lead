@@ -13,6 +13,7 @@ This folder contains the FastAPI backend for Alfred / Leadership OS.
 - `routers/` exposes API endpoints.
 - `services/` contains orchestration and business logic used by routers, webhooks, coaching, nudges, and message handling.
 - `frontend/` contains the React application source.
+- `frontend/android/` contains the Capacitor Android shell that packages the built React bundle for APK/AAB workflows.
 - `prompts/` and `nudge_prompts.yaml` hold editable prompt assets.
 - `templates/` contains legacy/server-rendered templates still present in the codebase.
 - `utils/` contains shared helpers such as security, task context, and message splitting.
@@ -66,6 +67,13 @@ python -m pywebpush --generate-vapid-keys
 
 Configure the same values in Railway before enabling production push notifications. The backend exposes generic notification endpoints at `/api/notifications/...`; nudges are the first caller, but the service is shared for future task, habit, journal, Journey, review, and admin notifications.
 
+Installed Android push notifications:
+
+- `FIREBASE_SERVICE_ACCOUNT_JSON` or `FIREBASE_SERVICE_ACCOUNT_B64`
+- `FIREBASE_PROJECT_ID`, optional when it is already present in the service account JSON
+
+Use Firebase credentials in Railway when the installed Android app should receive native notifications. Browser/PWA notifications continue to use the VAPID Web Push path.
+
 CTO Director review:
 
 - `GITHUB_COPILOT_CTO_TOKEN` or `GITHUB_TOKEN`
@@ -88,6 +96,8 @@ Alfred combines:
 - Task, habit, people, journal, priority review, message feedback, signal classification, audio, settings, and coaching workflows.
 - Home dashboard snapshots that route activated users to Home and new users toward goals.
 - Browser push notification subscriptions, preferences, delivery logs, and settings-page test notifications.
+- Trust & Security policy surfaces for privacy, terms, security, GDPR/account deletion, and cookies, available in-app and through public routes.
+- Capacitor Android packaging for debug APK and signed Play Store AAB workflows, including Firebase-backed installed-app notifications.
 - Admin surfaces for user management, feedback review, usage analytics, system health, AI briefings, Operations Director drafts, and CTO Director findings.
 - Persisted language and timezone preferences used by UI and time-sensitive product logic.
 

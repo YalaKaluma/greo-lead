@@ -24,12 +24,13 @@ Use this before a deliberate production release, typically Sunday.
 - [ ] Confirm this release should include a Play Store app update.
 - [ ] Confirm production app identity:
   - App name: Alfred
-  - Package ID: com.greo.alfred
+  - Package ID: com.AlfredTheChiefOfStaff.myapp
   - API URL: production Railway URL
 - [ ] Confirm dev identity remains separate:
   - App name: Alfred (dev)
-  - Package ID: com.greo.alfred.dev
+  - Package ID: com.AlfredTheChiefOfStaff.myapp.dev
   - API URL: Railway development URL
+- [ ] Confirm the package ID matches the Play Console app before uploading; Android package IDs cannot be changed after Play publication.
 - [ ] Confirm app icon, splash screen, and display name are production-ready.
 - [ ] Confirm mobile notifications are either intentionally deferred or fully configured for production.
 - [ ] Build signed production Android App Bundle (`.aab`) in GitHub Actions.
