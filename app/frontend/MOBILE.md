@@ -77,7 +77,21 @@ For Android debug APK notifications to work:
 6. Rebuild the Android APK workflow.
 7. In Alfred (dev), go to **Settings -> Notifications**, enable this device, then send a test notification.
 
-The future production app will need its own Firebase Android app for package `com.AlfredTheChiefOfStaff.myapp`.
+The production app needs its own Firebase Android app for package `com.AlfredTheChiefOfStaff.myapp`.
+
+## Play Store AAB Workflow
+
+Use the **Android AAB** GitHub Actions workflow for signed Play Store builds. It builds the web bundle, syncs Capacitor, injects Firebase config, signs the release bundle from GitHub secrets, and uploads `alfred-release-aab`.
+
+Required repository secrets:
+
+- `GOOGLE_SERVICES_JSON` or `GOOGLE_SERVICES_JSON_B64`
+- `ANDROID_UPLOAD_KEYSTORE_B64`
+- `ANDROID_UPLOAD_KEYSTORE_PASSWORD`
+- `ANDROID_UPLOAD_KEY_ALIAS`
+- `ANDROID_UPLOAD_KEY_PASSWORD`
+
+The workflow defaults `VITE_API_URL` to the Railway production backend. Override it only when intentionally building a non-production bundle.
 
 ## Requirements
 
@@ -90,4 +104,5 @@ The future production app will need its own Firebase Android app for package `co
 
 - The native Android project lives in `app/frontend/android`.
 - Capacitor sync copies the built web bundle from the repository-level `static/` folder into the Android app.
-- Phase 1 does not add native push notifications, native voice recording, app signing, or app-store packaging.
+- Current Android identity in code is `com.AlfredTheChiefOfStaff.myapp` for release and `com.AlfredTheChiefOfStaff.myapp.dev` for debug builds.
+- Native push notifications, signed AAB packaging, and GitHub-hosted Play Store bundle generation are now present. Native voice recording remains outside the current mobile scope.

@@ -340,6 +340,13 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose, onDeleted }) {
   const [synthesisExpanded, setSynthesisExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
+  const [showMeetingNoteForm, setShowMeetingNoteForm] = useState(false);
+  const [expandedMeetingNoteId, setExpandedMeetingNoteId] = useState(null);
+  const [meetingNoteDraft, setMeetingNoteDraft] = useState({
+    title: '',
+    meeting_date: new Date().toISOString().slice(0, 10),
+    notes: ''
+  });
 
   useEffect(() => {
     fetchPersonData();
@@ -400,6 +407,44 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose, onDeleted }) {
     } catch (err) {
       console.error('Error updating person:', err);
       alert('Failed to update team member');
+    }
+  };
+
+  const saveMeetingNote = async (event) => {
+    event.preventDefault();
+    if (!meetingNoteDraft.notes.trim()) {
+      alert('Please enter your meeting notes');
+      return;
+    }
+
+    const existingNotes = Array.isArray(person.meeting_notes) ? person.meeting_notes : [];
+    const meetingDate = meetingNoteDraft.meeting_date || new Date().toISOString().slice(0, 10);
+    const note = {
+      id: `${Date.now()}`,
+      title: meetingNoteDraft.title.trim() || `Meeting notes - ${formatDisplayDate(meetingDate)}`,
+      meeting_date: meetingDate,
+      notes: meetingNoteDraft.notes.trim(),
+      created_at: new Date().toISOString()
+    };
+
+    try {
+      const updatedNotes = [note, ...existingNotes];
+      await axios.put(
+        `${apiUrl}/api/journey/people/${personId}`,
+        { meeting_notes: updatedNotes },
+        { params: { user_number: userNumber } }
+      );
+      setPerson({ ...person, meeting_notes: updatedNotes });
+      setExpandedMeetingNoteId(note.id);
+      setMeetingNoteDraft({
+        title: '',
+        meeting_date: new Date().toISOString().slice(0, 10),
+        notes: ''
+      });
+      setShowMeetingNoteForm(false);
+    } catch (err) {
+      console.error('Error saving meeting note:', err);
+      alert('Failed to save meeting note');
     }
   };
 
@@ -475,6 +520,20 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose, onDeleted }) {
             >
               People Profile
               {activeTab === 'profile' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('meeting-notes')}
+              className={`relative px-2 pb-3 font-medium transition-colors ${
+                activeTab === 'meeting-notes'
+                  ? 'text-blue-600'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Meeting Notes
+              {activeTab === 'meeting-notes' && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
               )}
             </button>
@@ -558,6 +617,16 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose, onDeleted }) {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Mission Statement */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h3 className="text-xl font-bold text-slate-800 mb-3">Mission Statement</h3>
+          {person.mission_statement ? (
+            <p className="text-slate-600 leading-7">{person.mission_statement}</p>
+          ) : (
+            <p className="text-slate-500">No mission statement yet. Use Edit to add one for this relationship.</p>
+          )}
         </div>
 
         {/* Alfred's Synthesis */}
@@ -719,6 +788,19 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose, onDeleted }) {
           </>
         )}
 
+        {activeTab === 'meeting-notes' && (
+          <MeetingNotesTab
+            notes={Array.isArray(person.meeting_notes) ? person.meeting_notes : []}
+            showForm={showMeetingNoteForm}
+            setShowForm={setShowMeetingNoteForm}
+            draft={meetingNoteDraft}
+            setDraft={setMeetingNoteDraft}
+            onSave={saveMeetingNote}
+            expandedNoteId={expandedMeetingNoteId}
+            setExpandedNoteId={setExpandedMeetingNoteId}
+          />
+        )}
+
         {activeTab === 'review' && (
           <PeopleReviewTab
             apiUrl={apiUrl}
@@ -728,6 +810,119 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose, onDeleted }) {
           />
         )}
       </div>
+    </div>
+  );
+}
+
+function formatDisplayDate(value) {
+  if (!value) return 'Today';
+  return new Date(`${value}T00:00:00`).toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
+  });
+}
+
+function MeetingNotesTab({
+  notes,
+  showForm,
+  setShowForm,
+  draft,
+  setDraft,
+  onSave,
+  expandedNoteId,
+  setExpandedNoteId
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold text-slate-800">Meeting Notes</h2>
+        <button
+          type="button"
+          onClick={() => setShowForm(!showForm)}
+          className="inline-flex h-10 w-10 items-center justify-center rounded border border-blue-200 bg-blue-50 text-2xl leading-none text-blue-700 transition-colors hover:bg-blue-100"
+          title="Add meeting note"
+          aria-label="Add meeting note"
+        >
+          +
+        </button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={onSave} className="rounded-lg border border-slate-200 bg-white p-5 space-y-4">
+          <div className="grid gap-4 md:grid-cols-[1fr_180px]">
+            <input
+              type="text"
+              value={draft.title}
+              onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+              placeholder="Meeting title"
+              className="w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              type="date"
+              value={draft.meeting_date}
+              onChange={(event) => setDraft({ ...draft, meeting_date: event.target.value })}
+              className="w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <textarea
+            value={draft.notes}
+            onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
+            placeholder="What happened in this meeting?"
+            rows={7}
+            className="w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            required
+          />
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="rounded bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700"
+            >
+              Save Note
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowForm(false)}
+              className="rounded bg-slate-200 px-4 py-2 text-slate-700 transition-colors hover:bg-slate-300"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+
+      {notes.length === 0 ? (
+        <section className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-slate-600">
+          No meeting notes yet. Add notes after your next meeting to keep the relationship history in one place.
+        </section>
+      ) : (
+        <div className="space-y-3">
+          {notes.map((note, index) => {
+            const noteId = note.id || `${note.meeting_date}-${index}`;
+            const isExpanded = expandedNoteId === noteId;
+            return (
+              <section key={noteId} className="rounded-lg border border-slate-200 bg-white">
+                <button
+                  type="button"
+                  onClick={() => setExpandedNoteId(isExpanded ? null : noteId)}
+                  className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-slate-50"
+                >
+                  <div>
+                    <h3 className="font-semibold text-slate-900">{note.title || `Meeting notes ${notes.length - index}`}</h3>
+                    <p className="mt-1 text-sm text-slate-500">{formatDisplayDate(note.meeting_date)}</p>
+                  </div>
+                  <span className="text-sm font-medium text-slate-500">{isExpanded ? 'Close' : 'Open'}</span>
+                </button>
+                {isExpanded && (
+                  <div className="border-t border-slate-200 px-5 py-4">
+                    <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{note.notes}</p>
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -812,6 +1007,7 @@ function PersonForm({ person, onSubmit, onCancel, onDelete }) {
     phone: person?.phone || '',
     relation: person?.relation || '',
     context: person?.context || '',
+    mission_statement: person?.mission_statement || '',
     strengths: person?.strengths || '',
     growth_areas: person?.growth_areas || '',
     aspirations: person?.aspirations || ''
@@ -868,6 +1064,14 @@ function PersonForm({ person, onSubmit, onCancel, onDelete }) {
         onChange={(e) => setFormData({ ...formData, context: e.target.value })}
         placeholder="Context / Notes"
         rows={2}
+        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+
+      <textarea
+        value={formData.mission_statement}
+        onChange={(e) => setFormData({ ...formData, mission_statement: e.target.value })}
+        placeholder="Mission statement"
+        rows={3}
         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
 

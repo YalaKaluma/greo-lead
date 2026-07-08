@@ -20,6 +20,7 @@ The application is a FastAPI backend with a Vite/React frontend, backed by Postg
 - Database: Neon/PostgreSQL via SQLAlchemy models in `app/models.py`
 - Frontend source: Vite React app in `app/frontend`
 - Built frontend: served by FastAPI from repository-level `static/`
+- Android app shell: Capacitor project in `app/frontend/android`
 - Journey curriculum: `app/journey_trials.yaml`
 - Journey subdomain prompts: `app/journey_subdomain_prompts.yaml`
 - Prompt assets: `app/prompts/` and `app/nudge_prompts.yaml`
@@ -38,10 +39,12 @@ Alfred currently includes:
 - Journaling with reflection-depth scoring and trend views.
 - In-app chat, WhatsApp, email, nudges, audio transcription, and text-to-speech.
 - Browser push notifications with per-user subscriptions, preferences, delivery logs, and settings-page test sends.
+- Trust & Security policy center with privacy, terms, security, GDPR/account-deletion, and cookies content available in-app and at public routes.
 - Message feedback and signal classification for response quality and behavioral telemetry.
 - Admin user management, feedback review, usage analytics, system health, AI briefings, Operations Director issue drafting, and CTO Director review.
 - Home dashboard snapshots for activation-aware startup routing.
 - User settings for English/French language preference and timezone preference.
+- Capacitor Android packaging for debug APK and signed Play Store AAB workflows, including Firebase-backed native push configuration.
 
 ## Local Development
 
@@ -184,3 +187,5 @@ npm run build
 ```
 
 Current focused backend test coverage includes CTO Director, Operations Director, notifications, nudge targeting, onboarding starter goals, priority timezone behavior, security hardening, task MTN trends, habits, and Journey roadmap imports.
+
+For local frontend work in this workspace, do not run `pnpm i18n:check`, `pnpm build`, `pnpm test`, or `vite build` unless explicitly requested. Prefer CI, Railway, GitHub Actions, or another known working build environment for those validation steps.

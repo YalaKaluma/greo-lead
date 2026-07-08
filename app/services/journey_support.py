@@ -212,9 +212,11 @@ class PersonCreate(BaseModel):
     phone: Optional[str] = None
     relation: Optional[str] = None
     context: Optional[str] = None
+    mission_statement: Optional[str] = None
     strengths: Optional[str] = None
     growth_areas: Optional[str] = None
     aspirations: Optional[str] = None
+    meeting_notes: Optional[list[dict[str, Any]]] = None
 
 
 class PersonUpdate(BaseModel):
@@ -223,9 +225,11 @@ class PersonUpdate(BaseModel):
     phone: Optional[str] = None
     relation: Optional[str] = None
     context: Optional[str] = None
+    mission_statement: Optional[str] = None
     strengths: Optional[str] = None
     growth_areas: Optional[str] = None
     aspirations: Optional[str] = None
+    meeting_notes: Optional[list[dict[str, Any]]] = None
 
 
 
@@ -737,9 +741,11 @@ class PersonResponse(BaseModel):
     phone: Optional[str]
     relation: Optional[str]
     context: Optional[str]
+    mission_statement: Optional[str]
     strengths: Optional[str]
     growth_areas: Optional[str]
     aspirations: Optional[str]
+    meeting_notes: Optional[list[dict[str, Any]]] = None
     first_seen_at: datetime
     updated_at: datetime
 
