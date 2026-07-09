@@ -217,6 +217,29 @@ class PersonCreate(BaseModel):
     growth_areas: Optional[str] = None
     aspirations: Optional[str] = None
     meeting_notes: Optional[list[dict[str, Any]]] = None
+    organization: Optional[str] = None
+    team: Optional[str] = None
+    manager_name: Optional[str] = None
+    circle_type: Optional[str] = None
+    strategic_importance: Optional[str] = None
+    last_interaction_at: Optional[datetime] = None
+    next_action: Optional[str] = None
+    current_goals: Optional[str] = None
+    development_plan: Optional[str] = None
+    stretch_assignments: Optional[str] = None
+    coaching_focus: Optional[str] = None
+    performance_indicator: Optional[str] = None
+    potential_indicator: Optional[str] = None
+    stakeholder_mission: Optional[str] = None
+    stakeholder_priorities: Optional[str] = None
+    success_metrics: Optional[str] = None
+    stakeholder_strengths: Optional[str] = None
+    risks_or_pressures: Optional[str] = None
+    stakeholder_aspirations: Optional[str] = None
+    how_i_create_value: Optional[str] = None
+    mission_alignment: Optional[str] = None
+    potential_tensions: Optional[str] = None
+    relationship_strategy: Optional[str] = None
 
 
 class PersonUpdate(BaseModel):
@@ -230,6 +253,30 @@ class PersonUpdate(BaseModel):
     growth_areas: Optional[str] = None
     aspirations: Optional[str] = None
     meeting_notes: Optional[list[dict[str, Any]]] = None
+    organization: Optional[str] = None
+    team: Optional[str] = None
+    manager_name: Optional[str] = None
+    circle_type: Optional[str] = None
+    relationship_health: Optional[int] = None
+    strategic_importance: Optional[str] = None
+    last_interaction_at: Optional[datetime] = None
+    next_action: Optional[str] = None
+    current_goals: Optional[str] = None
+    development_plan: Optional[str] = None
+    stretch_assignments: Optional[str] = None
+    coaching_focus: Optional[str] = None
+    performance_indicator: Optional[str] = None
+    potential_indicator: Optional[str] = None
+    stakeholder_mission: Optional[str] = None
+    stakeholder_priorities: Optional[str] = None
+    success_metrics: Optional[str] = None
+    stakeholder_strengths: Optional[str] = None
+    risks_or_pressures: Optional[str] = None
+    stakeholder_aspirations: Optional[str] = None
+    how_i_create_value: Optional[str] = None
+    mission_alignment: Optional[str] = None
+    potential_tensions: Optional[str] = None
+    relationship_strategy: Optional[str] = None
 
 
 
@@ -746,6 +793,30 @@ class PersonResponse(BaseModel):
     growth_areas: Optional[str]
     aspirations: Optional[str]
     meeting_notes: Optional[list[dict[str, Any]]] = None
+    organization: Optional[str] = None
+    team: Optional[str] = None
+    manager_name: Optional[str] = None
+    circle_type: Optional[str] = None
+    relationship_health: Optional[int] = None
+    strategic_importance: Optional[str] = None
+    last_interaction_at: Optional[datetime] = None
+    next_action: Optional[str] = None
+    current_goals: Optional[str] = None
+    development_plan: Optional[str] = None
+    stretch_assignments: Optional[str] = None
+    coaching_focus: Optional[str] = None
+    performance_indicator: Optional[str] = None
+    potential_indicator: Optional[str] = None
+    stakeholder_mission: Optional[str] = None
+    stakeholder_priorities: Optional[str] = None
+    success_metrics: Optional[str] = None
+    stakeholder_strengths: Optional[str] = None
+    risks_or_pressures: Optional[str] = None
+    stakeholder_aspirations: Optional[str] = None
+    how_i_create_value: Optional[str] = None
+    mission_alignment: Optional[str] = None
+    potential_tensions: Optional[str] = None
+    relationship_strategy: Optional[str] = None
     first_seen_at: datetime
     updated_at: datetime
 
