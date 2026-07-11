@@ -10,6 +10,7 @@ import MyHabits from './components/MyHabits';
 import MyJournal from './components/MyJournal';
 import PageIntroBanner from './components/PageIntroBanner';
 import AlfredChat from './components/AlfredChat';
+import InAppOnboarding from './components/InAppOnboarding';
 import Settings from './components/Settings';
 import AlfredStory from './components/AlfredStory';
 import TrustSecurity from './components/TrustSecurity';
@@ -219,6 +220,15 @@ function MainAppShell({
 }) {
   const { t, language } = useLanguage();
   const [introCardsEnabled, setIntroCardsEnabled] = useState(false);
+  const [onboardingComplete, setOnboardingComplete] = useState(null);
+
+  useEffect(() => {
+    if (!userNumber) return;
+    fetch(`${API_URL}/api/auth/me?user_number=${encodeURIComponent(userNumber)}`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => setOnboardingComplete(Boolean(data?.user?.onboarding_completed)))
+      .catch(() => setOnboardingComplete(true));
+  }, [userNumber]);
   const pageTitles = {
     home: t('page.home'),
     'todo-list': t('page.tasks'),
@@ -361,6 +371,17 @@ function MainAppShell({
         showLauncher={!isMobile || isSidebarOpen}
         preferredLanguage={language}
       />
+
+      {onboardingComplete === false && (
+        <InAppOnboarding
+          apiUrl={API_URL}
+          userNumber={userNumber}
+          onComplete={() => {
+            setOnboardingComplete(true);
+            handleNavigate(HOME_PAGE);
+          }}
+        />
+      )}
 
       {isMobile && isSidebarOpen && (
         <div

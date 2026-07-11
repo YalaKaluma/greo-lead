@@ -991,9 +991,6 @@ function PersonForm({ copy, person, onSubmit, onCancel, onDelete }) {
       <div className="grid gap-4 md:grid-cols-3">
         <TextInput label={copy('team.name', 'Name')} value={formData.name} onChange={(value) => setField('name', value)} required />
         <TextInput label={copy('team.role', 'Role / Relationship')} value={formData.relation} onChange={(value) => setField('relation', value)} />
-        <TextInput label={copy('team.organization', 'Organization')} value={formData.organization} onChange={(value) => setField('organization', value)} />
-        <TextInput label={copy('team.team', 'Team')} value={formData.team} onChange={(value) => setField('team', value)} />
-        <TextInput label={copy('team.manager', 'Manager')} value={formData.manager_name} onChange={(value) => setField('manager_name', value)} />
         <label className="block text-sm font-medium text-slate-700">
           {copy('team.circleStatus', 'Circle status')}
           <select value={formData.circle_type || ''} onChange={(event) => setField('circle_type', event.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2">
@@ -1006,14 +1003,11 @@ function PersonForm({ copy, person, onSubmit, onCancel, onDelete }) {
           {copy('team.relationshipHealth', 'Relationship health')}
           <input type="number" min="1" max="5" value={formData.relationship_health || ''} onChange={(event) => setField('relationship_health', event.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2" />
         </label>
-        <TextInput label={copy('team.strategicImportance', 'Strategic importance')} value={formData.strategic_importance} onChange={(value) => setField('strategic_importance', value)} />
         <label className="block text-sm font-medium text-slate-700">
           {copy('team.lastInteraction', 'Last interaction')}
           <input type="date" value={formData.last_interaction_at || ''} onChange={(event) => setField('last_interaction_at', event.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2" />
         </label>
       </div>
-      <TextArea label={copy('team.context', 'Context / Notes')} value={formData.context} onChange={(value) => setField('context', value)} />
-      <TextArea label={copy('team.nextAction', 'Next action')} value={formData.next_action} onChange={(value) => setField('next_action', value)} />
 
       {!isSponsor && (
         <fieldset className="space-y-4 rounded border border-slate-200 p-4">
@@ -1023,10 +1017,6 @@ function PersonForm({ copy, person, onSubmit, onCancel, onDelete }) {
             <TextArea label={copy('team.strengths', 'Strengths')} value={formData.strengths} onChange={(value) => setField('strengths', value)} />
             <TextArea label={copy('team.developmentAreas', 'Development areas')} value={formData.growth_areas} onChange={(value) => setField('growth_areas', value)} />
             <TextArea label={copy('team.aspirations', 'Aspirations')} value={formData.aspirations} onChange={(value) => setField('aspirations', value)} />
-            <TextArea label={copy('team.currentGoals', 'Current goals')} value={formData.current_goals} onChange={(value) => setField('current_goals', value)} />
-            <TextArea label={copy('team.developmentPlan', 'Development plan')} value={formData.development_plan} onChange={(value) => setField('development_plan', value)} />
-            <TextArea label={copy('team.stretchAssignments', 'Stretch assignments')} value={formData.stretch_assignments} onChange={(value) => setField('stretch_assignments', value)} />
-            <TextArea label={copy('team.coachingFocus', 'Coaching focus')} value={formData.coaching_focus} onChange={(value) => setField('coaching_focus', value)} />
             <div className="grid gap-4 md:grid-cols-2">
               <TextInput label={copy('team.performance', 'Performance')} value={formData.performance_indicator} onChange={(value) => setField('performance_indicator', value)} />
               <TextInput label={copy('team.potential', 'Potential')} value={formData.potential_indicator} onChange={(value) => setField('potential_indicator', value)} />
