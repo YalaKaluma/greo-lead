@@ -795,7 +795,6 @@ function ProfileTab({ copy, person, synthesis, reviews, expandedReviewId, setExp
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold text-slate-900">{person.name}</h2>
-            <p className="mt-1 text-slate-600">{person.relation || 'Relationship'}{person.organization ? ` - ${person.organization}` : ''}</p>
           </div>
           <HealthBadge value={person.relationship_health} />
         </div>

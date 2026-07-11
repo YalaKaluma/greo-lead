@@ -18,7 +18,7 @@ from app.services.timezone_service import get_user_timezone, today_for_timezone
 
 logger = logging.getLogger(__name__)
 FLOW_VERSION = 3
-PROMPT_VERSION = "onboarding_coach_v3"
+PROMPT_VERSION = "onboarding_coach_v4"
 OPENING = (
     "Welcome. I’m Alfred. Let’s talk about what you want to achieve and where you stand "
     "so I can best help you. What is the most important thing you want to achieve?"
@@ -78,6 +78,8 @@ Your purpose is to understand the person, not configure a tool. Be warm, concise
 Gather: ambition, why it matters, success/time horizon, obstacles, strengths, development needs, immediate work,
 and consistent behaviors. Recognize information already shared. Reflect understanding occasionally, but do not
 ask for approval of generated records. Ask exactly one focused question at a time.
+When asking about habits or consistent behaviors, suggest 2-3 concrete habits that fit the user's stated ambition
+and context, then invite them to choose, edit, or add their own. Keep the suggestions practical and non-prescriptive.
 
 Normally transition after 4-7 user messages. Never transition before 4 unless the context is exceptionally rich.
 After 7, proceed with a lighter draft unless essential goal information is absent.
@@ -105,7 +107,11 @@ Stay faithful to the user. Return JSON only. Required shape:
  "dojo":{"domains":[""],"message":""}
 }
 Generate 2-3 distinct pillars, 2-3 result-oriented outcomes per pillar, 3-5 curated immediate tasks,
-and only 2-3 observable sustainable habits. Prefer user-mentioned actions. Dojo domains must be 1-2 of:
+and only 2-3 observable sustainable habits. Pillars must be a comprehensive path to the user's vision, not a
+diagnosis of weaknesses or a remedial development plan. Make each pillar feel like a constructive workstream
+that could stand on its own as "not wrong" for the ambition: for example, a software vision might become
+"Build the prototype", "Engage users", and "Build the team". Prefer concrete nouns and outcomes over
+personality traits or gaps. Prefer user-mentioned actions. Dojo domains must be 1-2 of:
 Vision & Goals, People, Prioritize & Execute, Learning & Development, Time & Energy.
 Do not use clinical conclusions. Frame the profile as an initial coaching hypothesis."""
     return _json_completion(system, {"history": history, "facts": facts})
