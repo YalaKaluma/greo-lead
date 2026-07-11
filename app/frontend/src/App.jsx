@@ -21,7 +21,7 @@ import Welcome from "./Welcome";
 import Waitlist from "./Waitlist";
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { API_URL } from './config';
-import { initializeNotificationRouting } from './services/notifications';
+import { initializeNotificationRouting, refreshNativeNotificationRegistration } from './services/notifications';
 
 const HOME_PAGE = 'home';
 const TRUST_SECURITY_PAGE = 'trust-security';
@@ -64,6 +64,13 @@ function App() {
       console.warn('Could not initialize native notification routing:', error);
     });
   }, []);
+
+  useEffect(() => {
+    if (!isLoggedIn || !userNumber) return;
+    refreshNativeNotificationRegistration(API_URL, userNumber).catch((error) => {
+      console.warn('Could not refresh native notification registration:', error);
+    });
+  }, [isLoggedIn, userNumber]);
 
   // Handle URL parameters on load
   useEffect(() => {
@@ -321,7 +328,7 @@ function MainAppShell({
         <PageIntroBanner
           pageId={currentPage}
           userNumber={userNumber}
-          enabled={introCardsEnabled}
+          enabled={introCardsEnabled && !onboardingReveal}
         />
 
         {currentPage === 'settings' && (
@@ -389,6 +396,7 @@ function MainAppShell({
       {onboardingReveal && (
         <OnboardingReveal
           result={onboardingReveal}
+          userNumber={userNumber}
           onNavigate={handleNavigate}
           onFinish={() => setOnboardingReveal(null)}
         />

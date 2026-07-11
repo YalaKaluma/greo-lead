@@ -1,19 +1,25 @@
 import { useEffect, useState } from 'react';
 
 const STEPS = [
-  ['my-goals', 'Your vision', 'I translated your ambition into a primary vision, strategic pillars, and concrete outcomes.'],
-  ['todo-list', 'Your first actions', 'These are the actions I believe will create useful momentum now. They are due today so you can begin immediately.'],
-  ['my-habits', 'Your operating rhythm', 'I selected only a few routines that can realistically support the leader you want to become.'],
+  ['my-goals', 'Your vision', 'I translated your ambition into a primary vision, strategic pillars, and concrete outcomes so you can see how Alfred connects direction to progress. Edit, delete, or replace anything with the future you want to build.'],
+  ['todo-list', 'Your first actions', 'These are the actions I believe will create useful momentum now. They are due today so you can begin immediately, prioritize what matters, and turn intention into progress.'],
+  ['my-habits', 'Your operating rhythm', 'I selected only a few routines that can realistically support the leader you want to become. Transformation comes from consistent actions repeated over time.'],
   ['my-journey', 'Your Dojo focus', '']
 ];
 
-export default function OnboardingReveal({ result, onNavigate, onFinish }) {
+export default function OnboardingReveal({ result, userNumber, onNavigate, onFinish }) {
   const [index, setIndex] = useState(0);
   const [page, title, defaultBody] = STEPS[index];
   const domains = result?.dojo?.domains || [];
-  useEffect(() => { onNavigate(page); }, [index]);
+  useEffect(() => {
+    if (userNumber) {
+      localStorage.setItem(`page_intro_seen_v4:${userNumber}:${page}`, 'true');
+    }
+    onNavigate(page);
+  }, [index, page, userNumber, onNavigate]);
+  const dojoFocus = result?.dojo?.message || `Based on what you shared, I would focus particularly on ${domains.join(' and ') || 'the most relevant areas'}.`;
   const body = index === 3
-    ? (result?.dojo?.message || `Based on what you shared, I would focus particularly on ${domains.join(' and ') || 'the most relevant areas'} in our curriculum.`)
+    ? `Your Leadership Dojo is ready. ${dojoFocus} Start with the early trials and gather evidence through real action.`
     : defaultBody;
   return <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[65] p-4 md:p-6">
     <section className="pointer-events-auto mx-auto max-w-3xl rounded-2xl border border-amber-200 bg-slate-950 p-5 text-white shadow-2xl md:p-6">

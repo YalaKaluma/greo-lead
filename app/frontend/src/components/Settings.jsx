@@ -379,6 +379,10 @@ function NotificationSettingsPanel({ apiUrl, userNumber }) {
       if (reason === 'no_active_subscriptions') return 'No active device is subscribed yet.';
       if (reason === 'notifications_disabled') return 'Notifications are paused in your preferences.';
       if (reason === 'vapid_not_configured') return 'Notification keys are not configured yet.';
+      if (reason === 'firebase_not_configured') return 'Firebase is not configured on the server yet.';
+      if (reason === 'firebase_dependencies_unavailable') return 'The server is missing its Firebase notification support.';
+      if (reason?.startsWith('fcm_error_')) return `Firebase rejected the notification: ${reason}`;
+      if (result?.result?.failed > 0) return 'The notification could not be delivered. The server recorded a delivery failure.';
       return 'Test notification attempted.';
     }
   );

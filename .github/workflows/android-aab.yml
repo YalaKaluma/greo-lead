@@ -44,11 +44,16 @@ jobs:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
           GOOGLE_SERVICES_JSON_B64: ${{ secrets.GOOGLE_SERVICES_JSON_B64 }}
         run: |
+          if [ -z "$GOOGLE_SERVICES_JSON" ] && [ -z "$GOOGLE_SERVICES_JSON_B64" ]; then
+            echo "Firebase Android configuration is required for Play Store notifications."
+            exit 1
+          fi
           if [ -n "$GOOGLE_SERVICES_JSON_B64" ]; then
             printf '%s' "$GOOGLE_SERVICES_JSON_B64" | base64 --decode > google-services.json
           else
             printf '%s' "$GOOGLE_SERVICES_JSON" > google-services.json
           fi
+          test -s google-services.json
         shell: bash
 
       - name: Set up Java
