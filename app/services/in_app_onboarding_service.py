@@ -1,139 +1,180 @@
-"""Natural, five-question onboarding for the in-app Alfred conversation."""
+"""Adaptive first coaching conversation and Leadership OS generation."""
 
 from __future__ import annotations
 
 import json
 import logging
-import re
 from datetime import datetime, time
+from typing import Any
 
 from openai import OpenAI
 from sqlalchemy.orm import Session
 
 from app.config import OPENAI_API_KEY, OPENAI_MODEL
-from app.models import (
-    Habit,
-    JourneyDevelopmentArea,
-    JourneyGoal,
-    JourneyStrength,
-    OnboardingStep,
-    Task,
-    User,
-)
+from app.models import Habit, JourneyDevelopmentArea, JourneyGoal, JourneyStrength, OnboardingStep, Task, User
+from app.services.audit_log_service import write_audit_log
+from app.services.leadership_coaching_service import LEADERSHIP_QUADRANTS
 from app.services.timezone_service import get_user_timezone, today_for_timezone
 
 logger = logging.getLogger(__name__)
+FLOW_VERSION = 3
+PROMPT_VERSION = "onboarding_coach_v3"
+OPENING = (
+    "Welcome. I’m Alfred. Let’s talk about what you want to achieve and where you stand "
+    "so I can best help you. What is the most important thing you want to achieve?"
+)
 
-FLOW_VERSION = 2
-STEPS = [
-    OnboardingStep.INITIAL,
-    OnboardingStep.GOAL,
-    OnboardingStep.GOAL_WHY,
-    OnboardingStep.TASKS,
-    OnboardingStep.QUICK_WIN,
-]
-QUESTIONS = {
-    OnboardingStep.INITIAL: "Welcome — I’m Alfred. Let’s set up your workspace together. What is your name and what is your profession?",
-    OnboardingStep.GOAL: "Great to meet you, {name}. Tell me one big goal you want to achieve.",
-    OnboardingStep.GOAL_WHY: "What are your key strengths and opportunities for development to achieve this goal?",
-    OnboardingStep.TASKS: "What are the key things you should execute in the next 3 days to move toward this goal?",
-    OnboardingStep.QUICK_WIN: "What key habits would help you on a daily basis to achieve your goal?",
-}
+
+def _fresh_data() -> dict:
+    return {
+        "flow_version": FLOW_VERSION,
+        "status": "in_progress",
+        "history": [{"role": "assistant", "content": OPENING}],
+        "facts": {},
+        "message_count": 0,
+        "prompt_version": PROMPT_VERSION,
+    }
 
 
 def _data(user: User) -> dict:
     data = dict(user.onboarding_data or {})
     if data.get("flow_version") != FLOW_VERSION:
-        data = {"flow_version": FLOW_VERSION, "history": [], "created": {}}
-    data.setdefault("history", [])
-    data.setdefault("created", {})
+        seeded = {key: value for key, value in data.items() if key.startswith("starter_")}
+        data = _fresh_data() | seeded
+    data.setdefault("history", [{"role": "assistant", "content": OPENING}])
+    data.setdefault("facts", {})
+    data.setdefault("message_count", 0)
+    data.setdefault("status", "in_progress")
     return data
 
 
-def _question(user: User) -> str:
-    template = QUESTIONS.get(user.onboarding_step, QUESTIONS[OnboardingStep.INITIAL])
-    return template.format(name=user.name or "there")
-
-
 def get_session(user: User) -> dict:
-    if user.onboarding_completed:
-        return {"completed": True, "step": "COMPLETED", "messages": [], "progress": len(STEPS), "total": len(STEPS)}
-
     data = _data(user)
-    history = list(data["history"])
-    if not history:
-        history.append({"role": "assistant", "content": _question(user)})
     return {
-        "completed": False,
-        "step": user.onboarding_step.value if hasattr(user.onboarding_step, "value") else str(user.onboarding_step),
-        "messages": history,
-        "progress": STEPS.index(user.onboarding_step) + 1 if user.onboarding_step in STEPS else 1,
-        "total": len(STEPS),
+        "completed": bool(user.onboarding_completed),
+        "status": data.get("status"),
+        "messages": data.get("history", []),
+        "conversation_progress": min(int(data.get("message_count", 0)) / 6, 1),
+        "result": data.get("result"),
     }
 
 
-def _extract(step: OnboardingStep, answer: str) -> dict:
-    """Extract structured content and decide whether a short follow-up is needed."""
-    if OPENAI_API_KEY:
-        schema = {
-            "INITIAL": "name (string), profession (string)",
-            "GOAL": "title (short string), goal_text (string)",
-            "GOAL_WHY": "strengths (array of strings), development_areas (array of strings)",
-            "TASKS": "items (array of concise action strings)",
-            "QUICK_WIN": "items (array of concise daily habit strings)",
-        }[step.value]
-        prompt = f"""You extract onboarding answers for a leadership app.
-Current question step: {step.value}
-Required fields: {schema}
-User answer: {answer}
-
-Return JSON with: sufficient (boolean), follow_up (one brief natural question or empty string), and the required fields.
-Be generous: natural conversational answers are sufficient when the requested meaning is reasonably clear.
-For GOAL_WHY, require at least one strength and one development opportunity.
-Do not invent facts. Convert task and habit prose into concise individual items."""
-        try:
-            response = OpenAI(api_key=OPENAI_API_KEY).chat.completions.create(
-                model=OPENAI_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"},
-                temperature=0,
-            )
-            return json.loads(response.choices[0].message.content or "{}")
-        except Exception:
-            logger.exception("AI onboarding extraction failed; using conservative fallback")
-
-    text = answer.strip()
-    parts = [part.strip(" -\t") for part in re.split(r"[,;\n]+", text) if part.strip(" -\t")]
-    if step == OnboardingStep.INITIAL:
-        match = re.match(r"(?:my name is\s+)?(.+?)(?:\s+and\s+|,\s*)(?:i(?:'m| am)\s+|a\s+)?(.+)$", text, re.I)
-        if not match:
-            return {"sufficient": False, "follow_up": "I caught part of that. What name and profession should I use?"}
-        return {"sufficient": True, "name": match.group(1).strip(), "profession": match.group(2).strip()}
-    if len(text) < 3:
-        return {"sufficient": False, "follow_up": "Could you tell me a little more?"}
-    if step == OnboardingStep.GOAL:
-        return {"sufficient": True, "title": text[:200], "goal_text": text}
-    if step == OnboardingStep.GOAL_WHY:
-        if len(parts) < 2:
-            return {"sufficient": False, "follow_up": "And what is one development opportunity that would help you reach the goal?"}
-        return {"sufficient": True, "strengths": [parts[0]], "development_areas": parts[1:]}
-    return {"sufficient": True, "items": parts or [text]}
+def _json_completion(system: str, payload: dict) -> dict:
+    if not OPENAI_API_KEY:
+        raise RuntimeError("OpenAI is not configured")
+    response = OpenAI(api_key=OPENAI_API_KEY).chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": json.dumps(payload)}],
+        response_format={"type": "json_object"},
+        temperature=0.25,
+    )
+    return json.loads(response.choices[0].message.content or "{}")
 
 
-def _append(history: list, role: str, content: str) -> None:
-    history.append({"role": role, "content": content})
+def _coach_turn(history: list[dict], facts: dict, message_count: int) -> dict:
+    domain_names = [item["name"] for item in LEADERSHIP_QUADRANTS.values()]
+    system = f"""You are Alfred, an experienced chief of staff having a first coaching conversation.
+Your purpose is to understand the person, not configure a tool. Be warm, concise, perceptive, and practical.
+Gather: ambition, why it matters, success/time horizon, obstacles, strengths, development needs, immediate work,
+and consistent behaviors. Recognize information already shared. Reflect understanding occasionally, but do not
+ask for approval of generated records. Ask exactly one focused question at a time.
+
+Normally transition after 4-7 user messages. Never transition before 4 unless the context is exceptionally rich.
+After 7, proceed with a lighter draft unless essential goal information is absent.
+Return JSON only with:
+- reply: brief chief-of-staff response and next question, or transition statement
+- ready: boolean
+- facts: merged factual summary with keys ambition, why, success, horizon, obstacles, strengths (array),
+  development_needs (array), tasks (array), habits (array), leadership_context
+- missing: array of important missing areas
+- readiness: object with goal, leadership, tasks, habits scores from 0 to 1
+Do not expose scores. When ready, reply: "I think I understand enough to build a strong first draft."
+Valid Dojo domains later are: {', '.join(domain_names)}."""
+    return _json_completion(system, {"history": history[-16:], "known_facts": facts, "user_message_count": message_count})
 
 
-def _has_required_content(step: OnboardingStep, extracted: dict) -> bool:
-    if not extracted.get("sufficient"):
-        return False
-    if step == OnboardingStep.INITIAL:
-        return bool(str(extracted.get("name") or "").strip() and str(extracted.get("profession") or "").strip())
-    if step == OnboardingStep.GOAL:
-        return bool(str(extracted.get("goal_text") or "").strip())
-    if step == OnboardingStep.GOAL_WHY:
-        return bool(extracted.get("strengths") and extracted.get("development_areas"))
-    return bool(extracted.get("items"))
+def _generate_proposal(history: list[dict], facts: dict) -> dict:
+    system = """Create the first draft of a Leadership Operating System from a coaching conversation.
+Stay faithful to the user. Return JSON only. Required shape:
+{
+ "goal":{"title":"", "description":"", "why":"", "horizon":""},
+ "pillars":[{"title":"", "description":"", "outcomes":[{"title":"","description":""}]}],
+ "profile":{"strengths":[""],"development_needs":[""],"synthesis":"","focus":""},
+ "tasks":[{"title":"","description":"","priority":"High|Medium","pillar_index":0}],
+ "habits":[{"title":"","frequency":"daily|weekdays","why":""}],
+ "dojo":{"domains":[""],"message":""}
+}
+Generate 2-3 distinct pillars, 2-3 result-oriented outcomes per pillar, 3-5 curated immediate tasks,
+and only 2-3 observable sustainable habits. Prefer user-mentioned actions. Dojo domains must be 1-2 of:
+Vision & Goals, People, Prioritize & Execute, Learning & Development, Time & Energy.
+Do not use clinical conclusions. Frame the profile as an initial coaching hypothesis."""
+    return _json_completion(system, {"history": history, "facts": facts})
+
+
+def _validate(proposal: dict) -> None:
+    if not proposal.get("goal", {}).get("title"):
+        raise ValueError("Generated goal is missing")
+    pillars = proposal.get("pillars") or []
+    if not 2 <= len(pillars) <= 3 or any(not 2 <= len(item.get("outcomes") or []) <= 3 for item in pillars):
+        raise ValueError("Generated goal structure is incomplete")
+    if not 1 <= len(proposal.get("tasks") or []) <= 5:
+        raise ValueError("Generated tasks are invalid")
+    if not 2 <= len(proposal.get("habits") or []) <= 3:
+        raise ValueError("Generated habits are invalid")
+
+
+def _persist(db: Session, user: User, proposal: dict, data: dict) -> dict:
+    existing = data.get("result")
+    if existing and existing.get("generation_key") == f"user-{user.id}-v{FLOW_VERSION}":
+        return existing
+
+    goal_spec = proposal["goal"]
+    vision = JourneyGoal(user_number=user.phone_number, title=goal_spec["title"][:200],
+                         goal_text=goal_spec.get("description") or goal_spec["title"], why=goal_spec.get("why"),
+                         time_horizon="vision", sort_order=0)
+    db.add(vision); db.flush()
+    pillar_ids = []
+    outcome_ids = []
+    for p_index, pillar_spec in enumerate(proposal["pillars"]):
+        pillar = JourneyGoal(user_number=user.phone_number, title=pillar_spec["title"][:200],
+                             goal_text=pillar_spec.get("description") or pillar_spec["title"],
+                             time_horizon="pillar", parent_goal_id=vision.id, sort_order=p_index)
+        db.add(pillar); db.flush(); pillar_ids.append(pillar.id)
+        row = []
+        for o_index, outcome_spec in enumerate(pillar_spec["outcomes"]):
+            outcome = JourneyGoal(user_number=user.phone_number, title=outcome_spec["title"][:200],
+                                  goal_text=outcome_spec.get("description") or outcome_spec["title"],
+                                  time_horizon="outcome", parent_goal_id=pillar.id, sort_order=o_index)
+            db.add(outcome); db.flush(); row.append(outcome.id)
+        outcome_ids.append(row)
+
+    profile = proposal.get("profile") or {}
+    for item in (profile.get("strengths") or [])[:3]:
+        db.add(JourneyStrength(user_number=user.phone_number, title=str(item)[:200], strength=str(item), source="onboarding"))
+    for item in (profile.get("development_needs") or [])[:3]:
+        db.add(JourneyDevelopmentArea(user_number=user.phone_number, title=str(item)[:200], skill=str(item), source="onboarding"))
+
+    due_today = datetime.combine(today_for_timezone(get_user_timezone(db, user.phone_number)), time.min)
+    task_ids = []
+    for index, item in enumerate(proposal["tasks"]):
+        p_index = item.get("pillar_index") if isinstance(item.get("pillar_index"), int) else None
+        linked_id = pillar_ids[p_index] if p_index is not None and 0 <= p_index < len(pillar_ids) else vision.id
+        task = Task(user_number=user.phone_number, title=item["title"], notes=item.get("description") or "Added by Alfred during onboarding",
+                    due_date=due_today, priority=item.get("priority") or "High", goal_id=linked_id,
+                    current_bucket="today", sort_order=index, in_top10=index == 0, top10_position=1 if index == 0 else None)
+        db.add(task); db.flush(); task_ids.append(task.id)
+    habit_ids = []
+    for item in proposal["habits"]:
+        frequency = item.get("frequency") if item.get("frequency") in {"daily", "weekdays"} else "daily"
+        habit = Habit(user_number=user.phone_number, title=item["title"], goal_id=vision.id, frequency=frequency)
+        db.add(habit); db.flush(); habit_ids.append(habit.id)
+
+    result = {"generation_key": f"user-{user.id}-v{FLOW_VERSION}", "vision_id": vision.id,
+              "pillar_ids": pillar_ids, "outcome_ids": outcome_ids, "task_ids": task_ids, "habit_ids": habit_ids,
+              "profile": profile, "dojo": proposal.get("dojo") or {}, "reveal_steps": ["my-goals", "todo-list", "my-habits", "my-journey"]}
+    data["result"] = result
+    data["generated_payload"] = proposal
+    return result
 
 
 def respond(db: Session, user: User, answer: str) -> dict:
@@ -142,98 +183,61 @@ def respond(db: Session, user: User, answer: str) -> dict:
     answer = answer.strip()
     if not answer:
         raise ValueError("Please enter a response.")
-
-    step = user.onboarding_step if user.onboarding_step in STEPS else OnboardingStep.INITIAL
     data = _data(user)
-    history = data["history"]
-    if not history:
-        _append(history, "assistant", _question(user))
-    _append(history, "user", answer)
+    history = list(data["history"])
+    history.append({"role": "user", "content": answer})
+    count = int(data.get("message_count", 0)) + 1
+    try:
+        turn = _coach_turn(history, data.get("facts") or {}, count)
+    except Exception as exc:
+        logger.exception("Onboarding coaching turn failed")
+        raise RuntimeError("Alfred could not process that response. Please try again.") from exc
+    data["facts"] = turn.get("facts") or data.get("facts") or {}
+    data["readiness"] = turn.get("readiness") or {}
+    data["message_count"] = count
+    reply = turn.get("reply") or "Tell me a little more about what would make the biggest difference."
+    if turn.get("ready") and count < 4:
+        early_followups = {
+            1: "Why does this matter to you, and what would success change?",
+            2: "What strengths can you rely on—and where might you need to grow to make this happen?",
+            3: "What should you act on now, and what would you need to do consistently?",
+        }
+        reply = early_followups.get(count, reply)
+    history.append({"role": "assistant", "content": reply})
+    data["history"] = history
 
-    attempts = dict(data.get("step_answers") or {})
-    step_key = step.value
-    step_attempts = list(attempts.get(step_key) or [])
-    step_attempts.append(answer)
-    attempts[step_key] = step_attempts
-    data["step_answers"] = attempts
-    extracted = _extract(step, "\n".join(step_attempts))
-    if not _has_required_content(step, extracted):
-        follow_up = extracted.get("follow_up") or "Could you tell me a little more?"
-        _append(history, "assistant", follow_up)
-        data["history"] = history
+    # Preserve a real coaching exchange even if the model believes a very rich
+    # opening answer is technically sufficient.
+    ready = bool(turn.get("ready")) and count >= 4
+    if not ready:
         user.onboarding_data = data
         db.commit()
         return get_session(user)
 
-    created = data["created"]
-    attempts.pop(step_key, None)
-    data["step_answers"] = attempts
-    if step == OnboardingStep.INITIAL:
-        user.name = str(extracted.get("name") or user.name or "").strip()
-        user.profession = str(extracted.get("profession") or "").strip()
-        data["identity"] = {"name": user.name, "profession": user.profession}
-        user.onboarding_step = OnboardingStep.GOAL
-    elif step == OnboardingStep.GOAL:
-        goal = JourneyGoal(
-            user_number=user.phone_number,
-            title=str(extracted.get("title") or answer)[:200],
-            goal_text=str(extracted.get("goal_text") or answer),
-            time_horizon="vision",
-            sort_order=0,
-        )
-        db.add(goal)
-        db.flush()
-        created["goal_id"] = goal.id
-        user.onboarding_step = OnboardingStep.GOAL_WHY
-    elif step == OnboardingStep.GOAL_WHY:
-        strengths = [str(item).strip() for item in extracted.get("strengths", []) if str(item).strip()]
-        areas = [str(item).strip() for item in extracted.get("development_areas", []) if str(item).strip()]
-        for item in strengths:
-            db.add(JourneyStrength(user_number=user.phone_number, title=item[:200], strength=item, source="onboarding"))
-        for item in areas:
-            db.add(JourneyDevelopmentArea(user_number=user.phone_number, title=item[:200], skill=item, source="onboarding"))
-        data["strengths"] = strengths
-        data["development_areas"] = areas
-        user.onboarding_step = OnboardingStep.TASKS
-    elif step == OnboardingStep.TASKS:
-        items = [str(item).strip() for item in extracted.get("items", []) if str(item).strip()]
-        task_ids = []
-        user_today = today_for_timezone(get_user_timezone(db, user.phone_number))
-        due_today = datetime.combine(user_today, time.min)
-        for index, item in enumerate(items):
-            task = Task(
-                user_number=user.phone_number,
-                title=item,
-                notes="Added during Alfred onboarding",
-                due_date=due_today,
-                priority="High",
-                goal_id=created.get("goal_id"),
-                sort_order=index,
-            )
-            db.add(task)
-            db.flush()
-            task_ids.append(task.id)
-        created["task_ids"] = task_ids
-        user.onboarding_step = OnboardingStep.QUICK_WIN
-    elif step == OnboardingStep.QUICK_WIN:
-        items = [str(item).strip() for item in extracted.get("items", []) if str(item).strip()]
-        habit_ids = []
-        for item in items:
-            habit = Habit(user_number=user.phone_number, title=item, goal_id=created.get("goal_id"), frequency="daily")
-            db.add(habit)
-            db.flush()
-            habit_ids.append(habit.id)
-        created["habit_ids"] = habit_ids
-        user.onboarding_step = OnboardingStep.COMPLETED
-        user.onboarding_completed = True
-
-    data["created"] = created
-    if user.onboarding_completed:
-        _append(history, "assistant", "You’re all set. I’ve added your goal, strengths, development opportunities, next three-day actions, and daily habits to Alfred. Let’s get to work.")
-    else:
-        _append(history, "assistant", _question(user))
-    data["history"] = history
-    data["completed_at"] = datetime.utcnow().isoformat() if user.onboarding_completed else None
+    data["status"] = "generating"
     user.onboarding_data = data
     db.commit()
-    return get_session(user) | {"messages": history}
+    try:
+        proposal = _generate_proposal(history, data["facts"])
+        _validate(proposal)
+        result = _persist(db, user, proposal, data)
+        data["status"] = "reveal_pending"
+        data["completed_at"] = datetime.utcnow().isoformat()
+        history.append({"role": "assistant", "content": "Based on what you shared, I’ve prepared a strong first draft. Let me show you what I built and where I think we should focus first."})
+        data["history"] = history
+        user.onboarding_data = data
+        user.onboarding_completed = True
+        user.onboarding_step = OnboardingStep.COMPLETED
+        db.commit()
+        write_audit_log(db, user_id=user.id, event_type="onboarding_completed", object_type="user", object_id=user.id,
+                        metadata={"flow_version": FLOW_VERSION, "vision_id": result["vision_id"]})
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Leadership OS generation failed")
+        data["status"] = "failed"
+        history.append({"role": "assistant", "content": "I wasn’t able to complete your first draft just yet. Our conversation is saved, so we can try again without starting over."})
+        data["history"] = history
+        user.onboarding_data = data
+        db.commit()
+        raise RuntimeError("I saved our conversation, but could not build your first draft yet. Please try again.") from exc
+    return get_session(user)

@@ -67,7 +67,7 @@ def respond_to_in_app_onboarding(payload: InAppOnboardingResponse, db: Session =
         raise HTTPException(status_code=404, detail="User not found")
     try:
         return respond(db, user, payload.answer)
-    except ValueError as exc:
+    except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 

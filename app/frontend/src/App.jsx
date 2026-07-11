@@ -11,6 +11,7 @@ import MyJournal from './components/MyJournal';
 import PageIntroBanner from './components/PageIntroBanner';
 import AlfredChat from './components/AlfredChat';
 import InAppOnboarding from './components/InAppOnboarding';
+import OnboardingReveal from './components/OnboardingReveal';
 import Settings from './components/Settings';
 import AlfredStory from './components/AlfredStory';
 import TrustSecurity from './components/TrustSecurity';
@@ -221,6 +222,7 @@ function MainAppShell({
   const { t, language } = useLanguage();
   const [introCardsEnabled, setIntroCardsEnabled] = useState(false);
   const [onboardingComplete, setOnboardingComplete] = useState(null);
+  const [onboardingReveal, setOnboardingReveal] = useState(null);
 
   useEffect(() => {
     if (!userNumber) return;
@@ -376,10 +378,19 @@ function MainAppShell({
         <InAppOnboarding
           apiUrl={API_URL}
           userNumber={userNumber}
-          onComplete={() => {
+          onComplete={(result) => {
             setOnboardingComplete(true);
+            setOnboardingReveal(result || null);
             handleNavigate(NEW_USER_DEFAULT_PAGE);
           }}
+        />
+      )}
+
+      {onboardingReveal && (
+        <OnboardingReveal
+          result={onboardingReveal}
+          onNavigate={handleNavigate}
+          onFinish={() => setOnboardingReveal(null)}
         />
       )}
 

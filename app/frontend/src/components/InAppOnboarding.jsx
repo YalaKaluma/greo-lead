@@ -14,7 +14,7 @@ export default function InAppOnboarding({ apiUrl, userNumber, onComplete }) {
     axios.get(`${apiUrl}/api/onboarding/in-app/session`, { params: { user_number: userNumber } })
       .then(({ data }) => {
         setSession(data);
-        if (data.completed) onComplete?.();
+        if (data.completed) onComplete?.(data.result);
       })
       .catch(() => setError('Alfred could not start setup. Please refresh and try again.'));
   }, [apiUrl, userNumber]);
@@ -59,12 +59,12 @@ export default function InAppOnboarding({ apiUrl, userNumber, onComplete }) {
           <div className="flex items-center gap-3">
             <img src="/alfred-logo.png" alt="Alfred" className="h-11 w-11 rounded-full border border-amber-300 object-cover" />
             <div>
-              <h1 className="text-lg font-semibold text-slate-950">Set up Alfred</h1>
-              <p className="text-sm text-slate-500">A quick conversation · Question {session.progress} of {session.total}</p>
+              <h1 className="text-lg font-semibold text-slate-950">A conversation with Alfred</h1>
+              <p className="text-sm text-slate-500">Building an understanding of what matters most</p>
             </div>
           </div>
           <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100">
-            <div className="h-full rounded-full bg-amber-400 transition-all" style={{ width: `${(session.progress / session.total) * 100}%` }} />
+            <div className="h-full rounded-full bg-amber-400 transition-all" style={{ width: `${Math.max(12, (session.conversation_progress || 0) * 100)}%` }} />
           </div>
         </header>
 
@@ -89,8 +89,8 @@ export default function InAppOnboarding({ apiUrl, userNumber, onComplete }) {
         <footer className="border-t border-slate-200 bg-white p-4 md:px-8 md:py-5">
           {session.completed ? (
             <div className="mx-auto flex max-w-2xl justify-end">
-              <button type="button" onClick={() => onComplete?.()} className="rounded-xl bg-slate-950 px-6 py-3 font-semibold text-white hover:bg-slate-800">
-                Enter Alfred
+              <button type="button" onClick={() => onComplete?.(session.result)} className="rounded-xl bg-slate-950 px-6 py-3 font-semibold text-white hover:bg-slate-800">
+                Show me
               </button>
             </div>
           ) : <form onSubmit={submit} className="mx-auto flex max-w-2xl items-end gap-3">

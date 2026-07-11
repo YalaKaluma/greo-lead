@@ -403,12 +403,10 @@ function OverviewCard({ title, people, emptyText, onOpen, mode }) {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-semibold text-slate-900">{person.name}</p>
-                  <p className="text-sm text-slate-500">{person.relation || person.role || person.organization || 'Relationship'}</p>
                 </div>
                 <HealthBadge value={person.relationship_health} />
               </div>
-              <p className="mt-2 line-clamp-2 text-sm text-slate-600">{mode === 'sponsor' ? person.stakeholder_mission || person.mission_alignment || 'No sponsor mission captured yet.' : person.mission_statement || person.current_goals || 'No mission captured yet.'}</p>
-              <p className="mt-2 text-xs font-medium text-slate-500">Next: {person.next_action || 'No next action'}</p>
+              <p className="mt-2 line-clamp-2 text-sm text-slate-600">{mode === 'sponsor' ? person.stakeholder_mission || person.mission_alignment || 'No sponsor mission captured yet.' : person.mission_statement || 'No mission captured yet.'}</p>
             </button>
           ))}
         </div>
@@ -469,11 +467,11 @@ function PersonCard({ copy, person, mode, onOpen, onEdit, onMark }) {
     ['Next action', person.next_action]
   ] : [
     ['Mission', person.mission_statement],
-    ['Development focus', person.coaching_focus || person.development_plan],
-    ['Current goals', person.current_goals],
-    ['Stretch assignments', person.stretch_assignments],
-    ['Next coaching action', person.next_action],
-    ['Aspirations', person.aspirations]
+    ['Strengths', person.strengths],
+    ['Development areas', person.growth_areas],
+    ['Aspirations', person.aspirations],
+    ['Performance', person.performance_indicator],
+    ['Potential', person.potential_indicator]
   ];
 
   return (
@@ -481,7 +479,6 @@ function PersonCard({ copy, person, mode, onOpen, onEdit, onMark }) {
       <div className="flex items-start justify-between gap-3">
         <button onClick={() => onOpen(person.id)} className="text-left">
           <h3 className="text-lg font-bold text-slate-900">{person.name}</h3>
-          <p className="text-sm text-slate-500">{person.relation || person.organization || person.team || 'Relationship'}</p>
         </button>
         <HealthBadge value={person.relationship_health} />
       </div>
@@ -554,7 +551,6 @@ function NotesTab({ copy, people, recentNotes, onOpen }) {
           {people.map((person) => (
             <button key={person.id} onClick={() => onOpen(person.id)} className="rounded border border-slate-200 p-3 text-left hover:bg-slate-50">
               <p className="font-semibold text-slate-900">{person.name}</p>
-              <p className="text-sm text-slate-500">{person.relation || person.organization || 'Relationship'}</p>
             </button>
           ))}
         </div>
@@ -788,13 +784,8 @@ function ProfileTab({ copy, person, synthesis, reviews, expandedReviewId, setExp
       ['Strengths', person.strengths],
       ['Development areas', person.growth_areas],
       ['Aspirations', person.aspirations],
-      ['Current goals', person.current_goals],
-      ['Development plan', person.development_plan],
-      ['Stretch assignments', person.stretch_assignments],
-      ['Coaching focus', person.coaching_focus],
       ['Performance indicator', person.performance_indicator],
-      ['Potential indicator', person.potential_indicator],
-      ['Next coaching action', person.next_action]
+      ['Potential indicator', person.potential_indicator]
     ]]
   ];
 
@@ -811,7 +802,6 @@ function ProfileTab({ copy, person, synthesis, reviews, expandedReviewId, setExp
         <div className="mt-5 grid gap-4 md:grid-cols-3">
           <InfoTile label={copy('team.circleStatus', 'Circle status')} value={circleLabel(person.circle_type)} />
           <InfoTile label={copy('team.lastInteraction', 'Last interaction')} value={formatDisplayDate(person.last_interaction_at)} />
-          <InfoTile label={copy('team.nextAction', 'Next action')} value={person.next_action} />
         </div>
       </section>
       {sections.map(([title, items]) => (
@@ -1216,10 +1206,8 @@ function buildAttentionItems(people, copy) {
   const items = [];
   people.forEach((person) => {
     const days = daysSince(person.last_interaction_at);
-    if (person.circle_type && !person.next_action) items.push({ person, reason: copy('team.attentionNoAction', 'Circle member has no next action defined.') });
     if (person.relationship_health && Number(person.relationship_health) >= 4) items.push({ person, reason: copy('team.attentionLowHealth', 'Relationship health is low.') });
     if (days != null && days > 21) items.push({ person, reason: `${person.name} has not had a logged interaction in ${days} days.` });
-    if (person.circle_type === CIRCLE.LEADERSHIP && !person.development_plan) items.push({ person, reason: `${person.name} is in your Leadership Circle but has no development plan.` });
     if (person.circle_type === CIRCLE.SPONSOR && !person.relationship_strategy) items.push({ person, reason: `${person.name} is in your Sponsor Circle but has no relationship strategy.` });
   });
   const leadershipCount = people.filter((person) => person.circle_type === CIRCLE.LEADERSHIP).length;
