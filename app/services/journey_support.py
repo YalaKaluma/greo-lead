@@ -63,6 +63,7 @@ from app.services.onboarding_seed_service import (
     ensure_starter_goal_samples_compacted,
     ensure_starter_roadmaps_seeded,
 )
+from app.services.procrastination_pattern_service import get_procrastination_pattern_rows
 from app.services.audit_log_service import user_id_for_identifier, write_audit_log
 
 logger = logging.getLogger(__name__)

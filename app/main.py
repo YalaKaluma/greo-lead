@@ -247,6 +247,21 @@ def _record_system_health_event(
     message: str | None = None,
     exc: Exception | None = None,
 ) -> None:
+    # Telemetry must not wait for a connection while user requests already
+    # occupy the base pool. Skipping one event is safer than cascading stalls.
+    try:
+        pool_size = engine.pool.size()
+        checked_out = engine.pool.checkedout()
+        if pool_size and checked_out >= pool_size:
+            logger.warning(
+                "Skipping system health event because the DB pool is busy (%s/%s base connections checked out)",
+                checked_out,
+                pool_size,
+            )
+            return
+    except (AttributeError, NotImplementedError):
+        pass
+
     db = None
     try:
         db = SessionLocal()
