@@ -330,5 +330,21 @@
   "journey.map": "Journey Map",
   "journey.assessment": "Assessment",
   "journey.coaching": "Coaching",
-  "journey.progressReview": "Progress Review"
+  "journey.progressReview": "Progress Review",
+  "team.chooseRelationshipHealth": "Choose relationship health",
+  "team.healthExcellent": "Excellent",
+  "team.healthStrong": "Strong",
+  "team.healthNeutral": "Neutral",
+  "team.healthTense": "Tense",
+  "team.healthToxic": "Toxic",
+  "team.choosePerformance": "Choose performance",
+  "team.performanceSuperstar": "Superstar",
+  "team.performanceStrong": "Strong",
+  "team.performanceOnTrack": "On track",
+  "team.performanceConcerns": "Concerns",
+  "team.performanceIssue": "Issue",
+  "team.choosePotential": "Choose potential",
+  "team.potentialHigh": "High",
+  "team.potentialMedium": "Medium",
+  "team.potentialLow": "Low"
 }

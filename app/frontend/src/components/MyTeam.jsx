@@ -34,6 +34,28 @@ const relationshipStrategies = [
   'Maintain relationship'
 ];
 
+const relationshipHealthOptions = [
+  { value: 1, key: 'team.healthExcellent', label: 'Excellent' },
+  { value: 2, key: 'team.healthStrong', label: 'Strong' },
+  { value: 3, key: 'team.healthNeutral', label: 'Neutral' },
+  { value: 4, key: 'team.healthTense', label: 'Tense' },
+  { value: 5, key: 'team.healthToxic', label: 'Toxic' }
+];
+
+const performanceOptions = [
+  { value: 'Superstar', key: 'team.performanceSuperstar', label: 'Superstar' },
+  { value: 'Strong', key: 'team.performanceStrong', label: 'Strong' },
+  { value: 'On track', key: 'team.performanceOnTrack', label: 'On track' },
+  { value: 'Concerns', key: 'team.performanceConcerns', label: 'Concerns' },
+  { value: 'Issue', key: 'team.performanceIssue', label: 'Issue' }
+];
+
+const potentialOptions = [
+  { value: 'High', key: 'team.potentialHigh', label: 'High' },
+  { value: 'Medium', key: 'team.potentialMedium', label: 'Medium' },
+  { value: 'Low', key: 'team.potentialLow', label: 'Low' }
+];
+
 const personFields = [
   'name',
   'email',
@@ -1001,7 +1023,14 @@ function PersonForm({ copy, person, onSubmit, onCancel, onDelete }) {
         </label>
         <label className="block text-sm font-medium text-slate-700">
           {copy('team.relationshipHealth', 'Relationship health')}
-          <input type="number" min="1" max="5" value={formData.relationship_health || ''} onChange={(event) => setField('relationship_health', event.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2" />
+          <select value={formData.relationship_health || ''} onChange={(event) => setField('relationship_health', event.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2">
+            <option value="">{copy('team.chooseRelationshipHealth', 'Choose relationship health')}</option>
+            {relationshipHealthOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.value}. {copy(option.key, option.label)}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="block text-sm font-medium text-slate-700">
           {copy('team.lastInteraction', 'Last interaction')}
@@ -1018,8 +1047,22 @@ function PersonForm({ copy, person, onSubmit, onCancel, onDelete }) {
             <TextArea label={copy('team.developmentAreas', 'Development areas')} value={formData.growth_areas} onChange={(value) => setField('growth_areas', value)} />
             <TextArea label={copy('team.aspirations', 'Aspirations')} value={formData.aspirations} onChange={(value) => setField('aspirations', value)} />
             <div className="grid gap-4 md:grid-cols-2">
-              <TextInput label={copy('team.performance', 'Performance')} value={formData.performance_indicator} onChange={(value) => setField('performance_indicator', value)} />
-              <TextInput label={copy('team.potential', 'Potential')} value={formData.potential_indicator} onChange={(value) => setField('potential_indicator', value)} />
+              <OptionSelect
+                label={copy('team.performance', 'Performance')}
+                value={formData.performance_indicator}
+                placeholder={copy('team.choosePerformance', 'Choose performance')}
+                options={performanceOptions}
+                copy={copy}
+                onChange={(value) => setField('performance_indicator', value)}
+              />
+              <OptionSelect
+                label={copy('team.potential', 'Potential')}
+                value={formData.potential_indicator}
+                placeholder={copy('team.choosePotential', 'Choose potential')}
+                options={potentialOptions}
+                copy={copy}
+                onChange={(value) => setField('potential_indicator', value)}
+              />
             </div>
           </div>
         </fieldset>
@@ -1090,6 +1133,22 @@ function TextArea({ label, value, onChange }) {
   );
 }
 
+function OptionSelect({ label, value, placeholder, options, copy, onChange }) {
+  return (
+    <label className="block text-sm font-medium text-slate-700">
+      {label}
+      <select value={value || ''} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2">
+        <option value="">{placeholder}</option>
+        {options.map((option, index) => (
+          <option key={option.value} value={option.value}>
+            {index + 1}. {copy(option.key, option.label)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function InfoTile({ label, value }) {
   return (
     <div className="rounded border border-slate-200 bg-slate-50 p-3">
@@ -1103,8 +1162,13 @@ function HealthBadge({ value }) {
   if (!value) return <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-500">No health</span>;
   const score = Number(value);
   if (Number.isNaN(score)) return <ImpactBadge value={value} />;
-  const color = score <= 2 ? 'border-red-200 bg-red-50 text-red-700' : score >= 4 ? 'border-green-200 bg-green-50 text-green-700' : 'border-amber-200 bg-amber-50 text-amber-700';
-  return <span className={`rounded border px-2 py-1 text-xs font-semibold ${color}`}>Health {score}/5</span>;
+  const option = relationshipHealthOptions.find((item) => item.value === score);
+  const color = score <= 2
+    ? 'border-green-200 bg-green-50 text-green-700'
+    : score === 3
+      ? 'border-amber-200 bg-amber-50 text-amber-700'
+      : 'border-red-200 bg-red-50 text-red-700';
+  return <span className={`rounded border px-2 py-1 text-xs font-semibold ${color}`}>{score}. {option?.label || 'Health'}</span>;
 }
 
 function ImpactBadge({ value }) {
@@ -1153,7 +1217,7 @@ function buildAttentionItems(people, copy) {
   people.forEach((person) => {
     const days = daysSince(person.last_interaction_at);
     if (person.circle_type && !person.next_action) items.push({ person, reason: copy('team.attentionNoAction', 'Circle member has no next action defined.') });
-    if (person.relationship_health && Number(person.relationship_health) <= 2) items.push({ person, reason: copy('team.attentionLowHealth', 'Relationship health is low.') });
+    if (person.relationship_health && Number(person.relationship_health) >= 4) items.push({ person, reason: copy('team.attentionLowHealth', 'Relationship health is low.') });
     if (days != null && days > 21) items.push({ person, reason: `${person.name} has not had a logged interaction in ${days} days.` });
     if (person.circle_type === CIRCLE.LEADERSHIP && !person.development_plan) items.push({ person, reason: `${person.name} is in your Leadership Circle but has no development plan.` });
     if (person.circle_type === CIRCLE.SPONSOR && !person.relationship_strategy) items.push({ person, reason: `${person.name} is in your Sponsor Circle but has no relationship strategy.` });

@@ -330,5 +330,21 @@
   "team.reviewHistory": "Historique des revues",
   "team.reviewEmpty": "Aucune revue pour l'instant. Lancez une premiere revue pour construire ce profil relationnel.",
   "team.attentionNoAction": "Un membre du cercle n'a pas de prochaine action definie.",
-  "team.attentionLowHealth": "La sante relationnelle est faible."
+  "team.attentionLowHealth": "La sante relationnelle est faible.",
+  "team.chooseRelationshipHealth": "Choisir la sante relationnelle",
+  "team.healthExcellent": "Excellente",
+  "team.healthStrong": "Forte",
+  "team.healthNeutral": "Neutre",
+  "team.healthTense": "Tendue",
+  "team.healthToxic": "Toxique",
+  "team.choosePerformance": "Choisir la performance",
+  "team.performanceSuperstar": "Superstar",
+  "team.performanceStrong": "Forte",
+  "team.performanceOnTrack": "Sur la bonne voie",
+  "team.performanceConcerns": "Preoccupations",
+  "team.performanceIssue": "Probleme",
+  "team.choosePotential": "Choisir le potentiel",
+  "team.potentialHigh": "Eleve",
+  "team.potentialMedium": "Moyen",
+  "team.potentialLow": "Faible"
 }
