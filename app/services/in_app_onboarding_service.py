@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, time
 
 from openai import OpenAI
 from sqlalchemy.orm import Session
@@ -20,6 +20,7 @@ from app.models import (
     Task,
     User,
 )
+from app.services.timezone_service import get_user_timezone, today_for_timezone
 
 logger = logging.getLogger(__name__)
 
@@ -197,12 +198,14 @@ def respond(db: Session, user: User, answer: str) -> dict:
     elif step == OnboardingStep.TASKS:
         items = [str(item).strip() for item in extracted.get("items", []) if str(item).strip()]
         task_ids = []
+        user_today = today_for_timezone(get_user_timezone(db, user.phone_number))
+        due_today = datetime.combine(user_today, time.min)
         for index, item in enumerate(items):
             task = Task(
                 user_number=user.phone_number,
                 title=item,
                 notes="Added during Alfred onboarding",
-                due_date=datetime.utcnow() + timedelta(days=3),
+                due_date=due_today,
                 priority="High",
                 goal_id=created.get("goal_id"),
                 sort_order=index,

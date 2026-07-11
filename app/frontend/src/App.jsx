@@ -378,7 +378,7 @@ function MainAppShell({
           userNumber={userNumber}
           onComplete={() => {
             setOnboardingComplete(true);
-            handleNavigate(HOME_PAGE);
+            handleNavigate(NEW_USER_DEFAULT_PAGE);
           }}
         />
       )}

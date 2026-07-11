@@ -62,6 +62,7 @@ from app.services.onboarding_seed_service import (
     ensure_starter_examples_for_empty_user,
     ensure_starter_goal_samples_compacted,
     ensure_starter_roadmaps_seeded,
+    is_starter_goal_example,
 )
 from app.services.procrastination_pattern_service import get_procrastination_pattern_rows
 from app.services.audit_log_service import user_id_for_identifier, write_audit_log
@@ -163,6 +164,7 @@ def serialize_goal(goal: JourneyGoal) -> dict[str, Any]:
         "legacy_time_horizon": LEGACY_LEVEL_ALIASES[normalize_goal_level(goal.time_horizon)],
         "parent_goal_id": goal.parent_goal_id,
         "sort_order": goal.sort_order,
+        "is_starter_example": is_starter_goal_example(goal),
         "value_ids": [link.value_id for link in value_links],
         "linked_values": [
             {
@@ -860,6 +862,7 @@ class GoalResponse(BaseModel):
     time_horizon: Optional[str]
     parent_goal_id: Optional[int]
     sort_order: Optional[int]
+    is_starter_example: bool = False
     value_ids: list[int] = Field(default_factory=list)
     linked_values: list[dict[str, Any]] = Field(default_factory=list)
     first_seen_at: datetime

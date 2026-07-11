@@ -22,6 +22,14 @@ logger = logging.getLogger(__name__)
 STARTER_SEED_KEY = "starter_examples_seeded_v1"
 ROADMAP_SEED_KEY = "starter_roadmaps_seeded_v1"
 COMPACT_GOAL_SAMPLE_KEY = "starter_goal_samples_compacted_v1"
+STARTER_HABIT_REFRESH_KEY = "starter_habit_examples_refreshed_v2"
+STARTER_HABIT_TITLES = {
+    "Morning workout",
+    "Fill out my journal",
+    "Share my key Growth insight with Alfred in my journal",
+    "Review and sort my todo list",
+    "Evening reflection",
+}
 STARTER_JOURNAL_DEPTH_EXPLANATION = "Starter example created by Alfred to demonstrate reflection depth."
 STARTER_JOURNAL_EXAMPLES = [
     {
@@ -228,6 +236,43 @@ def is_starter_goal_example(goal: JourneyGoal | None) -> bool:
         return False
 
     return title in _starter_goal_titles_by_level().get(level, set())
+
+
+def is_starter_habit_example(habit: Habit | None) -> bool:
+    """Return True for unchanged, unlinked habits seeded as illustrations."""
+    if not habit or habit.goal_id is not None:
+        return False
+    return (habit.title or "").strip() in STARTER_HABIT_TITLES - {"Evening reflection"}
+
+
+def ensure_starter_habit_examples_current(db: Session, user: User | None) -> bool:
+    """Refresh the curated habits for accounts that received starter examples."""
+    if not user or not user.phone_number:
+        return False
+
+    onboarding_data = dict(user.onboarding_data or {})
+    if not onboarding_data.get(STARTER_SEED_KEY) or onboarding_data.get(STARTER_HABIT_REFRESH_KEY):
+        return False
+
+    habits = db.query(Habit).filter(
+        Habit.user_number == user.phone_number,
+        Habit.goal_id.is_(None),
+        Habit.title.in_(STARTER_HABIT_TITLES),
+    ).all()
+    for habit in habits:
+        title = (habit.title or "").strip()
+        if title == "Evening reflection":
+            db.delete(habit)
+        elif title == "Fill out my journal":
+            habit.title = "Share my key Growth insight with Alfred in my journal"
+            habit.updated_at = datetime.utcnow()
+
+    onboarding_data[STARTER_HABIT_REFRESH_KEY] = {
+        "refreshed_at": datetime.utcnow().isoformat(),
+        "version": 2,
+    }
+    user.onboarding_data = onboarding_data
+    return True
 
 
 def is_starter_journal_example(entry: JournalEntry | Message | None) -> bool:
@@ -761,9 +806,8 @@ def _starter_due_datetime(db: Session, user_number: str) -> datetime:
 def _seed_habits(db: Session, user_number: str) -> None:
     for title in [
         "Morning workout",
-        "Fill out my journal",
+        "Share my key Growth insight with Alfred in my journal",
         "Review and sort my todo list",
-        "Evening reflection",
     ]:
         db.add(Habit(
             user_number=user_number,

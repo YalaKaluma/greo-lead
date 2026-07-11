@@ -17,6 +17,7 @@ export default function GoalCard({
   // Visual hierarchy - visions are most prominent
   const isVisionGoal = isVision(goal);
   const isPillarGoal = isPillar(goal);
+  const isStarterExample = Boolean(goal.is_starter_example);
 
   return (
     <div
@@ -28,9 +29,10 @@ export default function GoalCard({
     }}
     className={`
     relative rounded border border-slate-300 bg-white hover:bg-slate-50
+    ${isStarterExample ? 'border-slate-200 bg-slate-100 opacity-50 grayscale hover:bg-slate-100' : ''}
     ${dragHandleProps ? (isDragging ? 'cursor-grabbing shadow-lg ring-2 ring-blue-300' : 'cursor-grab') : 'cursor-pointer'}
     ${isInTree ? 'p-1.5 lg:p-4' : 'p-3 lg:p-4'}
-    ${isVisionGoal ? 'border-2 border-blue-300' : ''}
+    ${isVisionGoal && !isStarterExample ? 'border-2 border-blue-300' : ''}
   `}
 >
 
@@ -82,6 +84,12 @@ export default function GoalCard({
       `}>
         {goal.title || goal.goal_text?.substring(0, 60) || 'Untitled'}
       </div>
+
+      {isStarterExample && (
+        <div className="mb-2 inline-flex rounded-full border border-slate-300 bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+          Example goal
+        </div>
+      )}
       
       {/* Footer with horizon and tasks */}
       <div className={`
