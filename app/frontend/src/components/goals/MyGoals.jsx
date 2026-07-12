@@ -202,6 +202,19 @@ export default function MyGoals({ apiUrl, userNumber }) {
     fetchGoalRoadmapStatuses(expandedGoalId);
   }, [expandedGoalId, activeTab, userNumber]);
 
+  useEffect(() => {
+    const refreshAfterOnboardingReveal = (event) => {
+      if (event.detail?.page !== 'my-goals') return;
+      fetchGoals();
+      fetchAllLinkedTasks();
+    };
+
+    window.addEventListener('alfred:onboarding-reveal-page', refreshAfterOnboardingReveal);
+    return () => {
+      window.removeEventListener('alfred:onboarding-reveal-page', refreshAfterOnboardingReveal);
+    };
+  }, [userNumber]);
+
   /* ---------------- EVENT HANDLERS ---------------- */
 
   const handleCardClick = (goal) => {

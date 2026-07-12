@@ -179,10 +179,8 @@ def _persist(db: Session, user: User, proposal: dict, data: dict) -> dict:
     due_today = datetime.combine(today_for_timezone(get_user_timezone(db, user.phone_number)), time.min)
     task_ids = []
     for index, item in enumerate(proposal["tasks"]):
-        p_index = item.get("pillar_index") if isinstance(item.get("pillar_index"), int) else None
-        linked_id = pillar_ids[p_index] if p_index is not None and 0 <= p_index < len(pillar_ids) else vision.id
         task = Task(user_number=user.phone_number, title=item["title"], notes=item.get("description") or "Added by Alfred during onboarding",
-                    due_date=due_today, priority=item.get("priority") or "High", goal_id=linked_id,
+                    due_date=due_today, priority=item.get("priority") or "High", goal_id=vision.id,
                     current_bucket="today", sort_order=index, in_top10=index == 0, top10_position=1 if index == 0 else None)
         db.add(task); db.flush(); task_ids.append(task.id)
     habit_ids = []
