@@ -46,13 +46,30 @@ jobs:
       - name: Add Firebase Android config
         working-directory: app/frontend/android/app
         env:
+          GOOGLE_SERVICES_JSON_DEBUG: ${{ secrets.GOOGLE_SERVICES_JSON_DEBUG }}
+          GOOGLE_SERVICES_JSON_DEBUG_B64: ${{ secrets.GOOGLE_SERVICES_JSON_DEBUG_B64 }}
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
           GOOGLE_SERVICES_JSON_B64: ${{ secrets.GOOGLE_SERVICES_JSON_B64 }}
         run: |
-          if [ -n "$GOOGLE_SERVICES_JSON_B64" ]; then
+          rm -f google-services.json
+
+          if [ -n "$GOOGLE_SERVICES_JSON_DEBUG_B64" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON_DEBUG_B64" | base64 --decode > google-services.json
+          elif [ -n "$GOOGLE_SERVICES_JSON_DEBUG" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON_DEBUG" > google-services.json
+          elif [ -n "$GOOGLE_SERVICES_JSON_B64" ]; then
             printf '%s' "$GOOGLE_SERVICES_JSON_B64" | base64 --decode > google-services.json
-          else
+          elif [ -n "$GOOGLE_SERVICES_JSON" ]; then
             printf '%s' "$GOOGLE_SERVICES_JSON" > google-services.json
+          fi
+
+          if [ -s google-services.json ] && grep -q '"package_name"[[:space:]]*:[[:space:]]*"com.AlfredTheChiefOfStaff.myapp.dev"' google-services.json; then
+            echo "Firebase config found for debug package com.AlfredTheChiefOfStaff.myapp.dev."
+          elif [ -s google-services.json ]; then
+            echo "::warning::Firebase config does not contain debug package com.AlfredTheChiefOfStaff.myapp.dev. Building debug APK without Firebase push config."
+            rm -f google-services.json
+          else
+            echo "::warning::No Firebase config provided for debug APK. Building without Firebase push config."
           fi
         shell: bash
 
