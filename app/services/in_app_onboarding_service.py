@@ -191,8 +191,43 @@ def _persist(db: Session, user: User, proposal: dict, data: dict) -> dict:
         habit = Habit(user_number=user.phone_number, title=item["title"], goal_id=vision.id, frequency=frequency)
         db.add(habit); db.flush(); habit_ids.append(habit.id)
 
+    mtn_result = {"status": "not_run", "top_mtn_tasks": [], "all_scored_tasks": []}
+    try:
+        from app.services.priority_llm_service import PriorityLLMService
+        from app.services.priority_service import PriorityService
+
+        priority_service = PriorityService(db)
+        context, recommendation, scores, tokens_used = priority_service.run_prioritization(
+            user_number=user.phone_number,
+            llm_service=PriorityLLMService(),
+        )
+        serialized = priority_service.serialize_recommendation(recommendation, context, scores) if recommendation else None
+        mtn_result = {
+            "status": "completed" if serialized else "no_open_tasks",
+            "context_id": context.id if context else None,
+            "recommendation_id": recommendation.id if recommendation else None,
+            "tokens_used": tokens_used,
+            "top_mtn_tasks": (serialized or {}).get("top_mtn_tasks", []),
+            "all_scored_tasks": (serialized or {}).get("all_scored_tasks", []),
+            "prioritized_at": (serialized or {}).get("prioritized_at"),
+        }
+    except Exception:
+        logger.exception("Onboarding MTN prioritization failed")
+        mtn_result = {"status": "failed", "top_mtn_tasks": [], "all_scored_tasks": []}
+
     result = {"generation_key": f"user-{user.id}-v{FLOW_VERSION}", "vision_id": vision.id,
               "pillar_ids": pillar_ids, "outcome_ids": outcome_ids, "task_ids": task_ids, "habit_ids": habit_ids,
+              "goal": {
+                  "title": goal_spec.get("title") or "",
+                  "description": goal_spec.get("description") or "",
+                  "why": goal_spec.get("why") or "",
+                  "horizon": goal_spec.get("horizon") or "",
+              },
+              "pillars": [
+                  {"title": item.get("title") or "", "description": item.get("description") or ""}
+                  for item in proposal.get("pillars") or []
+              ],
+              "mtn": mtn_result,
               "profile": profile, "dojo": proposal.get("dojo") or {}, "reveal_steps": ["my-goals", "todo-list", "my-habits", "my-journey"]}
     data["result"] = result
     data["generated_payload"] = proposal

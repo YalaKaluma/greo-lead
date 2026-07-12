@@ -324,7 +324,8 @@ export default function TodoList({ apiUrl, userNumber }) {
       searchQuery,
       sortOrder,
       columnSort,
-      getTaskScore
+      getTaskScore,
+      priorityMode
     });
   };
 
