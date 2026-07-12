@@ -5,6 +5,100 @@ from openai import OpenAI
 router = APIRouter()
 openai_client_journey = OpenAI(api_key=OPENAI_API_KEY)
 
+
+def _ensure_onboarding_goal_visible(db: Session, user: User) -> bool:
+    """Repair the generated onboarding vision if the result exists but the goals tree does not."""
+    if not user or not user.phone_number:
+        return False
+
+    onboarding_data = dict(user.onboarding_data or {})
+    if onboarding_data.get("onboarding_goal_repaired_at"):
+        return False
+
+    result = onboarding_data.get("result") or {}
+    proposal = onboarding_data.get("generated_payload") or {}
+    goal_spec = proposal.get("goal") or result.get("goal") or {}
+    title = (goal_spec.get("title") or "").strip()
+    if not title:
+        return False
+
+    identifiers = get_user_identifiers(db, user.phone_number)
+    existing = (
+        db.query(JourneyGoal.id)
+        .filter(
+            JourneyGoal.user_number.in_(identifiers),
+            JourneyGoal.time_horizon.in_(goal_level_variants("vision")),
+            ((JourneyGoal.id == result.get("vision_id")) | (JourneyGoal.title == title)),
+        )
+        .first()
+    )
+    if existing:
+        return False
+
+    vision = JourneyGoal(
+        user_number=user.phone_number,
+        title=title[:200],
+        goal_text=goal_spec.get("description") or title,
+        why=goal_spec.get("why"),
+        time_horizon="vision",
+        sort_order=0,
+        first_seen_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    db.add(vision)
+    db.flush()
+
+    pillar_ids = []
+    outcome_ids = []
+    for p_index, pillar_spec in enumerate((proposal.get("pillars") or [])[:3]):
+        pillar_title = (pillar_spec.get("title") or "").strip()
+        if not pillar_title:
+            continue
+        pillar = JourneyGoal(
+            user_number=user.phone_number,
+            title=pillar_title[:200],
+            goal_text=pillar_spec.get("description") or pillar_title,
+            time_horizon="pillar",
+            parent_goal_id=vision.id,
+            sort_order=p_index,
+            first_seen_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        db.add(pillar)
+        db.flush()
+        pillar_ids.append(pillar.id)
+
+        row = []
+        for o_index, outcome_spec in enumerate((pillar_spec.get("outcomes") or [])[:3]):
+            outcome_title = (outcome_spec.get("title") or "").strip()
+            if not outcome_title:
+                continue
+            outcome = JourneyGoal(
+                user_number=user.phone_number,
+                title=outcome_title[:200],
+                goal_text=outcome_spec.get("description") or outcome_title,
+                time_horizon="outcome",
+                parent_goal_id=pillar.id,
+                sort_order=o_index,
+                first_seen_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+            db.add(outcome)
+            db.flush()
+            row.append(outcome.id)
+        outcome_ids.append(row)
+
+    result.update({
+        "vision_id": vision.id,
+        "pillar_ids": pillar_ids,
+        "outcome_ids": outcome_ids,
+    })
+    onboarding_data["result"] = result
+    onboarding_data["onboarding_goal_repaired_at"] = datetime.utcnow().isoformat()
+    user.onboarding_data = onboarding_data
+    return True
+
+
 # GOALS - FULL CRUD
 # ========================================
 @router.get("/goals", response_model=list[GoalResponse])
@@ -16,13 +110,16 @@ def get_goals(
     user = db.query(User).filter((User.phone_number == user_number) | (User.email == user_number)).first()
     if user and ensure_starter_examples_for_empty_user(db, user):
         db.commit()
+    if user and _ensure_onboarding_goal_visible(db, user):
+        db.commit()
 
+    identifiers = get_user_identifiers(db, user_number)
     goals = (
         db.query(JourneyGoal)
         .options(
             selectinload(JourneyGoal.value_links).selectinload(JourneyGoalValue.value)
         )
-        .filter(JourneyGoal.user_number == user_number)
+        .filter(JourneyGoal.user_number.in_(identifiers))
         .order_by(JourneyGoal.sort_order, JourneyGoal.first_seen_at.desc())
         .all()
     )
