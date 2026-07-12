@@ -328,7 +328,7 @@ function MainAppShell({
         <PageIntroBanner
           pageId={currentPage}
           userNumber={userNumber}
-          enabled={introCardsEnabled && !onboardingReveal}
+          enabled={(introCardsEnabled || currentPage === 'my-journal') && !onboardingReveal}
         />
 
         {currentPage === 'settings' && (

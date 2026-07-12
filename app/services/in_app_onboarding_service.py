@@ -21,7 +21,7 @@ FLOW_VERSION = 3
 PROMPT_VERSION = "onboarding_coach_v4"
 OPENING = (
     "Welcome. I’m Alfred. Let’s talk about what you want to achieve and where you stand "
-    "so I can best help you. What are the most important goals you want to achieve?"
+    "so I can best help you. What is the most important goal you want to achieve?"
 )
 
 
@@ -112,7 +112,22 @@ and only 2-3 observable sustainable habits. Pillars must be a comprehensive path
 diagnosis of weaknesses or a remedial development plan. Make each pillar feel like a constructive workstream
 that could stand on its own as "not wrong" for the ambition: for example, a software vision might become
 "Build the prototype", "Engage users", and "Build the team". Prefer concrete nouns and outcomes over
-personality traits or gaps. Prefer user-mentioned actions. Dojo domains must be 1-2 of:
+personality traits or gaps.
+
+Use these archetypes as reference patterns, then customize to the user's actual goal:
+- Build & Scale a Corporate Business: define a winning strategy and clear business priorities; build the
+  organization needed to execute successfully; deliver sustainable business results and continuously adapt.
+- Build a Startup: build a product that solves a real customer problem; find a repeatable and scalable growth
+  engine; build the team, culture, and operations to scale sustainably.
+- Career Advancement: define a compelling value proposition aligned with promotion criteria; build sponsorship
+  with key decision makers and execute an influence plan; deliver measurable impact that demonstrates readiness
+  for the next role.
+- Athletic Achievement: develop and execute a structured training plan; optimize nutrition, recovery, and body
+  composition; continuously improve through learning, measurement, and coaching.
+- Financial Freedom: increase income and earning potential; build and grow long-term wealth through disciplined
+  investing; manage spending, risk, and financial decisions intentionally.
+
+Prefer user-mentioned actions. Dojo domains must be 1-2 of:
 Vision & Goals, People, Prioritize & Execute, Learning & Development, Time & Energy.
 Do not use clinical conclusions. Frame the profile as an initial coaching hypothesis."""
     return _json_completion(system, {"history": history, "facts": facts})

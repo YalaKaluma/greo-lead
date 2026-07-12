@@ -11,6 +11,7 @@ import {
   buildDimensionStates,
   getBehavioralStatus,
   getBeltById,
+  getBeltIndexById,
   getBeltRequirementsFromConfig,
   getNextBeltId,
   getRealWorldStatus,
@@ -411,8 +412,11 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   const journeyCurrentBelt = getBeltById(normalizedReadinessCurrentBelt);
   const journeyNextBelt = getBeltById(readinessStatus?.target_belt || getNextBeltId(journeyCurrentBelt.id));
   const isAssessmentLockedUntilYellow = readinessStatus?.assessment_locked_until_yellow || normalizedReadinessCurrentBelt === "white";
-  const availableTrialBelts = VISIBLE_BELTS.filter((belt) =>
-    beltHasActiveTrialContent(trialConfig, selectedDimension.id, belt.id)
+  const currentBeltIndex = getBeltIndexById(journeyCurrentBelt.id);
+  const availableTrialBelts = VISIBLE_BELTS.filter(
+    (belt) =>
+      getBeltIndexById(belt.id) <= currentBeltIndex &&
+      beltHasActiveTrialContent(trialConfig, selectedDimension.id, belt.id)
   );
 
   useEffect(() => {
@@ -424,7 +428,18 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   const effectiveSelectedTrialBeltId = BELT_IDS.includes(normalizeBeltId(selectedTrialBeltId))
     ? normalizeBeltId(selectedTrialBeltId)
     : null;
-  const viewedBelt = getBeltById(effectiveSelectedTrialBeltId || journeyCurrentBelt.id);
+  const canViewSelectedTrialBelt = availableTrialBelts.some(
+    (belt) => belt.id === effectiveSelectedTrialBeltId
+  );
+  const viewedBelt = getBeltById(
+    canViewSelectedTrialBelt ? effectiveSelectedTrialBeltId : journeyCurrentBelt.id
+  );
+
+  useEffect(() => {
+    if (selectedTrialBeltId && !canViewSelectedTrialBelt) {
+      setSelectedTrialBeltId(null);
+    }
+  }, [selectedTrialBeltId, canViewSelectedTrialBelt]);
   const viewedBeltRequirements = getBeltRequirementsFromConfig(
     trialConfig,
     selectedDimension.id,
@@ -793,7 +808,10 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
       )}
 
       {showBeltGuide && (
-        <BeltGuideModal onClose={() => setShowBeltGuide(false)} />
+        <BeltGuideModal
+          currentBelt={journeyCurrentBelt}
+          onClose={() => setShowBeltGuide(false)}
+        />
       )}
 
       {activeTrial && (

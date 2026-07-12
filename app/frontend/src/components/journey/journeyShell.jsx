@@ -7,7 +7,8 @@ import {
   LEADERSHIP_ARC,
   LEADERSHIP_QUADRANT_LABELS,
   RECOMMENDATION_LABELS,
-  getBeltById
+  getBeltById,
+  getBeltIndexById
 } from "./journeyModel";
 import { directAssessmentCopy, formatDateTime } from "./journeyAssessment";
 import { StatusPill } from "./journeyEvidence";
@@ -489,7 +490,13 @@ export function LeadershipWheelModal({ dimensionStates, topicData, journeyBelt, 
   );
 }
 
-export function BeltGuideModal({ onClose }) {
+export function BeltGuideModal({ currentBelt, onClose }) {
+  const currentBeltIndex = getBeltIndexById(currentBelt?.id);
+  const availableGuide = BELT_GUIDE.filter(
+    (guide) => getBeltIndexById(guide.id) <= currentBeltIndex
+  );
+  const availableArc = LEADERSHIP_ARC.slice(0, availableGuide.length);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 md:p-6">
       <div className="flex max-h-[92vh] w-full max-w-7xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
@@ -517,7 +524,7 @@ export function BeltGuideModal({ onClose }) {
 
         <div className="min-h-0 flex-1 overflow-auto bg-slate-50 px-4 py-5 md:px-6">
           <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
-            {BELT_GUIDE.map((guide) => {
+            {availableGuide.map((guide) => {
               const belt = getBeltById(guide.earnedBeltId || guide.id);
 
               return (
@@ -564,7 +571,7 @@ export function BeltGuideModal({ onClose }) {
             <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm md:p-5">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">The Leadership Arc</p>
               <div className="mt-4 overflow-hidden rounded-md border border-slate-200">
-                {LEADERSHIP_ARC.map((row, index) => (
+                {availableArc.map((row, index) => (
                   <div
                     key={row.belt}
                     className={`grid grid-cols-[minmax(120px,0.8fr)_1fr] gap-4 px-4 py-3 text-sm ${
