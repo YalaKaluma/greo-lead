@@ -19,7 +19,8 @@ export function JourneyHeaderTabs({
   isAssessmentLockedUntilYellow,
   readinessStatus,
   journeyNextBelt,
-  availableTrialBelts,
+  currentBelt,
+  beltLegend,
   viewedBelt,
   activeJourneyTab,
   setActiveJourneyTab,
@@ -52,24 +53,34 @@ export function JourneyHeaderTabs({
           ) : null}
           <div className="flex flex-wrap items-center justify-end gap-2">
             <div className="flex flex-wrap justify-end gap-2">
-              {availableTrialBelts.map((belt) => (
-                <button
-                  key={belt.name}
-                  type="button"
-                  onClick={() => setSelectedTrialBeltId(belt.id)}
-                  className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs shadow-sm transition ${
-                    viewedBelt.id === belt.id
-                      ? "border-slate-950 bg-slate-950 text-white"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
-                  }`}
-                >
-                  <span
-                    className="h-3 w-3 rounded-full border border-slate-300"
-                    style={{ backgroundColor: belt.color }}
-                  />
-                  <span>{belt.shortName}</span>
-                </button>
-              ))}
+              {beltLegend.map((belt) => {
+                const isLocked = getBeltIndexById(belt.id) > getBeltIndexById(currentBelt?.id);
+
+                return (
+                  <button
+                    key={belt.name}
+                    type="button"
+                    disabled={isLocked}
+                    onClick={() => setSelectedTrialBeltId(belt.id)}
+                    aria-label={`${belt.name}${isLocked ? " locked" : ""}`}
+                    title={isLocked ? `Earn ${belt.name} to unlock its lessons and trials` : `View ${belt.name} work`}
+                    className={`flex items-center gap-2 rounded-full border px-3 py-2 text-xs shadow-sm transition ${
+                      viewedBelt.id === belt.id
+                        ? "border-slate-950 bg-slate-950 text-white"
+                        : isLocked
+                          ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 opacity-60"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
+                    }`}
+                  >
+                    <span
+                      className={`h-3 w-3 rounded-full border ${isLocked ? "border-slate-300 grayscale" : "border-slate-300"}`}
+                      style={{ backgroundColor: belt.color }}
+                    />
+                    <span>{belt.shortName}</span>
+                    {isLocked && <span className="sr-only">Locked</span>}
+                  </button>
+                );
+              })}
             </div>
             <button
               type="button"
