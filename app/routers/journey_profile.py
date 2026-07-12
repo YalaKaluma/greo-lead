@@ -173,6 +173,29 @@ def create_person(
         growth_areas=person_data.growth_areas,
         aspirations=person_data.aspirations,
         meeting_notes=person_data.meeting_notes or [],
+        organization=person_data.organization,
+        team=person_data.team,
+        manager_name=person_data.manager_name,
+        circle_type=person_data.circle_type,
+        strategic_importance=person_data.strategic_importance,
+        last_interaction_at=person_data.last_interaction_at,
+        next_action=person_data.next_action,
+        current_goals=person_data.current_goals,
+        development_plan=person_data.development_plan,
+        stretch_assignments=person_data.stretch_assignments,
+        coaching_focus=person_data.coaching_focus,
+        performance_indicator=person_data.performance_indicator,
+        potential_indicator=person_data.potential_indicator,
+        stakeholder_mission=person_data.stakeholder_mission,
+        stakeholder_priorities=person_data.stakeholder_priorities,
+        success_metrics=person_data.success_metrics,
+        stakeholder_strengths=person_data.stakeholder_strengths,
+        risks_or_pressures=person_data.risks_or_pressures,
+        stakeholder_aspirations=person_data.stakeholder_aspirations,
+        how_i_create_value=person_data.how_i_create_value,
+        mission_alignment=person_data.mission_alignment,
+        potential_tensions=person_data.potential_tensions,
+        relationship_strategy=person_data.relationship_strategy,
         first_seen_at=datetime.now(),
         updated_at=datetime.now()
     )
@@ -218,6 +241,35 @@ def update_person(
         person.aspirations = person_data.aspirations
     if person_data.meeting_notes is not None:
         person.meeting_notes = person_data.meeting_notes
+    for field in (
+        "organization",
+        "team",
+        "manager_name",
+        "circle_type",
+        "relationship_health",
+        "strategic_importance",
+        "last_interaction_at",
+        "next_action",
+        "current_goals",
+        "development_plan",
+        "stretch_assignments",
+        "coaching_focus",
+        "performance_indicator",
+        "potential_indicator",
+        "stakeholder_mission",
+        "stakeholder_priorities",
+        "success_metrics",
+        "stakeholder_strengths",
+        "risks_or_pressures",
+        "stakeholder_aspirations",
+        "how_i_create_value",
+        "mission_alignment",
+        "potential_tensions",
+        "relationship_strategy",
+    ):
+        value = getattr(person_data, field)
+        if value is not None:
+            setattr(person, field, value)
 
     person.updated_at = datetime.now()
     db.commit()

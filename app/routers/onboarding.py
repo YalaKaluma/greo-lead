@@ -22,6 +22,7 @@ from app.services.onboarding_service import (
 from app.services import journey_service
 from app.routers.tasks import Task as TaskModel
 from app.utils.security import hash_password, verify_password
+from app.services.in_app_onboarding_service import get_session, respond
 
 router = APIRouter(tags=["onboarding"])
 
@@ -44,6 +45,30 @@ class LoginResponse(BaseModel):
     user_name: Optional[str] = None
     trial_days_left: Optional[int] = None
     needs_tour: bool = False
+
+
+class InAppOnboardingResponse(BaseModel):
+    user_number: str
+    answer: str
+
+
+@router.get("/in-app/session")
+def get_in_app_onboarding_session(user_number: str, db: Session = Depends(get_db)):
+    user = _find_user_by_number_or_email(db, user_number)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return get_session(user)
+
+
+@router.post("/in-app/respond")
+def respond_to_in_app_onboarding(payload: InAppOnboardingResponse, db: Session = Depends(get_db)):
+    user = _find_user_by_number_or_email(db, payload.user_number)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        return respond(db, user, payload.answer)
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 class TourProgressResponse(BaseModel):
@@ -125,8 +150,6 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         user.last_active_at = user.last_login_at
         user.tour_current_step = None
         user.tour_completed = True
-        user.onboarding_completed = True
-        user.onboarding_step = 'COMPLETED'
         db.commit()
 
         return LoginResponse(

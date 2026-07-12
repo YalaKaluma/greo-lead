@@ -3,7 +3,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 import calendar
 from app.db import get_db
-from app.models import JourneyGoal, Task
+from app.models import JourneyGoal, Task, User
 from pydantic import BaseModel
 from datetime import datetime, date, timedelta
 from typing import Optional, List, Union
@@ -14,6 +14,40 @@ from app.services.onboarding_seed_service import ensure_starter_tasks_visible_to
 from app.services.audit_log_service import user_id_for_identifier, write_audit_log
 
 router = APIRouter()
+
+
+def _ensure_onboarding_tasks_link_to_vision(db: Session, user_number: str) -> int:
+    user = db.query(User).filter((User.phone_number == user_number) | (User.email == user_number)).first()
+    if not user or not user.phone_number:
+        return 0
+
+    onboarding_data = dict(user.onboarding_data or {})
+    if onboarding_data.get("onboarding_tasks_linked_to_vision_at"):
+        return 0
+
+    result = onboarding_data.get("result") or {}
+    vision_id = result.get("vision_id")
+    task_ids = [task_id for task_id in (result.get("task_ids") or []) if task_id]
+    if not vision_id or not task_ids:
+        return 0
+
+    tasks = db.query(Task).filter(
+        Task.user_number == user.phone_number,
+        Task.id.in_(task_ids),
+    ).all()
+
+    repaired_count = 0
+    now = datetime.utcnow()
+    for task in tasks:
+        if task.goal_id == vision_id:
+            continue
+        task.goal_id = vision_id
+        task.updated_at = now
+        repaired_count += 1
+
+    onboarding_data["onboarding_tasks_linked_to_vision_at"] = now.isoformat()
+    user.onboarding_data = onboarding_data
+    return repaired_count
 
 
 # Pydantic schemas for validation
@@ -330,6 +364,10 @@ def get_tasks(
         if repaired_count:
             db.commit()
             print(f"[TASKS API] Repaired {repaired_count} starter task due dates for default visibility")
+        relinked_count = _ensure_onboarding_tasks_link_to_vision(db, user_number)
+        if relinked_count:
+            db.commit()
+            print(f"[TASKS API] Linked {relinked_count} onboarding tasks to the generated vision")
 
         query = db.query(Task).filter(
             Task.user_number == user_number,

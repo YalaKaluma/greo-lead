@@ -69,7 +69,9 @@ For Android debug APK notifications to work:
 1. Create or open the Firebase project for Alfred.
 2. Add an Android app with package name `com.AlfredTheChiefOfStaff.myapp.dev` for debug builds.
 3. Download that app's `google-services.json`.
-4. Add the full JSON contents as a GitHub repository secret named `GOOGLE_SERVICES_JSON`, or add a base64-encoded version as `GOOGLE_SERVICES_JSON_B64`.
+4. Add the full JSON contents as a GitHub repository secret named `GOOGLE_SERVICES_JSON_DEBUG`, or add a base64-encoded version as `GOOGLE_SERVICES_JSON_DEBUG_B64`.
+   The debug APK workflow can fall back to `GOOGLE_SERVICES_JSON` / `GOOGLE_SERVICES_JSON_B64`, but only if that file contains the debug package `com.AlfredTheChiefOfStaff.myapp.dev`.
+   If the available Firebase config only contains the production package, the debug APK still builds but native push notifications are disabled for that APK.
 5. Add backend Firebase sender credentials to the Railway development environment:
    - `FIREBASE_SERVICE_ACCOUNT_JSON`: full Firebase service account JSON, or
    - `FIREBASE_SERVICE_ACCOUNT_B64`: base64-encoded Firebase service account JSON

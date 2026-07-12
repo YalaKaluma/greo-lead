@@ -1,26 +1,113 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { useLanguage } from '../i18n/LanguageContext';
 import MyCoachingSessions from './MyCoachingSessions';
 
 const PEOPLE_REVIEW_SESSION_TYPES = ['people_review'];
 const PEOPLE_REVIEW_EMPTY_STATE = 'Start a people review session to reflect on the current relationship, diagnose patterns, and choose concrete next steps.';
 
+const CIRCLE = {
+  NONE: '',
+  LEADERSHIP: 'leadership_circle',
+  SPONSOR: 'sponsor_circle'
+};
+
+const tabs = [
+  ['overview', 'team.tabs.overview', 'Overview'],
+  ['leadership', 'team.tabs.leadership', 'Leadership Circle'],
+  ['sponsor', 'team.tabs.sponsor', 'Sponsor Circle'],
+  ['team', 'team.tabs.fullTeam', 'Full Team'],
+  ['stakeholders', 'team.tabs.stakeholders', 'Stakeholders'],
+  ['notes', 'team.tabs.notes', 'Relationship Reviews / Notes']
+];
+
+const relationshipStrategies = [
+  'Build trust',
+  'Keep informed',
+  'Seek sponsorship',
+  'Challenge constructively',
+  'Align priorities',
+  'Create quick win',
+  'Ask for feedback',
+  'Escalate carefully',
+  'Reduce friction',
+  'Maintain relationship'
+];
+
+const relationshipHealthOptions = [
+  { value: 1, key: 'team.healthExcellent', label: 'Excellent' },
+  { value: 2, key: 'team.healthStrong', label: 'Strong' },
+  { value: 3, key: 'team.healthNeutral', label: 'Neutral' },
+  { value: 4, key: 'team.healthTense', label: 'Tense' },
+  { value: 5, key: 'team.healthToxic', label: 'Toxic' }
+];
+
+const performanceOptions = [
+  { value: 'Superstar', key: 'team.performanceSuperstar', label: 'Superstar' },
+  { value: 'Strong', key: 'team.performanceStrong', label: 'Strong' },
+  { value: 'On track', key: 'team.performanceOnTrack', label: 'On track' },
+  { value: 'Concerns', key: 'team.performanceConcerns', label: 'Concerns' },
+  { value: 'Issue', key: 'team.performanceIssue', label: 'Issue' }
+];
+
+const potentialOptions = [
+  { value: 'High', key: 'team.potentialHigh', label: 'High' },
+  { value: 'Medium', key: 'team.potentialMedium', label: 'Medium' },
+  { value: 'Low', key: 'team.potentialLow', label: 'Low' }
+];
+
+const personFields = [
+  'name',
+  'email',
+  'phone',
+  'relation',
+  'context',
+  'mission_statement',
+  'strengths',
+  'growth_areas',
+  'aspirations',
+  'organization',
+  'team',
+  'manager_name',
+  'circle_type',
+  'relationship_health',
+  'strategic_importance',
+  'last_interaction_at',
+  'next_action',
+  'current_goals',
+  'development_plan',
+  'stretch_assignments',
+  'coaching_focus',
+  'performance_indicator',
+  'potential_indicator',
+  'stakeholder_mission',
+  'stakeholder_priorities',
+  'success_metrics',
+  'stakeholder_strengths',
+  'risks_or_pressures',
+  'stakeholder_aspirations',
+  'how_i_create_value',
+  'mission_alignment',
+  'potential_tensions',
+  'relationship_strategy'
+];
+
+const blankPerson = personFields.reduce((acc, field) => ({ ...acc, [field]: '' }), {});
+
 export default function MyTeam({ apiUrl, userNumber }) {
   const { t } = useLanguage();
+  const copy = (key, fallback) => t(key, fallback);
   const [people, setPeople] = useState([]);
+  const [reviewsByPerson, setReviewsByPerson] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState('overview');
   const [showAddForm, setShowAddForm] = useState(false);
-  const [editingPersonId, setEditingPersonId] = useState(null);
-  const [relationFilter, setRelationFilter] = useState('all');
-  const [viewingProfile, setViewingProfile] = useState(null); // Person ID for profile view
-  const [customOrder, setCustomOrder] = useState([]); // User's manual sort order
+  const [editingPerson, setEditingPerson] = useState(null);
+  const [viewingPersonId, setViewingPersonId] = useState(null);
 
   useEffect(() => {
     fetchPeople();
-    loadCustomOrder();
   }, []);
 
   const fetchPeople = async () => {
@@ -30,322 +117,488 @@ export default function MyTeam({ apiUrl, userNumber }) {
       const response = await axios.get(`${apiUrl}/api/journey/people`, {
         params: { user_number: userNumber }
       });
-      if (response.data && Array.isArray(response.data)) {
-        setPeople(response.data);
-      }
+      const nextPeople = Array.isArray(response.data) ? response.data : [];
+      setPeople(nextPeople);
+      fetchRecentReviews(nextPeople);
     } catch (err) {
       console.error('Error fetching people:', err);
-      setError('Failed to load team members');
+      setError(copy('team.loadError', 'Failed to load your leadership ecosystem.'));
     } finally {
       setLoading(false);
     }
   };
 
-  const loadCustomOrder = () => {
-    const saved = localStorage.getItem('myteam_custom_order');
-    if (saved) {
-      setCustomOrder(JSON.parse(saved));
-    }
+  const fetchRecentReviews = async (items) => {
+    const circlePeople = items.filter((person) => person.circle_type || hasNotes(person)).slice(0, 12);
+    const entries = await Promise.all(circlePeople.map(async (person) => {
+      try {
+        const response = await axios.get(`${apiUrl}/api/journey/people/${person.id}/review-history`, {
+          params: { user_number: userNumber }
+        });
+        return [person.id, response.data?.reviews || []];
+      } catch (err) {
+        console.warn('Could not load review history.', err);
+        return [person.id, []];
+      }
+    }));
+    setReviewsByPerson(Object.fromEntries(entries));
   };
 
-  const saveCustomOrder = (order) => {
-    localStorage.setItem('myteam_custom_order', JSON.stringify(order));
-    setCustomOrder(order);
-  };
-
-  const addPerson = async (personData) => {
+  const createPerson = async (personData) => {
     try {
-      await axios.post(
-        `${apiUrl}/api/journey/people`,
-        personData,
-        { params: { user_number: userNumber } }
-      );
-      await fetchPeople();
+      await axios.post(`${apiUrl}/api/journey/people`, normalizePayload(personData), {
+        params: { user_number: userNumber }
+      });
       setShowAddForm(false);
+      await fetchPeople();
     } catch (err) {
       console.error('Error adding person:', err);
-      alert('Failed to add team member');
+      alert(copy('team.saveError', 'Failed to save this person.'));
     }
   };
 
   const updatePerson = async (personId, updates) => {
     try {
-      await axios.put(
-        `${apiUrl}/api/journey/people/${personId}`,
-        updates,
-        { params: { user_number: userNumber } }
-      );
+      await axios.put(`${apiUrl}/api/journey/people/${personId}`, normalizePayload(updates), {
+        params: { user_number: userNumber }
+      });
+      setEditingPerson(null);
       await fetchPeople();
-      setEditingPersonId(null);
     } catch (err) {
       console.error('Error updating person:', err);
-      alert('Failed to update team member');
+      alert(copy('team.saveError', 'Failed to save this person.'));
     }
   };
 
   const deletePerson = async (personId) => {
-    if (!confirm('Delete this person?')) return;
-    
+    if (!confirm(copy('team.deleteConfirm', 'Delete this person?'))) return;
     try {
       await axios.delete(`${apiUrl}/api/journey/people/${personId}`, {
         params: { user_number: userNumber }
       });
-      setPeople(people.filter(p => p.id !== personId));
-      setViewingProfile(null);
-      setEditingPersonId(null);
+      setPeople((current) => current.filter((person) => person.id !== personId));
+      setViewingPersonId(null);
+      setEditingPerson(null);
     } catch (err) {
       console.error('Error deleting person:', err);
-      alert('Failed to delete team member');
+      alert(copy('team.deleteError', 'Failed to delete this person.'));
     }
   };
 
-  // Handle drag and drop
-  const onDragEnd = (result) => {
-    if (!result.destination) return;
-    
-    const items = Array.from(getSortedPeople());
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
-    
-    const newOrder = items.map(p => p.id);
-    saveCustomOrder(newOrder);
+  const markCircle = (person, circleType) => {
+    updatePerson(person.id, { circle_type: person.circle_type === circleType ? '' : circleType });
   };
 
-  // Get people sorted by custom order
-  const getSortedPeople = () => {
-    const filtered = people.filter(person => {
-      if (relationFilter === 'all') return true;
-      if (relationFilter === 'team member') return person.relation?.toLowerCase().includes('team');
-      if (relationFilter === 'supervisor') return person.relation?.toLowerCase().includes('supervisor');
-      if (relationFilter === 'mentor') return person.relation?.toLowerCase().includes('mentor');
-      if (relationFilter === 'peer') return person.relation?.toLowerCase().includes('peer') || person.relation?.toLowerCase().includes('colleague');
-      return true;
-    });
+  const leadershipCircle = useMemo(
+    () => people.filter((person) => person.circle_type === CIRCLE.LEADERSHIP),
+    [people]
+  );
+  const sponsorCircle = useMemo(
+    () => people.filter((person) => person.circle_type === CIRCLE.SPONSOR),
+    [people]
+  );
+  const teamMembers = useMemo(
+    () => people.filter((person) => isTeamMember(person)),
+    [people]
+  );
+  const stakeholders = useMemo(
+    () => people.filter((person) => isStakeholder(person)),
+    [people]
+  );
+  const attentionItems = useMemo(
+    () => buildAttentionItems(people, copy),
+    [people]
+  );
+  const recentNotes = useMemo(
+    () => buildRecentNotes(people, reviewsByPerson),
+    [people, reviewsByPerson]
+  );
 
-    if (customOrder.length === 0) return filtered;
-
-    // Sort by custom order, then append any new people at the end
-    const sorted = [];
-    customOrder.forEach(id => {
-      const person = filtered.find(p => p.id === id);
-      if (person) sorted.push(person);
-    });
-    
-    // Add any people not in custom order
-    filtered.forEach(person => {
-      if (!customOrder.includes(person.id)) sorted.push(person);
-    });
-    
-    return sorted;
-  };
-
-  // Show profile page
-  if (viewingProfile) {
+  if (viewingPersonId) {
     return (
       <PersonProfile
-        personId={viewingProfile}
+        personId={viewingPersonId}
         apiUrl={apiUrl}
         userNumber={userNumber}
+        copy={copy}
         onClose={() => {
-          setViewingProfile(null);
+          setViewingPersonId(null);
           fetchPeople();
         }}
         onDeleted={(personId) => {
-          setPeople(people.filter(p => p.id !== personId));
-          setViewingProfile(null);
+          setPeople((current) => current.filter((person) => person.id !== personId));
+          setViewingPersonId(null);
         }}
       />
     );
   }
 
-  // Main MyTeam view
   if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-slate-600">Loading your team...</div>
-      </div>
-    );
+    return <div className="flex h-64 items-center justify-center text-slate-600">{copy('team.loading', 'Loading your leadership ecosystem...')}</div>;
   }
 
   if (error) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-red-600">{error}</div>
-      </div>
-    );
+    return <div className="flex h-64 items-center justify-center text-red-600">{error}</div>;
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="mx-auto max-w-6xl p-6">
+      <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800">{t('team.title')}</h1>
-          <p className="text-slate-600 mt-1">Manage your professional network</p>
+          <h1 className="text-3xl font-bold text-slate-900">{copy('team.ecosystemTitle', 'My Leadership Ecosystem')}</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+            {copy('team.ecosystemSubtitle', 'Lead your team, develop your inner circle, and manage the sponsor relationships that amplify your mission.')}
+          </p>
         </div>
-        <button
-          onClick={() => setShowAddForm(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          {t('team.addPerson')}
+        <button onClick={() => setShowAddForm(true)} className="rounded bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700">
+          {copy('team.addPerson', '+ Add Person')}
         </button>
-      </div>
+      </header>
 
-      {/* Filters */}
-      <div className="mb-6 flex gap-2 overflow-x-auto pb-2">
-        {['all', 'team member', 'supervisor', 'mentor', 'peer'].map(filter => (
+      <nav className="mb-6 flex gap-2 overflow-x-auto border-b border-slate-200 pb-2">
+        {tabs.map(([id, key, fallback]) => (
           <button
-            key={filter}
-            onClick={() => setRelationFilter(filter)}
-            className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
-              relationFilter === filter
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            key={id}
+            type="button"
+            onClick={() => setActiveTab(id)}
+            className={`whitespace-nowrap rounded px-3 py-2 text-sm font-medium transition-colors ${
+              activeTab === id ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            {filter === 'all' ? 'All' : filter.charAt(0).toUpperCase() + filter.slice(1) + 's'}
+            {copy(key, fallback)}
           </button>
         ))}
-      </div>
+      </nav>
 
-      {/* Add Person Form */}
       {showAddForm && (
         <div className="mb-6">
-          <PersonForm
-            onSubmit={addPerson}
-            onCancel={() => setShowAddForm(false)}
-          />
+          <PersonForm copy={copy} onSubmit={createPerson} onCancel={() => setShowAddForm(false)} />
         </div>
       )}
 
-      {/* People List - Drag and Drop */}
-      {getSortedPeople().length === 0 ? (
-        <div className="text-center py-12">
-          <p className="text-slate-600 text-lg">
-            No {relationFilter !== 'all' ? relationFilter + 's' : 'team members'} yet. Add people to your network!
-          </p>
-        </div>
-      ) : (
-        <DragDropContext onDragEnd={onDragEnd}>
-          <Droppable droppableId="people-list">
-            {(provided) => (
-              <div
-                {...provided.droppableProps}
-                ref={provided.innerRef}
-                className="space-y-2"
-              >
-                {getSortedPeople().map((person, index) => (
-                  <Draggable
-                    key={person.id}
-                    draggableId={String(person.id)}
-                    index={index}
-                  >
-                    {(provided, snapshot) => (
-                      <div
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        className={`${snapshot.isDragging ? 'opacity-50' : ''}`}
-                      >
-                        {editingPersonId === person.id ? (
-                          <PersonForm
-                            person={person}
-                            onSubmit={(data) => updatePerson(person.id, data)}
-                            onCancel={() => setEditingPersonId(null)}
-                            onDelete={() => deletePerson(person.id)}
-                          />
-                        ) : (
-                          <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                            <div className="flex items-start gap-4">
-                              {/* Drag Handle */}
-                              <div
-                                {...provided.dragHandleProps}
-                                className="cursor-move text-gray-400 hover:text-gray-600 pt-1 flex-shrink-0"
-                                title="Drag to reorder"
-                              >
-                                ::
-                              </div>
+      {activeTab === 'overview' && (
+        <OverviewTab
+          copy={copy}
+          leadershipCircle={leadershipCircle}
+          sponsorCircle={sponsorCircle}
+          attentionItems={attentionItems}
+          recentNotes={recentNotes}
+          onOpen={setViewingPersonId}
+        />
+      )}
 
-                              {/* Person Info - Click to view profile */}
-                              <div 
-                                className="flex-1 cursor-pointer"
-                                onClick={() => setViewingProfile(person.id)}
-                              >
-                                <h3 className="text-lg font-bold text-slate-800 hover:text-blue-600">
-                                  {person.name}
-                                </h3>
-                                {person.relation && (
-                                  <p className="text-sm text-slate-600">{person.relation}</p>
-                                )}
-                                {person.context && (
-                                  <p className="mt-2 text-sm text-slate-600 line-clamp-2">{person.context}</p>
-                                )}
-                              </div>
+      {activeTab === 'leadership' && (
+        <CircleTab
+          copy={copy}
+          title={copy('team.leadershipTitle', 'Leadership Circle')}
+          intro={copy('team.leadershipIntro', 'People you are intentionally developing this quarter.')}
+          emptyText={copy('team.leadershipEmpty', 'Choose 5-7 people you are intentionally developing this quarter.')}
+          warning={leadershipCircle.length > 7 ? copy('team.leadershipLimitWarning', 'Leadership Circles work best when they stay focused. Consider whether all these people need deep development attention this quarter.') : null}
+          people={leadershipCircle}
+          allPeople={people}
+          circleType={CIRCLE.LEADERSHIP}
+          onOpen={setViewingPersonId}
+          onEdit={setEditingPerson}
+          onMark={markCircle}
+        />
+      )}
 
-                              <div className="flex items-center gap-2 text-slate-400">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setEditingPersonId(person.id);
-                                  }}
-                                  className="p-1 rounded hover:bg-slate-200 transition"
-                                  title="Edit"
-                                  aria-label={`Edit ${person.name}`}
-                                >
-                                  <EditIcon />
-                                </button>
-                              </div>
-                            </div>
+      {activeTab === 'sponsor' && (
+        <CircleTab
+          copy={copy}
+          title={copy('team.sponsorTitle', 'Sponsor Circle')}
+          intro={copy('team.sponsorIntro', 'High-leverage relationships that can amplify your mission.')}
+          emptyText={copy('team.sponsorEmpty', 'Choose 5-7 relationships that most influence your ability to deliver your mission.')}
+          warning={sponsorCircle.length > 7 ? copy('team.sponsorLimitWarning', 'Sponsor Circles work best when they focus on the few relationships that most influence your mission.') : null}
+          people={sponsorCircle}
+          allPeople={people}
+          circleType={CIRCLE.SPONSOR}
+          onOpen={setViewingPersonId}
+          onEdit={setEditingPerson}
+          onMark={markCircle}
+        />
+      )}
 
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </Draggable>
-                ))}
-                {provided.placeholder}
-              </div>
-            )}
-          </Droppable>
-        </DragDropContext>
+      {activeTab === 'team' && (
+        <TableTab
+          copy={copy}
+          people={teamMembers}
+          emptyText={copy('team.fullTeamEmpty', 'No team members yet. Add people to your leadership ecosystem.')}
+          columns={['name', 'role', 'team', 'manager', 'health', 'lastInteraction', 'objective', 'strength', 'risk', 'circle']}
+          onOpen={setViewingPersonId}
+          onEdit={setEditingPerson}
+          onMark={markCircle}
+        />
+      )}
+
+      {activeTab === 'stakeholders' && (
+        <TableTab
+          copy={copy}
+          people={stakeholders}
+          emptyText={copy('team.stakeholdersEmpty', 'No stakeholders yet. Add sponsors, peers, mentors, or client sponsors here.')}
+          columns={['name', 'role', 'organization', 'type', 'health', 'importance', 'lastInteraction', 'priority', 'nextAction', 'sponsor']}
+          onOpen={setViewingPersonId}
+          onEdit={setEditingPerson}
+          onMark={markCircle}
+        />
+      )}
+
+      {activeTab === 'notes' && (
+        <NotesTab copy={copy} people={people} recentNotes={recentNotes} onOpen={setViewingPersonId} />
+      )}
+
+      {editingPerson && (
+        <Modal title={copy('team.editPerson', 'Edit Person')} onClose={() => setEditingPerson(null)}>
+          <PersonForm
+            copy={copy}
+            person={editingPerson}
+            onSubmit={(data) => updatePerson(editingPerson.id, data)}
+            onCancel={() => setEditingPerson(null)}
+            onDelete={() => deletePerson(editingPerson.id)}
+          />
+        </Modal>
       )}
     </div>
   );
 }
 
-function EditIcon() {
+function OverviewTab({ copy, leadershipCircle, sponsorCircle, attentionItems, recentNotes, onOpen }) {
   return (
-    <svg
-      className="w-4 h-4 text-slate-500"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={2}
-        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-      />
-    </svg>
+    <div className="grid gap-4 lg:grid-cols-2">
+      <OverviewCard title={copy('team.leadershipTitle', 'Leadership Circle')} people={leadershipCircle.slice(0, 7)} emptyText={copy('team.leadershipEmpty', 'Choose 5-7 people you are intentionally developing this quarter.')} onOpen={onOpen} mode="leadership" />
+      <OverviewCard title={copy('team.sponsorTitle', 'Sponsor Circle')} people={sponsorCircle.slice(0, 7)} emptyText={copy('team.sponsorEmpty', 'Choose 5-7 relationships that most influence your ability to deliver your mission.')} onOpen={onOpen} mode="sponsor" />
+      <section className="rounded-lg border border-slate-200 bg-white p-5">
+        <h2 className="text-lg font-bold text-slate-900">{copy('team.attentionNeeded', 'Attention Needed')}</h2>
+        {attentionItems.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-600">{copy('team.attentionEmpty', 'No urgent relationship gaps detected. Your leadership ecosystem looks healthy.')}</p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {attentionItems.slice(0, 8).map((item) => (
+              <button key={`${item.person.id}-${item.reason}`} onClick={() => onOpen(item.person.id)} className="block w-full rounded border border-slate-200 p-3 text-left hover:bg-slate-50">
+                <p className="font-semibold text-slate-900">{item.person.name}</p>
+                <p className="mt-1 text-sm text-slate-600">{item.reason}</p>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-5">
+        <h2 className="text-lg font-bold text-slate-900">{copy('team.recentNotes', 'Recent Relationship Notes')}</h2>
+        <NotesList copy={copy} notes={recentNotes.slice(0, 8)} onOpen={onOpen} />
+      </section>
+    </div>
   );
 }
 
-// Person Profile Full Page View
-function PersonProfile({ personId, apiUrl, userNumber, onClose, onDeleted }) {
+function OverviewCard({ title, people, emptyText, onOpen, mode }) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-5">
+      <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+      {people.length === 0 ? (
+        <p className="mt-4 text-sm text-slate-600">{emptyText}</p>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {people.map((person) => (
+            <button key={person.id} onClick={() => onOpen(person.id)} className="block w-full rounded border border-slate-200 p-3 text-left hover:bg-slate-50">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-slate-900">{person.name}</p>
+                </div>
+                <HealthBadge value={person.relationship_health} />
+              </div>
+              <p className="mt-2 line-clamp-2 text-sm text-slate-600">{mode === 'sponsor' ? person.stakeholder_mission || person.mission_alignment || 'No sponsor mission captured yet.' : person.mission_statement || 'No mission captured yet.'}</p>
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CircleTab({ copy, title, intro, emptyText, warning, people, allPeople, circleType, onOpen, onEdit, onMark }) {
+  const candidates = allPeople.filter((person) => person.circle_type !== circleType);
+  return (
+    <div className="space-y-5">
+      <section className="rounded-lg border border-slate-200 bg-white p-5">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900">{title}</h2>
+            <p className="mt-1 text-sm text-slate-600">{intro}</p>
+          </div>
+          <span className="rounded border border-slate-200 px-3 py-1 text-sm font-medium text-slate-600">{people.length}/7</span>
+        </div>
+        {warning && <p className="mt-4 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{warning}</p>}
+      </section>
+
+      {people.length === 0 ? (
+        <section className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-slate-600">{emptyText}</section>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {people.map((person) => (
+            <PersonCard key={person.id} copy={copy} person={person} mode={circleType} onOpen={onOpen} onEdit={onEdit} onMark={onMark} />
+          ))}
+        </div>
+      )}
+
+      {candidates.length > 0 && (
+        <section className="rounded-lg border border-slate-200 bg-white p-5">
+          <h3 className="font-bold text-slate-900">{copy('team.addToCircle', 'Add to this circle')}</h3>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {candidates.slice(0, 12).map((person) => (
+              <button key={person.id} onClick={() => onMark(person, circleType)} className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                {person.name}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function PersonCard({ copy, person, mode, onOpen, onEdit, onMark }) {
+  const isSponsor = mode === CIRCLE.SPONSOR;
+  const summary = isSponsor ? [
+    ['Mission', person.stakeholder_mission],
+    ['Priorities', person.stakeholder_priorities],
+    ['Value I create', person.how_i_create_value],
+    ['Alignment', person.mission_alignment],
+    ['Strategy', person.relationship_strategy],
+    ['Next action', person.next_action]
+  ] : [
+    ['Mission', person.mission_statement],
+    ['Strengths', person.strengths],
+    ['Development areas', person.growth_areas],
+    ['Aspirations', person.aspirations],
+    ['Performance', person.performance_indicator],
+    ['Potential', person.potential_indicator]
+  ];
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-5">
+      <div className="flex items-start justify-between gap-3">
+        <button onClick={() => onOpen(person.id)} className="text-left">
+          <h3 className="text-lg font-bold text-slate-900">{person.name}</h3>
+        </button>
+        <HealthBadge value={person.relationship_health} />
+      </div>
+      <dl className="mt-4 space-y-3">
+        {summary.map(([label, value]) => (
+          <div key={label}>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
+            <dd className="mt-1 line-clamp-3 text-sm text-slate-700">{value || 'Not captured yet'}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="mt-5 flex flex-wrap gap-2">
+        <button onClick={() => onOpen(person.id)} className="rounded bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700">{copy('team.openProfile', 'Open profile')}</button>
+        <button onClick={() => onEdit(person)} className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">{copy('team.edit', 'Edit')}</button>
+        <button onClick={() => onMark(person, mode)} className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">{copy('team.removeFromCircle', 'Remove from circle')}</button>
+      </div>
+    </section>
+  );
+}
+
+function TableTab({ copy, people, emptyText, columns, onOpen, onEdit, onMark }) {
+  if (people.length === 0) {
+    return <section className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-slate-600">{emptyText}</section>;
+  }
+  return (
+    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <table className="min-w-full divide-y divide-slate-200 text-sm">
+        <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <tr>
+            {columns.map((column) => <th key={column} className="px-4 py-3">{columnLabel(copy, column)}</th>)}
+            <th className="px-4 py-3">{copy('team.actions', 'Actions')}</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-200">
+          {people.map((person) => (
+            <tr key={person.id}>
+              {columns.map((column) => (
+                <td key={column} className="max-w-[220px] px-4 py-3 align-top text-slate-700">
+                  {renderColumn(person, column, onMark)}
+                </td>
+              ))}
+              <td className="px-4 py-3 align-top">
+                <div className="flex gap-2">
+                  <button onClick={() => onOpen(person.id)} className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50">{copy('team.open', 'Open')}</button>
+                  <button onClick={() => onEdit(person)} className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50">{copy('team.edit', 'Edit')}</button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function NotesTab({ copy, people, recentNotes, onOpen }) {
+  return (
+    <div className="space-y-5">
+      <section className="rounded-lg border border-slate-200 bg-white p-5">
+        <h2 className="text-xl font-bold text-slate-900">{copy('team.notesTitle', 'Relationship Reviews / Notes')}</h2>
+        <p className="mt-1 text-sm text-slate-600">{copy('team.notesIntro', 'Open any person to add meeting notes, relationship notes, or start a people review.')}</p>
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-5">
+        <h3 className="font-bold text-slate-900">{copy('team.recentNotes', 'Recent Relationship Notes')}</h3>
+        <NotesList copy={copy} notes={recentNotes} onOpen={onOpen} />
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-5">
+        <h3 className="font-bold text-slate-900">{copy('team.allPeople', 'All People')}</h3>
+        <div className="mt-3 grid gap-2 md:grid-cols-2">
+          {people.map((person) => (
+            <button key={person.id} onClick={() => onOpen(person.id)} className="rounded border border-slate-200 p-3 text-left hover:bg-slate-50">
+              <p className="font-semibold text-slate-900">{person.name}</p>
+            </button>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function NotesList({ copy, notes, onOpen }) {
+  if (!notes.length) {
+    return <p className="mt-4 text-sm text-slate-600">{copy('team.notesEmpty', 'No recent relationship notes yet.')}</p>;
+  }
+  return (
+    <div className="mt-4 space-y-3">
+      {notes.map((note) => (
+        <button key={note.id} onClick={() => onOpen(note.personId)} className="block w-full rounded border border-slate-200 p-3 text-left hover:bg-slate-50">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold text-slate-900">{note.personName}</p>
+              <p className="text-sm text-slate-500">{note.type} - {formatDisplayDate(note.date)}</p>
+            </div>
+            {note.health && <ImpactBadge value={note.health} />}
+          </div>
+          <p className="mt-2 line-clamp-2 text-sm text-slate-700">{note.summary}</p>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PersonProfile({ personId, apiUrl, userNumber, copy, onClose, onDeleted }) {
   const [person, setPerson] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [synthesis, setSynthesis] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [expandedReviewId, setExpandedReviewId] = useState(null);
-  const [synthesisExpanded, setSynthesisExpanded] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState('profile');
+  const [isEditing, setIsEditing] = useState(false);
   const [showMeetingNoteForm, setShowMeetingNoteForm] = useState(false);
   const [expandedMeetingNoteId, setExpandedMeetingNoteId] = useState(null);
+  const [expandedReviewId, setExpandedReviewId] = useState(null);
   const [meetingNoteDraft, setMeetingNoteDraft] = useState({
     title: '',
+    note_type: '1:1',
     meeting_date: new Date().toISOString().slice(0, 10),
-    notes: ''
+    notes: '',
+    commitments: '',
+    follow_up_action: '',
+    health_impact: ''
   });
 
   useEffect(() => {
@@ -354,22 +607,17 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose, onDeleted }) {
 
   const fetchPersonData = async () => {
     try {
-      // Fetch person details
       const peopleResponse = await axios.get(`${apiUrl}/api/journey/people`, {
         params: { user_number: userNumber }
       });
-      const foundPerson = peopleResponse.data.find(p => p.id === personId);
+      const foundPerson = peopleResponse.data.find((item) => item.id === personId);
       setPerson(foundPerson);
-
-      // Fetch review history
-      const reviewsResponse = await axios.get(
-        `${apiUrl}/api/journey/people/${personId}/review-history`,
-        { params: { user_number: userNumber } }
-      );
-      setReviews(reviewsResponse.data.reviews || []);
-
-      // Generate synthesis
-      await generateSynthesis(foundPerson, reviewsResponse.data.reviews || []);
+      const reviewsResponse = await axios.get(`${apiUrl}/api/journey/people/${personId}/review-history`, {
+        params: { user_number: userNumber }
+      });
+      const nextReviews = reviewsResponse.data.reviews || [];
+      setReviews(nextReviews);
+      await generateSynthesis(nextReviews);
     } catch (err) {
       console.error('Error fetching person profile:', err);
     } finally {
@@ -377,80 +625,37 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose, onDeleted }) {
     }
   };
 
-  const generateSynthesis = async (personData, reviewsData) => {
+  const generateSynthesis = async (reviewsData) => {
     try {
-      const response = await axios.get(
-        `${apiUrl}/api/journey/people/${personId}/synthesis`,
-        { params: { user_number: userNumber } }
-      );
+      const response = await axios.get(`${apiUrl}/api/journey/people/${personId}/synthesis`, {
+        params: { user_number: userNumber }
+      });
       setSynthesis(response.data);
     } catch (err) {
       console.error('Error generating synthesis:', err);
-      // Fallback to placeholder
       setSynthesis({
-        strengths: ['Deep technical expertise', 'Collaborative mindset', 'Strong in crisis situations'],
-        improvements: ['Needs clearer frameworks', 'Communication clarity', 'Reliability under pressure'],
-        trajectory: 'Stable partnership, focus on delegation and independence'
+        strengths: ['Review history will sharpen this profile over time.'],
+        improvements: ['Add notes, next actions, and review outcomes to build signal.'],
+        trajectory: reviewsData.length ? 'Relationship profile is forming from saved reviews.' : 'No review trend yet.'
       });
     }
   };
 
   const updateProfilePerson = async (updates) => {
     try {
-      await axios.put(
-        `${apiUrl}/api/journey/people/${personId}`,
-        updates,
-        { params: { user_number: userNumber } }
-      );
+      await axios.put(`${apiUrl}/api/journey/people/${personId}`, normalizePayload(updates), {
+        params: { user_number: userNumber }
+      });
       setIsEditing(false);
       await fetchPersonData();
     } catch (err) {
       console.error('Error updating person:', err);
-      alert('Failed to update team member');
-    }
-  };
-
-  const saveMeetingNote = async (event) => {
-    event.preventDefault();
-    if (!meetingNoteDraft.notes.trim()) {
-      alert('Please enter your meeting notes');
-      return;
-    }
-
-    const existingNotes = Array.isArray(person.meeting_notes) ? person.meeting_notes : [];
-    const meetingDate = meetingNoteDraft.meeting_date || new Date().toISOString().slice(0, 10);
-    const note = {
-      id: `${Date.now()}`,
-      title: meetingNoteDraft.title.trim() || `Meeting notes - ${formatDisplayDate(meetingDate)}`,
-      meeting_date: meetingDate,
-      notes: meetingNoteDraft.notes.trim(),
-      created_at: new Date().toISOString()
-    };
-
-    try {
-      const updatedNotes = [note, ...existingNotes];
-      await axios.put(
-        `${apiUrl}/api/journey/people/${personId}`,
-        { meeting_notes: updatedNotes },
-        { params: { user_number: userNumber } }
-      );
-      setPerson({ ...person, meeting_notes: updatedNotes });
-      setExpandedMeetingNoteId(note.id);
-      setMeetingNoteDraft({
-        title: '',
-        meeting_date: new Date().toISOString().slice(0, 10),
-        notes: ''
-      });
-      setShowMeetingNoteForm(false);
-    } catch (err) {
-      console.error('Error saving meeting note:', err);
-      alert('Failed to save meeting note');
+      alert(copy('team.saveError', 'Failed to save this person.'));
     }
   };
 
   const deleteProfilePerson = async () => {
-    if (!confirm('Delete this person?')) return;
-
+    if (!confirm(copy('team.deleteConfirm', 'Delete this person?'))) return;
     try {
       await axios.delete(`${apiUrl}/api/journey/people/${personId}`, {
         params: { user_number: userNumber }
@@ -458,338 +663,89 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose, onDeleted }) {
       onDeleted?.(personId);
     } catch (err) {
       console.error('Error deleting person:', err);
-      alert('Failed to delete team member');
+      alert(copy('team.deleteError', 'Failed to delete this person.'));
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-slate-600">Loading profile...</div>
-      </div>
-    );
-  }
+  const saveMeetingNote = async (event) => {
+    event.preventDefault();
+    if (!meetingNoteDraft.notes.trim()) {
+      alert(copy('team.noteRequired', 'Please enter your notes.'));
+      return;
+    }
+    const existingNotes = Array.isArray(person.meeting_notes) ? person.meeting_notes : [];
+    const meetingDate = meetingNoteDraft.meeting_date || new Date().toISOString().slice(0, 10);
+    const note = {
+      id: `${Date.now()}`,
+      title: meetingNoteDraft.title.trim() || `${meetingNoteDraft.note_type} - ${formatDisplayDate(meetingDate)}`,
+      note_type: meetingNoteDraft.note_type,
+      meeting_date: meetingDate,
+      notes: meetingNoteDraft.notes.trim(),
+      commitments: meetingNoteDraft.commitments.trim(),
+      follow_up_action: meetingNoteDraft.follow_up_action.trim(),
+      health_impact: meetingNoteDraft.health_impact,
+      created_at: new Date().toISOString()
+    };
+    const updatedNotes = [note, ...existingNotes];
+    try {
+      await axios.put(`${apiUrl}/api/journey/people/${personId}`, {
+        meeting_notes: updatedNotes,
+        next_action: note.follow_up_action || person.next_action,
+        last_interaction_at: `${meetingDate}T12:00:00`
+      }, {
+        params: { user_number: userNumber }
+      });
+      setPerson({ ...person, meeting_notes: updatedNotes, next_action: note.follow_up_action || person.next_action, last_interaction_at: `${meetingDate}T12:00:00` });
+      setExpandedMeetingNoteId(note.id);
+      setMeetingNoteDraft({
+        title: '',
+        note_type: '1:1',
+        meeting_date: new Date().toISOString().slice(0, 10),
+        notes: '',
+        commitments: '',
+        follow_up_action: '',
+        health_impact: ''
+      });
+      setShowMeetingNoteForm(false);
+    } catch (err) {
+      console.error('Error saving meeting note:', err);
+      alert(copy('team.noteSaveError', 'Failed to save note.'));
+    }
+  };
 
-  if (!person) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-red-600">Person not found</div>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-600">{copy('team.profileLoading', 'Loading profile...')}</div>;
+  if (!person) return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-red-600">{copy('team.profileMissing', 'Person not found')}</div>;
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <button
-            onClick={onClose}
-            className="flex items-center gap-2 text-slate-600 hover:text-slate-800 transition-colors"
-          >
-            ← Back to My Team
-          </button>
-          <h1 className="text-2xl font-bold text-slate-800">{person.name}</h1>
-          <div className="w-24"></div>
+      <div className="sticky top-0 z-10 border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+          <button onClick={onClose} className="text-sm font-medium text-slate-600 hover:text-slate-900">{copy('team.back', 'Back')}</button>
+          <h1 className="text-xl font-bold text-slate-900">{person.name}</h1>
+          <button onClick={() => setIsEditing(true)} className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">{copy('team.edit', 'Edit')}</button>
         </div>
       </div>
-
-      {/* Content */}
-      <div className="max-w-5xl mx-auto px-6 py-8">
+      <main className="mx-auto max-w-5xl px-6 py-8">
         {isEditing && (
           <div className="mb-6">
-            <PersonForm
-              person={person}
-              onSubmit={updateProfilePerson}
-              onCancel={() => setIsEditing(false)}
-              onDelete={deleteProfilePerson}
-            />
+            <PersonForm copy={copy} person={person} onSubmit={updateProfilePerson} onCancel={() => setIsEditing(false)} onDelete={deleteProfilePerson} />
           </div>
         )}
-
-        <div className="mb-6 border-b border-slate-200">
-          <div className="flex gap-6">
-            <button
-              type="button"
-              onClick={() => setActiveTab('profile')}
-              className={`relative px-2 pb-3 font-medium transition-colors ${
-                activeTab === 'profile'
-                  ? 'text-blue-600'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              People Profile
-              {activeTab === 'profile' && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-              )}
+        <div className="mb-6 flex gap-2 overflow-x-auto border-b border-slate-200 pb-2">
+          {[
+            ['profile', 'People Profile'],
+            ['meeting-notes', 'Relationship Notes'],
+            ['review', 'People Review']
+          ].map(([id, label]) => (
+            <button key={id} onClick={() => setActiveTab(id)} className={`rounded px-3 py-2 text-sm font-medium ${activeTab === id ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+              {label}
             </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('meeting-notes')}
-              className={`relative px-2 pb-3 font-medium transition-colors ${
-                activeTab === 'meeting-notes'
-                  ? 'text-blue-600'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Meeting Notes
-              {activeTab === 'meeting-notes' && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('review')}
-              className={`relative px-2 pb-3 font-medium transition-colors ${
-                activeTab === 'review'
-                  ? 'text-blue-600'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              People Review
-              {activeTab === 'review' && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-              )}
-            </button>
-          </div>
+          ))}
         </div>
-
-        {activeTab === 'profile' && (
-          <>
-        {/* Person Info Card */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="text-3xl font-bold text-slate-800 mb-2">{person.name}</h2>
-              {person.relation && (
-                <p className="text-lg text-slate-600 mb-4">{person.relation}</p>
-              )}
-              {person.context && (
-                <p className="text-slate-600 mb-4">{person.context}</p>
-              )}
-              {(person.strengths || person.growth_areas || person.aspirations) && (
-                <div className="mb-4 grid gap-3 md:grid-cols-3">
-                  {person.strengths && (
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Strengths</p>
-                      <p className="mt-1 text-sm text-slate-700">{person.strengths}</p>
-                    </div>
-                  )}
-                  {person.growth_areas && (
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Growth Areas</p>
-                      <p className="mt-1 text-sm text-slate-700">{person.growth_areas}</p>
-                    </div>
-                  )}
-                  {person.aspirations && (
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Aspirations</p>
-                      <p className="mt-1 text-sm text-slate-700">{person.aspirations}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-              <div className="flex gap-4 text-sm text-slate-500">
-                {person.email && (
-                  <a href={`mailto:${person.email}`} className="hover:text-blue-600">
-                    {person.email}
-                  </a>
-                )}
-                {person.phone && (
-                  <span>{person.phone}</span>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsEditing(true)}
-                className="h-10 inline-flex items-center justify-center rounded border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                title="Edit"
-                aria-label={`Edit ${person.name}`}
-              >
-                Edit
-              </button>
-              <button
-                onClick={deleteProfilePerson}
-                className="h-10 inline-flex items-center justify-center rounded border border-red-200 bg-red-50 px-4 text-sm font-medium text-red-600 transition-colors hover:bg-red-100"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Mission Statement */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h3 className="text-xl font-bold text-slate-800 mb-3">Mission Statement</h3>
-          {person.mission_statement ? (
-            <p className="text-slate-600 leading-7">{person.mission_statement}</p>
-          ) : (
-            <p className="text-slate-500">No mission statement yet. Use Edit to add one for this relationship.</p>
-          )}
-        </div>
-
-        {/* Alfred's Synthesis */}
-        {synthesis && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-            <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-              Alfred's Synthesis
-            </h3>
-            
-            <button
-              type="button"
-              onClick={() => setSynthesisExpanded(!synthesisExpanded)}
-              className="mb-4 text-sm font-medium text-slate-600 hover:text-slate-800"
-            >
-              {synthesisExpanded ? 'Hide synthesis' : 'Show synthesis'}
-            </button>
-
-            {synthesisExpanded && (
-            <div className="space-y-4">
-              <div>
-                <h4 className="font-semibold text-slate-700 mb-2">Core Strengths</h4>
-                <ul className="list-disc list-inside text-slate-600 space-y-1">
-                  {synthesis.strengths.map((strength, i) => (
-                    <li key={i}>{strength}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-slate-700 mb-2">Improvement Opportunities</h4>
-                <ul className="list-disc list-inside text-slate-600 space-y-1">
-                  {synthesis.improvements.map((improvement, i) => (
-                    <li key={i}>{improvement}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-slate-700 mb-2">Trajectory</h4>
-                <p className="text-slate-600">{synthesis.trajectory}</p>
-              </div>
-            </div>
-            )}
-          </div>
-        )}
-
-        {/* Review History */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-            Review History
-          </h3>
-
-          {reviews.length === 0 ? (
-            <p className="text-slate-600">No reviews yet. Start your first review to build this relationship profile.</p>
-          ) : (
-            <div className="space-y-4">
-              {reviews.map((review) => (
-                <div
-                  key={review.id}
-                  className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-semibold text-slate-600">
-                          {new Date(review.review_date).toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric'
-                          })}
-                        </span>
-                        {review.relationship_strength && (
-                          <span className="text-sm font-medium text-slate-700">
-                            Strength: {review.relationship_strength}/5
-                          </span>
-                        )}
-                      </div>
-                      {review.insights && (
-                        <p className="text-sm text-slate-600 mt-2">{review.insights}</p>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => setExpandedReviewId(expandedReviewId === review.id ? null : review.id)}
-                      className="text-sm text-slate-600 hover:text-slate-800 font-medium"
-                    >
-                      {expandedReviewId === review.id ? 'Hide' : 'View Full'}
-                    </button>
-                  </div>
-
-                  {expandedReviewId === review.id && (
-                    <div className="mt-4 pt-4 border-t border-gray-200 space-y-3 text-sm">
-                      {review.recent_interactions && (
-                        <div>
-                          <span className="font-semibold text-slate-700">Recent Interactions:</span>
-                          <p className="text-slate-600">{review.recent_interactions}</p>
-                        </div>
-                      )}
-                      {review.current_dynamics && (
-                        <div>
-                          <span className="font-semibold text-slate-700">Current Dynamics:</span>
-                          <p className="text-slate-600">{review.current_dynamics}</p>
-                        </div>
-                      )}
-                      {review.strategic_importance && (
-                        <div>
-                          <span className="font-semibold text-slate-700">Strategic Importance:</span>
-                          <p className="text-slate-600">{review.strategic_importance}</p>
-                        </div>
-                      )}
-                      {review.mutual_value && (
-                        <div>
-                          <span className="font-semibold text-slate-700">Mutual Value:</span>
-                          <p className="text-slate-600">{review.mutual_value}</p>
-                        </div>
-                      )}
-                      {review.unresolved_issues && (
-                        <div>
-                          <span className="font-semibold text-slate-700">Unresolved Issues:</span>
-                          <p className="text-slate-600">{review.unresolved_issues}</p>
-                        </div>
-                      )}
-                      {review.patterns_noticed && (
-                        <div>
-                          <span className="font-semibold text-slate-700">Patterns Noticed:</span>
-                          <p className="text-slate-600">{review.patterns_noticed}</p>
-                        </div>
-                      )}
-                      {review.how_to_strengthen && (
-                        <div>
-                          <span className="font-semibold text-slate-700">How to Strengthen:</span>
-                          <p className="text-slate-600">{review.how_to_strengthen}</p>
-                        </div>
-                      )}
-                      {review.what_to_appreciate && (
-                        <div>
-                          <span className="font-semibold text-slate-700">What to Appreciate:</span>
-                          <p className="text-slate-600">{review.what_to_appreciate}</p>
-                        </div>
-                      )}
-                      {review.communication_plan && (
-                        <div>
-                          <span className="font-semibold text-slate-700">Communication Plan:</span>
-                          <p className="text-slate-600">{review.communication_plan}</p>
-                        </div>
-                      )}
-                      {review.next_steps && (
-                        <div>
-                          <span className="font-semibold text-slate-700">Next Steps:</span>
-                          <p className="text-slate-600">{review.next_steps}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-          </>
-        )}
-
+        {activeTab === 'profile' && <ProfileTab copy={copy} person={person} synthesis={synthesis} reviews={reviews} expandedReviewId={expandedReviewId} setExpandedReviewId={setExpandedReviewId} />}
         {activeTab === 'meeting-notes' && (
           <MeetingNotesTab
+            copy={copy}
             notes={Array.isArray(person.meeting_notes) ? person.meeting_notes : []}
             showForm={showMeetingNoteForm}
             setShowForm={setShowMeetingNoteForm}
@@ -800,101 +756,111 @@ function PersonProfile({ personId, apiUrl, userNumber, onClose, onDeleted }) {
             setExpandedNoteId={setExpandedMeetingNoteId}
           />
         )}
-
-        {activeTab === 'review' && (
-          <PeopleReviewTab
-            apiUrl={apiUrl}
-            userNumber={userNumber}
-            person={person}
-            reviews={reviews}
-          />
-        )}
-      </div>
+        {activeTab === 'review' && <PeopleReviewTab apiUrl={apiUrl} userNumber={userNumber} person={person} reviews={reviews} />}
+      </main>
     </div>
   );
 }
 
-function formatDisplayDate(value) {
-  if (!value) return 'Today';
-  return new Date(`${value}T00:00:00`).toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric'
-  });
+function ProfileTab({ copy, person, synthesis, reviews, expandedReviewId, setExpandedReviewId }) {
+  const isSponsor = person.circle_type === CIRCLE.SPONSOR;
+  const sections = isSponsor ? [
+    ['Sponsor Profile', [
+      ['Their mission', person.stakeholder_mission],
+      ['Their priorities', person.stakeholder_priorities],
+      ['Success metrics', person.success_metrics],
+      ['Strengths', person.stakeholder_strengths],
+      ['Risks / pressures', person.risks_or_pressures],
+      ['Aspirations', person.stakeholder_aspirations],
+      ['How I create value', person.how_i_create_value],
+      ['Alignment with my mission', person.mission_alignment],
+      ['Potential tensions', person.potential_tensions],
+      ['Relationship strategy', person.relationship_strategy],
+      ['Next relationship action', person.next_action]
+    ]]
+  ] : [
+    ['Leadership Profile', [
+      ['Mission', person.mission_statement],
+      ['Strengths', person.strengths],
+      ['Development areas', person.growth_areas],
+      ['Aspirations', person.aspirations],
+      ['Performance indicator', person.performance_indicator],
+      ['Potential indicator', person.potential_indicator]
+    ]]
+  ];
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-lg border border-slate-200 bg-white p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">{person.name}</h2>
+          </div>
+          <HealthBadge value={person.relationship_health} />
+        </div>
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <InfoTile label={copy('team.circleStatus', 'Circle status')} value={circleLabel(person.circle_type)} />
+          <InfoTile label={copy('team.lastInteraction', 'Last interaction')} value={formatDisplayDate(person.last_interaction_at)} />
+        </div>
+      </section>
+      {sections.map(([title, items]) => (
+        <section key={title} className="rounded-lg border border-slate-200 bg-white p-6">
+          <h3 className="text-lg font-bold text-slate-900">{title}</h3>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            {items.map(([label, value]) => <InfoTile key={label} label={label} value={value} />)}
+          </div>
+        </section>
+      ))}
+      <section className="rounded-lg border border-slate-200 bg-white p-6">
+        <h3 className="text-lg font-bold text-slate-900">{copy('team.synthesis', 'Relationship Synthesis')}</h3>
+        {synthesis && (
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <InfoTile label={copy('team.strengths', 'Strengths')} value={(synthesis.strengths || []).join(', ')} />
+            <InfoTile label={copy('team.opportunities', 'Opportunities')} value={(synthesis.improvements || []).join(', ')} />
+            <InfoTile label={copy('team.trajectory', 'Trajectory')} value={synthesis.trajectory} />
+          </div>
+        )}
+      </section>
+      <ReviewHistory copy={copy} reviews={reviews} expandedReviewId={expandedReviewId} setExpandedReviewId={setExpandedReviewId} />
+    </div>
+  );
 }
 
-function MeetingNotesTab({
-  notes,
-  showForm,
-  setShowForm,
-  draft,
-  setDraft,
-  onSave,
-  expandedNoteId,
-  setExpandedNoteId
-}) {
+function MeetingNotesTab({ copy, notes, showForm, setShowForm, draft, setDraft, onSave, expandedNoteId, setExpandedNoteId }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-slate-800">Meeting Notes</h2>
-        <button
-          type="button"
-          onClick={() => setShowForm(!showForm)}
-          className="inline-flex h-10 w-10 items-center justify-center rounded border border-blue-200 bg-blue-50 text-2xl leading-none text-blue-700 transition-colors hover:bg-blue-100"
-          title="Add meeting note"
-          aria-label="Add meeting note"
-        >
-          +
-        </button>
+        <h2 className="text-xl font-bold text-slate-900">{copy('team.notesTitle', 'Relationship Notes')}</h2>
+        <button type="button" onClick={() => setShowForm(!showForm)} className="rounded bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700">{copy('team.addNote', '+ Add Note')}</button>
       </div>
-
       {showForm && (
-        <form onSubmit={onSave} className="rounded-lg border border-slate-200 bg-white p-5 space-y-4">
-          <div className="grid gap-4 md:grid-cols-[1fr_180px]">
-            <input
-              type="text"
-              value={draft.title}
-              onChange={(event) => setDraft({ ...draft, title: event.target.value })}
-              placeholder="Meeting title"
-              className="w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <input
-              type="date"
-              value={draft.meeting_date}
-              onChange={(event) => setDraft({ ...draft, meeting_date: event.target.value })}
-              className="w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+        <form onSubmit={onSave} className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
+          <div className="grid gap-4 md:grid-cols-[1fr_220px_180px]">
+            <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder={copy('team.noteTitle', 'Note title')} className="rounded border border-slate-300 px-3 py-2" />
+            <select value={draft.note_type} onChange={(event) => setDraft({ ...draft, note_type: event.target.value })} className="rounded border border-slate-300 px-3 py-2">
+              {['1:1', 'Coaching conversation', 'Feedback given', 'Stakeholder update', 'Conflict / tension', 'Win / recognition', 'Development moment', 'Career conversation', 'Sponsorship conversation'].map((type) => <option key={type}>{type}</option>)}
+            </select>
+            <input type="date" value={draft.meeting_date} onChange={(event) => setDraft({ ...draft, meeting_date: event.target.value })} className="rounded border border-slate-300 px-3 py-2" />
           </div>
-          <textarea
-            value={draft.notes}
-            onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
-            placeholder="What happened in this meeting?"
-            rows={7}
-            className="w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
+          <textarea value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder={copy('team.noteSummary', 'Summary')} rows={5} className="w-full rounded border border-slate-300 px-3 py-2" required />
+          <div className="grid gap-4 md:grid-cols-3">
+            <textarea value={draft.commitments} onChange={(event) => setDraft({ ...draft, commitments: event.target.value })} placeholder={copy('team.commitments', 'Commitments made')} rows={3} className="rounded border border-slate-300 px-3 py-2" />
+            <textarea value={draft.follow_up_action} onChange={(event) => setDraft({ ...draft, follow_up_action: event.target.value })} placeholder={copy('team.followUpAction', 'Follow-up action')} rows={3} className="rounded border border-slate-300 px-3 py-2" />
+            <select value={draft.health_impact} onChange={(event) => setDraft({ ...draft, health_impact: event.target.value })} className="h-10 rounded border border-slate-300 px-3 py-2">
+              <option value="">{copy('team.healthImpact', 'Health impact')}</option>
+              <option value="positive">Positive</option>
+              <option value="neutral">Neutral</option>
+              <option value="negative">Negative</option>
+            </select>
+          </div>
           <div className="flex gap-2">
-            <button
-              type="submit"
-              className="rounded bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700"
-            >
-              Save Note
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowForm(false)}
-              className="rounded bg-slate-200 px-4 py-2 text-slate-700 transition-colors hover:bg-slate-300"
-            >
-              Cancel
-            </button>
+            <button type="submit" className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">{copy('team.saveNote', 'Save Note')}</button>
+            <button type="button" onClick={() => setShowForm(false)} className="rounded bg-slate-200 px-4 py-2 text-slate-700 hover:bg-slate-300">{copy('team.cancel', 'Cancel')}</button>
           </div>
         </form>
       )}
-
       {notes.length === 0 ? (
-        <section className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-slate-600">
-          No meeting notes yet. Add notes after your next meeting to keep the relationship history in one place.
-        </section>
+        <section className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-slate-600">{copy('team.notesEmpty', 'No recent relationship notes yet.')}</section>
       ) : (
         <div className="space-y-3">
           {notes.map((note, index) => {
@@ -902,20 +868,19 @@ function MeetingNotesTab({
             const isExpanded = expandedNoteId === noteId;
             return (
               <section key={noteId} className="rounded-lg border border-slate-200 bg-white">
-                <button
-                  type="button"
-                  onClick={() => setExpandedNoteId(isExpanded ? null : noteId)}
-                  className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-slate-50"
-                >
+                <button type="button" onClick={() => setExpandedNoteId(isExpanded ? null : noteId)} className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left hover:bg-slate-50">
                   <div>
-                    <h3 className="font-semibold text-slate-900">{note.title || `Meeting notes ${notes.length - index}`}</h3>
-                    <p className="mt-1 text-sm text-slate-500">{formatDisplayDate(note.meeting_date)}</p>
+                    <h3 className="font-semibold text-slate-900">{note.title || `Relationship note ${notes.length - index}`}</h3>
+                    <p className="mt-1 text-sm text-slate-500">{note.note_type || 'Note'} - {formatDisplayDate(note.meeting_date)}</p>
                   </div>
-                  <span className="text-sm font-medium text-slate-500">{isExpanded ? 'Close' : 'Open'}</span>
+                  <span className="text-sm font-medium text-slate-500">{isExpanded ? copy('team.close', 'Close') : copy('team.open', 'Open')}</span>
                 </button>
                 {isExpanded && (
-                  <div className="border-t border-slate-200 px-5 py-4">
-                    <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{note.notes}</p>
+                  <div className="space-y-3 border-t border-slate-200 px-5 py-4 text-sm text-slate-700">
+                    <p className="whitespace-pre-wrap leading-6">{note.notes}</p>
+                    {note.commitments && <InfoTile label={copy('team.commitments', 'Commitments made')} value={note.commitments} />}
+                    {note.follow_up_action && <InfoTile label={copy('team.followUpAction', 'Follow-up action')} value={note.follow_up_action} />}
+                    {note.health_impact && <InfoTile label={copy('team.healthImpact', 'Health impact')} value={note.health_impact} />}
                   </div>
                 )}
               </section>
@@ -936,7 +901,7 @@ function PeopleReviewTab({ apiUrl, userNumber, person, reviews }) {
           apiUrl={apiUrl}
           userNumber={userNumber}
           visibleSessionTypes={PEOPLE_REVIEW_SESSION_TYPES}
-          launchLabelByType={{ people_review: `Start People Review` }}
+          launchLabelByType={{ people_review: 'Start People Review' }}
           emptyStateText={PEOPLE_REVIEW_EMPTY_STATE}
           loadInitialHistory={false}
           selectedPersonName={person.name}
@@ -948,13 +913,8 @@ function PeopleReviewTab({ apiUrl, userNumber, person, reviews }) {
 
 function PreviousPeopleReviews({ person, reviews }) {
   if (!reviews.length) {
-    return (
-      <section className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm leading-6 text-slate-600">
-        No people reviews yet for {person.name}. Start one below to build a clearer relationship profile.
-      </section>
-    );
+    return <section className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm leading-6 text-slate-600">No people reviews yet for {person.name}. Start one below to build a clearer relationship profile.</section>;
   }
-
   return (
     <section className="rounded-md border border-slate-200 bg-white">
       <details className="group">
@@ -966,21 +926,13 @@ function PreviousPeopleReviews({ person, reviews }) {
           {reviews.map((review, index) => (
             <details key={review.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
               <summary className="cursor-pointer text-sm font-semibold text-slate-900">
-                {index === 0 ? 'Latest Review' : `Review ${reviews.length - index}`} - {new Date(review.review_date).toLocaleDateString('en-US', {
-                  month: 'long',
-                  day: 'numeric',
-                  year: 'numeric'
-                })}
+                {index === 0 ? 'Latest Review' : `Review ${reviews.length - index}`} - {formatDisplayDate(review.review_date)}
               </summary>
               <div className="mt-4 space-y-3">
-                {review.relationship_strength && (
-                  <span className="inline-flex rounded border border-purple-200 bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700">
-                    Strength {review.relationship_strength}/5
-                  </span>
-                )}
-                {review.insights && <PeopleReviewSummaryField title="Insight" value={review.insights} />}
-                {review.patterns_noticed && <PeopleReviewSummaryField title="Pattern" value={review.patterns_noticed} />}
-                {review.next_steps && <PeopleReviewSummaryField title="Next Steps" value={review.next_steps} />}
+                {review.relationship_strength && <HealthBadge value={review.relationship_strength} />}
+                {review.insights && <InfoTile label="Insight" value={review.insights} />}
+                {review.patterns_noticed && <InfoTile label="Pattern" value={review.patterns_noticed} />}
+                {review.next_steps && <InfoTile label="Next Steps" value={review.next_steps} />}
               </div>
             </details>
           ))}
@@ -990,139 +942,378 @@ function PreviousPeopleReviews({ person, reviews }) {
   );
 }
 
-function PeopleReviewSummaryField({ title, value }) {
+function ReviewHistory({ copy, reviews, expandedReviewId, setExpandedReviewId }) {
   return (
-    <div className="rounded-md border border-slate-200 bg-white p-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
-      <p className="mt-2 text-sm leading-6 text-slate-700">{value}</p>
-    </div>
+    <section className="rounded-lg border border-slate-200 bg-white p-6">
+      <h3 className="text-lg font-bold text-slate-900">{copy('team.reviewHistory', 'Review History')}</h3>
+      {reviews.length === 0 ? (
+        <p className="mt-4 text-sm text-slate-600">{copy('team.reviewEmpty', 'No reviews yet. Start your first review to build this relationship profile.')}</p>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {reviews.map((review) => (
+            <section key={review.id} className="rounded border border-slate-200 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-slate-900">{formatDisplayDate(review.review_date)}</p>
+                  {review.insights && <p className="mt-1 text-sm text-slate-600">{review.insights}</p>}
+                </div>
+                <button onClick={() => setExpandedReviewId(expandedReviewId === review.id ? null : review.id)} className="text-sm font-medium text-slate-600 hover:text-slate-900">
+                  {expandedReviewId === review.id ? copy('team.close', 'Close') : copy('team.open', 'Open')}
+                </button>
+              </div>
+              {expandedReviewId === review.id && (
+                <div className="mt-4 grid gap-3 border-t border-slate-200 pt-4 md:grid-cols-2">
+                  {Object.entries({
+                    'Current Dynamics': review.current_dynamics,
+                    'Strategic Importance': review.strategic_importance,
+                    'Mutual Value': review.mutual_value,
+                    'Unresolved Issues': review.unresolved_issues,
+                    'Patterns Noticed': review.patterns_noticed,
+                    'How to Strengthen': review.how_to_strengthen,
+                    'Communication Plan': review.communication_plan,
+                    'Next Steps': review.next_steps
+                  }).map(([label, value]) => value ? <InfoTile key={label} label={label} value={value} /> : null)}
+                </div>
+              )}
+            </section>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
-// Helper Components (PersonForm, HelpPanel - keep existing code)
-function PersonForm({ person, onSubmit, onCancel, onDelete }) {
-  const [formData, setFormData] = useState({
-    name: person?.name || '',
-    email: person?.email || '',
-    phone: person?.phone || '',
-    relation: person?.relation || '',
-    context: person?.context || '',
-    mission_statement: person?.mission_statement || '',
-    strengths: person?.strengths || '',
-    growth_areas: person?.growth_areas || '',
-    aspirations: person?.aspirations || ''
-  });
+function PersonForm({ copy, person, onSubmit, onCancel, onDelete }) {
+  const [formData, setFormData] = useState(() => ({ ...blankPerson, ...person, last_interaction_at: toDateInput(person?.last_interaction_at) }));
+  const isSponsor = formData.circle_type === CIRCLE.SPONSOR;
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const setField = (field, value) => setFormData((current) => ({ ...current, [field]: value }));
+  const handleSubmit = (event) => {
+    event.preventDefault();
     if (!formData.name.trim()) {
-      alert('Please enter a name');
+      alert(copy('team.nameRequired', 'Please enter a name.'));
       return;
     }
     onSubmit(formData);
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-lg p-4 space-y-3">
-      <h3 className="font-semibold text-slate-800">{person ? 'Edit Person' : 'Add Team Member'}</h3>
-      
-      <input
-        type="text"
-        value={formData.name}
-        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-        placeholder="Name *"
-        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-        required
-      />
+    <form onSubmit={handleSubmit} className="space-y-5 rounded-lg border border-slate-200 bg-white p-5">
+      <div className="grid gap-4 md:grid-cols-3">
+        <TextInput label={copy('team.name', 'Name')} value={formData.name} onChange={(value) => setField('name', value)} required />
+        <TextInput label={copy('team.role', 'Role / Relationship')} value={formData.relation} onChange={(value) => setField('relation', value)} />
+        <label className="block text-sm font-medium text-slate-700">
+          {copy('team.circleStatus', 'Circle status')}
+          <select value={formData.circle_type || ''} onChange={(event) => setField('circle_type', event.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2">
+            <option value="">{copy('team.noCircle', 'No circle')}</option>
+            <option value={CIRCLE.LEADERSHIP}>{copy('team.leadershipTitle', 'Leadership Circle')}</option>
+            <option value={CIRCLE.SPONSOR}>{copy('team.sponsorTitle', 'Sponsor Circle')}</option>
+          </select>
+        </label>
+        <label className="block text-sm font-medium text-slate-700">
+          {copy('team.relationshipHealth', 'Relationship health')}
+          <select value={formData.relationship_health || ''} onChange={(event) => setField('relationship_health', event.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2">
+            <option value="">{copy('team.chooseRelationshipHealth', 'Choose relationship health')}</option>
+            {relationshipHealthOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.value}. {copy(option.key, option.label)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-sm font-medium text-slate-700">
+          {copy('team.lastInteraction', 'Last interaction')}
+          <input type="date" value={formData.last_interaction_at || ''} onChange={(event) => setField('last_interaction_at', event.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2" />
+        </label>
+      </div>
 
-      <input
-        type="text"
-        value={formData.relation}
-        onChange={(e) => setFormData({ ...formData, relation: e.target.value })}
-        placeholder="Relation (e.g., Colleague, Client, Mentor)"
-        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
+      {!isSponsor && (
+        <fieldset className="space-y-4 rounded border border-slate-200 p-4">
+          <legend className="px-2 text-sm font-bold text-slate-900">{copy('team.leadershipTitle', 'Leadership Circle')}</legend>
+          <TextArea label={copy('team.mission', 'Mission')} value={formData.mission_statement} onChange={(value) => setField('mission_statement', value)} />
+          <div className="grid gap-4 md:grid-cols-2">
+            <TextArea label={copy('team.strengths', 'Strengths')} value={formData.strengths} onChange={(value) => setField('strengths', value)} />
+            <TextArea label={copy('team.developmentAreas', 'Development areas')} value={formData.growth_areas} onChange={(value) => setField('growth_areas', value)} />
+            <TextArea label={copy('team.aspirations', 'Aspirations')} value={formData.aspirations} onChange={(value) => setField('aspirations', value)} />
+            <div className="grid gap-4 md:grid-cols-2">
+              <OptionSelect
+                label={copy('team.performance', 'Performance')}
+                value={formData.performance_indicator}
+                placeholder={copy('team.choosePerformance', 'Choose performance')}
+                options={performanceOptions}
+                copy={copy}
+                onChange={(value) => setField('performance_indicator', value)}
+              />
+              <OptionSelect
+                label={copy('team.potential', 'Potential')}
+                value={formData.potential_indicator}
+                placeholder={copy('team.choosePotential', 'Choose potential')}
+                options={potentialOptions}
+                copy={copy}
+                onChange={(value) => setField('potential_indicator', value)}
+              />
+            </div>
+          </div>
+        </fieldset>
+      )}
 
-      <input
-        type="email"
-        value={formData.email}
-        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-        placeholder="Email"
-        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
+      {isSponsor && (
+        <fieldset className="space-y-4 rounded border border-slate-200 p-4">
+          <legend className="px-2 text-sm font-bold text-slate-900">{copy('team.sponsorTitle', 'Sponsor Circle')}</legend>
+          <div className="grid gap-4 md:grid-cols-2">
+            <TextArea label={copy('team.theirMission', 'Their mission')} value={formData.stakeholder_mission} onChange={(value) => setField('stakeholder_mission', value)} />
+            <TextArea label={copy('team.theirPriorities', 'Their priorities')} value={formData.stakeholder_priorities} onChange={(value) => setField('stakeholder_priorities', value)} />
+            <TextArea label={copy('team.successMetrics', 'Success metrics')} value={formData.success_metrics} onChange={(value) => setField('success_metrics', value)} />
+            <TextArea label={copy('team.stakeholderStrengths', 'Their strengths')} value={formData.stakeholder_strengths} onChange={(value) => setField('stakeholder_strengths', value)} />
+            <TextArea label={copy('team.risksPressures', 'Risks / pressures')} value={formData.risks_or_pressures} onChange={(value) => setField('risks_or_pressures', value)} />
+            <TextArea label={copy('team.stakeholderAspirations', 'Their aspirations')} value={formData.stakeholder_aspirations} onChange={(value) => setField('stakeholder_aspirations', value)} />
+            <TextArea label={copy('team.valueCreation', 'How I create value for them')} value={formData.how_i_create_value} onChange={(value) => setField('how_i_create_value', value)} />
+            <TextArea label={copy('team.missionAlignment', 'Alignment with my mission')} value={formData.mission_alignment} onChange={(value) => setField('mission_alignment', value)} />
+            <TextArea label={copy('team.potentialTensions', 'Potential tensions')} value={formData.potential_tensions} onChange={(value) => setField('potential_tensions', value)} />
+            <label className="block text-sm font-medium text-slate-700">
+              {copy('team.relationshipStrategy', 'Relationship strategy')}
+              <select value={formData.relationship_strategy || ''} onChange={(event) => setField('relationship_strategy', event.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2">
+                <option value="">{copy('team.chooseStrategy', 'Choose a strategy')}</option>
+                {relationshipStrategies.map((strategy) => <option key={strategy} value={strategy}>{strategy}</option>)}
+              </select>
+            </label>
+          </div>
+        </fieldset>
+      )}
 
-      <input
-        type="tel"
-        value={formData.phone}
-        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-        placeholder="Phone"
-        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-
-      <textarea
-        value={formData.context}
-        onChange={(e) => setFormData({ ...formData, context: e.target.value })}
-        placeholder="Context / Notes"
-        rows={2}
-        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-
-      <textarea
-        value={formData.mission_statement}
-        onChange={(e) => setFormData({ ...formData, mission_statement: e.target.value })}
-        placeholder="Mission statement"
-        rows={3}
-        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-
-      <textarea
-        value={formData.strengths}
-        onChange={(e) => setFormData({ ...formData, strengths: e.target.value })}
-        placeholder="Strengths"
-        rows={2}
-        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-
-      <textarea
-        value={formData.growth_areas}
-        onChange={(e) => setFormData({ ...formData, growth_areas: e.target.value })}
-        placeholder="Weaknesses / growth areas"
-        rows={2}
-        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-
-      <textarea
-        value={formData.aspirations}
-        onChange={(e) => setFormData({ ...formData, aspirations: e.target.value })}
-        placeholder="Aspirations"
-        rows={2}
-        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-        >
-          {person ? 'Save Changes' : 'Add Person'}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-4 py-2 bg-slate-200 text-slate-700 rounded hover:bg-slate-300 transition-colors"
-        >
-          Cancel
-        </button>
-        {person && onDelete && (
-          <button
-            type="button"
-            onClick={onDelete}
-            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors ml-auto"
-          >
-            Delete
-          </button>
-        )}
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" className="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">{person ? copy('team.saveChanges', 'Save Changes') : copy('team.addPerson', '+ Add Person')}</button>
+        <button type="button" onClick={onCancel} className="rounded bg-slate-200 px-4 py-2 text-slate-700 hover:bg-slate-300">{copy('team.cancel', 'Cancel')}</button>
+        {person && onDelete && <button type="button" onClick={onDelete} className="ml-auto rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700">{copy('team.delete', 'Delete')}</button>}
       </div>
     </form>
   );
+}
+
+function Modal({ title, children, onClose }) {
+  return (
+    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4">
+      <section className="my-8 w-full max-w-5xl rounded-lg bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+          <button onClick={onClose} className="rounded border border-slate-200 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50">Close</button>
+        </div>
+        <div className="p-5">{children}</div>
+      </section>
+    </div>
+  );
+}
+
+function TextInput({ label, value, onChange, required }) {
+  return (
+    <label className="block text-sm font-medium text-slate-700">
+      {label}
+      <input value={value || ''} onChange={(event) => onChange(event.target.value)} required={required} className="mt-1 w-full rounded border border-slate-300 px-3 py-2" />
+    </label>
+  );
+}
+
+function TextArea({ label, value, onChange }) {
+  return (
+    <label className="block text-sm font-medium text-slate-700">
+      {label}
+      <textarea value={value || ''} onChange={(event) => onChange(event.target.value)} rows={3} className="mt-1 w-full rounded border border-slate-300 px-3 py-2" />
+    </label>
+  );
+}
+
+function OptionSelect({ label, value, placeholder, options, copy, onChange }) {
+  return (
+    <label className="block text-sm font-medium text-slate-700">
+      {label}
+      <select value={value || ''} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2">
+        <option value="">{placeholder}</option>
+        {options.map((option, index) => (
+          <option key={option.value} value={option.value}>
+            {index + 1}. {copy(option.key, option.label)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function InfoTile({ label, value }) {
+  return (
+    <div className="rounded border border-slate-200 bg-slate-50 p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{value || 'Not captured yet'}</p>
+    </div>
+  );
+}
+
+function HealthBadge({ value }) {
+  if (!value) return <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-500">No health</span>;
+  const score = Number(value);
+  if (Number.isNaN(score)) return <ImpactBadge value={value} />;
+  const option = relationshipHealthOptions.find((item) => item.value === score);
+  const color = score <= 2
+    ? 'border-green-200 bg-green-50 text-green-700'
+    : score === 3
+      ? 'border-amber-200 bg-amber-50 text-amber-700'
+      : 'border-red-200 bg-red-50 text-red-700';
+  return <span className={`rounded border px-2 py-1 text-xs font-semibold ${color}`}>{score}. {option?.label || 'Health'}</span>;
+}
+
+function ImpactBadge({ value }) {
+  const normalized = String(value || '').toLowerCase();
+  const color = normalized === 'negative'
+    ? 'border-red-200 bg-red-50 text-red-700'
+    : normalized === 'positive'
+      ? 'border-green-200 bg-green-50 text-green-700'
+      : 'border-slate-200 bg-slate-50 text-slate-600';
+  return <span className={`rounded border px-2 py-1 text-xs font-semibold capitalize ${color}`}>{value}</span>;
+}
+
+function normalizePayload(data) {
+  const payload = { ...data };
+  if (payload.relationship_health !== '' && payload.relationship_health != null) {
+    payload.relationship_health = Number(payload.relationship_health);
+  } else {
+    delete payload.relationship_health;
+  }
+  if (payload.last_interaction_at && !String(payload.last_interaction_at).includes('T')) {
+    payload.last_interaction_at = `${payload.last_interaction_at}T12:00:00`;
+  }
+  personFields.forEach((field) => {
+    if (payload[field] === undefined || payload[field] === null) return;
+    if (typeof payload[field] === 'string') payload[field] = payload[field].trim();
+  });
+  return payload;
+}
+
+function isTeamMember(person) {
+  const relation = (person.relation || '').toLowerCase();
+  return person.circle_type === CIRCLE.LEADERSHIP || relation.includes('team') || relation.includes('direct') || relation.includes('employee') || person.team;
+}
+
+function isStakeholder(person) {
+  const relation = (person.relation || '').toLowerCase();
+  return person.circle_type === CIRCLE.SPONSOR || ['sponsor', 'stakeholder', 'mentor', 'peer', 'client'].some((word) => relation.includes(word)) || person.organization;
+}
+
+function hasNotes(person) {
+  return Array.isArray(person.meeting_notes) && person.meeting_notes.length > 0;
+}
+
+function buildAttentionItems(people, copy) {
+  const items = [];
+  people.forEach((person) => {
+    const days = daysSince(person.last_interaction_at);
+    if (person.relationship_health && Number(person.relationship_health) >= 4) items.push({ person, reason: copy('team.attentionLowHealth', 'Relationship health is low.') });
+    if (days != null && days > 21) items.push({ person, reason: `${person.name} has not had a logged interaction in ${days} days.` });
+    if (person.circle_type === CIRCLE.SPONSOR && !person.relationship_strategy) items.push({ person, reason: `${person.name} is in your Sponsor Circle but has no relationship strategy.` });
+  });
+  const leadershipCount = people.filter((person) => person.circle_type === CIRCLE.LEADERSHIP).length;
+  const sponsorCount = people.filter((person) => person.circle_type === CIRCLE.SPONSOR).length;
+  if (leadershipCount > 7) items.unshift({ person: people.find((person) => person.circle_type === CIRCLE.LEADERSHIP), reason: `Your Leadership Circle has ${leadershipCount} people. Consider narrowing it.` });
+  if (sponsorCount > 7) items.unshift({ person: people.find((person) => person.circle_type === CIRCLE.SPONSOR), reason: `Your Sponsor Circle has ${sponsorCount} people. Consider narrowing it.` });
+  return items.filter((item) => item.person);
+}
+
+function buildRecentNotes(people, reviewsByPerson) {
+  const notes = [];
+  people.forEach((person) => {
+    (Array.isArray(person.meeting_notes) ? person.meeting_notes : []).forEach((note, index) => {
+      notes.push({
+        id: `note-${person.id}-${note.id || index}`,
+        personId: person.id,
+        personName: person.name,
+        type: note.note_type || 'Meeting note',
+        date: note.meeting_date || note.created_at,
+        summary: note.notes || note.summary || note.title,
+        health: note.health_impact
+      });
+    });
+    (reviewsByPerson[person.id] || []).forEach((review) => {
+      notes.push({
+        id: `review-${review.id}`,
+        personId: person.id,
+        personName: person.name,
+        type: 'People review',
+        date: review.review_date,
+        summary: review.insights || review.next_steps || review.current_dynamics || 'Relationship review saved.',
+        health: review.relationship_strength
+      });
+    });
+  });
+  return notes.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+}
+
+function daysSince(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return Math.floor((Date.now() - date.getTime()) / 86400000);
+}
+
+function formatDisplayDate(value) {
+  if (!value) return 'Not captured yet';
+  const date = String(value).includes('T') ? new Date(value) : new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return 'Not captured yet';
+  return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+function toDateInput(value) {
+  if (!value) return '';
+  return String(value).slice(0, 10);
+}
+
+function circleLabel(value) {
+  if (value === CIRCLE.LEADERSHIP) return 'Leadership Circle';
+  if (value === CIRCLE.SPONSOR) return 'Sponsor Circle';
+  return 'No circle';
+}
+
+function columnLabel(copy, column) {
+  const labels = {
+    name: copy('team.name', 'Name'),
+    role: copy('team.role', 'Role'),
+    team: copy('team.team', 'Team'),
+    manager: copy('team.manager', 'Manager'),
+    health: copy('team.relationshipHealth', 'Relationship health'),
+    lastInteraction: copy('team.lastInteraction', 'Last interaction'),
+    objective: copy('team.currentObjective', 'Current objective'),
+    strength: copy('team.keyStrength', 'Key strength'),
+    risk: copy('team.currentRisk', 'Current risk'),
+    circle: copy('team.circleStatus', 'Circle status'),
+    organization: copy('team.organization', 'Organization'),
+    type: copy('team.relationshipType', 'Relationship type'),
+    importance: copy('team.strategicImportance', 'Strategic importance'),
+    priority: copy('team.currentPriority', 'Current priority'),
+    nextAction: copy('team.nextAction', 'Next action'),
+    sponsor: copy('team.sponsorStatus', 'Sponsor Circle status')
+  };
+  return labels[column] || column;
+}
+
+function renderColumn(person, column, onMark) {
+  if (column === 'name') return <span className="font-semibold text-slate-900">{person.name}</span>;
+  if (column === 'role') return person.relation || 'Not captured';
+  if (column === 'team') return person.team || 'Not captured';
+  if (column === 'manager') return person.manager_name || 'Not captured';
+  if (column === 'health') return <HealthBadge value={person.relationship_health} />;
+  if (column === 'lastInteraction') return formatDisplayDate(person.last_interaction_at);
+  if (column === 'objective') return person.current_goals || 'Not captured';
+  if (column === 'strength') return person.strengths || person.stakeholder_strengths || 'Not captured';
+  if (column === 'risk') return person.risks_or_pressures || person.growth_areas || 'Not captured';
+  if (column === 'circle') return circleLabel(person.circle_type);
+  if (column === 'organization') return person.organization || 'Not captured';
+  if (column === 'type') return person.relation || 'Not captured';
+  if (column === 'importance') return person.strategic_importance || 'Not captured';
+  if (column === 'priority') return person.stakeholder_priorities || 'Not captured';
+  if (column === 'nextAction') return person.next_action || 'Not captured';
+  if (column === 'sponsor') {
+    return (
+      <button onClick={() => onMark(person, CIRCLE.SPONSOR)} className="rounded border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50">
+        {person.circle_type === CIRCLE.SPONSOR ? 'In Sponsor Circle' : 'Add to Sponsor Circle'}
+      </button>
+    );
+  }
+  return 'Not captured';
 }

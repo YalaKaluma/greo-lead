@@ -77,7 +77,6 @@ async def login(credentials: LoginRequest, request: Request, db: Session = Depen
         user.last_active_at = user.last_login_at
         user.tour_current_step = None
         user.tour_completed = True
-        user.onboarding_completed = True
         db.commit()
         write_audit_log(
             db,
@@ -156,7 +155,8 @@ async def register(payload: RegisterRequest, request: Request, db: Session = Dep
         email=username if "@" in username else None,
         password_hash=hash_password(password),
         is_active=True,
-        onboarding_completed=True,
+        onboarding_completed=False,
+        onboarding_data={"flow_version": 2, "history": [], "created": {}},
         tour_completed=True,
         tour_current_step=None,
     )
@@ -193,7 +193,7 @@ async def register(payload: RegisterRequest, request: Request, db: Session = Dep
         "user_number": user.phone_number,
         "user_name": user.name,
         "is_admin": bool(getattr(user, "is_admin", False)),
-        "needs_tour": False,
+        "needs_tour": True,
         "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 21
     }
 

@@ -573,6 +573,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
       <div className="space-y-3">
         {habits.map((h, index) => {
           const todayStatus = h.today_status || 'pending';
+          const isStarterExample = Boolean(h.is_starter_example);
           
           return (
             <div
@@ -581,7 +582,11 @@ export default function MyHabits({ apiUrl, userNumber }) {
               onDragStart={(e) => onDragStart(e, index)}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => onDrop(e, index)}
-              className="flex items-center justify-between bg-white border rounded-lg px-4 py-3 hover:shadow-sm transition-shadow"
+              className={`flex items-center justify-between border rounded-lg px-4 py-3 transition-shadow ${
+                isStarterExample
+                  ? 'border-slate-200 bg-slate-100 opacity-50 grayscale'
+                  : 'bg-white hover:shadow-sm'
+              }`}
             >
               <div className="flex items-center gap-3 flex-1">
 
@@ -612,6 +617,11 @@ export default function MyHabits({ apiUrl, userNumber }) {
                     {h.frequency === 'weekdays' && (
                       <span className="ml-2 text-xs text-slate-500 font-normal">
                         (weekdays only)
+                      </span>
+                    )}
+                    {isStarterExample && (
+                      <span className="ml-2 inline-flex rounded-full border border-slate-300 bg-slate-200 px-2 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                        Example habit
                       </span>
                     )}
                   </div>

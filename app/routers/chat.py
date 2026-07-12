@@ -302,6 +302,7 @@ async def get_chat_history(
 
     try:
         from app.models import Message
+        from app.services.onboarding_seed_service import is_starter_journal_example
 
         query = db.query(Message).filter(Message.user_number == user_number)
         normalized_conversation_type = normalize_conversation_type(conversation_type)
@@ -334,6 +335,7 @@ async def get_chat_history(
                 "reflection_depth_label": getattr(msg, "reflection_depth_label", None),
                 "reflection_depth_explanation": getattr(msg, "reflection_depth_explanation", None),
                 "reflection_depth_recommendations": getattr(msg, "reflection_depth_recommendations", None),
+                "is_starter_example": is_starter_journal_example(msg),
             }
             for msg in messages
         ]

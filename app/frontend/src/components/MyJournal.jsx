@@ -557,26 +557,34 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
         ) : (
           messages.map((msg, idx) => {
             const depth = getDepthDetails(msg);
+            const isStarterExample = Boolean(msg.is_starter_example);
 
             return (
             <div
               key={idx}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`flex ${msg.role === 'user' && !isStarterExample ? 'justify-end' : 'justify-start'}`}
             >
               <div
                 className={`
                   max-w-[70%] rounded-lg px-4 py-3 shadow-sm
-                  ${msg.role === 'user'
+                  ${isStarterExample
+                    ? 'border border-dashed border-slate-300 bg-slate-100 text-slate-500 opacity-80'
+                    : msg.role === 'user'
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-900'
                   }
                 `}
               >
+                {isStarterExample && (
+                  <div className="mb-2 inline-flex rounded-full bg-white px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500 ring-1 ring-slate-200">
+                    Illustrative example - not user generated
+                  </div>
+                )}
                 <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
                 <div className="mt-1 flex items-center justify-between gap-2">
                   <div className={`
                     text-xs 
-                    ${msg.role === 'user' ? 'text-blue-100' : 'text-gray-500'}
+                    ${isStarterExample ? 'text-slate-400' : msg.role === 'user' ? 'text-blue-100' : 'text-gray-500'}
                   `}>
                     {new Date(msg.timestamp).toLocaleTimeString([], { 
                       hour: '2-digit', 
@@ -589,7 +597,9 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
                         type="button"
                         onClick={() => setSelectedDepth(depth)}
                         className={`inline-flex h-7 items-center justify-center rounded-full px-2 text-xs transition-colors ${
-                          msg.role === 'user'
+                          isStarterExample
+                            ? 'text-slate-500 hover:bg-slate-200'
+                            : msg.role === 'user'
                             ? 'text-blue-100 hover:bg-blue-500'
                             : 'text-gray-600 hover:bg-gray-200'
                         }`}
@@ -601,7 +611,9 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
                     <ReadAloudButton
                       text={msg.content}
                       apiUrl={apiUrl}
-                      className={msg.role === 'user'
+                      className={isStarterExample
+                        ? 'text-slate-500 hover:bg-slate-200'
+                        : msg.role === 'user'
                         ? 'text-blue-100 hover:bg-blue-500'
                         : 'text-gray-600 hover:bg-gray-200'
                       }

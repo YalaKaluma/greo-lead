@@ -2,15 +2,16 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useLanguage } from "../i18n/LanguageContext";
 import {
+  BELTS,
   BELT_IDS,
   DIMENSIONS,
   REDIRECT_TOPICS,
   TOPIC_FORM_FIELDS,
-  VISIBLE_BELTS,
   beltHasActiveTrialContent,
   buildDimensionStates,
   getBehavioralStatus,
   getBeltById,
+  getBeltIndexById,
   getBeltRequirementsFromConfig,
   getNextBeltId,
   getRealWorldStatus,
@@ -411,8 +412,11 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   const journeyCurrentBelt = getBeltById(normalizedReadinessCurrentBelt);
   const journeyNextBelt = getBeltById(readinessStatus?.target_belt || getNextBeltId(journeyCurrentBelt.id));
   const isAssessmentLockedUntilYellow = readinessStatus?.assessment_locked_until_yellow || normalizedReadinessCurrentBelt === "white";
-  const availableTrialBelts = VISIBLE_BELTS.filter((belt) =>
-    beltHasActiveTrialContent(trialConfig, selectedDimension.id, belt.id)
+  const currentBeltIndex = getBeltIndexById(journeyCurrentBelt.id);
+  const availableTrialBelts = BELTS.filter(
+    (belt) =>
+      getBeltIndexById(belt.id) <= currentBeltIndex &&
+      beltHasActiveTrialContent(trialConfig, selectedDimension.id, belt.id)
   );
 
   useEffect(() => {
@@ -424,7 +428,18 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
   const effectiveSelectedTrialBeltId = BELT_IDS.includes(normalizeBeltId(selectedTrialBeltId))
     ? normalizeBeltId(selectedTrialBeltId)
     : null;
-  const viewedBelt = getBeltById(effectiveSelectedTrialBeltId || journeyCurrentBelt.id);
+  const canViewSelectedTrialBelt = availableTrialBelts.some(
+    (belt) => belt.id === effectiveSelectedTrialBeltId
+  );
+  const viewedBelt = getBeltById(
+    canViewSelectedTrialBelt ? effectiveSelectedTrialBeltId : journeyCurrentBelt.id
+  );
+
+  useEffect(() => {
+    if (selectedTrialBeltId && !canViewSelectedTrialBelt) {
+      setSelectedTrialBeltId(null);
+    }
+  }, [selectedTrialBeltId, canViewSelectedTrialBelt]);
   const viewedBeltRequirements = getBeltRequirementsFromConfig(
     trialConfig,
     selectedDimension.id,
@@ -660,7 +675,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
           isAssessmentLockedUntilYellow={isAssessmentLockedUntilYellow}
           readinessStatus={readinessStatus}
           journeyNextBelt={journeyNextBelt}
-          availableTrialBelts={availableTrialBelts}
+          currentBelt={journeyCurrentBelt}
+          beltLegend={BELTS}
           viewedBelt={viewedBelt}
           activeJourneyTab={activeJourneyTab}
           setActiveJourneyTab={setActiveJourneyTab}
@@ -793,7 +809,10 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
       )}
 
       {showBeltGuide && (
-        <BeltGuideModal onClose={() => setShowBeltGuide(false)} />
+        <BeltGuideModal
+          currentBelt={journeyCurrentBelt}
+          onClose={() => setShowBeltGuide(false)}
+        />
       )}
 
       {activeTrial && (

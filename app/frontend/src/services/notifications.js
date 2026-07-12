@@ -10,6 +10,19 @@ export async function initializeNotificationRouting() {
   });
 }
 
+export async function refreshNativeNotificationRegistration(apiUrl, userNumber) {
+  if (!isNativeApp() || !apiUrl || !userNumber) return null;
+  if (!localStorage.getItem(NATIVE_PUSH_ENDPOINT_KEY)) return null;
+
+  const { PushNotifications } = await import('@capacitor/push-notifications');
+  const permission = await PushNotifications.checkPermissions();
+  if (permission.receive !== 'granted') return null;
+
+  // FCM tokens can rotate after an app update or restore. Re-register an already
+  // enabled device on launch so the backend does not keep sending to a stale token.
+  return enableNativeNotifications(apiUrl, userNumber);
+}
+
 export function getNotificationSupport() {
   const hasWindow = typeof window !== 'undefined';
   const hasNavigator = typeof navigator !== 'undefined';
@@ -194,28 +207,32 @@ async function enableNativeNotifications(apiUrl, userNumber, deviceLabel) {
     throw new Error('Notification permission was not granted.');
   }
 
-  const token = await new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (handler, value) => {
-      if (settled) return;
-      settled = true;
-      handler(value);
-    };
-
-    PushNotifications.addListener('registration', (registrationToken) => {
-      finish(resolve, registrationToken.value);
-    });
-
-    PushNotifications.addListener('registrationError', (error) => {
-      finish(reject, new Error(error?.error || 'Could not register this device for notifications.'));
-    });
-
-    PushNotifications.register();
-
-    window.setTimeout(() => {
-      finish(reject, new Error('Notification registration timed out.'));
-    }, 15000);
+  let resolveRegistration;
+  let rejectRegistration;
+  const registrationPromise = new Promise((resolve, reject) => {
+    resolveRegistration = resolve;
+    rejectRegistration = reject;
   });
+  const listenerHandles = await Promise.all([
+    PushNotifications.addListener('registration', (registrationToken) => {
+      resolveRegistration(registrationToken.value);
+    }),
+    PushNotifications.addListener('registrationError', (error) => {
+      rejectRegistration(new Error(error?.error || 'Could not register this device for notifications.'));
+    })
+  ]);
+  const timeoutId = window.setTimeout(() => {
+    rejectRegistration(new Error('Notification registration timed out.'));
+  }, 15000);
+
+  let token;
+  try {
+    await PushNotifications.register();
+    token = await registrationPromise;
+  } finally {
+    window.clearTimeout(timeoutId);
+    await Promise.all(listenerHandles.map((handle) => handle.remove()));
+  }
 
   const endpoint = `fcm:${token}`;
   const response = await fetch(`${apiUrl}/api/notifications/subscribe`, {

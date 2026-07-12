@@ -25,7 +25,7 @@ const pageIntroMessages = {
   },
   'my-journal': {
     title: 'Journal',
-    body: 'Your journal is a mirror. We added a couple of sample reflections to show how Alfred can help you move from simple notes to deeper self-awareness. Capture your thoughts, lessons, and experiences, and let patterns emerge over time.'
+    body: 'Your journal is a mirror. The grey entries below are illustrative examples, not user-generated reflections. They show how Alfred can help you move from simple notes to deeper self-awareness as you capture your own thoughts, lessons, and experiences.'
   },
   settings: {
     title: 'Settings',

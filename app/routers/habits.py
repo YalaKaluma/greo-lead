@@ -9,6 +9,10 @@ from pydantic import BaseModel
 from app.db import get_db
 from app.models import DailyEnergyCheckin, Habit, HabitCompletion, JourneyGoal, User
 from app.services.timezone_service import get_user_timezone, today_for_timezone
+from app.services.onboarding_seed_service import (
+    ensure_starter_habit_examples_current,
+    is_starter_habit_example,
+)
 from app.services.habit_coaching_service import (
     get_latest_habit_coaching_review,
     refresh_habit_coaching_review,
@@ -135,6 +139,12 @@ def validate_user_goal_link(db: Session, user_number: str, goal_id: int | None) 
 def get_habits(user_number: str, db: Session = Depends(get_db)):
     """Get all active habits with today's status and streaks"""
 
+    user = db.query(User).filter(
+        (User.phone_number == user_number) | (User.email == user_number)
+    ).first()
+    if ensure_starter_habit_examples_current(db, user):
+        db.commit()
+
     habits = (
         db.query(Habit)
         .filter(Habit.user_number == user_number, Habit.is_active == True)
@@ -171,6 +181,7 @@ def get_habits(user_number: str, db: Session = Depends(get_db)):
             "frequency": h.frequency,  # NEW
             "today_status": today_status,  # NEW: replaces completed_today
             "streak": streak,
+            "is_starter_example": is_starter_habit_example(h),
         })
 
     return response

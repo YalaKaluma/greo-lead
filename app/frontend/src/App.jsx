@@ -10,6 +10,8 @@ import MyHabits from './components/MyHabits';
 import MyJournal from './components/MyJournal';
 import PageIntroBanner from './components/PageIntroBanner';
 import AlfredChat from './components/AlfredChat';
+import InAppOnboarding from './components/InAppOnboarding';
+import OnboardingReveal from './components/OnboardingReveal';
 import Settings from './components/Settings';
 import AlfredStory from './components/AlfredStory';
 import TrustSecurity from './components/TrustSecurity';
@@ -19,7 +21,7 @@ import Welcome from "./Welcome";
 import Waitlist from "./Waitlist";
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { API_URL } from './config';
-import { initializeNotificationRouting } from './services/notifications';
+import { initializeNotificationRouting, refreshNativeNotificationRegistration } from './services/notifications';
 
 const HOME_PAGE = 'home';
 const TRUST_SECURITY_PAGE = 'trust-security';
@@ -62,6 +64,13 @@ function App() {
       console.warn('Could not initialize native notification routing:', error);
     });
   }, []);
+
+  useEffect(() => {
+    if (!isLoggedIn || !userNumber) return;
+    refreshNativeNotificationRegistration(API_URL, userNumber).catch((error) => {
+      console.warn('Could not refresh native notification registration:', error);
+    });
+  }, [isLoggedIn, userNumber]);
 
   // Handle URL parameters on load
   useEffect(() => {
@@ -219,6 +228,16 @@ function MainAppShell({
 }) {
   const { t, language } = useLanguage();
   const [introCardsEnabled, setIntroCardsEnabled] = useState(false);
+  const [onboardingComplete, setOnboardingComplete] = useState(null);
+  const [onboardingReveal, setOnboardingReveal] = useState(null);
+
+  useEffect(() => {
+    if (!userNumber) return;
+    fetch(`${API_URL}/api/auth/me?user_number=${encodeURIComponent(userNumber)}`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => setOnboardingComplete(Boolean(data?.user?.onboarding_completed)))
+      .catch(() => setOnboardingComplete(true));
+  }, [userNumber]);
   const pageTitles = {
     home: t('page.home'),
     'todo-list': t('page.tasks'),
@@ -309,7 +328,7 @@ function MainAppShell({
         <PageIntroBanner
           pageId={currentPage}
           userNumber={userNumber}
-          enabled={introCardsEnabled}
+          enabled={(introCardsEnabled || currentPage === 'my-journal') && !onboardingReveal}
         />
 
         {currentPage === 'settings' && (
@@ -361,6 +380,27 @@ function MainAppShell({
         showLauncher={!isMobile || isSidebarOpen}
         preferredLanguage={language}
       />
+
+      {onboardingComplete === false && (
+        <InAppOnboarding
+          apiUrl={API_URL}
+          userNumber={userNumber}
+          onComplete={(result) => {
+            setOnboardingComplete(true);
+            setOnboardingReveal(result || null);
+            handleNavigate(NEW_USER_DEFAULT_PAGE);
+          }}
+        />
+      )}
+
+      {onboardingReveal && (
+        <OnboardingReveal
+          result={onboardingReveal}
+          userNumber={userNumber}
+          onNavigate={handleNavigate}
+          onFinish={() => setOnboardingReveal(null)}
+        />
+      )}
 
       {isMobile && isSidebarOpen && (
         <div

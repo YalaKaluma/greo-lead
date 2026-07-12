@@ -65,6 +65,32 @@ def ensure_admin_schema_and_seed() -> None:
         conn.execute(text("ALTER TABLE journey_people ADD COLUMN IF NOT EXISTS mission_statement TEXT"))
         conn.execute(text("ALTER TABLE journey_people ADD COLUMN IF NOT EXISTS meeting_notes JSONB DEFAULT '[]'::jsonb"))
         conn.execute(text("UPDATE journey_people SET meeting_notes = '[]'::jsonb WHERE meeting_notes IS NULL"))
+        for column_sql in [
+            "organization VARCHAR",
+            "team VARCHAR",
+            "manager_name VARCHAR",
+            "circle_type VARCHAR",
+            "strategic_importance VARCHAR",
+            "last_interaction_at TIMESTAMP",
+            "next_action TEXT",
+            "current_goals TEXT",
+            "development_plan TEXT",
+            "stretch_assignments TEXT",
+            "coaching_focus TEXT",
+            "performance_indicator VARCHAR",
+            "potential_indicator VARCHAR",
+            "stakeholder_mission TEXT",
+            "stakeholder_priorities TEXT",
+            "success_metrics TEXT",
+            "stakeholder_strengths TEXT",
+            "risks_or_pressures TEXT",
+            "stakeholder_aspirations TEXT",
+            "how_i_create_value TEXT",
+            "mission_alignment TEXT",
+            "potential_tensions TEXT",
+            "relationship_strategy VARCHAR",
+        ]:
+            conn.execute(text(f"ALTER TABLE journey_people ADD COLUMN IF NOT EXISTS {column_sql}"))
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS usage_events (
                 id SERIAL PRIMARY KEY,
