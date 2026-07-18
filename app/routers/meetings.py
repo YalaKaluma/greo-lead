@@ -36,6 +36,7 @@ class NotesMeetingCreate(BaseModel):
     meeting_type: Optional[str] = Field(default=None, max_length=80)
     started_at: Optional[datetime] = None
     duration_seconds: Optional[int] = Field(default=None, ge=0)
+    project_id: Optional[int] = None
 
 
 class MeetingUpdate(BaseModel):
@@ -252,6 +253,11 @@ def link_project(meeting_id: int, payload: MeetingLinkCreate, db: Session = Depe
 
 @router.post("/notes", status_code=202)
 def create_notes_meeting(payload: NotesMeetingCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    project = None
+    if payload.project_id is not None:
+        project = db.query(JourneyProject).filter(JourneyProject.id == payload.project_id, JourneyProject.user_number == payload.user_number).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found.")
     meeting = Meeting(
         user_number=payload.user_number,
         title=(payload.title or "Meeting notes").strip(),
@@ -266,6 +272,9 @@ def create_notes_meeting(payload: NotesMeetingCreate, background_tasks: Backgrou
     db.add(meeting)
     db.commit()
     db.refresh(meeting)
+    if project:
+        db.add(MeetingProjectLink(meeting_id=meeting.id, project_id=project.id))
+        db.commit()
     background_tasks.add_task(process_meeting, meeting.id)
     return {"id": meeting.id, "processing_status": meeting.processing_status}
 
@@ -294,8 +303,14 @@ async def upload_meeting(
     started_at: Optional[datetime] = Form(None),
     duration_seconds: Optional[int] = Form(None),
     source_type: str = Form("upload"),
+    project_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
 ):
+    project = None
+    if project_id is not None:
+        project = db.query(JourneyProject).filter(JourneyProject.id == project_id, JourneyProject.user_number == user_number).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found.")
     if not consent_acknowledged:
         raise HTTPException(status_code=400, detail="Recording consent acknowledgement is required.")
     # Browsers commonly include codec parameters, for example
@@ -341,6 +356,9 @@ async def upload_meeting(
     db.add(meeting)
     db.commit()
     db.refresh(meeting)
+    if project:
+        db.add(MeetingProjectLink(meeting_id=meeting.id, project_id=project.id))
+        db.commit()
     background_tasks.add_task(process_meeting, meeting.id)
     return {"id": meeting.id, "processing_status": meeting.processing_status}
 

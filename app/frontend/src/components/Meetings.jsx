@@ -47,7 +47,7 @@ function Evidence({ children }) {
   return <blockquote className="mt-2 border-l-2 border-slate-300 pl-3 text-sm italic text-slate-600">“{children}”</blockquote>;
 }
 
-function AddMeetingModal({ onClose, onCreated, apiUrl, userNumber }) {
+export function AddMeetingModal({ onClose, onCreated, apiUrl, userNumber, projectId = null }) {
   const [mode, setMode] = useState(null);
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
@@ -63,7 +63,7 @@ function AddMeetingModal({ onClose, onCreated, apiUrl, userNumber }) {
       const response = await fetch(`${apiUrl}/api/meetings/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_number: userNumber, title: title || null, notes })
+        body: JSON.stringify({ user_number: userNumber, title: title || null, notes, project_id: projectId })
       });
       if (!response.ok) throw new Error((await response.json()).detail || 'Could not add meeting notes.');
       onCreated(await response.json());
@@ -80,6 +80,7 @@ function AddMeetingModal({ onClose, onCreated, apiUrl, userNumber }) {
     try {
       const body = new FormData();
       body.append('user_number', userNumber);
+      if (projectId) body.append('project_id', String(projectId));
       body.append('consent_acknowledged', String(consent));
       body.append('file', file);
       if (title) body.append('title', title);
@@ -94,7 +95,7 @@ function AddMeetingModal({ onClose, onCreated, apiUrl, userNumber }) {
   };
 
   if (mode === 'recording') {
-    return <RecordingExperience apiUrl={apiUrl} userNumber={userNumber} onCancel={onClose} onCreated={onCreated} />;
+    return <RecordingExperience apiUrl={apiUrl} userNumber={userNumber} projectId={projectId} onCancel={onClose} onCreated={onCreated} />;
   }
 
   return (
@@ -169,7 +170,7 @@ function ConsentCheck({ checked, onChange }) {
   );
 }
 
-function RecordingExperience({ apiUrl, userNumber, onCancel, onCreated }) {
+function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreated }) {
   const [consent, setConsent] = useState(false);
   const [status, setStatus] = useState('idle');
   const [seconds, setSeconds] = useState(0);
@@ -222,6 +223,7 @@ function RecordingExperience({ apiUrl, userNumber, onCancel, onCreated }) {
     try {
       const body = new FormData();
       body.append('user_number', userNumber);
+      if (projectId) body.append('project_id', String(projectId));
       body.append('consent_acknowledged', 'true');
       body.append('source_type', 'recording');
       body.append('duration_seconds', String(seconds));
@@ -250,6 +252,7 @@ function RecordingExperience({ apiUrl, userNumber, onCancel, onCreated }) {
       const blob = await response.blob();
       const body = new FormData();
       body.append('user_number', userNumber);
+      if (projectId) body.append('project_id', String(projectId));
       body.append('consent_acknowledged', 'true');
       body.append('source_type', 'recording');
       body.append('duration_seconds', String(seconds));
@@ -348,7 +351,7 @@ function EditMeetingModal({ meeting, apiUrl, userNumber, onClose, onSaved }) {
   </div></div>;
 }
 
-function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, onDeleted }) {
+export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, onDeleted }) {
   const [transcriptSearch, setTranscriptSearch] = useState('');
   const [busyAction, setBusyAction] = useState(null);
   const [deleting, setDeleting] = useState(false);

@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
 MEETING_PROMPT_VERSION = "meeting-phase1-v1"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4o-mini")
-DB_WRITE_ATTEMPTS = int(os.getenv("MEETING_DB_WRITE_ATTEMPTS", "3"))
+DB_WRITE_ATTEMPTS = max(1, int(os.getenv("MEETING_DB_WRITE_ATTEMPTS", "3")))
 T = TypeVar("T")
 
 
@@ -43,7 +43,10 @@ def _with_fresh_session(operation: Callable[[Session], T], label: str) -> T:
             return result
         except (OperationalError, DBAPIError) as exc:
             last_error = exc
-            db.rollback()
+            try:
+                db.rollback()
+            except DBAPIError:
+                pass
             logger.warning(
                 "Meeting database step '%s' lost its connection (attempt %s/%s).",
                 label, attempt, DB_WRITE_ATTEMPTS,
@@ -195,59 +198,130 @@ def _replace_analysis(db: Session, meeting: Meeting, analysis: dict) -> None:
             ))
 
 
-def process_meeting(meeting_id: int) -> None:
-    db = SessionLocal()
-    try:
-        meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
-        if not meeting:
-            return
-        meeting.processing_status = "transcribing" if meeting.recording_storage_key else "analyzing"
-        meeting.processing_error = None
-        db.commit()
+def _start_processing(db: Session, meeting_id: int) -> dict | None:
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        return None
+    has_saved_transcript = bool((meeting.transcript_text or meeting.user_notes or "").strip())
+    meeting.processing_status = "analyzing" if has_saved_transcript else (
+        "transcribing" if meeting.recording_storage_key else "analyzing"
+    )
+    meeting.processing_error = None
+    return {
+        "title": meeting.title,
+        "recording_storage_key": meeting.recording_storage_key,
+        "recording_filename": meeting.recording_filename,
+        "recording_content_type": meeting.recording_content_type,
+        "transcript": (meeting.transcript_text or meeting.user_notes or "").strip(),
+    }
 
-        if meeting.recording_storage_key:
-            transcription = transcribe_recording(
-                meeting.recording_storage_key,
-                meeting.recording_filename or "meeting-audio",
-                meeting.recording_content_type,
-            )
-            meeting.transcript_text = transcription["text"]
-            speaker_labels = set()
-            for index, segment in enumerate(transcription["segments"]):
-                db.add(MeetingTranscriptSegment(
-                    meeting_id=meeting.id,
-                    sequence_number=index,
-                    speaker_label=segment["speaker"],
-                    start_seconds=segment["start"],
-                    end_seconds=segment["end"],
-                    text=segment["text"],
-                ))
-                speaker_labels.add(segment["speaker"])
-            for speaker_label in sorted(speaker_labels):
-                db.add(MeetingParticipant(
-                    meeting_id=meeting.id,
-                    display_name=speaker_label,
-                    speaker_label=speaker_label,
-                ))
-            meeting.processing_status = "analyzing"
-            db.commit()
 
-        transcript = (meeting.transcript_text or meeting.user_notes or "").strip()
-        if not transcript:
-            raise ValueError("No recording, transcript, or notes were provided.")
+def _save_transcription(db: Session, meeting_id: int, transcription: dict) -> str:
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise ValueError("Meeting was deleted while it was being transcribed.")
+    meeting.transcript_text = transcription["text"]
+    meeting.processing_status = "analyzing"
+    meeting.updated_at = datetime.now(timezone.utc)
+    db.query(MeetingTranscriptSegment).filter(MeetingTranscriptSegment.meeting_id == meeting_id).delete(
+        synchronize_session=False
+    )
+    speaker_labels = set()
+    for index, segment in enumerate(transcription["segments"]):
+        db.add(MeetingTranscriptSegment(
+            meeting_id=meeting_id,
+            sequence_number=index,
+            speaker_label=segment["speaker"],
+            start_seconds=segment["start"],
+            end_seconds=segment["end"],
+            text=segment["text"],
+        ))
+        speaker_labels.add(segment["speaker"])
+    existing_labels = {
+        label for (label,) in db.query(MeetingParticipant.speaker_label).filter(
+            MeetingParticipant.meeting_id == meeting_id
+        ).all()
+    }
+    for speaker_label in sorted(speaker_labels - existing_labels):
+        db.add(MeetingParticipant(
+            meeting_id=meeting_id,
+            display_name=speaker_label,
+            speaker_label=speaker_label,
+        ))
+    return transcription["text"].strip()
 
-        analysis = analyze_transcript(transcript, meeting.title)
-        _replace_analysis(db, meeting, analysis)
-        meeting.processing_status = "ready"
-        meeting.updated_at = datetime.now(timezone.utc)
-        db.commit()
-    except Exception as exc:
-        db.rollback()
+
+def _save_analysis(db: Session, meeting_id: int, analysis: dict) -> None:
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise ValueError("Meeting was deleted while it was being analyzed.")
+    # Analysis writes are idempotent, so a reconnect retry cannot duplicate rows.
+    db.query(MeetingTopic).filter(MeetingTopic.meeting_id == meeting_id).delete(synchronize_session=False)
+    db.query(MeetingDecision).filter(MeetingDecision.meeting_id == meeting_id).delete(synchronize_session=False)
+    db.query(MeetingActionItem).filter(MeetingActionItem.meeting_id == meeting_id).delete(synchronize_session=False)
+    db.query(MeetingLeadershipObservation).filter(
+        MeetingLeadershipObservation.meeting_id == meeting_id
+    ).delete(synchronize_session=False)
+    _replace_analysis(db, meeting, analysis)
+    meeting.processing_status = "ready"
+    meeting.processing_error = None
+    meeting.updated_at = datetime.now(timezone.utc)
+
+
+def _mark_processing_failed(meeting_id: int, exc: Exception) -> None:
+    technical_error = str(exc)
+    public_error = (
+        "A temporary database connection interrupted processing. Your recording is safe; please retry."
+        if isinstance(exc, DBAPIError)
+        else technical_error[:1000]
+    )
+
+    def mark(db: Session) -> None:
         meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
         if meeting:
             meeting.processing_status = "failed"
-            meeting.processing_error = str(exc)[:1000]
-            db.commit()
+            meeting.processing_error = public_error
+            meeting.updated_at = datetime.now(timezone.utc)
+
+    try:
+        _with_fresh_session(mark, "mark failed")
+    except Exception:
+        logger.exception("Could not persist failed status for meeting %s", meeting_id)
+
+
+def process_meeting(meeting_id: int) -> None:
+    try:
+        snapshot = _with_fresh_session(
+            lambda db: _start_processing(db, meeting_id), "start processing"
+        )
+        if not snapshot:
+            return
+
+        transcript = snapshot["transcript"]
+        if not transcript and snapshot["recording_storage_key"]:
+            logger.info("Meeting %s transcription started", meeting_id)
+            transcription = transcribe_recording(
+                snapshot["recording_storage_key"],
+                snapshot["recording_filename"] or "meeting-audio",
+                snapshot["recording_content_type"],
+            )
+            transcript = _with_fresh_session(
+                lambda db: _save_transcription(db, meeting_id, transcription),
+                "save transcription",
+            )
+            logger.info("Meeting %s transcription saved", meeting_id)
+        elif transcript:
+            logger.info("Meeting %s is reusing its saved transcript", meeting_id)
+
+        if not transcript:
+            raise ValueError("No recording, transcript, or notes were provided.")
+
+        logger.info("Meeting %s analysis started", meeting_id)
+        analysis = analyze_transcript(transcript, snapshot["title"])
+        _with_fresh_session(
+            lambda db: _save_analysis(db, meeting_id, analysis), "save analysis"
+        )
+        logger.info("Meeting %s processing completed", meeting_id)
+    except Exception as exc:
+        _mark_processing_failed(meeting_id, exc)
         logger.exception("Meeting %s processing failed", meeting_id)
-    finally:
-        db.close()

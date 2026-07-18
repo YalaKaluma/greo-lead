@@ -554,7 +554,7 @@ class MeetingProjectLink(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     meeting = relationship("Meeting", back_populates="project_links")
-    project = relationship("JourneyProject")
+    project = relationship("JourneyProject", back_populates="meeting_links")
 
 
 class OpportunitySuggestion(Base):
@@ -803,9 +803,39 @@ class JourneyProject(Base):
     goal = Column(Text, nullable=True)  # strategic purpose of the project
     description = Column(Text, nullable=True)
     status = Column(String, default="active")  # active, paused, completed
+    client = Column(String(240), nullable=True)
+    role = Column(String(240), nullable=True)
+    objective = Column(Text, nullable=True)
+    timeline = Column(String(500), nullable=True)
+    ai_overview = Column(Text, nullable=True)
+    workplan = Column(JSON, nullable=True, default=list)
+    in_scope = Column(JSON, nullable=True, default=list)
+    out_of_scope = Column(JSON, nullable=True, default=list)
+    deliverables = Column(JSON, nullable=True, default=list)
+    core_team = Column(JSON, nullable=True, default=list)
+    client_stakeholders = Column(JSON, nullable=True, default=list)
+    risks = Column(JSON, nullable=True, default=list)
 
     first_seen_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    documents = relationship("ProjectDocument", back_populates="project", cascade="all, delete-orphan")
+    meeting_links = relationship("MeetingProjectLink", back_populates="project", cascade="all, delete-orphan")
+
+
+class ProjectDocument(Base):
+    __tablename__ = "project_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("journey_projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_number = Column(String, nullable=False, index=True)
+    filename = Column(String(300), nullable=False)
+    content_type = Column(String(120), nullable=True)
+    storage_key = Column(String(500), nullable=False)
+    document_type = Column(String(80), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    project = relationship("JourneyProject", back_populates="documents")
 
 
 class JourneyStrength(Base):
