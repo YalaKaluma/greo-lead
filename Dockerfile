@@ -4,7 +4,7 @@ FROM python:3.11-slim
 # System deps + Node
 # --------------------
 RUN apt-get update && \
-    apt-get install -y curl gnupg && \
+    apt-get install -y curl gnupg ffmpeg && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
     apt-get install -y nodejs && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -32,6 +32,8 @@ RUN npm run build
 # --------------------
 WORKDIR /app
 COPY app/ ./app
+COPY alembic.ini ./alembic.ini
+COPY alembic/ ./alembic/
 
 # --------------------
 # REPLACE static files: delete old, move new from /static to /app/static
@@ -41,4 +43,4 @@ RUN rm -rf /app/static && \
     mv /static/* /app/static/ 2>/dev/null || true
 
 EXPOSE 8080
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+CMD ["sh", "-c", "DIRECT_DATABASE_URL= alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]

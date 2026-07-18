@@ -818,6 +818,7 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
       {activeTrial && (
         <TrialModal
           trial={activeTrial}
+          apiUrl={apiUrl}
           draft={trialDraft}
           setDraft={setTrialDraft}
           saving={savingTrial}

@@ -22,7 +22,12 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
   const [editData, setEditData] = useState({
     title: task?.title || '',
     delegated_to: task?.delegated_to || '',
-    due_date: task?.due_date ? normalizeDateString(task.due_date) : getTodayET(timezone),
+    scheduled_date: task?.scheduled_date
+      ? normalizeDateString(task.scheduled_date)
+      : task?.due_date
+        ? normalizeDateString(task.due_date)
+        : getTodayET(timezone),
+    due_date: task?.due_date ? normalizeDateString(task.due_date) : '',
     priority: task?.priority?.toLowerCase() || 'medium',
     notes: task?.notes || '',
     goal_id: task?.goal_id || null,
@@ -65,19 +70,19 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
   const setTomorrow = () => {
     const tomorrow = getETDate(timezone);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    setEditData({ ...editData, due_date: formatDateForInput(tomorrow) });
+    setEditData({ ...editData, scheduled_date: formatDateForInput(tomorrow) });
     setShowDatePicker(false);
   };
 
   const setNextWeek = () => {
-    setEditData({ ...editData, due_date: getNextMonday(timezone) });
+    setEditData({ ...editData, scheduled_date: getNextMonday(timezone) });
     setShowDatePicker(false);
   };
 
   const setNextMonth = () => {
     const nextMonth = getETDate(timezone);
     nextMonth.setMonth(nextMonth.getMonth() + 1);
-    setEditData({ ...editData, due_date: formatDateForInput(nextMonth) });
+    setEditData({ ...editData, scheduled_date: formatDateForInput(nextMonth) });
     setShowDatePicker(false);
   };
 
@@ -94,6 +99,7 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
 //    onSave(editData);
     onSave({
       ...editData,
+      due_date: editData.due_date || null,
       recurrence_update_scope: recurrenceUpdateScope,
       recurrence_interval: editData.is_recurring ? Number(editData.recurrence_interval || 1) : null,
       recurrence_day_of_month: editData.is_recurring && editData.recurrence_type === 'monthly'
@@ -230,19 +236,19 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Due Date</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Scheduled Date</label>
               <div className="relative">
                 <div 
                   onClick={() => setShowDatePicker(!showDatePicker)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white cursor-pointer hover:border-blue-400 transition-colors flex items-center justify-between"
                 >
-                  <span className={editData.due_date ? 'text-slate-800' : 'text-slate-400'}>
-                    {editData.due_date ? formatDateForDisplay(editData.due_date, { 
+                  <span className={editData.scheduled_date ? 'text-slate-800' : 'text-slate-400'}>
+                    {editData.scheduled_date ? formatDateForDisplay(editData.scheduled_date, {
                       weekday: 'short', 
                       month: 'short', 
                       day: 'numeric',
                       year: 'numeric'
-                    }) : 'No due date'}
+                    }) : 'Not scheduled'}
                   </span>
                   <span className="text-slate-400">📅</span>
                 </div>
@@ -276,9 +282,9 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
                     <div className="border-t border-gray-200 p-2">
                       <input
                         type="date"
-                        value={editData.due_date}
+                        value={editData.scheduled_date}
                         onChange={(e) => {
-                          setEditData({ ...editData, due_date: e.target.value });
+                          setEditData({ ...editData, scheduled_date: e.target.value });
                           setShowDatePicker(false);
                         }}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -287,6 +293,19 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
                   </div>
                 )}
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Due Date <span className="font-normal text-slate-400">(optional deadline)</span>
+              </label>
+              <input
+                type="date"
+                value={editData.due_date}
+                onChange={(event) => setEditData({ ...editData, due_date: event.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="mt-1 text-xs text-slate-500">Only add this when the task has a real deadline.</p>
             </div>
 
             <div>

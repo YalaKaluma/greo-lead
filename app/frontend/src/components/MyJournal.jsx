@@ -63,6 +63,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   const [trends, setTrends] = useState(null);
   const [trendsLoading, setTrendsLoading] = useState(false);
   const [trendsError, setTrendsError] = useState(null);
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -542,8 +543,31 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
           />
         </div>
       ) : (
-      <div className="flex-1 overflow-y-auto px-4 pb-6 md:px-10 space-y-4">
-        {messages.length === 0 ? (
+      <div className={`flex-1 overflow-y-auto px-4 pb-6 md:px-10 ${isVoiceRecording ? '' : 'space-y-4'}`}>
+        {isVoiceRecording ? (
+          <div className="flex h-full min-h-[360px] flex-col items-center justify-center text-center" role="status" aria-live="polite">
+            <div className="relative mb-8 flex h-56 w-56 items-center justify-center md:h-64 md:w-64">
+              <div className="absolute inset-0 rounded-full bg-amber-300/20 motion-safe:animate-ping" />
+              <div className="absolute inset-5 rounded-full border border-amber-300/60 bg-amber-50 shadow-[0_0_60px_rgba(245,158,11,0.18)]" />
+              <img
+                src="/alfred-logo.png"
+                alt="Alfred"
+                className="relative h-44 w-44 rounded-full object-cover shadow-xl md:h-52 md:w-52"
+              />
+            </div>
+            <h2 className="text-2xl font-semibold text-slate-900">Alfred is listening</h2>
+            <div className="mt-5 flex h-9 items-center justify-center gap-1.5" aria-hidden="true">
+              {[18, 30, 22, 36, 26, 32, 18].map((height, index) => (
+                <span
+                  key={index}
+                  className="w-1.5 rounded-full bg-amber-500 motion-safe:animate-pulse"
+                  style={{ height, animationDelay: `${index * 110}ms`, animationDuration: '700ms' }}
+                />
+              ))}
+            </div>
+            <p className="mt-4 text-sm text-slate-500">Speak naturally. Press Stop when you’re finished.</p>
+          </div>
+        ) : messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center">
             <div className="w-16 h-16 bg-white border border-slate-200 rounded-full flex items-center justify-center mb-4 shadow-sm">
               <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -667,6 +691,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
             apiUrl={apiUrl}
             disabled={isLoading}
             onTranscript={(text) => setInputMessage(text)}
+            onRecordingChange={setIsVoiceRecording}
           />
 
           <button

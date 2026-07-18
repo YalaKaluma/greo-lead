@@ -24,6 +24,9 @@ class FakeQuery:
     def first(self):
         return self.items[0] if self.items else None
 
+    def scalar(self):
+        return self.items[0] if self.items else None
+
 
 class FakeHabitDb:
     def __init__(self):
@@ -53,6 +56,13 @@ class FakeHabitDb:
             self.energy_checkins.append(item)
 
     def query(self, model):
+        if getattr(model, "name", None) == "max":
+            sort_orders = [
+                habit.sort_order
+                for habit in self.habits
+                if habit.sort_order is not None
+            ]
+            return FakeQuery([max(sort_orders)] if sort_orders else [None])
         if model is Habit:
             return FakeQuery(self.habits)
         if model is HabitCompletion:
@@ -97,8 +107,25 @@ class HabitsRouterTest(TestCase):
         self.assertEqual(db.habits[0].title, "Deep work")
         self.assertEqual(db.habits[0].goal_id, 7)
         self.assertEqual(db.habits[0].frequency, "weekdays")
+        self.assertEqual(db.habits[0].sort_order, 0)
         self.assertEqual(db.commits, 1)
         self.assertEqual(db.refreshes, [db.habits[0]])
+
+    def test_create_habit_places_new_habit_after_existing_sort_order(self):
+        db = FakeHabitDb()
+        db.habits.extend([
+            Habit(id=10, user_number="user-1", title="First", sort_order=2),
+            Habit(id=11, user_number="user-1", title="Second", sort_order=7),
+        ])
+
+        result = habits.create_habit(
+            habits.HabitCreate(title="Third"),
+            user_number="user-1",
+            db=db,
+        )
+
+        self.assertEqual(result, {"id": 1, "message": "Habit created successfully"})
+        self.assertEqual(db.habits[-1].sort_order, 8)
 
     def test_create_habit_rejects_missing_goal_link(self):
         db = FakeHabitDb()

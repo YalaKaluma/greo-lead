@@ -18,6 +18,12 @@ def ensure_admin_schema_and_seed() -> None:
     promotes one existing user only when the platform has no admins yet.
     """
     with engine.begin() as conn:
+        # create_all creates the meeting tables on first deployment but cannot
+        # add this participant identity flag to an existing installation.
+        conn.execute(text(
+            "ALTER TABLE meeting_participants "
+            "ADD COLUMN IF NOT EXISTS is_current_user BOOLEAN NOT NULL DEFAULT FALSE"
+        ))
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR"))
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS profession VARCHAR"))
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR"))

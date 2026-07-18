@@ -5,23 +5,24 @@ import TaskModal from './TodoList/TaskModal';
 import BulkActionModal from './TodoList/BulkActionModal';
 import FilterSection from './TodoList/FilterSection';
 import TaskListPanel from './TodoList/TaskListPanel';
-import TodoCalendarView from './TodoList/TodoCalendarView';
+import TodoCalendarView, { DoLaterDialog } from './TodoList/TodoCalendarView';
+import OptimizeTodayModal from './TodoList/OptimizeTodayModal';
 import { DailyMtnNeedle, MtnBreakdownModal, TaskMtnTrendsTab, TrendsErrorBoundary } from './TodoList/MtnTrends';
 import {
-  DeferNonTop10Modal,
   FloatingSelectionBar,
   FollowUpModal,
   OpportunityModal,
   TodoPageHeader,
   TodoTabs,
 } from './TodoList/PageControls';
-import { getTodayET, getETDate, formatDateForInput, isOverdueET, getLongTermGoals, MTN_TAG_OPTIONS } from '../utils/taskHelpers';
+import { getTodayET, isOverdueET, getLongTermGoals, MTN_TAG_OPTIONS } from '../utils/taskHelpers';
 import { buildDailyMtnBenchmark } from '../utils/todoMtnTrends.js';
-import { replaceTaskDueDate } from '../utils/todoCalendarLogic.js';
+import { buildMtnCapacity, buildSevenDayWindow, findSuitableScheduleDate, getTaskScheduledDate } from '../utils/todoCalendarLogic.js';
 import { getSortedTasks as sortTodoTasks, getVisibleTaskScore as resolveVisibleTaskScore } from '../utils/todoListLogic';
 import { useLanguage } from '../i18n/LanguageContext';
 import { usePriority } from '../hooks/usePriority';
 import { useTodoFollowUp, useTodoOpportunities, useTodoSelection } from '../hooks/useTodoInteractions';
+import { formatShortDate } from '../utils/todoDateLogic.js';
 
 export default function TodoList({ apiUrl, userNumber }) {
   const { t, timezone } = useLanguage();
@@ -47,15 +48,24 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [filtersCollapsed, setFiltersCollapsed] = useState(true);
   const [showDeferModal, setShowDeferModal] = useState(false);
   const [deferLoading, setDeferLoading] = useState(false);
+  const [optimizationTasks, setOptimizationTasks] = useState([]);
   const [activeTab, setActiveTab] = useState('tasks');
   const [columnSort, setColumnSort] = useState(null);
   const [mtnTrends, setMtnTrends] = useState(null);
   const [mtnTrendsLoading, setMtnTrendsLoading] = useState(false);
   const [mtnTrendsError, setMtnTrendsError] = useState(null);
   const [showMtnBreakdown, setShowMtnBreakdown] = useState(false);
+  const [listDoLaterTask, setListDoLaterTask] = useState(null);
+  const [listUndoMove, setListUndoMove] = useState(null);
   const [todayKey, setTodayKey] = useState(getTodayET(timezone));
   const mtnBackfillRequestsRef = useRef(new Set());
   const appliedPrioritySortRef = useRef(null);
+
+  useEffect(() => {
+    if (!listUndoMove) return undefined;
+    const timer = setTimeout(() => setListUndoMove(null), 8000);
+    return () => clearTimeout(timer);
+  }, [listUndoMove]);
 
   const {
     selectedTasks,
@@ -192,7 +202,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       const params = {
         user_number: userNumber,
         // If a goal is selected, show ALL tasks for that goal, not just due today.
-        filter_type: selectedGoal ? 'all' : filterType
+        filter_type: activeTab === 'calendar' || selectedGoal ? 'all' : filterType
       };
       if (selectedGoal) params.goal_id = parseInt(selectedGoal);
 
@@ -201,7 +211,11 @@ export default function TodoList({ apiUrl, userNumber }) {
       const openTasks = taskList.filter(task => String(task.status || '').toLowerCase() !== 'completed');
       setTasks(openTasks);
       if (!skipMtnBackfill) {
-        backfillMissingMtnScores(openTasks);
+        const calendarDayKeys = new Set(buildSevenDayWindow(todayKey).map(day => day.key));
+        const scoringTasks = activeTab === 'calendar'
+          ? openTasks.filter(task => calendarDayKeys.has(getTaskScheduledDate(task)))
+          : openTasks;
+        backfillMissingMtnScores(scoringTasks);
       }
     } catch (err) {
       console.error('Error fetching tasks:', err);
@@ -344,25 +358,20 @@ export default function TodoList({ apiUrl, userNumber }) {
   const handleChangeTab = (nextTab) => {
     setActiveTab(nextTab);
     if (nextTab === 'calendar') {
-      if (filterType === 'due_today') {
-        setFilterType('next_7_days');
-      }
-      if (selectedMtnTags.length === 0) {
-        setSelectedMtnTags(['1. Transformation', '2. Strategic']);
-      }
+      setFilterType('all');
+      setSelectedMtnTags([]);
     }
   };
 
   const handleCalendarReschedule = async (task, targetDate) => {
     if (!task || !targetDate) return;
-    const nextDueDate = replaceTaskDueDate(task.due_date, targetDate);
-    if (nextDueDate === task.due_date || targetDate === String(task.due_date || '').split('T')[0]) return;
+    if (targetDate === getTaskScheduledDate(task)) return;
 
     const previousTasks = tasks;
     setTasks(currentTasks =>
       currentTasks.map(currentTask =>
         currentTask.id === task.id
-          ? { ...currentTask, due_date: nextDueDate }
+          ? { ...currentTask, scheduled_date: targetDate }
           : currentTask
       )
     );
@@ -370,7 +379,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     try {
       await axios.put(
         `${apiUrl}/api/tasks/${task.id}`,
-        { due_date: nextDueDate },
+        { scheduled_date: targetDate },
         { params: { user_number: userNumber } }
       );
       await fetchTasks();
@@ -379,6 +388,75 @@ export default function TodoList({ apiUrl, userNumber }) {
       console.error('Error rescheduling task:', err);
       setTasks(previousTasks);
       alert(err.response?.data?.detail || 'Failed to reschedule task');
+    }
+  };
+
+  const handleDoLater = async (task, period, dueDate = null) => {
+    const previousScheduledDate = task?.scheduled_date || null;
+    const confirmedDate = period === 'confirmed_date' ? dueDate : null;
+    const targetDate = findSuitableScheduleDate({
+      tasks,
+      task,
+      todayKey,
+      period,
+      dueDate,
+      capacity: calendarMtnCapacity,
+      getTaskScore,
+    }) || confirmedDate;
+    if (!targetDate) {
+      const nextPeriod = period === 'later_this_week' ? 'next_week' : period;
+      const deadlineSafeFallback = findSuitableScheduleDate({
+        tasks, task, todayKey, period: nextPeriod, dueDate, capacity: calendarMtnCapacity, getTaskScore,
+      });
+      if (deadlineSafeFallback) {
+        return { error: 'no_workday_capacity', fallbackDate: deadlineSafeFallback };
+      }
+      const pastDueFallback = findSuitableScheduleDate({
+        tasks, task, todayKey, period: nextPeriod, dueDate, capacity: calendarMtnCapacity, ignoreDeadline: true, getTaskScore,
+      });
+      if (pastDueFallback && task?.due_date) {
+        return {
+          error: 'deadline_conflict',
+          fallbackDate: pastDueFallback,
+          dueDate: String(task.due_date).split('T')[0],
+        };
+      }
+      return { error: 'no_capacity' };
+    }
+
+    const updates = { scheduled_date: targetDate };
+    if (dueDate && period !== 'confirmed_date') updates.due_date = dueDate;
+    if (period === 'confirmed_date' && task?.due_date && targetDate > String(task.due_date).split('T')[0]) {
+      updates.due_date = targetDate;
+    }
+    const previousDueDate = task?.due_date || null;
+    const previousTasks = tasks;
+    setTasks(currentTasks => currentTasks.map(currentTask => (
+      currentTask.id === task.id ? { ...currentTask, ...updates } : currentTask
+    )));
+
+    try {
+      await axios.put(`${apiUrl}/api/tasks/${task.id}`, updates, { params: { user_number: userNumber } });
+      await fetchTasks({ skipMtnBackfill: true });
+      return { taskId: task.id, previousScheduledDate, previousDueDate, targetDate };
+    } catch (err) {
+      console.error('Error scheduling task for later:', err);
+      setTasks(previousTasks);
+      alert(err.response?.data?.detail || t('calendar.doLaterFailed', 'Failed to schedule this task.'));
+      return null;
+    }
+  };
+
+  const handleUndoDoLater = async ({ taskId, previousScheduledDate, previousDueDate }) => {
+    const updates = { scheduled_date: previousScheduledDate, due_date: previousDueDate };
+    try {
+      await axios.put(`${apiUrl}/api/tasks/${taskId}`, updates, { params: { user_number: userNumber } });
+      await fetchTasks({ skipMtnBackfill: true });
+      return true;
+    } catch (err) {
+      console.error('Error undoing task schedule:', err);
+      alert(err.response?.data?.detail || t('calendar.undoFailed', 'Failed to undo the move.'));
+      return false;
     }
   };
 
@@ -507,72 +585,91 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
   };
 
-  const getTomorrowET = () => {
-    const tomorrow = getETDate(timezone);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return formatDateForInput(tomorrow);
-  };
-
-  const openDeferNonTop10Modal = () => {
-    if (sortedTasks.length <= 10) {
-      alert('There are no tasks outside the current Top 10.');
-      return;
-    }
-    setShowDeferModal(true);
-  };
-
-  const deferNonTop10Tasks = async () => {
-    const currentOrder = getSortedTasks();
-    const tasksToKeepToday = currentOrder.slice(0, 10);
-    const tasksToMove = currentOrder.slice(10);
-
-    if (tasksToMove.length === 0) {
-      setShowDeferModal(false);
-      alert('There are no tasks outside the current Top 10.');
-      return;
-    }
-
+  const openDeferNonTop10Modal = async () => {
     setDeferLoading(true);
     try {
-      const targetDate = getTomorrowET();
-      const response = await axios.post(
-        `${apiUrl}/api/tasks/bulk-defer-non-top-10`,
-        {
-          task_ids_to_keep_today: tasksToKeepToday.map(task => task.id),
-          task_ids_to_move: tasksToMove.map(task => task.id),
-          target_date: targetDate
-        },
-        { params: { user_number: userNumber } }
-      );
-
-      await fetchTasks();
-      setShowDeferModal(false);
-      alert(`Moved ${response.data?.updated ?? tasksToMove.length} task(s) to tomorrow.`);
+      const response = await axios.get(`${apiUrl}/api/tasks/`, {
+        params: { user_number: userNumber, filter_type: 'all' },
+      });
+      const allOpenTasks = (Array.isArray(response.data) ? response.data : [])
+        .filter(task => String(task.status || 'open').toLowerCase() !== 'completed');
+      const todayTasks = allOpenTasks.filter(task => getTaskScheduledDate(task) === todayKey);
+      if (todayTasks.length <= 10) {
+        alert(t('optimizeToday.alreadyOptimized', 'Today already has 10 or fewer scheduled tasks.'));
+        return;
+      }
+      setOptimizationTasks(allOpenTasks);
+      setShowDeferModal(true);
     } catch (err) {
-      console.error('Error deferring non-Top-10 tasks:', err);
-      alert(err.response?.data?.detail || 'Failed to move tasks to tomorrow');
+      console.error('Error loading tasks for today optimization:', err);
+      alert(t('optimizeToday.loadFailed', 'Failed to load all tasks for optimization.'));
     } finally {
       setDeferLoading(false);
     }
   };
 
-  const applyBulkAction = async (updates) => {
+  const applyTodayOptimizationMove = async (move) => {
+    setDeferLoading(true);
+    try {
+      await axios.put(
+        `${apiUrl}/api/tasks/${move.task.id}`,
+        {
+          scheduled_date: move.targetDate,
+          ...(move.newDueDate ? { due_date: move.newDueDate } : {}),
+        },
+        { params: { user_number: userNumber } }
+      );
+      return true;
+    } catch (err) {
+      console.error('Error applying today optimization:', err);
+      alert(err.response?.data?.detail || t('optimizeToday.applyFailed', 'Failed to apply the optimization changes.'));
+      return false;
+    } finally {
+      setDeferLoading(false);
+    }
+  };
+
+  const finishTodayOptimization = async () => {
+    setShowDeferModal(false);
+    await fetchTasks({ skipMtnBackfill: true });
+  };
+
+  const applyBulkAction = async (updates, { overrideDueDates = false } = {}) => {
+    const selectedTaskRecords = tasks.filter(task => selectedTasks.includes(task.id));
+    const invalidTasks = selectedTaskRecords.filter(task => {
+      const nextScheduledDate = updates.scheduled_date || getTaskScheduledDate(task);
+      const nextDueDate = updates.due_date || String(task.due_date || '').split('T')[0];
+      return nextScheduledDate && nextDueDate && nextScheduledDate > nextDueDate;
+    });
+    if (invalidTasks.length > 0 && !overrideDueDates) {
+      return { conflicts: invalidTasks.length };
+    }
     try {
       await Promise.all(
-        selectedTasks.map(taskId =>
+        selectedTaskRecords.map(task => {
+          const taskUpdates = { ...updates };
+          const nextScheduledDate = updates.scheduled_date || getTaskScheduledDate(task);
+          const nextDueDate = updates.due_date || String(task.due_date || '').split('T')[0];
+          if (overrideDueDates && nextScheduledDate && nextDueDate && nextScheduledDate > nextDueDate) {
+            taskUpdates.due_date = nextScheduledDate;
+          }
+          return (
           axios.put(
-            `${apiUrl}/api/tasks/${taskId}`,
-            updates,
+            `${apiUrl}/api/tasks/${task.id}`,
+            taskUpdates,
             { params: { user_number: userNumber } }
           )
-        )
+          );
+        })
       );
       await fetchTasks();
       exitSelectionMode();
       setShowBulkActionModal(false);
+      return { applied: true };
     } catch (err) {
       console.error('Error applying bulk action:', err);
       alert('Failed to update some tasks');
+      return { error: true };
     }
   };
 
@@ -638,6 +735,9 @@ export default function TodoList({ apiUrl, userNumber }) {
     ? mtnTrends.summary.today.tasks
     : [];
   const mtnBenchmark = buildDailyMtnBenchmark(mtnTrends);
+  const calendarMtnCapacity = buildMtnCapacity(mtnTrends?.trend_chart, todayKey);
+  const todayScheduledTaskCount = tasks.filter(task => getTaskScheduledDate(task) === todayKey && String(task.status || 'open').toLowerCase() !== 'completed').length;
+  const optimizationTriggerCount = activeTab === 'calendar' ? todayScheduledTaskCount : tasks.length;
 
   // ============================================================================
   // RENDER
@@ -661,7 +761,7 @@ export default function TodoList({ apiUrl, userNumber }) {
           activeTab={activeTab}
           sortOrderCount={sortOrder.length}
           taskCount={tasks.length}
-          sortedTaskCount={sortedTasks.length}
+          sortedTaskCount={optimizationTriggerCount}
           priorityLoading={priorityLoading}
           opportunityLoading={opportunityLoading}
           mtnNeedle={(
@@ -736,11 +836,19 @@ export default function TodoList({ apiUrl, userNumber }) {
             searchQuery={searchQuery}
             goals={goals}
             getTaskScore={getTaskScore}
+            mtnCapacity={calendarMtnCapacity}
+            t={t}
             onStartEdit={(task) => {
               setEditingTask(task);
               setShowTaskModal(true);
             }}
             onReschedule={handleCalendarReschedule}
+            onDoLater={handleDoLater}
+            onUndoDoLater={handleUndoDoLater}
+            selectionMode={selectionMode}
+            selectedTasks={selectedTasks}
+            onEnterSelection={enterSelectionMode}
+            onSelectToggle={toggleTaskSelection}
           />
         ) : (
           <TaskListPanel
@@ -764,6 +872,8 @@ export default function TodoList({ apiUrl, userNumber }) {
             onLongPress={enterSelectionMode}
             onSelectToggle={toggleTaskSelection}
             onFollowUp={openFollowUpModal}
+            onDoLater={setListDoLaterTask}
+            doLaterLabel={t('calendar.doLater', 'Do later')}
             goals={goals}
             priorityMode={priorityMode}
             getVisibleTaskScore={getVisibleTaskScore}
@@ -826,12 +936,46 @@ export default function TodoList({ apiUrl, userNumber }) {
         />
       )}
 
+      {listDoLaterTask && (
+        <DoLaterDialog
+          key={listDoLaterTask.id}
+          task={listDoLaterTask}
+          t={t}
+          onSchedule={handleDoLater}
+          onClose={(result) => {
+            setListDoLaterTask(null);
+            if (result) setListUndoMove(result);
+          }}
+        />
+      )}
+
+      {listUndoMove && (
+        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-3 text-sm text-white shadow-xl" role="status">
+          <span>{t('calendar.movedTo', 'Task moved to')} {formatShortDate(listUndoMove.targetDate)}</span>
+          <button
+            type="button"
+            className="font-semibold text-blue-300 hover:text-blue-200"
+            onClick={async () => {
+              const restored = await handleUndoDoLater(listUndoMove);
+              if (restored) setListUndoMove(null);
+            }}
+          >
+            {t('common.undo', 'Undo')}
+          </button>
+          <button type="button" onClick={() => setListUndoMove(null)} className="text-slate-400 hover:text-white" aria-label={t('common.close', 'Close')}>×</button>
+        </div>
+      )}
+
       {showDeferModal && (
-        <DeferNonTop10Modal
-          taskCount={sortedTasks.length}
+        <OptimizeTodayModal
+          tasks={optimizationTasks}
+          todayKey={todayKey}
+          capacity={calendarMtnCapacity}
+          getTaskScore={getTaskScore}
           loading={deferLoading}
-          onCancel={() => setShowDeferModal(false)}
-          onConfirm={deferNonTop10Tasks}
+          onCancel={finishTodayOptimization}
+          onApplyMove={applyTodayOptimizationMove}
+          t={t}
         />
       )}
 

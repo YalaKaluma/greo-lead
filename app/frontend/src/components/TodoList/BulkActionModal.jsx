@@ -14,6 +14,7 @@ import { getTodayET, getETDate, formatDateForInput, formatDateForDisplay, getNex
  */
 export default function BulkActionModal({ selectedCount, onApply, onCancel, delegates, goals, timezone }) {
   const [bulkData, setBulkData] = useState({
+    scheduled_date: '',
     due_date: '',
     priority: '',
     goal_id: '',
@@ -21,6 +22,7 @@ export default function BulkActionModal({ selectedCount, onApply, onCancel, dele
   });
 
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [conflictWarning, setConflictWarning] = useState(null);
 
   const setToday = () => {
     setBulkData({ ...bulkData, due_date: getTodayET(timezone) });
@@ -46,8 +48,9 @@ export default function BulkActionModal({ selectedCount, onApply, onCancel, dele
     setShowDatePicker(false);
   };
 
-  const handleApply = () => {
+  const handleApply = async (overrideDueDates = false) => {
     const updates = {};
+    if (bulkData.scheduled_date) updates.scheduled_date = bulkData.scheduled_date;
     if (bulkData.due_date) updates.due_date = bulkData.due_date;
     if (bulkData.priority) updates.priority = bulkData.priority;
     if (bulkData.goal_id) updates.goal_id = parseInt(bulkData.goal_id);
@@ -58,7 +61,10 @@ export default function BulkActionModal({ selectedCount, onApply, onCancel, dele
       return;
     }
 
-    onApply(updates);
+    const result = await onApply(updates, { overrideDueDates });
+    if (result?.conflicts) {
+      setConflictWarning(result.conflicts);
+    }
   };
 
   return (
@@ -86,6 +92,18 @@ export default function BulkActionModal({ selectedCount, onApply, onCancel, dele
             <p className="text-sm text-slate-600 mb-4">
               Select the fields you want to update. Only selected fields will be changed.
             </p>
+
+            <div>
+              <label htmlFor="bulk-scheduled-date" className="block text-sm font-medium text-slate-700 mb-1">Scheduled Date</label>
+              <input
+                id="bulk-scheduled-date"
+                type="date"
+                value={bulkData.scheduled_date}
+                onChange={(event) => setBulkData({ ...bulkData, scheduled_date: event.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="mt-1 text-xs text-slate-500">Leave blank to keep the current scheduled dates.</p>
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Due Date</label>
@@ -199,7 +217,19 @@ export default function BulkActionModal({ selectedCount, onApply, onCancel, dele
             </div>
           </div>
 
-          <div className="sticky bottom-0 bg-slate-50 border-t border-gray-200 px-4 py-3 flex items-center justify-end gap-2">
+          {conflictWarning && (
+            <div className="mx-4 mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              <p>
+                {conflictWarning} selected task(s) would be scheduled after their current due date. You can continue; Alfred will update those due dates to the new scheduled date.
+              </p>
+              <div className="mt-3 flex justify-end gap-2">
+                <button type="button" onClick={() => setConflictWarning(null)} className="rounded px-3 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100">Back</button>
+                <button type="button" onClick={() => handleApply(true)} className="rounded bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700">Continue and update due dates</button>
+              </div>
+            </div>
+          )}
+
+          {!conflictWarning && <div className="sticky bottom-0 bg-slate-50 border-t border-gray-200 px-4 py-3 flex items-center justify-end gap-2">
             <button
               onClick={onCancel}
               className="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg font-medium transition-colors"
@@ -207,12 +237,12 @@ export default function BulkActionModal({ selectedCount, onApply, onCancel, dele
               Cancel
             </button>
             <button
-              onClick={handleApply}
+              onClick={() => handleApply(false)}
               className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
             >
               Apply to {selectedCount} Task{selectedCount > 1 ? 's' : ''}
             </button>
-          </div>
+          </div>}
         </div>
       </div>
     </>

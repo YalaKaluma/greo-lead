@@ -7,7 +7,8 @@ export default function VoiceRecorder({
   disabled = false,
   className = '',
   buttonClassName = '',
-  size = 'default'
+  size = 'default',
+  onRecordingChange
 }) {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -86,9 +87,17 @@ export default function VoiceRecorder({
 
       recorder.start();
       setIsRecording(true);
+      onRecordingChange?.(true);
     } catch (err) {
       console.error('Error accessing microphone:', err);
-      setError('Could not access microphone.');
+      const microphoneErrors = {
+        NotAllowedError: 'Microphone permission was denied. Allow microphone access in your browser settings and try again.',
+        NotFoundError: 'No microphone was found on this device.',
+        NotReadableError: 'The microphone is unavailable or already in use by another application.',
+        AbortError: 'Microphone access was interrupted. Please try again.',
+        SecurityError: 'Microphone access is blocked by the browser security settings.'
+      };
+      setError(microphoneErrors[err?.name] || 'Could not access microphone.');
       stopTracks();
     }
   };
@@ -98,6 +107,7 @@ export default function VoiceRecorder({
       recorderRef.current.stop();
     }
     setIsRecording(false);
+    onRecordingChange?.(false);
   };
 
   const handleClick = () => {

@@ -113,23 +113,6 @@ export const getSortedTasks = ({
     return [...visibleTasks].sort((a, b) => compareTasksByColumn(a, b, columnSort, getTaskScore));
   }
 
-  if (priorityMode && hasStoredMtnScoring(visibleTasks, getTaskScore)) {
-    return [...visibleTasks].sort((a, b) => {
-      const scoreA = getVisibleTaskScore(a, getTaskScore);
-      const scoreB = getVisibleTaskScore(b, getTaskScore);
-
-      if (scoreA && scoreB) {
-        const rankA = scoreA.rank ?? 999;
-        const rankB = scoreB.rank ?? 999;
-        if (rankA !== rankB) return rankA - rankB;
-        return (scoreB.score ?? 0) - (scoreA.score ?? 0);
-      }
-      if (scoreA) return -1;
-      if (scoreB) return 1;
-      return 0;
-    });
-  }
-
   if (sortOrder.length > 0) {
     return [...visibleTasks].sort((a, b) => {
       const indexA = sortOrder.indexOf(a.id);

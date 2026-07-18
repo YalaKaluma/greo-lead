@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { getCalendarTasks, replaceTaskDueDate } from './todoCalendarLogic.js';
+import {
+  buildMtnCapacity,
+  findSuitableScheduleDate,
+  getCalendarTasks,
+  getTaskScheduledDate,
+  replaceTaskDueDate,
+  summarizeCalendarDay,
+} from './todoCalendarLogic.js';
 
 const task = (overrides = {}) => ({
   id: overrides.id ?? 1,
@@ -57,5 +64,89 @@ describe('todoCalendarLogic', () => {
   it('preserves existing due time when replacing the calendar day', () => {
     expect(replaceTaskDueDate('2026-06-19T15:30:00Z', '2026-06-22')).toBe('2026-06-22T15:30:00Z');
     expect(replaceTaskDueDate('2026-06-19', '2026-06-22')).toBe('2026-06-22');
+  });
+
+  it('prefers scheduled date while retaining legacy due-date fallback', () => {
+    expect(getTaskScheduledDate(task({ scheduled_date: '2026-06-22', due_date: '2026-06-25' }))).toBe('2026-06-22');
+    expect(getTaskScheduledDate(task({ due_date: '2026-06-25T12:00:00' }))).toBe('2026-06-25');
+  });
+
+  it('adds daily task MTN scores on the 0-10 scale', () => {
+    const summary = summarizeCalendarDay([
+      task({ id: 1, move_the_needle_score: 0.9 }),
+      task({ id: 2, move_the_needle_score: 0.6 }),
+      task({ id: 3, move_the_needle_score: null }),
+    ], 12);
+
+    expect(summary).toMatchObject({
+      taskCount: 3,
+      expectedMtn: 15,
+      averageMtn: 7.5,
+      missingScoreCount: 1,
+      status: 'heavy',
+    });
+  });
+
+  it('uses 25 as the minimum daily MTN capacity', () => {
+    const trend = Array.from({ length: 23 }, (_, index) => ({
+      date: `2026-06-${String(index + 1).padStart(2, '0')}`,
+      mtn_score: index === 0 ? 100 : 10,
+    }));
+    expect(buildMtnCapacity(trend, '2026-06-23')).toBe(25);
+    expect(buildMtnCapacity([], '2026-06-23')).toBe(25);
+  });
+
+  it('allows sustained historical MTN capacity to exceed the minimum', () => {
+    const trend = Array.from({ length: 21 }, (_, index) => ({
+      date: `2026-06-${String(index + 1).padStart(2, '0')}`,
+      mtn_score: 32,
+    }));
+    expect(buildMtnCapacity(trend, '2026-06-22')).toBe(32);
+  });
+
+  it('chooses the lowest-MTN remaining workday this week', () => {
+    const selected = findSuitableScheduleDate({
+      tasks: [
+        task({ id: 1, scheduled_date: '2026-06-15', due_date: null, move_the_needle_score: 0.8 }),
+        task({ id: 2, scheduled_date: '2026-06-16', due_date: null, move_the_needle_score: 0.9 }),
+        task({ id: 3, scheduled_date: '2026-06-17', due_date: null, move_the_needle_score: 0.2 }),
+      ],
+      task: { id: 1, due_date: null },
+      todayKey: '2026-06-15',
+      period: 'later_this_week',
+    });
+    expect(selected).toBe('2026-06-18');
+  });
+
+  it('never selects a day after the optional deadline', () => {
+    const selected = findSuitableScheduleDate({
+      tasks: [],
+      task: { id: 1, due_date: '2026-06-20' },
+      todayKey: '2026-06-19',
+      period: 'next_week',
+    });
+    expect(selected).toBeNull();
+  });
+
+  it('schedules within a newly entered due-date window', () => {
+    const selected = findSuitableScheduleDate({
+      tasks: [],
+      task: { id: 1, due_date: null },
+      todayKey: '2026-06-19',
+      period: 'by_due_date',
+      dueDate: '2026-06-24',
+    });
+    expect(selected).toBe('2026-06-22');
+  });
+
+  it('does not select weekends and respects available MTN capacity', () => {
+    const selected = findSuitableScheduleDate({
+      tasks: [task({ id: 2, scheduled_date: '2026-06-22', due_date: null, move_the_needle_score: 0.9 })],
+      task: task({ id: 1, due_date: null, move_the_needle_score: 0.8 }),
+      todayKey: '2026-06-19',
+      period: 'next_week',
+      capacity: 10,
+    });
+    expect(selected).toBe('2026-06-23');
   });
 });

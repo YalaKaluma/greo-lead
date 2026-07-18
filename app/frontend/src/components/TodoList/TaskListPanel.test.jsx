@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import TaskListPanel from './TaskListPanel';
 
 const baseProps = {
@@ -45,5 +45,26 @@ describe('TaskListPanel', () => {
     render(<TaskListPanel {...baseProps} hasActiveFilters />);
 
     expect(screen.getByText('No filtered tasks')).toBeInTheDocument();
+  });
+
+  it('opens Do later from the task-card arrow action', () => {
+    const onDoLater = vi.fn();
+    const task = {
+      id: 1,
+      title: 'Move this task later',
+      status: 'open',
+      priority: 'Medium',
+      due_date: '2026-07-20',
+    };
+    render(
+      <TaskListPanel
+        {...baseProps}
+        sortedTasks={[task]}
+        onDoLater={onDoLater}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Do later' }));
+    expect(onDoLater).toHaveBeenCalledWith(task);
   });
 });

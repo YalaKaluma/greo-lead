@@ -5,6 +5,8 @@ import TodoList from './components/TodoList';
 import MyGoals from './components/goals/MyGoals'
 import MyLeadershipJourney from './components/MyLeadershipJourney';
 import MyTeam from './components/MyTeam';
+import Meetings from './components/Meetings';
+import Projects from './components/Projects';
 import MyCoachingSessions from './components/MyCoachingSessions'; // NEW: Replace MyJournal
 import MyHabits from './components/MyHabits';
 import MyJournal from './components/MyJournal';
@@ -32,6 +34,7 @@ const VALID_PAGE_IDS = new Set([
   'todo-list',
   NEW_USER_DEFAULT_PAGE,
   'my-team',
+  'meetings',
   'my-journey',
   'my-habits',
   'coaching-sessions',
@@ -243,6 +246,8 @@ function MainAppShell({
     'todo-list': t('page.tasks'),
     'my-goals': t('page.goals'),
     'my-team': t('page.team'),
+    meetings: t('page.meetings'),
+    projects: t('page.projects'),
     'my-journey': t('page.journey'),
     'my-habits': t('page.habits'),
     'coaching-sessions': t('page.coaching'),
@@ -349,6 +354,12 @@ function MainAppShell({
         )}
         {currentPage === 'my-team' && (
           <MyTeam apiUrl={API_URL} userNumber={userNumber} />
+        )}
+        {currentPage === 'meetings' && (
+          <Meetings apiUrl={API_URL} userNumber={userNumber} />
+        )}
+        {currentPage === 'projects' && (
+          <Projects apiUrl={API_URL} userNumber={userNumber} />
         )}
         {currentPage === 'my-journey' && (
           <MyLeadershipJourney apiUrl={API_URL} userNumber={userNumber} onNavigate={handleNavigate} />

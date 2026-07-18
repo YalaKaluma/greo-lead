@@ -7,12 +7,14 @@ import {
   LEADERSHIP_ARC,
   LEADERSHIP_QUADRANT_LABELS,
   RECOMMENDATION_LABELS,
+  WHY_IT_MATTERS,
   getBeltById,
   getBeltIndexById
 } from "./journeyModel";
 import { directAssessmentCopy, formatDateTime } from "./journeyAssessment";
 import { StatusPill } from "./journeyEvidence";
 import { formatTrialStatus } from "./journeyTrials";
+import { LeadershipWheel } from "./journeyWheel";
 
 export function JourneyHeaderTabs({
   t,
