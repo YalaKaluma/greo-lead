@@ -43,4 +43,4 @@ RUN rm -rf /app/static && \
     mv /static/* /app/static/ 2>/dev/null || true
 
 EXPOSE 8080
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+CMD ["sh", "-c", "DIRECT_DATABASE_URL= alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]

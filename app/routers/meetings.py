@@ -15,8 +15,9 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
-from app.models import JourneyGoal, JourneyPerson, JourneyProject, Meeting, MeetingActionItem, MeetingGoalLink, MeetingParticipant, MeetingProjectLink, Task
+from app.models import JourneyGoal, JourneyPerson, JourneyProject, Meeting, MeetingActionItem, MeetingGoalLink, MeetingParticipant, MeetingProjectLink, Task, User
 from app.services.meeting_intelligence_service import process_meeting
+from app.services.journey_support import goal_level_variants, normalize_goal_level
 
 router = APIRouter()
 ALLOWED_AUDIO_TYPES = {"audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a", "audio/webm", "video/webm"}
@@ -49,6 +50,7 @@ class MeetingLinkCreate(BaseModel):
 class ParticipantMatch(BaseModel):
     user_number: str
     person_id: Optional[int] = None
+    is_current_user: bool = False
 
 
 def _query(db: Session):
@@ -77,7 +79,7 @@ def _meeting_payload(meeting: Meeting, detail: bool = False):
         "one_line_summary": meeting.one_line_summary,
         "executive_summary": meeting.executive_summary,
         "participant_count": len(meeting.participants),
-        "participants": [{"id": p.id, "display_name": p.display_name, "speaker_label": p.speaker_label, "person_id": p.person_id, "match_status": p.match_status} for p in meeting.participants],
+        "participants": [{"id": p.id, "display_name": p.display_name, "speaker_label": p.speaker_label, "person_id": p.person_id, "match_status": p.match_status, "is_current_user": p.is_current_user} for p in meeting.participants],
         "action_item_count": len(meeting.action_items),
         "decision_count": len(meeting.decisions),
         "has_recording": bool(meeting.recording_storage_key),
@@ -146,9 +148,15 @@ def get_meeting(meeting_id: int, user_number: str, db: Session = Depends(get_db)
 @router.get("/context/options")
 def meeting_context_options(user_number: str, db: Session = Depends(get_db)):
     people = db.query(JourneyPerson).filter(JourneyPerson.user_number == user_number).order_by(JourneyPerson.name).all()
-    goals = db.query(JourneyGoal).filter(JourneyGoal.user_number == user_number).order_by(JourneyGoal.updated_at.desc()).all()
+    goals = db.query(JourneyGoal).filter(
+        JourneyGoal.user_number == user_number,
+        JourneyGoal.time_horizon.in_(goal_level_variants("vision")),
+        JourneyGoal.parent_goal_id.is_(None),
+    ).order_by(JourneyGoal.sort_order.asc(), JourneyGoal.updated_at.desc()).all()
     projects = db.query(JourneyProject).filter(JourneyProject.user_number == user_number, JourneyProject.status == "active").order_by(JourneyProject.project_name).all()
+    user = db.query(User).filter((User.phone_number == user_number) | (User.email == user_number)).first()
     return {
+        "current_user": {"title": user.name or "Me"} if user else {"title": "Me"},
         "people": [{"id": item.id, "title": item.name} for item in people],
         "goals": [{"id": item.id, "title": item.title or item.goal_text} for item in goals],
         "projects": [{"id": item.id, "title": item.project_name} for item in projects],
@@ -163,9 +171,18 @@ def match_participant(participant_id: int, payload: ParticipantMatch, db: Sessio
     ).first()
     if not participant:
         raise HTTPException(status_code=404, detail="Meeting participant not found.")
-    if payload.person_id is None:
+    if payload.is_current_user:
+        user = db.query(User).filter((User.phone_number == payload.user_number) | (User.email == payload.user_number)).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Current user not found.")
+        participant.person_id = None
+        participant.display_name = user.name or "Me"
+        participant.match_status = "current_user"
+        participant.is_current_user = True
+    elif payload.person_id is None:
         participant.person_id = None
         participant.match_status = "unmatched"
+        participant.is_current_user = False
     else:
         person = db.query(JourneyPerson).filter(JourneyPerson.id == payload.person_id, JourneyPerson.user_number == payload.user_number).first()
         if not person:
@@ -173,8 +190,9 @@ def match_participant(participant_id: int, payload: ParticipantMatch, db: Sessio
         participant.person_id = person.id
         participant.display_name = person.name
         participant.match_status = "confirmed"
+        participant.is_current_user = False
     db.commit()
-    return {"matched": payload.person_id is not None}
+    return {"matched": payload.person_id is not None or payload.is_current_user}
 
 
 @router.post("/{meeting_id}/goals", status_code=201)
@@ -183,6 +201,8 @@ def link_goal(meeting_id: int, payload: MeetingLinkCreate, db: Session = Depends
     goal = db.query(JourneyGoal).filter(JourneyGoal.id == payload.target_id, JourneyGoal.user_number == payload.user_number).first()
     if not meeting or not goal:
         raise HTTPException(status_code=404, detail="Meeting or goal not found.")
+    if normalize_goal_level(goal.time_horizon) != "vision" or goal.parent_goal_id is not None:
+        raise HTTPException(status_code=400, detail="Meetings can only be linked to top-level visions.")
     existing = db.query(MeetingGoalLink).filter(MeetingGoalLink.meeting_id == meeting_id, MeetingGoalLink.goal_id == goal.id).first()
     if not existing:
         db.add(MeetingGoalLink(meeting_id=meeting_id, goal_id=goal.id))
@@ -251,7 +271,11 @@ async def upload_meeting(
 ):
     if not consent_acknowledged:
         raise HTTPException(status_code=400, detail="Recording consent acknowledgement is required.")
-    if file.content_type not in ALLOWED_AUDIO_TYPES:
+    # Browsers commonly include codec parameters, for example
+    # "audio/webm;codecs=opus". Validate the base media type while preserving
+    # the complete value for playback and transcription metadata.
+    base_content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
+    if base_content_type not in ALLOWED_AUDIO_TYPES:
         raise HTTPException(status_code=415, detail="Unsupported audio format. Upload MP3, WAV, M4A, MP4, or WebM audio.")
 
     safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", file.filename or "meeting-audio")

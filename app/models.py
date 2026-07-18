@@ -449,6 +449,7 @@ class MeetingParticipant(Base):
     display_name = Column(String(200), nullable=False)
     speaker_label = Column(String(80), nullable=True)
     match_status = Column(String(30), nullable=False, default="unmatched")
+    is_current_user = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     meeting = relationship("Meeting", back_populates="participants")

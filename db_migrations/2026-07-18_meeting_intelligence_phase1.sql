@@ -32,10 +32,12 @@ CREATE TABLE IF NOT EXISTS meeting_participants (
     display_name VARCHAR(200) NOT NULL,
     speaker_label VARCHAR(80),
     match_status VARCHAR(30) NOT NULL DEFAULT 'unmatched',
+    is_current_user BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_meeting_speaker_label UNIQUE(meeting_id, speaker_label)
 );
 CREATE INDEX IF NOT EXISTS idx_meeting_participants_meeting ON meeting_participants(meeting_id);
+ALTER TABLE meeting_participants ADD COLUMN IF NOT EXISTS is_current_user BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS meeting_transcript_segments (
     id SERIAL PRIMARY KEY,
