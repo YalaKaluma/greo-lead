@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from datetime import date, datetime, timezone
 from pathlib import Path
+from typing import Callable, TypeVar
 
 from openai import OpenAI
+from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.config import OPENAI_API_KEY
@@ -25,6 +28,34 @@ logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
 MEETING_PROMPT_VERSION = "meeting-phase1-v1"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4o-mini")
+DB_WRITE_ATTEMPTS = int(os.getenv("MEETING_DB_WRITE_ATTEMPTS", "3"))
+T = TypeVar("T")
+
+
+def _with_fresh_session(operation: Callable[[Session], T], label: str) -> T:
+    """Run one short database transaction, reconnecting after transient failures."""
+    last_error = None
+    for attempt in range(1, DB_WRITE_ATTEMPTS + 1):
+        db = SessionLocal()
+        try:
+            result = operation(db)
+            db.commit()
+            return result
+        except (OperationalError, DBAPIError) as exc:
+            last_error = exc
+            db.rollback()
+            logger.warning(
+                "Meeting database step '%s' lost its connection (attempt %s/%s).",
+                label, attempt, DB_WRITE_ATTEMPTS,
+            )
+            if attempt < DB_WRITE_ATTEMPTS:
+                time.sleep(0.5 * (2 ** (attempt - 1)))
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+    raise last_error
 
 
 def _safe_confidence(value):

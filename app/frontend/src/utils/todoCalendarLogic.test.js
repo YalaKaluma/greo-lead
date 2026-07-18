@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildMtnCapacity,
+  findSuitableScheduleDate,
   getCalendarTasks,
   getTaskScheduledDate,
   replaceTaskDueDate,
@@ -101,5 +102,40 @@ describe('todoCalendarLogic', () => {
       mtn_score: 32,
     }));
     expect(buildMtnCapacity(trend, '2026-06-22')).toBe(32);
+  });
+
+  it('chooses the lowest-MTN remaining day this week', () => {
+    const selected = findSuitableScheduleDate({
+      tasks: [
+        task({ id: 1, scheduled_date: '2026-06-19', due_date: null, move_the_needle_score: 0.8 }),
+        task({ id: 2, scheduled_date: '2026-06-20', due_date: null, move_the_needle_score: 0.9 }),
+        task({ id: 3, scheduled_date: '2026-06-21', due_date: null, move_the_needle_score: 0.2 }),
+      ],
+      task: { id: 1, due_date: null },
+      todayKey: '2026-06-19',
+      period: 'later_this_week',
+    });
+    expect(selected).toBe('2026-06-21');
+  });
+
+  it('never selects a day after the optional deadline', () => {
+    const selected = findSuitableScheduleDate({
+      tasks: [],
+      task: { id: 1, due_date: '2026-06-20' },
+      todayKey: '2026-06-19',
+      period: 'next_week',
+    });
+    expect(selected).toBeNull();
+  });
+
+  it('schedules within a newly entered due-date window', () => {
+    const selected = findSuitableScheduleDate({
+      tasks: [],
+      task: { id: 1, due_date: null },
+      todayKey: '2026-06-19',
+      period: 'by_due_date',
+      dueDate: '2026-06-24',
+    });
+    expect(selected).toBe('2026-06-20');
   });
 });

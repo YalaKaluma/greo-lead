@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getCalendarMtnLabel, getCalendarTasks, summarizeCalendarDay } from '../../utils/todoCalendarLogic.js';
 import { getMtnStyle } from '../../utils/taskHelpers.js';
+import { formatShortDate } from '../../utils/todoDateLogic.js';
 
 function RepeatIcon() {
   return (
@@ -13,7 +14,7 @@ function RepeatIcon() {
   );
 }
 
-function CalendarTaskCard({ task, goals, getTaskScore, onStartEdit }) {
+function CalendarTaskCard({ task, goals, getTaskScore, onStartEdit, onOpenDoLater, t }) {
   const mtnLabel = getCalendarMtnLabel(task, getTaskScore);
   const goalLabel =
     goals.find(goal => goal.id === task.goal_id)?.title ||
@@ -27,14 +28,12 @@ function CalendarTaskCard({ task, goals, getTaskScore, onStartEdit }) {
   };
 
   return (
-    <button
-      type="button"
+    <div
       draggable
       onDragStart={handleDragStart}
-      onClick={() => onStartEdit(task)}
       className="w-full rounded border border-slate-200 bg-white px-2 py-2 text-left shadow-sm transition hover:border-slate-300 hover:shadow"
     >
-      <div className="flex items-start gap-1.5">
+      <button type="button" onClick={() => onStartEdit(task)} className="flex w-full items-start gap-1.5 text-left">
         {task.is_recurring && (
           <span className="mt-0.5 shrink-0 text-blue-600" title="Recurring task" aria-label="Recurring task">
             <RepeatIcon />
@@ -43,7 +42,7 @@ function CalendarTaskCard({ task, goals, getTaskScore, onStartEdit }) {
         <span className="min-w-0 flex-1 text-sm font-medium leading-snug text-slate-800">
           {task.title}
         </span>
-      </div>
+      </button>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {mtnLabel ? (
           <span className={`max-w-full truncate rounded border px-1.5 py-0.5 text-[11px] font-medium ${getMtnStyle(mtnLabel)}`}>
@@ -70,7 +69,14 @@ function CalendarTaskCard({ task, goals, getTaskScore, onStartEdit }) {
           </span>
         )}
       </div>
-    </button>
+      <button
+        type="button"
+        onClick={() => onOpenDoLater(task)}
+        className="mt-2 w-full rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+      >
+        {t('calendar.doLater', 'Do later')}
+      </button>
+    </div>
   );
 }
 
@@ -86,6 +92,7 @@ function TodoCalendarDayColumn({
   setDropTarget,
   summary,
   t,
+  onOpenDoLater,
 }) {
   const handleDragOver = (event) => {
     event.preventDefault();
@@ -153,6 +160,8 @@ function TodoCalendarDayColumn({
             goals={goals}
             getTaskScore={getTaskScore}
             onStartEdit={onStartEdit}
+            onOpenDoLater={onOpenDoLater}
+            t={t}
           />
         ))}
         {tasks.length === 0 && (
@@ -165,7 +174,7 @@ function TodoCalendarDayColumn({
   );
 }
 
-function OverdueSection({ tasks, goals, getTaskScore, onStartEdit }) {
+function OverdueSection({ tasks, goals, getTaskScore, onStartEdit, onOpenDoLater, t }) {
   if (tasks.length === 0) return null;
 
   return (
@@ -182,8 +191,62 @@ function OverdueSection({ tasks, goals, getTaskScore, onStartEdit }) {
             goals={goals}
             getTaskScore={getTaskScore}
             onStartEdit={onStartEdit}
+            onOpenDoLater={onOpenDoLater}
+            t={t}
           />
         ))}
+      </div>
+    </div>
+  );
+}
+
+function DoLaterDialog({ task, onClose, onSchedule, t }) {
+  const [showDueDate, setShowDueDate] = useState(false);
+  const [dueDate, setDueDate] = useState(task?.due_date?.split?.('T')?.[0] || '');
+  const [saving, setSaving] = useState(false);
+
+  const schedule = async (period, selectedDueDate = null) => {
+    setSaving(true);
+    const result = await onSchedule(task, period, selectedDueDate);
+    setSaving(false);
+    if (result) onClose(result);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="do-later-title">
+      <div className="w-full max-w-sm rounded-lg bg-white p-4 shadow-xl">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 id="do-later-title" className="text-base font-semibold text-slate-900">{t('calendar.doLater', 'Do later')}</h2>
+            <p className="mt-1 text-sm text-slate-600">{task.title}</p>
+          </div>
+          <button type="button" onClick={() => onClose(null)} className="text-xl text-slate-400 hover:text-slate-700" aria-label={t('common.close', 'Close')}>×</button>
+        </div>
+
+        {!showDueDate ? (
+          <div className="mt-4 grid gap-2">
+            <button type="button" disabled={saving} onClick={() => schedule('later_this_week')} className="rounded border border-slate-200 px-3 py-2 text-left text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50">
+              {t('calendar.laterThisWeek', 'Later this week')}
+            </button>
+            <button type="button" disabled={saving} onClick={() => schedule('next_week')} className="rounded border border-slate-200 px-3 py-2 text-left text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50">
+              {t('calendar.nextWeek', 'Next week')}
+            </button>
+            <button type="button" disabled={saving} onClick={() => setShowDueDate(true)} className="rounded border border-slate-200 px-3 py-2 text-left text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50">
+              {t('calendar.enterDueDate', 'Enter due date')}
+            </button>
+          </div>
+        ) : (
+          <div className="mt-4 space-y-3">
+            <label className="block text-sm font-medium text-slate-700" htmlFor="do-later-due-date">{t('calendar.dueDate', 'Due date')}</label>
+            <input id="do-later-due-date" type="date" value={dueDate} onChange={event => setDueDate(event.target.value)} className="w-full rounded border border-slate-300 px-3 py-2" />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setShowDueDate(false)} className="rounded px-3 py-2 text-sm text-slate-600 hover:bg-slate-100">{t('common.back', 'Back')}</button>
+              <button type="button" disabled={!dueDate || saving} onClick={() => schedule('by_due_date', dueDate)} className="rounded bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                {saving ? t('common.saving', 'Saving…') : t('calendar.scheduleTask', 'Schedule task')}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -199,14 +262,24 @@ export default function TodoCalendarView({
   getTaskScore,
   onStartEdit,
   onReschedule,
+  onDoLater = async () => null,
+  onUndoDoLater = async () => false,
   mtnCapacity = null,
   t = (key, fallback) => fallback || key,
 }) {
   const [dropTarget, setDropTarget] = useState('');
+  const [doLaterTask, setDoLaterTask] = useState(null);
+  const [undoMove, setUndoMove] = useState(null);
   const { days, groupedTasks, allGroupedTasks, overdueTasks } = useMemo(
     () => getCalendarTasks({ tasks, todayKey, selectedMtnTags, searchQuery, getTaskScore }),
     [tasks, todayKey, selectedMtnTags, searchQuery, getTaskScore]
   );
+
+  useEffect(() => {
+    if (!undoMove) return undefined;
+    const timer = setTimeout(() => setUndoMove(null), 8000);
+    return () => clearTimeout(timer);
+  }, [undoMove]);
 
   if (activeTab !== 'calendar') return null;
 
@@ -226,6 +299,8 @@ export default function TodoCalendarView({
         goals={goals}
         getTaskScore={getTaskScore}
         onStartEdit={onStartEdit}
+        onOpenDoLater={setDoLaterTask}
+        t={t}
       />
 
       <div className="overflow-x-auto pb-2">
@@ -244,10 +319,39 @@ export default function TodoCalendarView({
               setDropTarget={setDropTarget}
               summary={summarizeCalendarDay(allGroupedTasks[day.key] || [], mtnCapacity, getTaskScore)}
               t={t}
+              onOpenDoLater={setDoLaterTask}
             />
           ))}
         </div>
       </div>
+      {doLaterTask && (
+        <DoLaterDialog
+          key={doLaterTask.id}
+          task={doLaterTask}
+          t={t}
+          onSchedule={onDoLater}
+          onClose={(result) => {
+            setDoLaterTask(null);
+            if (result) setUndoMove(result);
+          }}
+        />
+      )}
+      {undoMove && (
+        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-3 text-sm text-white shadow-xl" role="status">
+          <span>{t('calendar.movedTo', 'Task moved to')} {formatShortDate(undoMove.targetDate)}</span>
+          <button
+            type="button"
+            className="font-semibold text-blue-300 hover:text-blue-200"
+            onClick={async () => {
+              const restored = await onUndoDoLater(undoMove);
+              if (restored) setUndoMove(null);
+            }}
+          >
+            {t('common.undo', 'Undo')}
+          </button>
+          <button type="button" onClick={() => setUndoMove(null)} className="text-slate-400 hover:text-white" aria-label={t('common.close', 'Close')}>×</button>
+        </div>
+      )}
     </div>
   );
 }

@@ -17,7 +17,7 @@ import {
 } from './TodoList/PageControls';
 import { getTodayET, getETDate, formatDateForInput, isOverdueET, getLongTermGoals, MTN_TAG_OPTIONS } from '../utils/taskHelpers';
 import { buildDailyMtnBenchmark } from '../utils/todoMtnTrends.js';
-import { buildMtnCapacity, buildSevenDayWindow, getTaskScheduledDate } from '../utils/todoCalendarLogic.js';
+import { buildMtnCapacity, buildSevenDayWindow, findSuitableScheduleDate, getTaskScheduledDate } from '../utils/todoCalendarLogic.js';
 import { getSortedTasks as sortTodoTasks, getVisibleTaskScore as resolveVisibleTaskScore } from '../utils/todoListLogic';
 import { useLanguage } from '../i18n/LanguageContext';
 import { usePriority } from '../hooks/usePriority';
@@ -378,6 +378,54 @@ export default function TodoList({ apiUrl, userNumber }) {
       console.error('Error rescheduling task:', err);
       setTasks(previousTasks);
       alert(err.response?.data?.detail || 'Failed to reschedule task');
+    }
+  };
+
+  const handleDoLater = async (task, period, dueDate = null) => {
+    const previousScheduledDate = task?.scheduled_date || null;
+    const targetDate = findSuitableScheduleDate({
+      tasks,
+      task,
+      todayKey,
+      period,
+      dueDate,
+      getTaskScore,
+    });
+    if (!targetDate) {
+      alert(t('calendar.doLaterNoDate', 'No suitable day is available before the deadline.'));
+      return null;
+    }
+
+    const updates = { scheduled_date: targetDate };
+    if (dueDate) updates.due_date = dueDate;
+    const previousDueDate = task?.due_date || null;
+    const previousTasks = tasks;
+    setTasks(currentTasks => currentTasks.map(currentTask => (
+      currentTask.id === task.id ? { ...currentTask, ...updates } : currentTask
+    )));
+
+    try {
+      await axios.put(`${apiUrl}/api/tasks/${task.id}`, updates, { params: { user_number: userNumber } });
+      await fetchTasks({ skipMtnBackfill: true });
+      return { taskId: task.id, previousScheduledDate, previousDueDate, targetDate };
+    } catch (err) {
+      console.error('Error scheduling task for later:', err);
+      setTasks(previousTasks);
+      alert(err.response?.data?.detail || t('calendar.doLaterFailed', 'Failed to schedule this task.'));
+      return null;
+    }
+  };
+
+  const handleUndoDoLater = async ({ taskId, previousScheduledDate, previousDueDate }) => {
+    const updates = { scheduled_date: previousScheduledDate, due_date: previousDueDate };
+    try {
+      await axios.put(`${apiUrl}/api/tasks/${taskId}`, updates, { params: { user_number: userNumber } });
+      await fetchTasks({ skipMtnBackfill: true });
+      return true;
+    } catch (err) {
+      console.error('Error undoing task schedule:', err);
+      alert(err.response?.data?.detail || t('calendar.undoFailed', 'Failed to undo the move.'));
+      return false;
     }
   };
 
@@ -743,6 +791,8 @@ export default function TodoList({ apiUrl, userNumber }) {
               setShowTaskModal(true);
             }}
             onReschedule={handleCalendarReschedule}
+            onDoLater={handleDoLater}
+            onUndoDoLater={handleUndoDoLater}
           />
         ) : (
           <TaskListPanel

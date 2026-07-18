@@ -68,6 +68,67 @@ export const summarizeCalendarDay = (tasks, capacity, getTaskScore = () => null)
   };
 };
 
+const candidateDateKeys = (todayKey, period, deadlineKey = '') => {
+  const today = dateFromKey(todayKey);
+  if (!today) return [];
+  const tomorrow = addDays(today, 1);
+  let start = tomorrow;
+  let end;
+
+  if (period === 'later_this_week') {
+    end = addDays(today, (7 - today.getDay()) % 7);
+  } else if (period === 'next_week') {
+    const daysUntilMonday = today.getDay() === 0 ? 1 : 8 - today.getDay();
+    start = addDays(today, daysUntilMonday);
+    end = addDays(start, 6);
+  } else if (period === 'by_due_date') {
+    end = dateFromKey(deadlineKey);
+  } else {
+    return [];
+  }
+
+  if (!end || end < start) return [];
+  const hardDeadline = dateFromKey(deadlineKey);
+  if (hardDeadline && hardDeadline < end) end = hardDeadline;
+  if (end < start) return [];
+
+  const keys = [];
+  let cursor = start;
+  while (cursor <= end && keys.length < 90) {
+    keys.push(formatDateKey(cursor));
+    cursor = addDays(cursor, 1);
+  }
+  return keys;
+};
+
+export const findSuitableScheduleDate = ({
+  tasks,
+  task,
+  todayKey,
+  period,
+  dueDate,
+  getTaskScore = () => null,
+}) => {
+  const deadlineKey = normalizeDateString(dueDate || task?.due_date);
+  const candidates = candidateDateKeys(todayKey, period, deadlineKey);
+  if (candidates.length === 0) return null;
+
+  const loadByDate = Object.fromEntries(candidates.map(key => [key, { expectedMtn: 0, taskCount: 0 }]));
+  tasks.forEach(item => {
+    if (item.id === task?.id || String(item.status || 'open').toLowerCase() === 'completed') return;
+    const scheduledKey = getTaskScheduledDate(item);
+    if (!loadByDate[scheduledKey]) return;
+    loadByDate[scheduledKey].taskCount += 1;
+    loadByDate[scheduledKey].expectedMtn += getExpectedMtnScore(item, getTaskScore) || 0;
+  });
+
+  return candidates.sort((left, right) => (
+    loadByDate[left].expectedMtn - loadByDate[right].expectedMtn ||
+    loadByDate[left].taskCount - loadByDate[right].taskCount ||
+    left.localeCompare(right)
+  ))[0];
+};
+
 export const getCalendarTasks = ({
   tasks,
   todayKey,
