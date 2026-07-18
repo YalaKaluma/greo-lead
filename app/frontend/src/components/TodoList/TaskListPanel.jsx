@@ -20,6 +20,8 @@ export default function TaskListPanel({
   onLongPress,
   onSelectToggle,
   onFollowUp,
+  onDoLater = () => {},
+  doLaterLabel = 'Do later',
   goals,
   priorityMode,
   getVisibleTaskScore,
@@ -71,6 +73,8 @@ export default function TaskListPanel({
                     onLongPress={() => onLongPress(task.id)}
                     onSelectToggle={() => onSelectToggle(task.id)}
                     onFollowUp={() => onFollowUp(task)}
+                    onDoLater={() => onDoLater(task)}
+                    doLaterLabel={doLaterLabel}
                     goals={goals}
                     priorityMode={priorityMode || Boolean(scoreData)}
                     priorityScore={scoreData}

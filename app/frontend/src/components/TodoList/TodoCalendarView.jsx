@@ -259,7 +259,7 @@ function OverdueSection({
   );
 }
 
-function DoLaterDialog({ task, onClose, onSchedule, t }) {
+export function DoLaterDialog({ task, onClose, onSchedule, t }) {
   const [showDueDate, setShowDueDate] = useState(false);
   const [dueDate, setDueDate] = useState(task?.due_date?.split?.('T')?.[0] || '');
   const [saving, setSaving] = useState(false);

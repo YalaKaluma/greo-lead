@@ -5,7 +5,7 @@ import TaskModal from './TodoList/TaskModal';
 import BulkActionModal from './TodoList/BulkActionModal';
 import FilterSection from './TodoList/FilterSection';
 import TaskListPanel from './TodoList/TaskListPanel';
-import TodoCalendarView from './TodoList/TodoCalendarView';
+import TodoCalendarView, { DoLaterDialog } from './TodoList/TodoCalendarView';
 import { DailyMtnNeedle, MtnBreakdownModal, TaskMtnTrendsTab, TrendsErrorBoundary } from './TodoList/MtnTrends';
 import {
   DeferNonTop10Modal,
@@ -22,6 +22,7 @@ import { getSortedTasks as sortTodoTasks, getVisibleTaskScore as resolveVisibleT
 import { useLanguage } from '../i18n/LanguageContext';
 import { usePriority } from '../hooks/usePriority';
 import { useTodoFollowUp, useTodoOpportunities, useTodoSelection } from '../hooks/useTodoInteractions';
+import { formatShortDate } from '../utils/todoDateLogic.js';
 
 export default function TodoList({ apiUrl, userNumber }) {
   const { t, timezone } = useLanguage();
@@ -53,9 +54,17 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [mtnTrendsLoading, setMtnTrendsLoading] = useState(false);
   const [mtnTrendsError, setMtnTrendsError] = useState(null);
   const [showMtnBreakdown, setShowMtnBreakdown] = useState(false);
+  const [listDoLaterTask, setListDoLaterTask] = useState(null);
+  const [listUndoMove, setListUndoMove] = useState(null);
   const [todayKey, setTodayKey] = useState(getTodayET(timezone));
   const mtnBackfillRequestsRef = useRef(new Set());
   const appliedPrioritySortRef = useRef(null);
+
+  useEffect(() => {
+    if (!listUndoMove) return undefined;
+    const timer = setTimeout(() => setListUndoMove(null), 8000);
+    return () => clearTimeout(timer);
+  }, [listUndoMove]);
 
   const {
     selectedTasks,
@@ -830,6 +839,8 @@ export default function TodoList({ apiUrl, userNumber }) {
             onLongPress={enterSelectionMode}
             onSelectToggle={toggleTaskSelection}
             onFollowUp={openFollowUpModal}
+            onDoLater={setListDoLaterTask}
+            doLaterLabel={t('calendar.doLater', 'Do later')}
             goals={goals}
             priorityMode={priorityMode}
             getVisibleTaskScore={getVisibleTaskScore}
@@ -890,6 +901,36 @@ export default function TodoList({ apiUrl, userNumber }) {
           onCancel={closeFollowUpModal}
           onConfirm={createFollowUp}
         />
+      )}
+
+      {listDoLaterTask && (
+        <DoLaterDialog
+          key={listDoLaterTask.id}
+          task={listDoLaterTask}
+          t={t}
+          onSchedule={handleDoLater}
+          onClose={(result) => {
+            setListDoLaterTask(null);
+            if (result) setListUndoMove(result);
+          }}
+        />
+      )}
+
+      {listUndoMove && (
+        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-3 text-sm text-white shadow-xl" role="status">
+          <span>{t('calendar.movedTo', 'Task moved to')} {formatShortDate(listUndoMove.targetDate)}</span>
+          <button
+            type="button"
+            className="font-semibold text-blue-300 hover:text-blue-200"
+            onClick={async () => {
+              const restored = await handleUndoDoLater(listUndoMove);
+              if (restored) setListUndoMove(null);
+            }}
+          >
+            {t('common.undo', 'Undo')}
+          </button>
+          <button type="button" onClick={() => setListUndoMove(null)} className="text-slate-400 hover:text-white" aria-label={t('common.close', 'Close')}>×</button>
+        </div>
       )}
 
       {showDeferModal && (

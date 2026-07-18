@@ -25,6 +25,8 @@ export default function TaskItem({
   onLongPress,
   onSelectToggle,
   onFollowUp,
+  onDoLater = null,
+  doLaterLabel = 'Do later',
   goals,
   priorityMode = false,
   priorityScore = null,
@@ -113,6 +115,8 @@ export default function TaskItem({
           onLongPress={onLongPress}
           onSelectToggle={onSelectToggle}
           onFollowUp={onFollowUp}
+          onDoLater={onDoLater}
+          doLaterLabel={doLaterLabel}
           goals={goals}
           priorityMode={priorityMode}
           priorityScore={priorityScore}
@@ -143,6 +147,8 @@ function TaskCard({
   onLongPress,
   onSelectToggle,
   onFollowUp,
+  onDoLater,
+  doLaterLabel,
   goals,
   priorityMode,
   priorityScore,
@@ -262,6 +268,25 @@ function TaskCard({
             Follow Up
           </span>
         </div>
+      )}
+
+      {!selectionMode && (
+        <button
+          type="button"
+          onClick={(e) => {
+            if (handleSelectionShortcut(e)) return;
+            e.stopPropagation();
+            onDoLater?.();
+          }}
+          className="absolute right-2 top-10 hidden h-7 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-700 sm:inline-flex"
+          title={doLaterLabel}
+          aria-label={doLaterLabel}
+        >
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 5v14" />
+            <path d="m19 12-7 7-7-7" />
+          </svg>
+        </button>
       )}
 
       <div
