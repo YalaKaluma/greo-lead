@@ -1,4 +1,5 @@
 import React from "react";
+import VoiceRecorder from "../VoiceRecorder";
 import {
   BELT_DOMAIN_PURPOSES,
   BELT_GUIDE,
@@ -337,7 +338,8 @@ export function RequirementCard({ number, title, body, footer, status, statusDet
   );
 }
 
-export function TrialModal({ trial, draft, setDraft, saving, error, onClose, onSave, onSubmit }) {
+export function TrialModal({ trial, draft, setDraft, saving, error, apiUrl, onClose, onSave, onSubmit }) {
+  const [isVoiceRecording, setIsVoiceRecording] = React.useState(false);
   const isReflection = trial.trial_type === "reflection";
   const targetBelt = getBeltById(trial.target_belt || "yellow");
   const title = isReflection ? "Reflection Trial" : "Real-World Trial";
@@ -374,6 +376,31 @@ export function TrialModal({ trial, draft, setDraft, saving, error, onClose, onS
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+          {isVoiceRecording ? (
+            <div className="flex min-h-[420px] flex-col items-center justify-center text-center" role="status" aria-live="polite">
+              <div className="relative mb-8 flex h-56 w-56 items-center justify-center md:h-64 md:w-64">
+                <div className="absolute inset-0 rounded-full bg-amber-300/20 motion-safe:animate-ping" />
+                <div className="absolute inset-5 rounded-full border border-amber-300/60 bg-amber-50 shadow-[0_0_60px_rgba(245,158,11,0.18)]" />
+                <img
+                  src="/alfred-logo.png"
+                  alt="Alfred"
+                  className="relative h-44 w-44 rounded-full object-cover shadow-xl md:h-52 md:w-52"
+                />
+              </div>
+              <h2 className="text-2xl font-semibold text-slate-900">Alfred is listening</h2>
+              <div className="mt-5 flex h-9 items-center justify-center gap-1.5" aria-hidden="true">
+                {[18, 30, 22, 36, 26, 32, 18].map((height, index) => (
+                  <span
+                    key={index}
+                    className="w-1.5 rounded-full bg-amber-500 motion-safe:animate-pulse"
+                    style={{ height, animationDelay: `${index * 110}ms`, animationDuration: "700ms" }}
+                  />
+                ))}
+              </div>
+              <p className="mt-4 text-sm text-slate-500">Speak naturally. Press Stop when you're finished.</p>
+            </div>
+          ) : (
+          <>
           <div className="rounded-lg border border-[#ded7c8] bg-[#fbfaf7] p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7c4a2d]">
               Prompt
@@ -420,9 +447,19 @@ export function TrialModal({ trial, draft, setDraft, saving, error, onClose, onS
               {typeof error === "string" ? error : "Alfred could not save this exercise yet. Your text is still on screen; please try again."}
             </div>
           )}
+          </>
+          )}
         </div>
 
-        <div className="flex flex-none flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:flex-row sm:justify-end sm:px-6">
+        <div className="flex flex-none flex-col-reverse gap-3 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">
+          <VoiceRecorder
+            apiUrl={apiUrl}
+            disabled={saving}
+            size="compact"
+            onRecordingChange={setIsVoiceRecording}
+            onTranscript={(text) => setDraft((currentDraft) => currentDraft.trim() ? `${currentDraft.trim()}\n\n${text}` : text)}
+            buttonClassName="min-w-24"
+          />
           <button
             type="button"
             disabled={saving || !draft.trim()}

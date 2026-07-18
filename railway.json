@@ -5,6 +5,8 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
+    "preDeployCommand": "sh -c \"DIRECT_DATABASE_URL= alembic upgrade head\"",
+    "startCommand": "sh -c \"uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}\"",
     "numReplicas": 1,
     "sleepApplication": false,
     "restartPolicyType": "ON_FAILURE",
@@ -12,4 +14,4 @@
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 100
   }
-}     
+}
