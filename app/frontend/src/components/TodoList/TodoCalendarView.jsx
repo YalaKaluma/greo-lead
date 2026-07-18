@@ -199,7 +199,7 @@ export default function TodoCalendarView({
   getTaskScore,
   onStartEdit,
   onReschedule,
-  mtnCapacity,
+  mtnCapacity = null,
   t = (key, fallback) => fallback || key,
 }) {
   const [dropTarget, setDropTarget] = useState('');

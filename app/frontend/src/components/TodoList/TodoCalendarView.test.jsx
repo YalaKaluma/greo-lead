@@ -49,6 +49,7 @@ describe('TodoCalendarView', () => {
     expect(screen.getAllByRole('region')).toHaveLength(7);
     expect(screen.getByRole('region', { name: 'Today Jun 19' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Thu Jun 25' })).toBeInTheDocument();
+    expect(screen.getByText('Daily capacity: —')).toBeInTheDocument();
     expect(screen.getByText('Transformational today')).toBeInTheDocument();
     expect(screen.getByText('Strategic tomorrow')).toBeInTheDocument();
     expect(screen.queryByText('Operational hidden')).not.toBeInTheDocument();
