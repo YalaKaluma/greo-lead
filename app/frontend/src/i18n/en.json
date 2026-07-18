@@ -243,6 +243,8 @@
   "calendar.doLaterNoDate": "No suitable day is available before the deadline.",
   "calendar.doLaterFailed": "Failed to schedule this task.",
   "calendar.undoFailed": "Failed to undo the move.",
+  "calendar.selectTask": "Select task",
+  "calendar.deselectTask": "Deselect task",
   "common.back": "Back",
   "common.close": "Close",
   "common.saving": "Saving…",

@@ -14,7 +14,18 @@ function RepeatIcon() {
   );
 }
 
-function CalendarTaskCard({ task, goals, getTaskScore, onStartEdit, onOpenDoLater, t }) {
+function CalendarTaskCard({
+  task,
+  goals,
+  getTaskScore,
+  onStartEdit,
+  onOpenDoLater,
+  t,
+  selectionMode,
+  isSelected,
+  onEnterSelection,
+  onSelectToggle,
+}) {
   const mtnLabel = getCalendarMtnLabel(task, getTaskScore);
   const goalLabel =
     goals.find(goal => goal.id === task.goal_id)?.title ||
@@ -29,11 +40,33 @@ function CalendarTaskCard({ task, goals, getTaskScore, onStartEdit, onOpenDoLate
 
   return (
     <div
-      draggable
+      draggable={!selectionMode}
       onDragStart={handleDragStart}
-      className="w-full rounded border border-slate-200 bg-white px-2 py-2 text-left shadow-sm transition hover:border-slate-300 hover:shadow"
+      className={`w-full rounded border px-2 py-2 text-left shadow-sm transition hover:shadow ${
+        isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'
+      }`}
     >
-      <button type="button" onClick={() => onStartEdit(task)} className="flex w-full items-start gap-1.5 text-left">
+      <div className="flex items-start gap-1.5">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            if (selectionMode) onSelectToggle(task.id);
+            else onEnterSelection(task.id);
+          }}
+          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold ${
+            isSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-transparent hover:border-blue-500'
+          }`}
+          aria-label={isSelected ? t('calendar.deselectTask', 'Deselect task') : t('calendar.selectTask', 'Select task')}
+          aria-pressed={isSelected}
+        >
+          ✓
+        </button>
+        <button
+          type="button"
+          onClick={() => selectionMode ? onSelectToggle(task.id) : onStartEdit(task)}
+          className="flex min-w-0 flex-1 items-start gap-1.5 text-left"
+        >
         {task.is_recurring && (
           <span className="mt-0.5 shrink-0 text-blue-600" title="Recurring task" aria-label="Recurring task">
             <RepeatIcon />
@@ -42,7 +75,8 @@ function CalendarTaskCard({ task, goals, getTaskScore, onStartEdit, onOpenDoLate
         <span className="min-w-0 flex-1 text-sm font-medium leading-snug text-slate-800">
           {task.title}
         </span>
-      </button>
+        </button>
+      </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {mtnLabel ? (
           <span className={`max-w-full truncate rounded border px-1.5 py-0.5 text-[11px] font-medium ${getMtnStyle(mtnLabel)}`}>
@@ -69,13 +103,15 @@ function CalendarTaskCard({ task, goals, getTaskScore, onStartEdit, onOpenDoLate
           </span>
         )}
       </div>
-      <button
-        type="button"
-        onClick={() => onOpenDoLater(task)}
-        className="mt-2 w-full rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-      >
-        {t('calendar.doLater', 'Do later')}
-      </button>
+      {!selectionMode && (
+        <button
+          type="button"
+          onClick={() => onOpenDoLater(task)}
+          className="mt-2 w-full rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+        >
+          {t('calendar.doLater', 'Do later')}
+        </button>
+      )}
     </div>
   );
 }
@@ -93,6 +129,10 @@ function TodoCalendarDayColumn({
   summary,
   t,
   onOpenDoLater,
+  selectionMode,
+  selectedTasks,
+  onEnterSelection,
+  onSelectToggle,
 }) {
   const handleDragOver = (event) => {
     event.preventDefault();
@@ -162,6 +202,10 @@ function TodoCalendarDayColumn({
             onStartEdit={onStartEdit}
             onOpenDoLater={onOpenDoLater}
             t={t}
+            selectionMode={selectionMode}
+            isSelected={selectedTasks.includes(task.id)}
+            onEnterSelection={onEnterSelection}
+            onSelectToggle={onSelectToggle}
           />
         ))}
         {tasks.length === 0 && (
@@ -174,7 +218,18 @@ function TodoCalendarDayColumn({
   );
 }
 
-function OverdueSection({ tasks, goals, getTaskScore, onStartEdit, onOpenDoLater, t }) {
+function OverdueSection({
+  tasks,
+  goals,
+  getTaskScore,
+  onStartEdit,
+  onOpenDoLater,
+  t,
+  selectionMode,
+  selectedTasks,
+  onEnterSelection,
+  onSelectToggle,
+}) {
   if (tasks.length === 0) return null;
 
   return (
@@ -193,6 +248,10 @@ function OverdueSection({ tasks, goals, getTaskScore, onStartEdit, onOpenDoLater
             onStartEdit={onStartEdit}
             onOpenDoLater={onOpenDoLater}
             t={t}
+            selectionMode={selectionMode}
+            isSelected={selectedTasks.includes(task.id)}
+            onEnterSelection={onEnterSelection}
+            onSelectToggle={onSelectToggle}
           />
         ))}
       </div>
@@ -264,6 +323,10 @@ export default function TodoCalendarView({
   onReschedule,
   onDoLater = async () => null,
   onUndoDoLater = async () => false,
+  selectionMode = false,
+  selectedTasks = [],
+  onEnterSelection = () => {},
+  onSelectToggle = () => {},
   mtnCapacity = null,
   t = (key, fallback) => fallback || key,
 }) {
@@ -301,6 +364,10 @@ export default function TodoCalendarView({
         onStartEdit={onStartEdit}
         onOpenDoLater={setDoLaterTask}
         t={t}
+        selectionMode={selectionMode}
+        selectedTasks={selectedTasks}
+        onEnterSelection={onEnterSelection}
+        onSelectToggle={onSelectToggle}
       />
 
       <div className="overflow-x-auto pb-2">
@@ -320,6 +387,10 @@ export default function TodoCalendarView({
               summary={summarizeCalendarDay(allGroupedTasks[day.key] || [], mtnCapacity, getTaskScore)}
               t={t}
               onOpenDoLater={setDoLaterTask}
+              selectionMode={selectionMode}
+              selectedTasks={selectedTasks}
+              onEnterSelection={onEnterSelection}
+              onSelectToggle={onSelectToggle}
             />
           ))}
         </div>

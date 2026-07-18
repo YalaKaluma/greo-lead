@@ -243,6 +243,8 @@
   "calendar.doLaterNoDate": "Aucun jour approprié n'est disponible avant l'échéance.",
   "calendar.doLaterFailed": "Impossible de planifier cette tâche.",
   "calendar.undoFailed": "Impossible d'annuler le déplacement.",
+  "calendar.selectTask": "Sélectionner la tâche",
+  "calendar.deselectTask": "Désélectionner la tâche",
   "common.back": "Retour",
   "common.close": "Fermer",
   "common.saving": "Enregistrement…",

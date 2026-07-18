@@ -24,3 +24,11 @@ CREATE TABLE IF NOT EXISTS project_documents (
 );
 CREATE INDEX IF NOT EXISTS ix_project_documents_project_id ON project_documents(project_id);
 CREATE INDEX IF NOT EXISTS ix_project_documents_user_number ON project_documents(user_number);
+ALTER TABLE project_documents ADD COLUMN IF NOT EXISTS processing_status VARCHAR(30) NOT NULL DEFAULT 'queued';
+ALTER TABLE project_documents ADD COLUMN IF NOT EXISTS processing_error TEXT;
+ALTER TABLE project_documents ADD COLUMN IF NOT EXISTS extracted_character_count INTEGER;
+ALTER TABLE project_documents ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ;
+UPDATE project_documents
+SET processing_status = 'failed',
+    processing_error = 'This file was uploaded before automatic project analysis was enabled. Retry analysis to add its context.'
+WHERE processed_at IS NULL AND processing_status = 'queued';

@@ -604,6 +604,16 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const applyBulkAction = async (updates) => {
+    const selectedTaskRecords = tasks.filter(task => selectedTasks.includes(task.id));
+    const invalidTasks = selectedTaskRecords.filter(task => {
+      const nextScheduledDate = updates.scheduled_date || getTaskScheduledDate(task);
+      const nextDueDate = updates.due_date || String(task.due_date || '').split('T')[0];
+      return nextScheduledDate && nextDueDate && nextScheduledDate > nextDueDate;
+    });
+    if (invalidTasks.length > 0) {
+      alert(`${invalidTasks.length} selected task(s) would be scheduled after their due date. Choose an earlier scheduled date or update the due date.`);
+      return;
+    }
     try {
       await Promise.all(
         selectedTasks.map(taskId =>
@@ -793,6 +803,10 @@ export default function TodoList({ apiUrl, userNumber }) {
             onReschedule={handleCalendarReschedule}
             onDoLater={handleDoLater}
             onUndoDoLater={handleUndoDoLater}
+            selectionMode={selectionMode}
+            selectedTasks={selectedTasks}
+            onEnterSelection={enterSelectionMode}
+            onSelectToggle={toggleTaskSelection}
           />
         ) : (
           <TaskListPanel

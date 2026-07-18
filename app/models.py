@@ -833,6 +833,10 @@ class ProjectDocument(Base):
     content_type = Column(String(120), nullable=True)
     storage_key = Column(String(500), nullable=False)
     document_type = Column(String(80), nullable=True)
+    processing_status = Column(String(30), nullable=False, default="queued")
+    processing_error = Column(Text, nullable=True)
+    extracted_character_count = Column(Integer, nullable=True)
+    processed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     project = relationship("JourneyProject", back_populates="documents")

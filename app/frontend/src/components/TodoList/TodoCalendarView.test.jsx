@@ -128,4 +128,35 @@ describe('TodoCalendarView', () => {
     expect(screen.getByText('Overdue')).toBeInTheDocument();
     expect(screen.getByText('Late strategic')).toBeInTheDocument();
   });
+
+  it('enters selection mode and toggles selected calendar tasks', () => {
+    const onEnterSelection = vi.fn();
+    const onSelectToggle = vi.fn();
+    const calendarTask = task({ title: 'Select calendar task', move_the_needle_score: 0.9 });
+    const { rerender } = render(
+      <TodoCalendarView
+        {...baseProps}
+        tasks={[calendarTask]}
+        onEnterSelection={onEnterSelection}
+        onSelectToggle={onSelectToggle}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select task' }));
+    expect(onEnterSelection).toHaveBeenCalledWith(calendarTask.id);
+
+    rerender(
+      <TodoCalendarView
+        {...baseProps}
+        tasks={[calendarTask]}
+        selectionMode
+        selectedTasks={[calendarTask.id]}
+        onEnterSelection={onEnterSelection}
+        onSelectToggle={onSelectToggle}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Deselect task' }));
+    expect(onSelectToggle).toHaveBeenCalledWith(calendarTask.id);
+    expect(screen.queryByRole('button', { name: 'Do later' })).not.toBeInTheDocument();
+  });
 });

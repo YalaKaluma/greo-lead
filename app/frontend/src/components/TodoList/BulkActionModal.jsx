@@ -14,6 +14,7 @@ import { getTodayET, getETDate, formatDateForInput, formatDateForDisplay, getNex
  */
 export default function BulkActionModal({ selectedCount, onApply, onCancel, delegates, goals, timezone }) {
   const [bulkData, setBulkData] = useState({
+    scheduled_date: '',
     due_date: '',
     priority: '',
     goal_id: '',
@@ -48,6 +49,7 @@ export default function BulkActionModal({ selectedCount, onApply, onCancel, dele
 
   const handleApply = () => {
     const updates = {};
+    if (bulkData.scheduled_date) updates.scheduled_date = bulkData.scheduled_date;
     if (bulkData.due_date) updates.due_date = bulkData.due_date;
     if (bulkData.priority) updates.priority = bulkData.priority;
     if (bulkData.goal_id) updates.goal_id = parseInt(bulkData.goal_id);
@@ -86,6 +88,18 @@ export default function BulkActionModal({ selectedCount, onApply, onCancel, dele
             <p className="text-sm text-slate-600 mb-4">
               Select the fields you want to update. Only selected fields will be changed.
             </p>
+
+            <div>
+              <label htmlFor="bulk-scheduled-date" className="block text-sm font-medium text-slate-700 mb-1">Scheduled Date</label>
+              <input
+                id="bulk-scheduled-date"
+                type="date"
+                value={bulkData.scheduled_date}
+                onChange={(event) => setBulkData({ ...bulkData, scheduled_date: event.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="mt-1 text-xs text-slate-500">Leave blank to keep the current scheduled dates.</p>
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Due Date</label>

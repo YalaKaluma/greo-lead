@@ -8,13 +8,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
 from app.models import JourneyProject, Meeting, MeetingProjectLink, ProjectDocument
+from app.services.project_intelligence_service import process_project_document
 
 
 router = APIRouter()
@@ -60,7 +61,7 @@ def _project_or_404(db: Session, project_id: int, user_number: str) -> JourneyPr
 
 def _payload(project: JourneyProject, meetings: Optional[list[Meeting]] = None):
     result = {column.name: getattr(project, column.name) for column in JourneyProject.__table__.columns}
-    result["documents"] = [{"id": d.id, "filename": d.filename, "content_type": d.content_type, "document_type": d.document_type, "created_at": d.created_at} for d in project.documents]
+    result["documents"] = [{"id": d.id, "filename": d.filename, "content_type": d.content_type, "document_type": d.document_type, "processing_status": d.processing_status, "processing_error": d.processing_error, "created_at": d.created_at} for d in project.documents]
     if meetings is not None:
         result["meetings"] = [{
             "id": meeting.id, "title": meeting.title, "started_at": meeting.started_at,
@@ -107,7 +108,7 @@ def update_project(project_id: int, payload: ProjectUpdate, user_number: str, db
 
 
 @router.post("/{project_id}/documents", status_code=201)
-async def upload_document(project_id: int, user_number: str = Form(...), document_type: Optional[str] = Form(None), file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_document(project_id: int, background_tasks: BackgroundTasks, user_number: str = Form(...), document_type: Optional[str] = Form(None), file: UploadFile = File(...), db: Session = Depends(get_db)):
     project = _project_or_404(db, project_id, user_number)
     safe_name = re.sub(r"[^A-Za-z0-9._ -]", "_", file.filename or "project-document")[:300]
     user_dir = STORAGE_ROOT / re.sub(r"[^A-Za-z0-9_-]", "_", user_number)[:100] / str(project.id)
@@ -128,7 +129,20 @@ async def upload_document(project_id: int, user_number: str = Form(...), documen
     db.add(document)
     db.commit()
     db.refresh(document)
-    return {"id": document.id, "filename": document.filename, "document_type": document.document_type, "created_at": document.created_at}
+    background_tasks.add_task(process_project_document, document.id)
+    return {"id": document.id, "filename": document.filename, "document_type": document.document_type, "processing_status": document.processing_status, "created_at": document.created_at}
+
+
+@router.post("/{project_id}/documents/{document_id}/retry", status_code=202)
+def retry_document(project_id: int, document_id: int, user_number: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    document = db.query(ProjectDocument).filter(ProjectDocument.id == document_id, ProjectDocument.project_id == project_id, ProjectDocument.user_number == user_number).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Project document not found.")
+    document.processing_status = "queued"
+    document.processing_error = None
+    db.commit()
+    background_tasks.add_task(process_project_document, document.id)
+    return {"id": document.id, "processing_status": "queued"}
 
 
 @router.get("/{project_id}/documents/{document_id}")
