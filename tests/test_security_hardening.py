@@ -36,7 +36,7 @@ def test_security_headers_are_present_on_basic_api_response():
     assert response.headers["X-Frame-Options"] == "DENY"
     assert response.headers["X-Content-Type-Options"] == "nosniff"
     assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
-    assert response.headers["Permissions-Policy"] == "camera=(), microphone=(), geolocation=()"
+    assert response.headers["Permissions-Policy"] == "camera=(), microphone=(self), geolocation=()"
     assert "default-src 'self'" in response.headers["Content-Security-Policy"]
 
 
