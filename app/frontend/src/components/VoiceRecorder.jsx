@@ -7,7 +7,8 @@ export default function VoiceRecorder({
   disabled = false,
   className = '',
   buttonClassName = '',
-  size = 'default'
+  size = 'default',
+  onRecordingChange
 }) {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -86,6 +87,7 @@ export default function VoiceRecorder({
 
       recorder.start();
       setIsRecording(true);
+      onRecordingChange?.(true);
     } catch (err) {
       console.error('Error accessing microphone:', err);
       const microphoneErrors = {
@@ -105,6 +107,7 @@ export default function VoiceRecorder({
       recorderRef.current.stop();
     }
     setIsRecording(false);
+    onRecordingChange?.(false);
   };
 
   const handleClick = () => {
