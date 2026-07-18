@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
+import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import HabitTrendsTab from './Habits/HabitTrendsTab';
 import { useLanguage } from '../i18n/LanguageContext';
 import { getTodayET, getETDate, formatDateForInput } from '../utils/taskHelpers';
@@ -219,6 +220,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState(null);
   const [habitHistory, setHabitHistory] = useState([]);
+  const [reorderError, setReorderError] = useState('');
 
   const [form, setForm] = useState({
     title: '',
@@ -478,21 +480,31 @@ export default function MyHabits({ apiUrl, userNumber }) {
     }
   };
 
-  /* ---------------- DRAG & DROP (FRONTEND ONLY) ---------------- */
+  /* ---------------- DRAG & DROP ---------------- */
 
-  const onDragStart = (e, index) => {
-    e.dataTransfer.setData('fromIndex', index);
-  };
+  const handleDragEnd = async (result) => {
+    if (!result.destination || result.source.index === result.destination.index) return;
 
-  const onDrop = (e, index) => {
-    const fromIndex = e.dataTransfer.getData('fromIndex');
-    if (fromIndex === null) return;
-
+    const previousHabits = habits;
     const updated = [...habits];
-    const [moved] = updated.splice(fromIndex, 1);
-    updated.splice(index, 0, moved);
+    const [moved] = updated.splice(result.source.index, 1);
+    if (!moved) return;
+    updated.splice(result.destination.index, 0, moved);
 
     setHabits(updated);
+    setReorderError('');
+
+    try {
+      await axios.post(
+        `${apiUrl}/api/habits/reorder`,
+        { ordered_habit_ids: updated.map(habit => habit.id) },
+        { params: { user_number: userNumber } }
+      );
+    } catch (err) {
+      console.error('Error reordering habits:', err);
+      setHabits(previousHabits);
+      setReorderError(err.response?.data?.detail || 'Could not save the habit order. Please try again.');
+    }
   };
 
   /* =========================================================
@@ -570,28 +582,47 @@ export default function MyHabits({ apiUrl, userNumber }) {
         <>
 
       {/* HABIT LIST */}
-      <div className="space-y-3">
+      {reorderError && (
+        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {reorderError}
+        </div>
+      )}
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <Droppable droppableId="habits">
+          {(dropProvided) => (
+      <div
+        ref={dropProvided.innerRef}
+        {...dropProvided.droppableProps}
+        className="space-y-3"
+      >
         {habits.map((h, index) => {
           const todayStatus = h.today_status || 'pending';
           const isStarterExample = Boolean(h.is_starter_example);
           
           return (
+            <Draggable key={h.id} draggableId={String(h.id)} index={index}>
+              {(dragProvided, snapshot) => (
             <div
-              key={h.id}
-              draggable
-              onDragStart={(e) => onDragStart(e, index)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => onDrop(e, index)}
+              ref={dragProvided.innerRef}
+              {...dragProvided.draggableProps}
               className={`flex items-center justify-between border rounded-lg px-4 py-3 transition-shadow ${
                 isStarterExample
                   ? 'border-slate-200 bg-slate-100 opacity-50 grayscale'
+                  : snapshot.isDragging
+                  ? 'border-blue-300 bg-white shadow-lg'
                   : 'bg-white hover:shadow-sm'
               }`}
             >
               <div className="flex items-center gap-3 flex-1">
 
                 {/* DRAG HANDLE */}
-                <span className="cursor-grab text-slate-300">⋮⋮</span>
+                <span
+                  {...dragProvided.dragHandleProps}
+                  className="cursor-grab touch-none text-slate-300 active:cursor-grabbing"
+                  aria-label={`Reorder ${h.title}`}
+                >
+                  ⋮⋮
+                </span>
 
                 {/* TOGGLE (3-state) - Larger click area */}
                 <button
@@ -647,9 +678,15 @@ export default function MyHabits({ apiUrl, userNumber }) {
                 🔥 {h.streak}-day
               </span>
             </div>
+              )}
+            </Draggable>
           );
         })}
+        {dropProvided.placeholder}
       </div>
+          )}
+        </Droppable>
+      </DragDropContext>
 
         </>
       )}

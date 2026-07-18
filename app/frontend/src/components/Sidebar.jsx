@@ -12,6 +12,7 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onC
     { id: 'my-journey', label: t('nav.journey'), disabled: false },
     { id: 'my-habits', label: t('nav.habits'), disabled: false },
     { id: 'my-team', label: t('nav.team'), disabled: false },
+    { id: 'meetings', label: t('nav.meetings'), disabled: false },
 //    { id: 'coaching-sessions', label: t('nav.coaching'), disabled: false },
     { id: 'my-journal', label: t('nav.journal'), disabled: false },
     // { id: 'my-feedback', label: t('nav.feedback'), disabled: true },

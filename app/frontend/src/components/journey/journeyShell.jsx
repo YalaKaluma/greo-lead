@@ -7,6 +7,7 @@ import {
   LEADERSHIP_ARC,
   LEADERSHIP_QUADRANT_LABELS,
   RECOMMENDATION_LABELS,
+  WHY_IT_MATTERS,
   getBeltById,
   getBeltIndexById
 } from "./journeyModel";

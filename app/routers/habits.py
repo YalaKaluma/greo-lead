@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from datetime import date, timedelta
 from pydantic import BaseModel
@@ -54,6 +55,10 @@ class HabitUpdate(BaseModel):
     title: str | None = None
     goal_id: int | None = None
     frequency: str | None = None  # NEW: can update frequency
+
+
+class HabitReorderRequest(BaseModel):
+    ordered_habit_ids: list[int]
 
 
 class DayUpdate(BaseModel):
@@ -148,6 +153,7 @@ def get_habits(user_number: str, db: Session = Depends(get_db)):
     habits = (
         db.query(Habit)
         .filter(Habit.user_number == user_number, Habit.is_active == True)
+        .order_by(Habit.sort_order.asc().nullslast(), Habit.created_at.asc(), Habit.id.asc())
         .all()
     )
 
@@ -179,6 +185,7 @@ def get_habits(user_number: str, db: Session = Depends(get_db)):
             "goal_id": h.goal_id,
             "goal_text": goal_text,
             "frequency": h.frequency,  # NEW
+            "sort_order": h.sort_order,
             "today_status": today_status,  # NEW: replaces completed_today
             "streak": streak,
             "is_starter_example": is_starter_habit_example(h),
@@ -195,11 +202,17 @@ def create_habit(payload: HabitCreate, user_number: str, db: Session = Depends(g
         raise HTTPException(status_code=400, detail="Title is required")
     validate_user_goal_link(db, user_number, payload.goal_id)
 
+    max_sort_order = (
+        db.query(func.max(Habit.sort_order))
+        .filter(Habit.user_number == user_number, Habit.is_active == True)
+        .scalar()
+    )
     habit = Habit(
         user_number=user_number,
         title=payload.title.strip(),
         goal_id=payload.goal_id,
-        frequency=payload.frequency  # NEW
+        frequency=payload.frequency,  # NEW
+        sort_order=(max_sort_order if max_sort_order is not None else -1) + 1,
     )
 
     db.add(habit)
@@ -207,6 +220,43 @@ def create_habit(payload: HabitCreate, user_number: str, db: Session = Depends(g
     db.refresh(habit)
 
     return {"id": habit.id, "message": "Habit created successfully"}
+
+
+@router.post("/reorder")
+def reorder_habits(
+        payload: HabitReorderRequest,
+        user_number: str,
+        db: Session = Depends(get_db)
+):
+    """Persist the user's habit sequence, including when some habits are hidden today."""
+
+    ordered_ids = payload.ordered_habit_ids
+    if len(ordered_ids) != len(set(ordered_ids)):
+        raise HTTPException(status_code=400, detail="Habit order contains duplicate IDs")
+
+    habits = (
+        db.query(Habit)
+        .filter(Habit.user_number == user_number, Habit.is_active == True)
+        .order_by(Habit.sort_order.asc().nullslast(), Habit.created_at.asc(), Habit.id.asc())
+        .all()
+    )
+    habits_by_id = {habit.id: habit for habit in habits}
+    missing_ids = [habit_id for habit_id in ordered_ids if habit_id not in habits_by_id]
+    if missing_ids:
+        raise HTTPException(status_code=404, detail=f"Habit(s) not found: {missing_ids}")
+
+    requested_ids = set(ordered_ids)
+    requested_positions = [
+        index for index, habit in enumerate(habits) if habit.id in requested_ids
+    ]
+    for position, habit_id in zip(requested_positions, ordered_ids):
+        habits[position] = habits_by_id[habit_id]
+
+    for index, habit in enumerate(habits):
+        habit.sort_order = index
+
+    db.commit()
+    return {"success": True, "updated": len(ordered_ids)}
 
 
 @router.put("/{habit_id}")

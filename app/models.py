@@ -394,6 +394,167 @@ class Task(Base):
     originating_opportunity_id = Column(Integer, ForeignKey("opportunity_suggestions.id", ondelete="SET NULL"), nullable=True)
 
 
+# ---------------------------------------------------------
+# MEETING INTELLIGENCE
+# ---------------------------------------------------------
+
+class Meeting(Base):
+    __tablename__ = "meetings"
+    __table_args__ = (
+        Index("idx_meetings_user_started", "user_number", "started_at"),
+        Index("idx_meetings_user_status", "user_number", "processing_status"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_number = Column(String, nullable=False, index=True)
+    title = Column(String(240), nullable=False, default="Untitled meeting")
+    source_type = Column(String(30), nullable=False)  # recording, upload, notes
+    processing_status = Column(String(30), nullable=False, default="queued")
+    processing_error = Column(Text, nullable=True)
+    meeting_type = Column(String(80), nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    duration_seconds = Column(Integer, nullable=True)
+    executive_summary = Column(Text, nullable=True)
+    one_line_summary = Column(Text, nullable=True)
+    transcript_text = Column(Text, nullable=True)
+    user_notes = Column(Text, nullable=True)
+    recording_filename = Column(String(300), nullable=True)
+    recording_content_type = Column(String(120), nullable=True)
+    recording_storage_key = Column(String(500), nullable=True)
+    consent_acknowledged_at = Column(DateTime(timezone=True), nullable=True)
+    prompt_version = Column(String(40), nullable=True)
+    model_version = Column(String(80), nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    participants = relationship("MeetingParticipant", back_populates="meeting", cascade="all, delete-orphan")
+    transcript_segments = relationship("MeetingTranscriptSegment", back_populates="meeting", cascade="all, delete-orphan")
+    topics = relationship("MeetingTopic", back_populates="meeting", cascade="all, delete-orphan")
+    decisions = relationship("MeetingDecision", back_populates="meeting", cascade="all, delete-orphan")
+    action_items = relationship("MeetingActionItem", back_populates="meeting", cascade="all, delete-orphan")
+    leadership_observations = relationship("MeetingLeadershipObservation", back_populates="meeting", cascade="all, delete-orphan")
+    goal_links = relationship("MeetingGoalLink", back_populates="meeting", cascade="all, delete-orphan")
+    project_links = relationship("MeetingProjectLink", back_populates="meeting", cascade="all, delete-orphan")
+
+
+class MeetingParticipant(Base):
+    __tablename__ = "meeting_participants"
+    __table_args__ = (UniqueConstraint("meeting_id", "speaker_label", name="uq_meeting_speaker_label"),)
+
+    id = Column(Integer, primary_key=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True)
+    person_id = Column(Integer, ForeignKey("journey_people.id", ondelete="SET NULL"), nullable=True, index=True)
+    display_name = Column(String(200), nullable=False)
+    speaker_label = Column(String(80), nullable=True)
+    match_status = Column(String(30), nullable=False, default="unmatched")
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    meeting = relationship("Meeting", back_populates="participants")
+    person = relationship("JourneyPerson")
+
+
+class MeetingTranscriptSegment(Base):
+    __tablename__ = "meeting_transcript_segments"
+
+    id = Column(Integer, primary_key=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True)
+    sequence_number = Column(Integer, nullable=False)
+    speaker_label = Column(String(80), nullable=True)
+    start_seconds = Column(Float, nullable=True)
+    end_seconds = Column(Float, nullable=True)
+    text = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    meeting = relationship("Meeting", back_populates="transcript_segments")
+
+
+class MeetingTopic(Base):
+    __tablename__ = "meeting_topics"
+
+    id = Column(Integer, primary_key=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(240), nullable=False)
+    summary = Column(Text, nullable=True)
+    sequence_number = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    meeting = relationship("Meeting", back_populates="topics")
+
+
+class MeetingDecision(Base):
+    __tablename__ = "meeting_decisions"
+
+    id = Column(Integer, primary_key=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True)
+    description = Column(Text, nullable=False)
+    confidence = Column(Float, nullable=True)
+    evidence_excerpt = Column(Text, nullable=True)
+    transcript_segment_id = Column(Integer, ForeignKey("meeting_transcript_segments.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    meeting = relationship("Meeting", back_populates="decisions")
+
+
+class MeetingActionItem(Base):
+    __tablename__ = "meeting_action_items"
+
+    id = Column(Integer, primary_key=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True)
+    description = Column(Text, nullable=False)
+    owner_name = Column(String(200), nullable=True)
+    due_date = Column(Date, nullable=True)
+    confidence = Column(Float, nullable=True)
+    evidence_excerpt = Column(Text, nullable=True)
+    transcript_segment_id = Column(Integer, ForeignKey("meeting_transcript_segments.id", ondelete="SET NULL"), nullable=True)
+    created_task_id = Column(Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    tracking_mode = Column(String(30), nullable=True)  # my_todo, follow_up
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    meeting = relationship("Meeting", back_populates="action_items")
+    created_task = relationship("Task")
+
+
+class MeetingLeadershipObservation(Base):
+    __tablename__ = "meeting_leadership_observations"
+
+    id = Column(Integer, primary_key=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True)
+    category = Column(String(100), nullable=False)
+    observation = Column(Text, nullable=False)
+    confidence = Column(Float, nullable=True)
+    evidence_excerpt = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    meeting = relationship("Meeting", back_populates="leadership_observations")
+
+
+class MeetingGoalLink(Base):
+    __tablename__ = "meeting_goal_links"
+    __table_args__ = (UniqueConstraint("meeting_id", "goal_id", name="uq_meeting_goal_link"),)
+
+    id = Column(Integer, primary_key=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True)
+    goal_id = Column(Integer, ForeignKey("journey_goals.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    meeting = relationship("Meeting", back_populates="goal_links")
+    goal = relationship("JourneyGoal")
+
+
+class MeetingProjectLink(Base):
+    __tablename__ = "meeting_project_links"
+    __table_args__ = (UniqueConstraint("meeting_id", "project_id", name="uq_meeting_project_link"),)
+
+    id = Column(Integer, primary_key=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(Integer, ForeignKey("journey_projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    meeting = relationship("Meeting", back_populates="project_links")
+    project = relationship("JourneyProject")
+
+
 class OpportunitySuggestion(Base):
     __tablename__ = "opportunity_suggestions"
 
@@ -965,6 +1126,7 @@ class Habit(Base):
     frequency = Column(String, nullable=False, default="daily")
 
     is_active = Column(Boolean, default=True)
+    sort_order = Column(Integer, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
