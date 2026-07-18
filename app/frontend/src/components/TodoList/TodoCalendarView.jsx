@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { getCalendarMtnLabel, getCalendarTasks } from '../../utils/todoCalendarLogic.js';
+import { getCalendarMtnLabel, getCalendarTasks, summarizeCalendarDay } from '../../utils/todoCalendarLogic.js';
 import { getMtnStyle } from '../../utils/taskHelpers.js';
 
 function RepeatIcon() {
@@ -84,6 +84,8 @@ function TodoCalendarDayColumn({
   onReschedule,
   isDropTarget,
   setDropTarget,
+  summary,
+  t,
 }) {
   const handleDragOver = (event) => {
     event.preventDefault();
@@ -112,11 +114,36 @@ function TodoCalendarDayColumn({
       <div className="border-b border-slate-200 px-3 py-2">
         <div className="flex items-baseline justify-between gap-2">
           <h3 className="text-sm font-semibold text-slate-900">{day.label}</h3>
-          <span className="rounded bg-white px-1.5 py-0.5 text-xs font-medium text-slate-500">
-            {tasks.length}
+          <span className={`rounded border px-1.5 py-0.5 text-[11px] font-semibold ${{
+            light: 'border-slate-200 bg-white text-slate-600',
+            balanced: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+            heavy: 'border-amber-200 bg-amber-50 text-amber-700',
+            overloaded: 'border-red-200 bg-red-50 text-red-700',
+            unknown: 'border-slate-200 bg-slate-100 text-slate-600',
+          }[summary.status]}`}>
+            {t(`calendar.status.${summary.status}`, summary.status)}
           </span>
         </div>
         <p className="mt-0.5 text-xs text-slate-500">{day.dateLabel}</p>
+        <dl className="mt-2 space-y-1 text-xs" aria-label={t('calendar.dailySummary', 'Daily planning summary')}>
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-slate-500">{t('calendar.expectedMtn', 'Expected MTN')}</dt>
+            <dd className="font-semibold text-slate-900">{summary.expectedMtn.toFixed(1)}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-slate-500">{t('calendar.tasks', 'Tasks')}</dt>
+            <dd className="font-medium text-slate-700">{summary.taskCount}</dd>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <dt className="text-slate-500">{t('calendar.averageMtn', 'Average MTN')}</dt>
+            <dd className="font-medium text-slate-700">{summary.averageMtn === null ? '—' : summary.averageMtn.toFixed(1)}</dd>
+          </div>
+        </dl>
+        {summary.missingScoreCount > 0 && (
+          <p className="mt-1 text-[11px] text-slate-500">
+            {summary.missingScoreCount} {t('calendar.missingMtn', 'without an MTN score')}
+          </p>
+        )}
       </div>
       <div className="flex flex-1 flex-col gap-2 p-2">
         {tasks.map(task => (
@@ -172,9 +199,11 @@ export default function TodoCalendarView({
   getTaskScore,
   onStartEdit,
   onReschedule,
+  mtnCapacity,
+  t = (key, fallback) => fallback || key,
 }) {
   const [dropTarget, setDropTarget] = useState('');
-  const { days, groupedTasks, overdueTasks } = useMemo(
+  const { days, groupedTasks, allGroupedTasks, overdueTasks } = useMemo(
     () => getCalendarTasks({ tasks, todayKey, selectedMtnTags, searchQuery, getTaskScore }),
     [tasks, todayKey, selectedMtnTags, searchQuery, getTaskScore]
   );
@@ -183,6 +212,15 @@ export default function TodoCalendarView({
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-200 bg-white px-3 py-2">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900">{t('calendar.sevenDayPlan', 'Seven-day plan')}</h2>
+          <p className="text-xs text-slate-500">{t('calendar.capacityHelp', 'Capacity is your average achieved daily MTN over the previous 3 weeks.')}</p>
+        </div>
+        <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+          {t('calendar.dailyCapacity', 'Daily capacity')}: {mtnCapacity === null ? '—' : mtnCapacity.toFixed(1)}
+        </span>
+      </div>
       <OverdueSection
         tasks={overdueTasks}
         goals={goals}
@@ -204,6 +242,8 @@ export default function TodoCalendarView({
               onReschedule={onReschedule}
               isDropTarget={dropTarget === day.key}
               setDropTarget={setDropTarget}
+              summary={summarizeCalendarDay(allGroupedTasks[day.key] || [], mtnCapacity, getTaskScore)}
+              t={t}
             />
           ))}
         </div>

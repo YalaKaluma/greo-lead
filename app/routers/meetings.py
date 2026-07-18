@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import tempfile
 import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -20,7 +21,10 @@ from app.services.meeting_intelligence_service import process_meeting
 router = APIRouter()
 ALLOWED_AUDIO_TYPES = {"audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a", "audio/webm", "video/webm"}
 MAX_AUDIO_BYTES = int(os.getenv("MEETING_MAX_AUDIO_BYTES", str(250 * 1024 * 1024)))
-STORAGE_ROOT = Path(os.getenv("MEETING_STORAGE_DIR", "/tmp/alfred-meetings"))
+STORAGE_ROOT = Path(
+    os.getenv("MEETING_STORAGE_DIR")
+    or Path(tempfile.gettempdir()) / "alfred-meetings"
+)
 
 
 class NotesMeetingCreate(BaseModel):

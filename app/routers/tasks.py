@@ -55,6 +55,7 @@ class TaskCreate(BaseModel):
     title: str
     notes: Optional[str] = ""
     due_date: Optional[date] = None
+    scheduled_date: Optional[date] = None
     priority: str = "Medium"
     project: Optional[str] = None
     delegated_to: Optional[str] = None
@@ -78,6 +79,7 @@ class TaskUpdate(BaseModel):
     title: Optional[str] = None
     notes: Optional[str] = None
     due_date: Optional[Union[datetime, date]] = None
+    scheduled_date: Optional[date] = None
     priority: Optional[str] = None
     status: Optional[str] = None
     project: Optional[str] = None
@@ -106,6 +108,7 @@ class TaskResponse(BaseModel):
     title: str
     notes: Optional[str]
     due_date: Optional[datetime]  # ← FIXED: Changed from date to datetime to match database column
+    scheduled_date: Optional[date] = None
     priority: Optional[str]
     status: str
     project: Optional[str]
@@ -492,6 +495,7 @@ def create_task(
         user_number=user_number,
         title=task.title,
         notes=task.notes,
+        scheduled_date=task.scheduled_date,
         due_date=task.due_date,
         priority=task.priority.capitalize(),
         status="open",

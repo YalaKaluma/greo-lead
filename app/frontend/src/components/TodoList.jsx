@@ -17,7 +17,7 @@ import {
 } from './TodoList/PageControls';
 import { getTodayET, getETDate, formatDateForInput, isOverdueET, getLongTermGoals, MTN_TAG_OPTIONS } from '../utils/taskHelpers';
 import { buildDailyMtnBenchmark } from '../utils/todoMtnTrends.js';
-import { replaceTaskDueDate } from '../utils/todoCalendarLogic.js';
+import { buildMtnCapacity, buildSevenDayWindow, getTaskScheduledDate } from '../utils/todoCalendarLogic.js';
 import { getSortedTasks as sortTodoTasks, getVisibleTaskScore as resolveVisibleTaskScore } from '../utils/todoListLogic';
 import { useLanguage } from '../i18n/LanguageContext';
 import { usePriority } from '../hooks/usePriority';
@@ -192,7 +192,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       const params = {
         user_number: userNumber,
         // If a goal is selected, show ALL tasks for that goal, not just due today.
-        filter_type: selectedGoal ? 'all' : filterType
+        filter_type: activeTab === 'calendar' || selectedGoal ? 'all' : filterType
       };
       if (selectedGoal) params.goal_id = parseInt(selectedGoal);
 
@@ -201,7 +201,11 @@ export default function TodoList({ apiUrl, userNumber }) {
       const openTasks = taskList.filter(task => String(task.status || '').toLowerCase() !== 'completed');
       setTasks(openTasks);
       if (!skipMtnBackfill) {
-        backfillMissingMtnScores(openTasks);
+        const calendarDayKeys = new Set(buildSevenDayWindow(todayKey).map(day => day.key));
+        const scoringTasks = activeTab === 'calendar'
+          ? openTasks.filter(task => calendarDayKeys.has(getTaskScheduledDate(task)))
+          : openTasks;
+        backfillMissingMtnScores(scoringTasks);
       }
     } catch (err) {
       console.error('Error fetching tasks:', err);
@@ -344,25 +348,20 @@ export default function TodoList({ apiUrl, userNumber }) {
   const handleChangeTab = (nextTab) => {
     setActiveTab(nextTab);
     if (nextTab === 'calendar') {
-      if (filterType === 'due_today') {
-        setFilterType('next_7_days');
-      }
-      if (selectedMtnTags.length === 0) {
-        setSelectedMtnTags(['1. Transformation', '2. Strategic']);
-      }
+      setFilterType('all');
+      setSelectedMtnTags([]);
     }
   };
 
   const handleCalendarReschedule = async (task, targetDate) => {
     if (!task || !targetDate) return;
-    const nextDueDate = replaceTaskDueDate(task.due_date, targetDate);
-    if (nextDueDate === task.due_date || targetDate === String(task.due_date || '').split('T')[0]) return;
+    if (targetDate === getTaskScheduledDate(task)) return;
 
     const previousTasks = tasks;
     setTasks(currentTasks =>
       currentTasks.map(currentTask =>
         currentTask.id === task.id
-          ? { ...currentTask, due_date: nextDueDate }
+          ? { ...currentTask, scheduled_date: targetDate }
           : currentTask
       )
     );
@@ -370,7 +369,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     try {
       await axios.put(
         `${apiUrl}/api/tasks/${task.id}`,
-        { due_date: nextDueDate },
+        { scheduled_date: targetDate },
         { params: { user_number: userNumber } }
       );
       await fetchTasks();
@@ -638,6 +637,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     ? mtnTrends.summary.today.tasks
     : [];
   const mtnBenchmark = buildDailyMtnBenchmark(mtnTrends);
+  const calendarMtnCapacity = buildMtnCapacity(mtnTrends?.trend_chart, todayKey);
 
   // ============================================================================
   // RENDER
@@ -736,6 +736,8 @@ export default function TodoList({ apiUrl, userNumber }) {
             searchQuery={searchQuery}
             goals={goals}
             getTaskScore={getTaskScore}
+            mtnCapacity={calendarMtnCapacity}
+            t={t}
             onStartEdit={(task) => {
               setEditingTask(task);
               setShowTaskModal(true);

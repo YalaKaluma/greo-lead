@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { getCalendarTasks, replaceTaskDueDate } from './todoCalendarLogic.js';
+import {
+  buildMtnCapacity,
+  getCalendarTasks,
+  getTaskScheduledDate,
+  replaceTaskDueDate,
+  summarizeCalendarDay,
+} from './todoCalendarLogic.js';
 
 const task = (overrides = {}) => ({
   id: overrides.id ?? 1,
@@ -57,5 +63,34 @@ describe('todoCalendarLogic', () => {
   it('preserves existing due time when replacing the calendar day', () => {
     expect(replaceTaskDueDate('2026-06-19T15:30:00Z', '2026-06-22')).toBe('2026-06-22T15:30:00Z');
     expect(replaceTaskDueDate('2026-06-19', '2026-06-22')).toBe('2026-06-22');
+  });
+
+  it('prefers scheduled date while retaining legacy due-date fallback', () => {
+    expect(getTaskScheduledDate(task({ scheduled_date: '2026-06-22', due_date: '2026-06-25' }))).toBe('2026-06-22');
+    expect(getTaskScheduledDate(task({ due_date: '2026-06-25T12:00:00' }))).toBe('2026-06-25');
+  });
+
+  it('adds daily task MTN scores on the 0-10 scale', () => {
+    const summary = summarizeCalendarDay([
+      task({ id: 1, move_the_needle_score: 0.9 }),
+      task({ id: 2, move_the_needle_score: 0.6 }),
+      task({ id: 3, move_the_needle_score: null }),
+    ], 12);
+
+    expect(summary).toMatchObject({
+      taskCount: 3,
+      expectedMtn: 15,
+      averageMtn: 7.5,
+      missingScoreCount: 1,
+      status: 'heavy',
+    });
+  });
+
+  it('uses the previous 21 completed days for daily MTN capacity', () => {
+    const trend = Array.from({ length: 23 }, (_, index) => ({
+      date: `2026-06-${String(index + 1).padStart(2, '0')}`,
+      mtn_score: index === 0 ? 100 : 10,
+    }));
+    expect(buildMtnCapacity(trend, '2026-06-23')).toBe(10);
   });
 });
