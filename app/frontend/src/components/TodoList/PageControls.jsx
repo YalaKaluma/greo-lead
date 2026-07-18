@@ -181,10 +181,10 @@ export function TodoPageHeader({
               </button>
               <button
                 onClick={onOpenDeferModal}
-                disabled={activeTab !== 'tasks' || sortedTaskCount <= 10}
+                disabled={sortedTaskCount === 0}
                 className="h-10 w-10 inline-flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Move non-Top-10 tasks to tomorrow"
-                aria-label="Move non-Top-10 tasks to tomorrow"
+                title="Optimize Today"
+                aria-label="Optimize Today"
               >
                 <CalendarArrowIcon />
               </button>

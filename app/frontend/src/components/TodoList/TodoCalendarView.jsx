@@ -263,11 +263,17 @@ export function DoLaterDialog({ task, onClose, onSchedule, t }) {
   const [showDueDate, setShowDueDate] = useState(false);
   const [dueDate, setDueDate] = useState(task?.due_date?.split?.('T')?.[0] || '');
   const [saving, setSaving] = useState(false);
+  const [conversation, setConversation] = useState(null);
 
   const schedule = async (period, selectedDueDate = null) => {
     setSaving(true);
     const result = await onSchedule(task, period, selectedDueDate);
     setSaving(false);
+    if (result?.error) {
+      setConversation(result);
+      setShowDueDate(false);
+      return;
+    }
     if (result) onClose(result);
   };
 
@@ -282,7 +288,45 @@ export function DoLaterDialog({ task, onClose, onSchedule, t }) {
           <button type="button" onClick={() => onClose(null)} className="text-xl text-slate-400 hover:text-slate-700" aria-label={t('common.close', 'Close')}>×</button>
         </div>
 
-        {!showDueDate ? (
+        {conversation && !showDueDate ? (
+          <div className="mt-4 space-y-3 rounded-lg border border-blue-100 bg-blue-50 p-3">
+            {conversation.error === 'no_workday_capacity' && (
+              <>
+                <p className="text-sm text-slate-700">
+                  {t('calendar.noWorkdayCapacity', 'There is no capacity left on the remaining workdays this week.')} {t('calendar.nextSuitableDay', 'The next suitable day is')} <strong>{formatShortDate(conversation.fallbackDate)}</strong>.
+                </p>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <button type="button" onClick={() => setConversation(null)} className="rounded px-3 py-2 text-sm text-slate-600 hover:bg-white">{t('common.back', 'Back')}</button>
+                  <button type="button" disabled={saving} onClick={() => schedule('confirmed_date', conversation.fallbackDate)} className="rounded bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                    {t('calendar.moveNextWeek', 'Move to next week')}
+                  </button>
+                </div>
+              </>
+            )}
+            {conversation.error === 'deadline_conflict' && (
+              <>
+                <p className="text-sm text-slate-700">
+                  {t('calendar.deadlineConflict', 'The next capacity-safe workday is after the current due date.')} {t('calendar.currentDueDate', 'Current due date')}: <strong>{formatShortDate(conversation.dueDate)}</strong>. {t('calendar.proposedDate', 'Proposed date')}: <strong>{formatShortDate(conversation.fallbackDate)}</strong>.
+                </p>
+                <p className="text-xs text-slate-600">{t('calendar.deadlineChangeWarning', 'Confirming will move the task and update its due date to the proposed date.')}</p>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <button type="button" onClick={() => { setDueDate(''); setShowDueDate(true); }} className="rounded border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50">{t('calendar.chooseNewDueDate', 'Choose new due date')}</button>
+                  <button type="button" disabled={saving} onClick={() => schedule('confirmed_date', conversation.fallbackDate)} className="rounded bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                    {t('calendar.confirmPastDueDate', 'Move and update due date')}
+                  </button>
+                </div>
+              </>
+            )}
+            {conversation.error === 'no_capacity' && (
+              <>
+                <p className="text-sm text-slate-700">{t('calendar.noCapacityFound', 'Alfred could not find a capacity-safe workday in that period.')}</p>
+                <div className="flex justify-end">
+                  <button type="button" onClick={() => setConversation(null)} className="rounded px-3 py-2 text-sm text-slate-600 hover:bg-white">{t('common.back', 'Back')}</button>
+                </div>
+              </>
+            )}
+          </div>
+        ) : !showDueDate ? (
           <div className="mt-4 grid gap-2">
             <button type="button" disabled={saving} onClick={() => schedule('later_this_week')} className="rounded border border-slate-200 px-3 py-2 text-left text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50">
               {t('calendar.laterThisWeek', 'Later this week')}

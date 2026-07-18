@@ -44,7 +44,7 @@ describe('TodoPageHeader', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Move overdue tasks to today' }));
     fireEvent.click(screen.getByRole('button', { name: 'Prioritize tasks' }));
     fireEvent.click(screen.getByRole('button', { name: 'Suggest move-the-needle actions' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Move non-Top-10 tasks to tomorrow' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Optimize Today' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
 
     expect(handlers.onResetSort).toHaveBeenCalledTimes(1);

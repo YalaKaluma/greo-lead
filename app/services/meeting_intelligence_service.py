@@ -4,6 +4,7 @@ import json
 import logging
 import math
 import os
+import re
 import shutil
 import subprocess  # nosec B404 - commands are fixed binaries invoked without a shell
 import tempfile
@@ -230,12 +231,20 @@ def _replace_analysis(db: Session, meeting: Meeting, analysis: dict) -> None:
 
     for participant in analysis.get("participants") or []:
         display_name = str(participant.get("display_name") or participant.get("speaker_label") or "Unknown participant").strip()
-        speaker_label = str(participant.get("speaker_label") or display_name).strip()[:80]
+        raw_speaker_label = str(participant.get("speaker_label") or display_name).strip()
+        speaker_label = re.sub(
+            r"^(speaker|participant)\s+", "", raw_speaker_label, flags=re.IGNORECASE
+        ).strip()[:80]
+        if speaker_label.lower() == "me":
+            speaker_label = "Me"
         existing = db.query(MeetingParticipant).filter(
             MeetingParticipant.meeting_id == meeting.id,
-            MeetingParticipant.speaker_label == speaker_label,
+            MeetingParticipant.speaker_label.ilike(speaker_label),
         ).first()
-        if existing and display_name != speaker_label:
+        generic_display = re.fullmatch(
+            r"(?i)(speaker|participant)\s+[a-z0-9]+", display_name
+        ) is not None
+        if existing and display_name != speaker_label and not generic_display:
             existing.display_name = display_name[:200]
         elif display_name and not existing:
             db.add(MeetingParticipant(

@@ -6,16 +6,16 @@ import BulkActionModal from './TodoList/BulkActionModal';
 import FilterSection from './TodoList/FilterSection';
 import TaskListPanel from './TodoList/TaskListPanel';
 import TodoCalendarView, { DoLaterDialog } from './TodoList/TodoCalendarView';
+import OptimizeTodayModal from './TodoList/OptimizeTodayModal';
 import { DailyMtnNeedle, MtnBreakdownModal, TaskMtnTrendsTab, TrendsErrorBoundary } from './TodoList/MtnTrends';
 import {
-  DeferNonTop10Modal,
   FloatingSelectionBar,
   FollowUpModal,
   OpportunityModal,
   TodoPageHeader,
   TodoTabs,
 } from './TodoList/PageControls';
-import { getTodayET, getETDate, formatDateForInput, isOverdueET, getLongTermGoals, MTN_TAG_OPTIONS } from '../utils/taskHelpers';
+import { getTodayET, isOverdueET, getLongTermGoals, MTN_TAG_OPTIONS } from '../utils/taskHelpers';
 import { buildDailyMtnBenchmark } from '../utils/todoMtnTrends.js';
 import { buildMtnCapacity, buildSevenDayWindow, findSuitableScheduleDate, getTaskScheduledDate } from '../utils/todoCalendarLogic.js';
 import { getSortedTasks as sortTodoTasks, getVisibleTaskScore as resolveVisibleTaskScore } from '../utils/todoListLogic';
@@ -48,6 +48,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [filtersCollapsed, setFiltersCollapsed] = useState(true);
   const [showDeferModal, setShowDeferModal] = useState(false);
   const [deferLoading, setDeferLoading] = useState(false);
+  const [optimizationTasks, setOptimizationTasks] = useState([]);
   const [activeTab, setActiveTab] = useState('tasks');
   const [columnSort, setColumnSort] = useState(null);
   const [mtnTrends, setMtnTrends] = useState(null);
@@ -392,21 +393,42 @@ export default function TodoList({ apiUrl, userNumber }) {
 
   const handleDoLater = async (task, period, dueDate = null) => {
     const previousScheduledDate = task?.scheduled_date || null;
+    const confirmedDate = period === 'confirmed_date' ? dueDate : null;
     const targetDate = findSuitableScheduleDate({
       tasks,
       task,
       todayKey,
       period,
       dueDate,
+      capacity: calendarMtnCapacity,
       getTaskScore,
-    });
+    }) || confirmedDate;
     if (!targetDate) {
-      alert(t('calendar.doLaterNoDate', 'No suitable day is available before the deadline.'));
-      return null;
+      const nextPeriod = period === 'later_this_week' ? 'next_week' : period;
+      const deadlineSafeFallback = findSuitableScheduleDate({
+        tasks, task, todayKey, period: nextPeriod, dueDate, capacity: calendarMtnCapacity, getTaskScore,
+      });
+      if (deadlineSafeFallback) {
+        return { error: 'no_workday_capacity', fallbackDate: deadlineSafeFallback };
+      }
+      const pastDueFallback = findSuitableScheduleDate({
+        tasks, task, todayKey, period: nextPeriod, dueDate, capacity: calendarMtnCapacity, ignoreDeadline: true, getTaskScore,
+      });
+      if (pastDueFallback && task?.due_date) {
+        return {
+          error: 'deadline_conflict',
+          fallbackDate: pastDueFallback,
+          dueDate: String(task.due_date).split('T')[0],
+        };
+      }
+      return { error: 'no_capacity' };
     }
 
     const updates = { scheduled_date: targetDate };
-    if (dueDate) updates.due_date = dueDate;
+    if (dueDate && period !== 'confirmed_date') updates.due_date = dueDate;
+    if (period === 'confirmed_date' && task?.due_date && targetDate > String(task.due_date).split('T')[0]) {
+      updates.due_date = targetDate;
+    }
     const previousDueDate = task?.due_date || null;
     const previousTasks = tasks;
     setTasks(currentTasks => currentTasks.map(currentTask => (
@@ -563,50 +585,47 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
   };
 
-  const getTomorrowET = () => {
-    const tomorrow = getETDate(timezone);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return formatDateForInput(tomorrow);
-  };
-
-  const openDeferNonTop10Modal = () => {
-    if (sortedTasks.length <= 10) {
-      alert('There are no tasks outside the current Top 10.');
-      return;
-    }
-    setShowDeferModal(true);
-  };
-
-  const deferNonTop10Tasks = async () => {
-    const currentOrder = getSortedTasks();
-    const tasksToKeepToday = currentOrder.slice(0, 10);
-    const tasksToMove = currentOrder.slice(10);
-
-    if (tasksToMove.length === 0) {
-      setShowDeferModal(false);
-      alert('There are no tasks outside the current Top 10.');
-      return;
-    }
-
+  const openDeferNonTop10Modal = async () => {
     setDeferLoading(true);
     try {
-      const targetDate = getTomorrowET();
-      const response = await axios.post(
-        `${apiUrl}/api/tasks/bulk-defer-non-top-10`,
-        {
-          task_ids_to_keep_today: tasksToKeepToday.map(task => task.id),
-          task_ids_to_move: tasksToMove.map(task => task.id),
-          target_date: targetDate
-        },
-        { params: { user_number: userNumber } }
-      );
-
-      await fetchTasks();
-      setShowDeferModal(false);
-      alert(`Moved ${response.data?.updated ?? tasksToMove.length} task(s) to tomorrow.`);
+      const response = await axios.get(`${apiUrl}/api/tasks/`, {
+        params: { user_number: userNumber, filter_type: 'all' },
+      });
+      const allOpenTasks = (Array.isArray(response.data) ? response.data : [])
+        .filter(task => String(task.status || 'open').toLowerCase() !== 'completed');
+      const todayTasks = allOpenTasks.filter(task => getTaskScheduledDate(task) === todayKey);
+      if (todayTasks.length <= 10) {
+        alert(t('optimizeToday.alreadyOptimized', 'Today already has 10 or fewer scheduled tasks.'));
+        return;
+      }
+      setOptimizationTasks(allOpenTasks);
+      setShowDeferModal(true);
     } catch (err) {
-      console.error('Error deferring non-Top-10 tasks:', err);
-      alert(err.response?.data?.detail || 'Failed to move tasks to tomorrow');
+      console.error('Error loading tasks for today optimization:', err);
+      alert(t('optimizeToday.loadFailed', 'Failed to load all tasks for optimization.'));
+    } finally {
+      setDeferLoading(false);
+    }
+  };
+
+  const applyTodayOptimization = async (moves) => {
+    setDeferLoading(true);
+    try {
+      await Promise.all(
+        moves.map(move => axios.put(
+          `${apiUrl}/api/tasks/${move.task.id}`,
+          {
+            scheduled_date: move.targetDate,
+            ...(move.newDueDate ? { due_date: move.newDueDate } : {}),
+          },
+          { params: { user_number: userNumber } }
+        ))
+      );
+      await fetchTasks({ skipMtnBackfill: true });
+      setShowDeferModal(false);
+    } catch (err) {
+      console.error('Error applying today optimization:', err);
+      alert(err.response?.data?.detail || t('optimizeToday.applyFailed', 'Failed to apply the optimization changes.'));
     } finally {
       setDeferLoading(false);
     }
@@ -705,6 +724,8 @@ export default function TodoList({ apiUrl, userNumber }) {
     : [];
   const mtnBenchmark = buildDailyMtnBenchmark(mtnTrends);
   const calendarMtnCapacity = buildMtnCapacity(mtnTrends?.trend_chart, todayKey);
+  const todayScheduledTaskCount = tasks.filter(task => getTaskScheduledDate(task) === todayKey && String(task.status || 'open').toLowerCase() !== 'completed').length;
+  const optimizationTriggerCount = activeTab === 'calendar' ? todayScheduledTaskCount : tasks.length;
 
   // ============================================================================
   // RENDER
@@ -728,7 +749,7 @@ export default function TodoList({ apiUrl, userNumber }) {
           activeTab={activeTab}
           sortOrderCount={sortOrder.length}
           taskCount={tasks.length}
-          sortedTaskCount={sortedTasks.length}
+          sortedTaskCount={optimizationTriggerCount}
           priorityLoading={priorityLoading}
           opportunityLoading={opportunityLoading}
           mtnNeedle={(
@@ -934,11 +955,15 @@ export default function TodoList({ apiUrl, userNumber }) {
       )}
 
       {showDeferModal && (
-        <DeferNonTop10Modal
-          taskCount={sortedTasks.length}
+        <OptimizeTodayModal
+          tasks={optimizationTasks}
+          todayKey={todayKey}
+          capacity={calendarMtnCapacity}
+          getTaskScore={getTaskScore}
           loading={deferLoading}
           onCancel={() => setShowDeferModal(false)}
-          onConfirm={deferNonTop10Tasks}
+          onApply={applyTodayOptimization}
+          t={t}
         />
       )}
 

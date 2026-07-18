@@ -104,18 +104,18 @@ describe('todoCalendarLogic', () => {
     expect(buildMtnCapacity(trend, '2026-06-22')).toBe(32);
   });
 
-  it('chooses the lowest-MTN remaining day this week', () => {
+  it('chooses the lowest-MTN remaining workday this week', () => {
     const selected = findSuitableScheduleDate({
       tasks: [
-        task({ id: 1, scheduled_date: '2026-06-19', due_date: null, move_the_needle_score: 0.8 }),
-        task({ id: 2, scheduled_date: '2026-06-20', due_date: null, move_the_needle_score: 0.9 }),
-        task({ id: 3, scheduled_date: '2026-06-21', due_date: null, move_the_needle_score: 0.2 }),
+        task({ id: 1, scheduled_date: '2026-06-15', due_date: null, move_the_needle_score: 0.8 }),
+        task({ id: 2, scheduled_date: '2026-06-16', due_date: null, move_the_needle_score: 0.9 }),
+        task({ id: 3, scheduled_date: '2026-06-17', due_date: null, move_the_needle_score: 0.2 }),
       ],
       task: { id: 1, due_date: null },
-      todayKey: '2026-06-19',
+      todayKey: '2026-06-15',
       period: 'later_this_week',
     });
-    expect(selected).toBe('2026-06-21');
+    expect(selected).toBe('2026-06-18');
   });
 
   it('never selects a day after the optional deadline', () => {
@@ -136,6 +136,17 @@ describe('todoCalendarLogic', () => {
       period: 'by_due_date',
       dueDate: '2026-06-24',
     });
-    expect(selected).toBe('2026-06-20');
+    expect(selected).toBe('2026-06-22');
+  });
+
+  it('does not select weekends and respects available MTN capacity', () => {
+    const selected = findSuitableScheduleDate({
+      tasks: [task({ id: 2, scheduled_date: '2026-06-22', due_date: null, move_the_needle_score: 0.9 })],
+      task: task({ id: 1, due_date: null, move_the_needle_score: 0.8 }),
+      todayKey: '2026-06-19',
+      period: 'next_week',
+      capacity: 10,
+    });
+    expect(selected).toBe('2026-06-23');
   });
 });

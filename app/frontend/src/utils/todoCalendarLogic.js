@@ -98,7 +98,10 @@ const candidateDateKeys = (todayKey, period, deadlineKey = '') => {
     keys.push(formatDateKey(cursor));
     cursor = addDays(cursor, 1);
   }
-  return keys;
+  return keys.filter(key => {
+    const day = dateFromKey(key)?.getDay();
+    return day !== 0 && day !== 6;
+  });
 };
 
 export const findSuitableScheduleDate = ({
@@ -107,9 +110,11 @@ export const findSuitableScheduleDate = ({
   todayKey,
   period,
   dueDate,
+  capacity = null,
+  ignoreDeadline = false,
   getTaskScore = () => null,
 }) => {
-  const deadlineKey = normalizeDateString(dueDate || task?.due_date);
+  const deadlineKey = ignoreDeadline ? '' : normalizeDateString(dueDate || task?.due_date);
   const candidates = candidateDateKeys(todayKey, period, deadlineKey);
   if (candidates.length === 0) return null;
 
@@ -122,7 +127,13 @@ export const findSuitableScheduleDate = ({
     loadByDate[scheduledKey].expectedMtn += getExpectedMtnScore(item, getTaskScore) || 0;
   });
 
-  return candidates.sort((left, right) => (
+  const taskMtn = getExpectedMtnScore(task, getTaskScore) || 0;
+  const capacitySafeCandidates = Number.isFinite(capacity) && capacity > 0
+    ? candidates.filter(key => loadByDate[key].expectedMtn + taskMtn <= capacity)
+    : candidates;
+  if (capacitySafeCandidates.length === 0) return null;
+
+  return capacitySafeCandidates.sort((left, right) => (
     loadByDate[left].expectedMtn - loadByDate[right].expectedMtn ||
     loadByDate[left].taskCount - loadByDate[right].taskCount ||
     left.localeCompare(right)

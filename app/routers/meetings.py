@@ -98,7 +98,40 @@ def _query(db: Session):
     )
 
 
+def _participant_key(participant: MeetingParticipant) -> str:
+    label = (participant.speaker_label or participant.display_name or "").strip()
+    normalized = re.sub(r"^(speaker|participant)\s+", "", label, flags=re.IGNORECASE).strip().lower()
+    if participant.is_current_user or participant.match_status == "current_user" or normalized == "me":
+        return "current-user"
+    if participant.person_id:
+        return f"person:{participant.person_id}"
+    return f"speaker:{normalized or participant.id}"
+
+
+def _participant_score(participant: MeetingParticipant) -> tuple:
+    label = (participant.speaker_label or "").strip()
+    normalized = re.sub(r"^(speaker|participant)\s+", "", label, flags=re.IGNORECASE).strip()
+    return (
+        1 if participant.is_current_user else 0,
+        1 if participant.person_id else 0,
+        1 if label.lower() == "me" else 0,
+        1 if label == normalized else 0,
+        -participant.id,
+    )
+
+
+def _deduplicated_participants(meeting: Meeting) -> list[MeetingParticipant]:
+    selected = {}
+    for participant in meeting.participants:
+        key = _participant_key(participant)
+        existing = selected.get(key)
+        if existing is None or _participant_score(participant) > _participant_score(existing):
+            selected[key] = participant
+    return sorted(selected.values(), key=lambda item: item.id)
+
+
 def _meeting_payload(meeting: Meeting, detail: bool = False):
+    participants = _deduplicated_participants(meeting)
     payload = {
         "id": meeting.id,
         "title": meeting.title,
@@ -110,8 +143,8 @@ def _meeting_payload(meeting: Meeting, detail: bool = False):
         "duration_seconds": meeting.duration_seconds,
         "one_line_summary": meeting.one_line_summary,
         "executive_summary": meeting.executive_summary,
-        "participant_count": len(meeting.participants),
-        "participants": [{"id": p.id, "display_name": p.display_name, "speaker_label": p.speaker_label, "person_id": p.person_id, "match_status": p.match_status, "is_current_user": p.is_current_user} for p in meeting.participants],
+        "participant_count": len(participants),
+        "participants": [{"id": p.id, "display_name": p.display_name, "speaker_label": p.speaker_label, "person_id": p.person_id, "match_status": p.match_status, "is_current_user": p.is_current_user} for p in participants],
         "action_item_count": len(meeting.action_items),
         "decision_count": len(meeting.decisions),
         "has_recording": bool(meeting.recording_storage_key),
@@ -339,6 +372,23 @@ def match_participant(participant_id: int, payload: ParticipantMatch, db: Sessio
         user = db.query(User).filter((User.phone_number == payload.user_number) | (User.email == payload.user_number)).first()
         if not user:
             raise HTTPException(status_code=404, detail="Current user not found.")
+        recognized_self = db.query(MeetingParticipant).filter(
+            MeetingParticipant.meeting_id == participant.meeting_id,
+            MeetingParticipant.id != participant.id,
+            MeetingParticipant.speaker_label.ilike("me"),
+            MeetingParticipant.is_current_user.is_(True),
+        ).first()
+        if recognized_self:
+            # Voice recognition is the canonical self record. Removing the later
+            # analysis alias avoids showing both "Me" and "Participant B = Me".
+            db.delete(participant)
+            db.commit()
+            return {"matched": True, "merged_into_participant_id": recognized_self.id}
+        db.query(MeetingParticipant).filter(
+            MeetingParticipant.meeting_id == participant.meeting_id,
+            MeetingParticipant.id != participant.id,
+            MeetingParticipant.is_current_user.is_(True),
+        ).update({"is_current_user": False, "match_status": "unmatched"}, synchronize_session=False)
         participant.person_id = None
         participant.display_name = user.name or "Me"
         participant.match_status = "current_user"
