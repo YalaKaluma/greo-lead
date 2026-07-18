@@ -72,7 +72,7 @@ When adding a new page or component, do not hardcode user-facing text directly i
 - Clickable domain and subdomain navigation.
 - Belt status and trial progression.
 - Readiness assessment and promotion flows.
-- Evidence library under the wheel.
+- My Story under the wheel.
 - Reflection and real-world trial submission modal.
 - Subdomain add/edit/delete modal connected to Journey API endpoints.
 

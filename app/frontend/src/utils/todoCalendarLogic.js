@@ -131,9 +131,11 @@ export const findSuitableScheduleDate = ({
   const capacitySafeCandidates = Number.isFinite(capacity) && capacity > 0
     ? candidates.filter(key => loadByDate[key].expectedMtn + taskMtn <= capacity)
     : candidates;
-  if (capacitySafeCandidates.length === 0) return null;
+  const rankedCandidates = capacitySafeCandidates.length > 0
+    ? capacitySafeCandidates
+    : candidates;
 
-  return capacitySafeCandidates.sort((left, right) => (
+  return rankedCandidates.sort((left, right) => (
     loadByDate[left].expectedMtn - loadByDate[right].expectedMtn ||
     loadByDate[left].taskCount - loadByDate[right].taskCount ||
     left.localeCompare(right)

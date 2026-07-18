@@ -54,7 +54,7 @@ dimensions:
           display_order: 3
         behavioral:
           title: Foundation Complete
-          prompt: Complete vision, values, and strengths in Alfred's evidence library.
+          prompt: Complete vision, values, and strengths in My Story.
           signals:
           - vision_completed
           - values_completed
@@ -302,7 +302,7 @@ dimensions:
           display_order: 1
         behavioral:
           title: Team Foundations
-          prompt: Complete team composition, inspire, and delegate section in Alfred's evidence library.
+          prompt: Complete the team composition, inspire, and delegate sections in My Story.
           signals:
           - relationship_reflections
           - people_reviews
@@ -582,7 +582,7 @@ dimensions:
           display_order: 2
         behavioral:
           title: Behavioral Evidence
-          prompt: Fill in your prioritization and procrastination tendency, and current executive system in Alfred's evidence library.
+          prompt: Fill in your prioritization and procrastination tendency, and current executive system in My Story.
           signals:
           - prioritization_tendency_completed
           - procrastination_tendency_completed
@@ -922,7 +922,7 @@ dimensions:
           display_order: 2
         behavioral:
           title: Map Your Energy Landscape
-          prompt: Complete the Energy Sources, Energy Drains, and Recovery sections in Alfred's evidence library.
+          prompt: Complete the Energy Sources, Energy Drains, and Recovery sections in My Story.
           signals:
           - energy_drains_completed
           - energy_sources_completed

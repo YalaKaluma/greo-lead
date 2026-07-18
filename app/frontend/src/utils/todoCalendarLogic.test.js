@@ -149,4 +149,21 @@ describe('todoCalendarLogic', () => {
     });
     expect(selected).toBe('2026-06-23');
   });
+
+  it('uses the lowest-MTN workday when every candidate is over capacity', () => {
+    const selected = findSuitableScheduleDate({
+      tasks: [
+        task({ id: 2, scheduled_date: '2026-06-22', move_the_needle_score: 2 }),
+        task({ id: 3, scheduled_date: '2026-06-23', move_the_needle_score: 1 }),
+        task({ id: 4, scheduled_date: '2026-06-24', move_the_needle_score: 3 }),
+        task({ id: 5, scheduled_date: '2026-06-25', move_the_needle_score: 4 }),
+        task({ id: 6, scheduled_date: '2026-06-26', move_the_needle_score: 5 }),
+      ],
+      task: task({ id: 1, move_the_needle_score: 2 }),
+      todayKey: '2026-06-19',
+      period: 'next_week',
+      capacity: 1,
+    });
+    expect(selected).toBe('2026-06-23');
+  });
 });

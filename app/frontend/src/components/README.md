@@ -6,7 +6,7 @@ This folder contains the main React UI surfaces for Alfred.
 
 - `Home.jsx` renders the activation-aware dashboard snapshot and helps route users into the right next workflow.
 - `goals/MyGoals.jsx` renders Vision/Pillar/Outcome goals and coordinates goal panels, tree/list views, goal reviews, linked tasks, and the transformation roadmap.
-- `MyLeadershipJourney.jsx` renders Journey 2.0: leadership wheel, clickable subdomains, belt trials, readiness assessment, trial response modal, evidence library, and subdomain add/edit modal.
+- `MyLeadershipJourney.jsx` renders Journey 2.0: leadership wheel, clickable subdomains, belt trials, readiness assessment, trial response modal, My Story, and subdomain add/edit modal.
 - `TodoList.jsx` coordinates task data, filters, task mutations, and page-level orchestration while focused TodoList modules render list, modal, trend, and action surfaces.
 - `MyHabits.jsx` renders habit tracking, daily states, energy check-ins, history, trends, scores, heatmap, leaderboard, and habit coaching.
 - `MyTeam.jsx` renders people/team surfaces and relationship review workflows.
@@ -64,7 +64,7 @@ Focused TodoList support modules currently own:
 - Subdomain evidence loading from existing Journey endpoints.
 - A clickable SVG wheel with center hub, domain ring, subdomain ring, and belt-color status.
 - A unified belt-trials panel for all domains.
-- Evidence library under the wheel.
+- My Story under the wheel.
 
 ## Frontend Conventions
 

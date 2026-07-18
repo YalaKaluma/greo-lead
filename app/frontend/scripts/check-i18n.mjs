@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,6 +8,33 @@ const enPath = resolve(i18nDir, 'en.json');
 const frPath = resolve(i18nDir, 'fr.json');
 
 const placeholderPattern = /\b(TODO|TBD|TRANSLATE|MISSING)\b/i;
+const sourceDir = resolve(__dirname, '../src');
+const sourceExtensions = new Set(['.js', '.jsx', '.ts', '.tsx']);
+const translatableAttributePattern = /\b(alt|aria-label|label|placeholder|title)\s*=\s*(['"])([^'"{}]*[A-Za-z][^'"{}]*)\2/g;
+const jsxTextPattern = /<[A-Za-z][^>]*>([^<>{}\r\n]*[A-Za-z][^<>{}\r\n]*)</g;
+const ignoredSourceFilePattern = /(?:\.test\.[jt]sx?| - Copy\.[jt]sx?|\(OLD[^)]*\)\.[jt]sx?)$/;
+const intentionallySharedValues = new Set([
+  'Alfred',
+  'Actions',
+  'Aspirations',
+  'Coaching',
+  'Contact',
+  'Cookies',
+  'English',
+  'Français',
+  'Infrastructure',
+  'Mission',
+  'Performance',
+  'Superstar',
+  '+ Vision',
+  'privacy@alfredos.ai',
+  'security@alfredos.ai',
+]);
+const intentionallySharedUiText = new Set([
+  'Alfred',
+  'Mailgun',
+  'OpenAI',
+]);
 
 function readJson(filePath) {
   try {
@@ -52,6 +79,84 @@ function printList(title, items, format = (item) => item) {
   }
 }
 
+function walkSourceFiles(directory, output = []) {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      walkSourceFiles(path, output);
+    } else if (sourceExtensions.has(entry.name.slice(entry.name.lastIndexOf('.')))) {
+      output.push(path);
+    }
+  }
+  return output;
+}
+
+function findReferencedTranslationKeys() {
+  const references = new Map();
+  const translationCallPattern = /\bt\(\s*(['"])([^'"\r\n]+)\1/g;
+
+  for (const filePath of walkSourceFiles(sourceDir)) {
+    const source = readFileSync(filePath, 'utf8');
+    for (const match of source.matchAll(translationCallPattern)) {
+      const key = match[2];
+      const line = source.slice(0, match.index).split(/\r?\n/).length;
+      const locations = references.get(key) || [];
+      locations.push(`${filePath.slice(sourceDir.length + 1)}:${line}`);
+      references.set(key, locations);
+    }
+  }
+
+  return references;
+}
+
+function normalizeVisibleText(value) {
+  return value
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function sourceLocation(source, index, filePath) {
+  const line = source.slice(0, index).split(/\r?\n/).length;
+  return `${filePath.slice(sourceDir.length + 1)}:${line}`;
+}
+
+function findHardCodedUiText() {
+  const violations = [];
+
+  for (const filePath of walkSourceFiles(sourceDir)) {
+    if (ignoredSourceFilePattern.test(filePath)) continue;
+    if (!/\.[jt]sx$/.test(filePath)) continue;
+    const source = readFileSync(filePath, 'utf8');
+
+    for (const match of source.matchAll(jsxTextPattern)) {
+      const value = normalizeVisibleText(match[1]);
+      if (value && !intentionallySharedUiText.has(value)) {
+        violations.push({
+          location: sourceLocation(source, match.index, filePath),
+          kind: 'JSX text',
+          value,
+        });
+      }
+    }
+
+    for (const match of source.matchAll(translatableAttributePattern)) {
+      const value = normalizeVisibleText(match[3]);
+      if (value && !intentionallySharedUiText.has(value)) {
+        violations.push({
+          location: sourceLocation(source, match.index, filePath),
+          kind: match[1],
+          value,
+        });
+      }
+    }
+  }
+
+  return violations;
+}
+
 const en = flatten(readJson(enPath));
 const fr = flatten(readJson(frPath));
 
@@ -77,13 +182,30 @@ const placeholderFrenchValues = Object.entries(fr)
   .filter(([, value]) => typeof value === 'string' && placeholderPattern.test(value.trim()))
   .map(([key, value]) => ({ key, value }));
 
+const untranslatedFrenchValues = Object.entries(fr)
+  .filter(([key, value]) => (
+    typeof value === 'string' &&
+    value === en[key] &&
+    !intentionallySharedValues.has(value)
+  ))
+  .map(([key, value]) => ({ key, value }));
+
+const referencedTranslationKeys = findReferencedTranslationKeys();
+const unknownReferencedKeys = [...referencedTranslationKeys.entries()]
+  .filter(([key]) => !(key in en) || !(key in fr))
+  .map(([key, locations]) => ({ key, locations }));
+const hardCodedUiText = findHardCodedUiText();
+
 const hasFailures = (
   missingInFr.length > 0 ||
   missingInEn.length > 0 ||
   malformedKeys.length > 0 ||
   invalidFrenchValues.length > 0 ||
   emptyFrenchValues.length > 0 ||
-  placeholderFrenchValues.length > 0
+  placeholderFrenchValues.length > 0 ||
+  untranslatedFrenchValues.length > 0 ||
+  unknownReferencedKeys.length > 0 ||
+  hardCodedUiText.length > 0
 );
 
 if (!hasFailures) {
@@ -105,6 +227,21 @@ printList(
   'Placeholder French translations',
   placeholderFrenchValues,
   ({ key, value }) => `${key} = ${JSON.stringify(value)}`
+);
+printList(
+  'French values still identical to English',
+  untranslatedFrenchValues,
+  ({ key, value }) => `${key} = ${JSON.stringify(value)}`
+);
+printList(
+  'Translation keys used by the UI but missing from a locale',
+  unknownReferencedKeys,
+  ({ key, locations }) => `${key} (${locations.join(', ')})`
+);
+printList(
+  'Hard-coded user-visible English (move this text to both locale files)',
+  hardCodedUiText,
+  ({ location, kind, value }) => `${location} [${kind}] ${JSON.stringify(value)}`
 );
 
 console.log('\nPlease update app/frontend/src/i18n/en.json and app/frontend/src/i18n/fr.json before merging.');

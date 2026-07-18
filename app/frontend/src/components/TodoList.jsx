@@ -629,6 +629,25 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
   };
 
+  const completeTodayOptimizationTask = async (task) => {
+    setDeferLoading(true);
+    try {
+      await axios.patch(
+        `${apiUrl}/api/tasks/${task.id}/toggle`,
+        {},
+        { params: { user_number: userNumber } }
+      );
+      fetchMtnTrends();
+      return true;
+    } catch (err) {
+      console.error('Error completing task during today optimization:', err);
+      alert(err.response?.data?.detail || t('optimizeToday.completeFailed', 'Failed to mark this task as done.'));
+      return false;
+    } finally {
+      setDeferLoading(false);
+    }
+  };
+
   const finishTodayOptimization = async () => {
     setShowDeferModal(false);
     await fetchTasks({ skipMtnBackfill: true });
@@ -975,6 +994,7 @@ export default function TodoList({ apiUrl, userNumber }) {
           loading={deferLoading}
           onCancel={finishTodayOptimization}
           onApplyMove={applyTodayOptimizationMove}
+          onMarkDone={completeTodayOptimizationTask}
           t={t}
         />
       )}
