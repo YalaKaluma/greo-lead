@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
+import subprocess
+import tempfile
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -29,6 +32,9 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 MEETING_PROMPT_VERSION = "meeting-phase1-v1"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4o-mini")
 DB_WRITE_ATTEMPTS = max(1, int(os.getenv("MEETING_DB_WRITE_ATTEMPTS", "3")))
+TRANSCRIPTION_CHUNK_SECONDS = min(
+    1200, max(300, int(os.getenv("MEETING_TRANSCRIPTION_CHUNK_SECONDS", "1200")))
+)
 T = TypeVar("T")
 
 
@@ -77,7 +83,7 @@ def _safe_date(value):
         return None
 
 
-def transcribe_recording(path: str, filename: str, content_type: str | None) -> dict:
+def _transcribe_file(path: str, filename: str, content_type: str | None) -> dict:
     with open(path, "rb") as audio_file:
         transcript = client.audio.transcriptions.create(
             model="gpt-4o-transcribe-diarize",
@@ -97,6 +103,66 @@ def transcribe_recording(path: str, filename: str, content_type: str | None) -> 
     ]
     speaker_text = "\n".join(f"{segment['speaker']}: {segment['text']}" for segment in segments)
     return {"text": speaker_text or transcript.text.strip(), "segments": segments}
+
+
+def _audio_duration_seconds(path: str) -> float | None:
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1", path,
+            ],
+            check=True, capture_output=True, text=True, timeout=60,
+        )
+        return float(result.stdout.strip())
+    except (FileNotFoundError, subprocess.SubprocessError, ValueError):
+        logger.exception("Could not determine duration for meeting audio %s", path)
+        return None
+
+
+def _create_audio_chunk(source_path: str, output_path: str, offset: float, duration: float) -> None:
+    subprocess.run(
+        [
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+            "-ss", str(offset), "-t", str(duration), "-i", source_path,
+            "-vn", "-ac", "1", "-ar", "16000", "-codec:a", "libmp3lame",
+            "-b:a", "64k", output_path,
+        ],
+        check=True, capture_output=True, timeout=300,
+    )
+
+
+def transcribe_recording(path: str, filename: str, content_type: str | None) -> dict:
+    duration = _audio_duration_seconds(path)
+    if duration is None or duration <= TRANSCRIPTION_CHUNK_SECONDS:
+        return _transcribe_file(path, filename, content_type)
+
+    chunk_count = math.ceil(duration / TRANSCRIPTION_CHUNK_SECONDS)
+    logger.info(
+        "Long meeting audio is %.1f seconds; splitting it into %s chunks of at most %s seconds",
+        duration, chunk_count, TRANSCRIPTION_CHUNK_SECONDS,
+    )
+    combined_segments = []
+    combined_text = []
+    with tempfile.TemporaryDirectory(prefix="alfred-meeting-chunks-") as chunk_dir:
+        for index in range(chunk_count):
+            offset = index * TRANSCRIPTION_CHUNK_SECONDS
+            chunk_duration = min(TRANSCRIPTION_CHUNK_SECONDS, duration - offset)
+            chunk_path = str(Path(chunk_dir) / f"chunk-{index + 1:03d}.mp3")
+            logger.info("Creating meeting audio chunk %s/%s", index + 1, chunk_count)
+            _create_audio_chunk(path, chunk_path, offset, chunk_duration)
+            logger.info("Transcribing meeting audio chunk %s/%s", index + 1, chunk_count)
+            result = _transcribe_file(
+                chunk_path, f"{Path(filename).stem}-part-{index + 1}.mp3", "audio/mpeg"
+            )
+            combined_text.append(result["text"])
+            for segment in result["segments"]:
+                combined_segments.append({
+                    **segment,
+                    "start": segment["start"] + offset,
+                    "end": segment["end"] + offset,
+                })
+    return {"text": "\n".join(combined_text).strip(), "segments": combined_segments}
 
 
 def analyze_transcript(transcript: str, supplied_title: str | None = None) -> dict:
