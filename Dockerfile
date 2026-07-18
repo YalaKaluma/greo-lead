@@ -32,6 +32,8 @@ RUN npm run build
 # --------------------
 WORKDIR /app
 COPY app/ ./app
+COPY alembic.ini ./alembic.ini
+COPY alembic/ ./alembic/
 
 # --------------------
 # REPLACE static files: delete old, move new from /static to /app/static
@@ -41,4 +43,4 @@ RUN rm -rf /app/static && \
     mv /static/* /app/static/ 2>/dev/null || true
 
 EXPOSE 8080
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]

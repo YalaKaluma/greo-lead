@@ -205,6 +205,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
   const { t, timezone } = useLanguage();
   const showHabitTrends = true;
   const [habits, setHabits] = useState([]);
+  const [habitsError, setHabitsError] = useState('');
   const [goals, setGoals] = useState([]);
   const [activeTab, setActiveTab] = useState('habits');
   const [trends, setTrends] = useState(null);
@@ -231,6 +232,8 @@ export default function MyHabits({ apiUrl, userNumber }) {
   /* ---------------- FETCH HABITS ---------------- */
 
   const fetchHabits = async () => {
+    if (apiUrl == null || !userNumber) return;
+    setHabitsError('');
     try {
       const res = await axios.get(`${apiUrl}/api/habits`, {
         params: { user_number: userNumber }
@@ -242,12 +245,14 @@ export default function MyHabits({ apiUrl, userNumber }) {
       }
     } catch (err) {
       console.error('Error fetching habits:', err);
+      setHabitsError(err.response?.data?.detail || 'Unable to load your habits right now.');
     }
   };
 
   /* ---------------- FETCH GOALS (SAME AS TODOLIST) ---------------- */
 
   const fetchGoals = async () => {
+    if (apiUrl == null || !userNumber) return;
     try {
       const res = await axios.get(`${apiUrl}/api/journey/goals`, {
         params: { user_number: userNumber }
@@ -371,9 +376,10 @@ export default function MyHabits({ apiUrl, userNumber }) {
   };
 
   useEffect(() => {
+    if (apiUrl == null || !userNumber) return;
     fetchHabits();
     fetchGoals();
-  }, [timezone]);
+  }, [apiUrl, userNumber, timezone]);
 
   useEffect(() => {
     if (activeTab === 'trends' && !trends && !trendsLoading) {
@@ -582,6 +588,11 @@ export default function MyHabits({ apiUrl, userNumber }) {
         <>
 
       {/* HABIT LIST */}
+      {habitsError && (
+        <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {habitsError}
+        </div>
+      )}
       {reorderError && (
         <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {reorderError}
