@@ -348,7 +348,8 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
         body: JSON.stringify({ user_number: userNumber, note_text: noteText.trim(), elapsed_seconds: seconds })
       });
       if (!response.ok) throw new Error('Could not save this context note.');
-      setContextNotes((current) => [...current, await response.json()]);
+      const savedNote = await response.json();
+      setContextNotes((current) => [...current, savedNote]);
       setNoteText('');
     } catch (err) { setError(err.message); } finally { setSavingContext(false); }
   };
