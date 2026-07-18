@@ -118,6 +118,20 @@ describe('todoListLogic sorting', () => {
     expect(getSortedTasks({ tasks, sortOrder: [2, 1] }).map(item => item.id)).toEqual([2, 1, 3]);
   });
 
+  it('keeps manual drag-and-drop order while priority mode is active', () => {
+    const tasks = [
+      task({ id: 1, mtn_score_today: 0.9, mtn_rank_today: 1 }),
+      task({ id: 2, mtn_score_today: 0.1, mtn_rank_today: 2 }),
+      task({ id: 3, mtn_score_today: 0.8, mtn_rank_today: 3 }),
+    ];
+
+    expect(getSortedTasks({
+      tasks,
+      sortOrder: [3, 2, 1],
+      priorityMode: true,
+    }).map(item => item.id)).toEqual([3, 2, 1]);
+  });
+
   it('uses persisted backend sort order before stored MTN scoring', () => {
     const tasks = [
       task({ id: 1, sort_order: 20, mtn_score_today: 0.9 }),
@@ -126,6 +140,16 @@ describe('todoListLogic sorting', () => {
     ];
 
     expect(getSortedTasks({ tasks }).map(item => item.id)).toEqual([2, 1, 3]);
+  });
+
+  it('uses persisted backend sort order while priority mode is active', () => {
+    const tasks = [
+      task({ id: 1, sort_order: 2, mtn_score_today: 0.9, mtn_rank_today: 1 }),
+      task({ id: 2, sort_order: 0, mtn_score_today: 0.1, mtn_rank_today: 2 }),
+      task({ id: 3, sort_order: 1, mtn_score_today: 0.8, mtn_rank_today: 3 }),
+    ];
+
+    expect(getSortedTasks({ tasks, priorityMode: true }).map(item => item.id)).toEqual([2, 3, 1]);
   });
 
   it('sorts by MTN rank before score when no manual or persisted order exists', () => {

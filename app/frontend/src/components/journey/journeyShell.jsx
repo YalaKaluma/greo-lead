@@ -13,6 +13,7 @@ import {
 import { directAssessmentCopy, formatDateTime } from "./journeyAssessment";
 import { StatusPill } from "./journeyEvidence";
 import { formatTrialStatus } from "./journeyTrials";
+import { LeadershipWheel } from "./journeyWheel";
 
 export function JourneyHeaderTabs({
   t,
