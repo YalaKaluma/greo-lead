@@ -6,8 +6,7 @@ const buildTasks = (count = 12) => Array.from({ length: count }, (_, index) => (
   id: index + 1,
   title: `Task ${index + 1}`,
   status: 'open',
-  scheduled_date: '2026-07-20',
-  due_date: null,
+  due_date: '2026-07-20',
   move_the_needle_score: (index + 1) / 100,
 }));
 
@@ -73,7 +72,7 @@ describe('OptimizeTodayModal', () => {
     expect(onMarkDone).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }));
   });
 
-  it('honors an exact scheduled date without applying a capacity limit', async () => {
+  it('honors an exact due date without applying a capacity limit', async () => {
     const onApplyMove = vi.fn(async () => true);
     render(
       <OptimizeTodayModal
@@ -89,8 +88,8 @@ describe('OptimizeTodayModal', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Choose exact date' }));
-    fireEvent.change(screen.getByLabelText('Exact scheduled date'), { target: { value: '2026-07-22' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Schedule on this date' }));
+    fireEvent.change(screen.getByLabelText('Exact due date'), { target: { value: '2026-07-22' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Set due date' }));
 
     expect(await screen.findByText('Review proposed changes')).toBeInTheDocument();
     expect(onApplyMove).toHaveBeenCalledWith(expect.objectContaining({ targetDate: '2026-07-22' }));

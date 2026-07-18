@@ -54,8 +54,7 @@ def _ensure_onboarding_tasks_link_to_vision(db: Session, user_number: str) -> in
 class TaskCreate(BaseModel):
     title: str
     notes: Optional[str] = ""
-    due_date: Optional[date] = None
-    scheduled_date: Optional[date] = None
+    due_date: date
     priority: str = "Medium"
     project: Optional[str] = None
     delegated_to: Optional[str] = None
@@ -79,7 +78,6 @@ class TaskUpdate(BaseModel):
     title: Optional[str] = None
     notes: Optional[str] = None
     due_date: Optional[Union[datetime, date]] = None
-    scheduled_date: Optional[date] = None
     priority: Optional[str] = None
     status: Optional[str] = None
     project: Optional[str] = None
@@ -107,8 +105,7 @@ class TaskResponse(BaseModel):
     user_number: str
     title: str
     notes: Optional[str]
-    due_date: Optional[datetime]  # ← FIXED: Changed from date to datetime to match database column
-    scheduled_date: Optional[date] = None
+    due_date: datetime
     priority: Optional[str]
     status: str
     project: Optional[str]
@@ -381,9 +378,7 @@ def get_tasks(
 
         due_date_day = func.date(Task.due_date)
 
-        # Date filters. due_date is a DateTime column, but the UI treats due
-        # dates as calendar days. Compare the date portion so tasks due later
-        # today are not excluded by a midnight timestamp boundary.
+        # The due date is the single date used for list and calendar placement.
         if filter_type == "due_today":
             print(f"[TASKS API] Applying due_today filter (today: {today}, timezone: {user_timezone})")
             query = query.filter(
@@ -491,16 +486,10 @@ def create_task(
     Create a new task
     """
     validate_user_goal_link(db, user_number, task.goal_id)
-    if task.scheduled_date and task.due_date and task.scheduled_date > task.due_date:
-        raise HTTPException(
-            status_code=400,
-            detail="The scheduled date cannot be after the task's due date.",
-        )
     new_task = Task(
         user_number=user_number,
         title=task.title,
         notes=task.notes,
-        scheduled_date=task.scheduled_date,
         due_date=task.due_date,
         priority=task.priority.capitalize(),
         status="open",
@@ -552,19 +541,12 @@ def update_task(
 
     # Update only provided fields
     update_data = updates.model_dump(exclude_unset=True)
+    if "due_date" in update_data and update_data["due_date"] is None:
+        raise HTTPException(status_code=400, detail="A due date is required for every task.")
     recurrence_update_scope = update_data.pop("recurrence_update_scope", None)
-    previous_schedule = task.scheduled_date or task.due_date
     should_increment_postponed = (
-        (
-            "scheduled_date" in update_data
-            and _is_due_date_postponed(previous_schedule, update_data.get("scheduled_date"))
-        )
-        or (
-            "scheduled_date" not in update_data
-            and "due_date" in update_data
-            and task.scheduled_date is None
-            and _is_due_date_postponed(task.due_date, update_data.get("due_date"))
-        )
+        "due_date" in update_data
+        and _is_due_date_postponed(task.due_date, update_data.get("due_date"))
     )
 
     # Capitalize priority if provided
@@ -573,14 +555,6 @@ def update_task(
 
     if "goal_id" in update_data:
         validate_user_goal_link(db, user_number, update_data.get("goal_id"))
-
-    next_scheduled_date = _as_date(update_data.get("scheduled_date", task.scheduled_date))
-    next_due_date = _as_date(update_data.get("due_date", task.due_date))
-    if next_scheduled_date and next_due_date and next_scheduled_date > next_due_date:
-        raise HTTPException(
-            status_code=400,
-            detail="The scheduled date cannot be after the task's due date.",
-        )
 
     previous_status = task.status
     now = datetime.now()

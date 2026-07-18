@@ -21,8 +21,8 @@ export const getCalendarMtnLabel = (task, getTaskScore = () => null) => {
   return scoreData ? getMtnLabel(scoreData.score) : '';
 };
 
-export const getTaskScheduledDate = (task) => (
-  normalizeDateString(task?.scheduled_date || task?.due_date)
+export const getTaskDate = (task) => (
+  normalizeDateString(task?.due_date)
 );
 
 export const getExpectedMtnScore = (task, getTaskScore = () => null) => {
@@ -114,17 +114,17 @@ export const findSuitableScheduleDate = ({
   ignoreDeadline = false,
   getTaskScore = () => null,
 }) => {
-  const deadlineKey = ignoreDeadline ? '' : normalizeDateString(dueDate || task?.due_date);
+  const deadlineKey = ignoreDeadline ? '' : normalizeDateString(dueDate);
   const candidates = candidateDateKeys(todayKey, period, deadlineKey);
   if (candidates.length === 0) return null;
 
   const loadByDate = Object.fromEntries(candidates.map(key => [key, { expectedMtn: 0, taskCount: 0 }]));
   tasks.forEach(item => {
     if (item.id === task?.id || String(item.status || 'open').toLowerCase() === 'completed') return;
-    const scheduledKey = getTaskScheduledDate(item);
-    if (!loadByDate[scheduledKey]) return;
-    loadByDate[scheduledKey].taskCount += 1;
-    loadByDate[scheduledKey].expectedMtn += getExpectedMtnScore(item, getTaskScore) || 0;
+    const dateKey = getTaskDate(item);
+    if (!loadByDate[dateKey]) return;
+    loadByDate[dateKey].taskCount += 1;
+    loadByDate[dateKey].expectedMtn += getExpectedMtnScore(item, getTaskScore) || 0;
   });
 
   const taskMtn = getExpectedMtnScore(task, getTaskScore) || 0;
@@ -157,7 +157,7 @@ export const getCalendarTasks = ({
 
   tasks.forEach(task => {
     const status = String(task.status || 'open').toLowerCase();
-    const dueKey = getTaskScheduledDate(task);
+    const dueKey = getTaskDate(task);
 
     if (status === 'completed' || !dueKey) return;
     if (dayKeys.has(dueKey)) allGroupedTasks[dueKey].push(task);

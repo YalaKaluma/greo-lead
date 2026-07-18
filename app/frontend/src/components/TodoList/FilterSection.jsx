@@ -5,7 +5,7 @@ import { getLongTermGoals } from '../../utils/taskHelpers';
  * FilterSection Component
  *
  * Collapsible filter panel for tasks:
- * - Due date filter (due today, tomorrow, next 7 days, all)
+ * - Due date filter (today, tomorrow, next 7 days, all)
  * - Search filter
  * - Goal filter with Vision/long-term goals
  * - Importance multi-select filter

@@ -17,7 +17,7 @@ import {
 } from './TodoList/PageControls';
 import { getTodayET, isOverdueET, getLongTermGoals, MTN_TAG_OPTIONS } from '../utils/taskHelpers';
 import { buildDailyMtnBenchmark } from '../utils/todoMtnTrends.js';
-import { buildMtnCapacity, buildSevenDayWindow, findSuitableScheduleDate, getTaskScheduledDate } from '../utils/todoCalendarLogic.js';
+import { buildMtnCapacity, buildSevenDayWindow, findSuitableScheduleDate, getTaskDate } from '../utils/todoCalendarLogic.js';
 import { getSortedTasks as sortTodoTasks, getVisibleTaskScore as resolveVisibleTaskScore } from '../utils/todoListLogic';
 import { useLanguage } from '../i18n/LanguageContext';
 import { usePriority } from '../hooks/usePriority';
@@ -213,7 +213,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       if (!skipMtnBackfill) {
         const calendarDayKeys = new Set(buildSevenDayWindow(todayKey).map(day => day.key));
         const scoringTasks = activeTab === 'calendar'
-          ? openTasks.filter(task => calendarDayKeys.has(getTaskScheduledDate(task)))
+          ? openTasks.filter(task => calendarDayKeys.has(getTaskDate(task)))
           : openTasks;
         backfillMissingMtnScores(scoringTasks);
       }
@@ -365,13 +365,13 @@ export default function TodoList({ apiUrl, userNumber }) {
 
   const handleCalendarReschedule = async (task, targetDate) => {
     if (!task || !targetDate) return;
-    if (targetDate === getTaskScheduledDate(task)) return;
+    if (targetDate === getTaskDate(task)) return;
 
     const previousTasks = tasks;
     setTasks(currentTasks =>
       currentTasks.map(currentTask =>
         currentTask.id === task.id
-          ? { ...currentTask, scheduled_date: targetDate }
+          ? { ...currentTask, due_date: targetDate }
           : currentTask
       )
     );
@@ -379,7 +379,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     try {
       await axios.put(
         `${apiUrl}/api/tasks/${task.id}`,
-        { scheduled_date: targetDate },
+        { due_date: targetDate },
         { params: { user_number: userNumber } }
       );
       await fetchTasks();
@@ -392,7 +392,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const handleDoLater = async (task, period, dueDate = null) => {
-    const previousScheduledDate = task?.scheduled_date || null;
+    const previousDueDate = task?.due_date || null;
     const confirmedDate = period === 'confirmed_date' ? dueDate : null;
     const targetDate = findSuitableScheduleDate({
       tasks,
@@ -411,25 +411,10 @@ export default function TodoList({ apiUrl, userNumber }) {
       if (deadlineSafeFallback) {
         return { error: 'no_workday_capacity', fallbackDate: deadlineSafeFallback };
       }
-      const pastDueFallback = findSuitableScheduleDate({
-        tasks, task, todayKey, period: nextPeriod, dueDate, capacity: calendarMtnCapacity, ignoreDeadline: true, getTaskScore,
-      });
-      if (pastDueFallback && task?.due_date) {
-        return {
-          error: 'deadline_conflict',
-          fallbackDate: pastDueFallback,
-          dueDate: String(task.due_date).split('T')[0],
-        };
-      }
       return { error: 'no_capacity' };
     }
 
-    const updates = { scheduled_date: targetDate };
-    if (dueDate && period !== 'confirmed_date') updates.due_date = dueDate;
-    if (period === 'confirmed_date' && task?.due_date && targetDate > String(task.due_date).split('T')[0]) {
-      updates.due_date = targetDate;
-    }
-    const previousDueDate = task?.due_date || null;
+    const updates = { due_date: targetDate };
     const previousTasks = tasks;
     setTasks(currentTasks => currentTasks.map(currentTask => (
       currentTask.id === task.id ? { ...currentTask, ...updates } : currentTask
@@ -438,7 +423,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     try {
       await axios.put(`${apiUrl}/api/tasks/${task.id}`, updates, { params: { user_number: userNumber } });
       await fetchTasks({ skipMtnBackfill: true });
-      return { taskId: task.id, previousScheduledDate, previousDueDate, targetDate };
+      return { taskId: task.id, previousDueDate, targetDate };
     } catch (err) {
       console.error('Error scheduling task for later:', err);
       setTasks(previousTasks);
@@ -447,8 +432,8 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
   };
 
-  const handleUndoDoLater = async ({ taskId, previousScheduledDate, previousDueDate }) => {
-    const updates = { scheduled_date: previousScheduledDate, due_date: previousDueDate };
+  const handleUndoDoLater = async ({ taskId, previousDueDate }) => {
+    const updates = { due_date: previousDueDate };
     try {
       await axios.put(`${apiUrl}/api/tasks/${taskId}`, updates, { params: { user_number: userNumber } });
       await fetchTasks({ skipMtnBackfill: true });
@@ -593,9 +578,9 @@ export default function TodoList({ apiUrl, userNumber }) {
       });
       const allOpenTasks = (Array.isArray(response.data) ? response.data : [])
         .filter(task => String(task.status || 'open').toLowerCase() !== 'completed');
-      const todayTasks = allOpenTasks.filter(task => getTaskScheduledDate(task) === todayKey);
+      const todayTasks = allOpenTasks.filter(task => getTaskDate(task) === todayKey);
       if (todayTasks.length <= 10) {
-        alert(t('optimizeToday.alreadyOptimized', 'Today already has 10 or fewer scheduled tasks.'));
+        alert(t('optimizeToday.alreadyOptimized', 'Today already has 10 or fewer tasks.'));
         return;
       }
       setOptimizationTasks(allOpenTasks);
@@ -614,8 +599,7 @@ export default function TodoList({ apiUrl, userNumber }) {
       await axios.put(
         `${apiUrl}/api/tasks/${move.task.id}`,
         {
-          scheduled_date: move.targetDate,
-          ...(move.newDueDate ? { due_date: move.newDueDate } : {}),
+          due_date: move.targetDate,
         },
         { params: { user_number: userNumber } }
       );
@@ -653,33 +637,17 @@ export default function TodoList({ apiUrl, userNumber }) {
     await fetchTasks({ skipMtnBackfill: true });
   };
 
-  const applyBulkAction = async (updates, { overrideDueDates = false } = {}) => {
+  const applyBulkAction = async (updates) => {
     const selectedTaskRecords = tasks.filter(task => selectedTasks.includes(task.id));
-    const invalidTasks = selectedTaskRecords.filter(task => {
-      const nextScheduledDate = updates.scheduled_date || getTaskScheduledDate(task);
-      const nextDueDate = updates.due_date || String(task.due_date || '').split('T')[0];
-      return nextScheduledDate && nextDueDate && nextScheduledDate > nextDueDate;
-    });
-    if (invalidTasks.length > 0 && !overrideDueDates) {
-      return { conflicts: invalidTasks.length };
-    }
     try {
       await Promise.all(
-        selectedTaskRecords.map(task => {
-          const taskUpdates = { ...updates };
-          const nextScheduledDate = updates.scheduled_date || getTaskScheduledDate(task);
-          const nextDueDate = updates.due_date || String(task.due_date || '').split('T')[0];
-          if (overrideDueDates && nextScheduledDate && nextDueDate && nextScheduledDate > nextDueDate) {
-            taskUpdates.due_date = nextScheduledDate;
-          }
-          return (
+        selectedTaskRecords.map(task => (
           axios.put(
             `${apiUrl}/api/tasks/${task.id}`,
-            taskUpdates,
+            updates,
             { params: { user_number: userNumber } }
           )
-          );
-        })
+        ))
       );
       await fetchTasks();
       exitSelectionMode();
@@ -755,8 +723,8 @@ export default function TodoList({ apiUrl, userNumber }) {
     : [];
   const mtnBenchmark = buildDailyMtnBenchmark(mtnTrends);
   const calendarMtnCapacity = buildMtnCapacity(mtnTrends?.trend_chart, todayKey);
-  const todayScheduledTaskCount = tasks.filter(task => getTaskScheduledDate(task) === todayKey && String(task.status || 'open').toLowerCase() !== 'completed').length;
-  const optimizationTriggerCount = activeTab === 'calendar' ? todayScheduledTaskCount : tasks.length;
+  const todayTaskCount = tasks.filter(task => getTaskDate(task) === todayKey && String(task.status || 'open').toLowerCase() !== 'completed').length;
+  const optimizationTriggerCount = activeTab === 'calendar' ? todayTaskCount : tasks.length;
 
   // ============================================================================
   // RENDER

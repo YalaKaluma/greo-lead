@@ -3,7 +3,7 @@ import {
   buildMtnCapacity,
   findSuitableScheduleDate,
   getCalendarTasks,
-  getTaskScheduledDate,
+  getTaskDate,
   replaceTaskDueDate,
   summarizeCalendarDay,
 } from './todoCalendarLogic.js';
@@ -66,9 +66,8 @@ describe('todoCalendarLogic', () => {
     expect(replaceTaskDueDate('2026-06-19', '2026-06-22')).toBe('2026-06-22');
   });
 
-  it('prefers scheduled date while retaining legacy due-date fallback', () => {
-    expect(getTaskScheduledDate(task({ scheduled_date: '2026-06-22', due_date: '2026-06-25' }))).toBe('2026-06-22');
-    expect(getTaskScheduledDate(task({ due_date: '2026-06-25T12:00:00' }))).toBe('2026-06-25');
+  it('uses the due date for calendar placement', () => {
+    expect(getTaskDate({ due_date: '2026-06-25T12:00:00' })).toBe('2026-06-25');
   });
 
   it('adds daily task MTN scores on the 0-10 scale', () => {
@@ -107,9 +106,9 @@ describe('todoCalendarLogic', () => {
   it('chooses the lowest-MTN remaining workday this week', () => {
     const selected = findSuitableScheduleDate({
       tasks: [
-        task({ id: 1, scheduled_date: '2026-06-15', due_date: null, move_the_needle_score: 0.8 }),
-        task({ id: 2, scheduled_date: '2026-06-16', due_date: null, move_the_needle_score: 0.9 }),
-        task({ id: 3, scheduled_date: '2026-06-17', due_date: null, move_the_needle_score: 0.2 }),
+        task({ id: 1, due_date: '2026-06-15', move_the_needle_score: 0.8 }),
+        task({ id: 2, due_date: '2026-06-16', move_the_needle_score: 0.9 }),
+        task({ id: 3, due_date: '2026-06-17', move_the_needle_score: 0.2 }),
       ],
       task: { id: 1, due_date: null },
       todayKey: '2026-06-15',
@@ -118,12 +117,13 @@ describe('todoCalendarLogic', () => {
     expect(selected).toBe('2026-06-18');
   });
 
-  it('never selects a day after the optional deadline', () => {
+  it('respects an explicitly bounded date window', () => {
     const selected = findSuitableScheduleDate({
       tasks: [],
       task: { id: 1, due_date: '2026-06-20' },
       todayKey: '2026-06-19',
       period: 'next_week',
+      dueDate: '2026-06-20',
     });
     expect(selected).toBeNull();
   });
@@ -141,7 +141,7 @@ describe('todoCalendarLogic', () => {
 
   it('does not select weekends and respects available MTN capacity', () => {
     const selected = findSuitableScheduleDate({
-      tasks: [task({ id: 2, scheduled_date: '2026-06-22', due_date: null, move_the_needle_score: 0.9 })],
+      tasks: [task({ id: 2, due_date: '2026-06-22', move_the_needle_score: 0.9 })],
       task: task({ id: 1, due_date: null, move_the_needle_score: 0.8 }),
       todayKey: '2026-06-19',
       period: 'next_week',
@@ -153,11 +153,11 @@ describe('todoCalendarLogic', () => {
   it('uses the lowest-MTN workday when every candidate is over capacity', () => {
     const selected = findSuitableScheduleDate({
       tasks: [
-        task({ id: 2, scheduled_date: '2026-06-22', move_the_needle_score: 0.2 }),
-        task({ id: 3, scheduled_date: '2026-06-23', move_the_needle_score: 0.1 }),
-        task({ id: 4, scheduled_date: '2026-06-24', move_the_needle_score: 0.3 }),
-        task({ id: 5, scheduled_date: '2026-06-25', move_the_needle_score: 0.4 }),
-        task({ id: 6, scheduled_date: '2026-06-26', move_the_needle_score: 0.5 }),
+        task({ id: 2, due_date: '2026-06-22', move_the_needle_score: 0.2 }),
+        task({ id: 3, due_date: '2026-06-23', move_the_needle_score: 0.1 }),
+        task({ id: 4, due_date: '2026-06-24', move_the_needle_score: 0.3 }),
+        task({ id: 5, due_date: '2026-06-25', move_the_needle_score: 0.4 }),
+        task({ id: 6, due_date: '2026-06-26', move_the_needle_score: 0.5 }),
       ],
       task: task({ id: 1, due_date: null, move_the_needle_score: 0.2 }),
       todayKey: '2026-06-19',

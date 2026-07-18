@@ -352,8 +352,7 @@ class Task(Base):
     notes = Column(Text, nullable=True)
     project = Column(String, nullable=True)
     delegated_to = Column(String, nullable=True)
-    scheduled_date = Column(Date, nullable=True)
-    due_date = Column(DateTime, nullable=True)
+    due_date = Column(DateTime, nullable=False, server_default=func.current_date())
     status = Column(String, default="open")  # open, completed, archived
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
