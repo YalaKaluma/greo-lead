@@ -7,7 +7,8 @@ import re
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from xml.etree import ElementTree
+
+from defusedxml import ElementTree
 
 from openai import OpenAI
 

@@ -4,7 +4,8 @@ import json
 import logging
 import math
 import os
-import subprocess
+import shutil
+import subprocess  # nosec B404 - commands are fixed binaries invoked without a shell
 import tempfile
 import time
 from datetime import date, datetime, timezone
@@ -107,13 +108,16 @@ def _transcribe_file(path: str, filename: str, content_type: str | None) -> dict
 
 def _audio_duration_seconds(path: str) -> float | None:
     try:
+        ffprobe_path = shutil.which("ffprobe")
+        if not ffprobe_path:
+            raise FileNotFoundError("ffprobe is not installed")
         result = subprocess.run(
             [
-                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                ffprobe_path, "-v", "error", "-show_entries", "format=duration",
                 "-of", "default=noprint_wrappers=1:nokey=1", path,
             ],
             check=True, capture_output=True, text=True, timeout=60,
-        )
+        )  # nosec B603 - argument list is passed directly with shell=False
         return float(result.stdout.strip())
     except (FileNotFoundError, subprocess.SubprocessError, ValueError):
         logger.exception("Could not determine duration for meeting audio %s", path)
@@ -121,15 +125,18 @@ def _audio_duration_seconds(path: str) -> float | None:
 
 
 def _create_audio_chunk(source_path: str, output_path: str, offset: float, duration: float) -> None:
+    ffmpeg_path = shutil.which("ffmpeg")
+    if not ffmpeg_path:
+        raise RuntimeError("ffmpeg is not installed on this deployment")
     subprocess.run(
         [
-            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+            ffmpeg_path, "-hide_banner", "-loglevel", "error", "-y",
             "-ss", str(offset), "-t", str(duration), "-i", source_path,
             "-vn", "-ac", "1", "-ar", "16000", "-codec:a", "libmp3lame",
             "-b:a", "64k", output_path,
         ],
         check=True, capture_output=True, timeout=300,
-    )
+    )  # nosec B603 - argument list is passed directly with shell=False
 
 
 def transcribe_recording(path: str, filename: str, content_type: str | None) -> dict:
