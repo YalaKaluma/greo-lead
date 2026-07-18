@@ -18,9 +18,10 @@ from app.db import get_db
 from app.models import JourneyGoal, JourneyPerson, JourneyProject, Meeting, MeetingActionItem, MeetingGoalLink, MeetingParticipant, MeetingProjectLink, Task, User
 from app.services.meeting_intelligence_service import process_meeting
 from app.services.journey_support import goal_level_variants, normalize_goal_level
+from app.services.timezone_service import get_user_timezone, today_for_timezone
 
 router = APIRouter()
-ALLOWED_AUDIO_TYPES = {"audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a", "audio/webm", "video/webm"}
+ALLOWED_AUDIO_TYPES = {"audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a", "audio/x-m4a", "audio/webm", "video/webm"}
 MAX_AUDIO_BYTES = int(os.getenv("MEETING_MAX_AUDIO_BYTES", str(250 * 1024 * 1024)))
 STORAGE_ROOT = Path(
     os.getenv("MEETING_STORAGE_DIR")
@@ -35,6 +36,15 @@ class NotesMeetingCreate(BaseModel):
     meeting_type: Optional[str] = Field(default=None, max_length=80)
     started_at: Optional[datetime] = None
     duration_seconds: Optional[int] = Field(default=None, ge=0)
+
+
+class MeetingUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=240)
+    one_line_summary: Optional[str] = Field(default=None, max_length=1000)
+    executive_summary: Optional[str] = Field(default=None, max_length=30000)
+    meeting_type: Optional[str] = Field(default=None, max_length=80)
+    started_at: Optional[datetime] = None
+    user_notes: Optional[str] = Field(default=None, max_length=120000)
 
 
 class ActionConversion(BaseModel):
@@ -142,6 +152,23 @@ def get_meeting(meeting_id: int, user_number: str, db: Session = Depends(get_db)
     meeting = _query(db).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found.")
+    return _meeting_payload(meeting, detail=True)
+
+
+@router.patch("/{meeting_id:int}")
+def update_meeting(meeting_id: int, user_number: str, payload: MeetingUpdate, db: Session = Depends(get_db)):
+    meeting = _query(db).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found.")
+    changes = payload.model_dump(exclude_unset=True)
+    if "title" in changes:
+        changes["title"] = (changes["title"] or "").strip()
+        if not changes["title"]:
+            raise HTTPException(status_code=400, detail="Meeting title cannot be empty.")
+    for field, value in changes.items():
+        setattr(meeting, field, value.strip() if isinstance(value, str) else value)
+    meeting.updated_at = datetime.now(timezone.utc)
+    db.commit()
     return _meeting_payload(meeting, detail=True)
 
 
@@ -274,11 +301,16 @@ async def upload_meeting(
     # Browsers commonly include codec parameters, for example
     # "audio/webm;codecs=opus". Validate the base media type while preserving
     # the complete value for playback and transcription metadata.
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", file.filename or "meeting-audio")
+    file_suffix = Path(safe_name).suffix.lower()
     base_content_type = (file.content_type or "").split(";", 1)[0].strip().lower()
-    if base_content_type not in ALLOWED_AUDIO_TYPES:
+    # Some browsers and operating systems label M4A files as generic binary data.
+    # The filename fallback is intentionally limited to M4A rather than accepting
+    # arbitrary extensions as audio.
+    generic_m4a = file_suffix == ".m4a" and base_content_type in {"", "application/octet-stream", "video/mp4"}
+    if base_content_type not in ALLOWED_AUDIO_TYPES and not generic_m4a:
         raise HTTPException(status_code=415, detail="Unsupported audio format. Upload MP3, WAV, M4A, MP4, or WebM audio.")
 
-    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", file.filename or "meeting-audio")
     user_dir = STORAGE_ROOT / re.sub(r"[^A-Za-z0-9_-]", "_", user_number)[:100]
     user_dir.mkdir(parents=True, exist_ok=True)
     storage_path = user_dir / f"{uuid.uuid4().hex}-{safe_name}"
@@ -302,7 +334,7 @@ async def upload_meeting(
         started_at=started_at or datetime.now(timezone.utc),
         duration_seconds=duration_seconds,
         recording_filename=safe_name,
-        recording_content_type=file.content_type,
+        recording_content_type="audio/mp4" if generic_m4a else file.content_type,
         recording_storage_key=str(storage_path),
         consent_acknowledged_at=datetime.now(timezone.utc),
     )
@@ -342,10 +374,18 @@ def convert_action_item(action_item_id: int, payload: ActionConversion, db: Sess
     ).first()
     if not action:
         raise HTTPException(status_code=404, detail="Action item not found.")
-    if action.created_task_id:
-        return {"task_id": action.created_task_id, "already_created": True}
     if payload.mode not in {"my_todo", "follow_up"}:
         raise HTTPException(status_code=400, detail="Mode must be my_todo or follow_up.")
+    today = today_for_timezone(get_user_timezone(db, payload.user_number))
+    today_due = datetime.combine(today, datetime.min.time())
+    if action.created_task_id:
+        existing_task = db.query(Task).filter(Task.id == action.created_task_id, Task.user_number == payload.user_number).first()
+        if existing_task:
+            existing_task.scheduled_date = today
+            existing_task.due_date = today_due
+            db.commit()
+            return {"task_id": existing_task.id, "already_created": True}
+        action.created_task_id = None
     title = action.description
     delegated_to = None
     if payload.mode == "follow_up":
@@ -357,7 +397,8 @@ def convert_action_item(action_item_id: int, payload: ActionConversion, db: Sess
         title=title,
         notes=f"Created from meeting: {action.meeting.title}",
         delegated_to=delegated_to,
-        due_date=datetime.combine(action.due_date, datetime.min.time()) if action.due_date else None,
+        scheduled_date=today,
+        due_date=today_due,
         priority="Medium",
         status="open",
     )

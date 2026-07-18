@@ -31,13 +31,16 @@ export const getExpectedMtnScore = (task, getTaskScore = () => null) => {
   return Math.round(Math.max(0, Math.min(1, score)) * 100) / 10;
 };
 
+export const MIN_DAILY_MTN_CAPACITY = 25;
+
 export const buildMtnCapacity = (trendChart = [], todayKey = '') => {
   const completedDays = trendChart
     .filter(item => item?.date && (!todayKey || item.date < todayKey))
     .slice(-21);
-  if (completedDays.length === 0) return null;
+  if (completedDays.length === 0) return MIN_DAILY_MTN_CAPACITY;
   const total = completedDays.reduce((sum, item) => sum + Number(item.mtn_score || 0), 0);
-  return Math.round((total / completedDays.length) * 10) / 10;
+  const historicalAverage = Math.round((total / completedDays.length) * 10) / 10;
+  return Math.max(MIN_DAILY_MTN_CAPACITY, historicalAverage);
 };
 
 export const getMtnWorkloadStatus = (expectedMtn, capacity) => {

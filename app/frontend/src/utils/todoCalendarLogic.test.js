@@ -86,11 +86,20 @@ describe('todoCalendarLogic', () => {
     });
   });
 
-  it('uses the previous 21 completed days for daily MTN capacity', () => {
+  it('uses 25 as the minimum daily MTN capacity', () => {
     const trend = Array.from({ length: 23 }, (_, index) => ({
       date: `2026-06-${String(index + 1).padStart(2, '0')}`,
       mtn_score: index === 0 ? 100 : 10,
     }));
-    expect(buildMtnCapacity(trend, '2026-06-23')).toBe(10);
+    expect(buildMtnCapacity(trend, '2026-06-23')).toBe(25);
+    expect(buildMtnCapacity([], '2026-06-23')).toBe(25);
+  });
+
+  it('allows sustained historical MTN capacity to exceed the minimum', () => {
+    const trend = Array.from({ length: 21 }, (_, index) => ({
+      date: `2026-06-${String(index + 1).padStart(2, '0')}`,
+      mtn_score: 32,
+    }));
+    expect(buildMtnCapacity(trend, '2026-06-22')).toBe(32);
   });
 });

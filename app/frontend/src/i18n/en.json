@@ -225,7 +225,7 @@
   "calendar.tasks": "Tasks",
   "calendar.missingMtn": "without an MTN score",
   "calendar.dailyCapacity": "Daily capacity",
-  "calendar.capacityHelp": "Capacity is your average achieved daily MTN over the previous 3 weeks.",
+  "calendar.capacityHelp": "Capacity starts at 25 and rises when your average achieved daily MTN over the previous 3 weeks is higher.",
   "calendar.status.light": "Light",
   "calendar.status.balanced": "Balanced",
   "calendar.status.heavy": "Heavy",

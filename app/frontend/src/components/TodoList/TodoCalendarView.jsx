@@ -215,7 +215,7 @@ export default function TodoCalendarView({
       <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-200 bg-white px-3 py-2">
         <div>
           <h2 className="text-sm font-semibold text-slate-900">{t('calendar.sevenDayPlan', 'Seven-day plan')}</h2>
-          <p className="text-xs text-slate-500">{t('calendar.capacityHelp', 'Capacity is your average achieved daily MTN over the previous 3 weeks.')}</p>
+          <p className="text-xs text-slate-500">{t('calendar.capacityHelp', 'Capacity starts at 25 and rises when your average achieved daily MTN over the previous 3 weeks is higher.')}</p>
         </div>
         <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
           {t('calendar.dailyCapacity', 'Daily capacity')}: {mtnCapacity === null ? '—' : mtnCapacity.toFixed(1)}

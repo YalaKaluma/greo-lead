@@ -225,7 +225,7 @@
   "calendar.tasks": "Tâches",
   "calendar.missingMtn": "sans score MTN",
   "calendar.dailyCapacity": "Capacité quotidienne",
-  "calendar.capacityHelp": "La capacité correspond à votre MTN quotidien moyen réalisé au cours des 3 semaines précédentes.",
+  "calendar.capacityHelp": "La capacité commence à 25 et augmente lorsque votre MTN quotidien moyen réalisé au cours des 3 semaines précédentes est supérieur.",
   "calendar.status.light": "Léger",
   "calendar.status.balanced": "Équilibré",
   "calendar.status.heavy": "Chargé",
