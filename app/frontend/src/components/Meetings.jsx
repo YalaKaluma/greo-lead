@@ -358,7 +358,11 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
     <div className="fixed inset-0 z-[60] overflow-y-auto bg-slate-950 p-5 text-white">
       {(status === 'idle' || status === 'failed') && <button onClick={onCancel} className="absolute right-6 top-6 rounded-lg px-3 py-2 text-slate-300 hover:bg-white/10">Cancel</button>}
       <div className="mx-auto flex min-h-full max-w-5xl flex-col items-center justify-center py-8">
-      <div className="mb-5 flex h-24 w-24 items-center justify-center rounded-full border border-amber-300/40 bg-amber-400/10 text-4xl">A</div>
+      <img
+        src="/alfred-logo.png"
+        alt="Alfred"
+        className="mb-5 h-24 w-24 rounded-full border border-amber-300/40 object-cover"
+      />
       <h2 className="text-3xl font-semibold">{status === 'idle' ? 'Ready to Record' : status === 'uploading' ? 'Saving Meeting' : 'Alfred is listening'}</h2>
       <p className="mt-3 font-mono text-5xl tracking-wider">{formatTimer(seconds)}</p>
       {status === 'idle' && <div className="mt-7 max-w-xl"><ConsentCheck checked={consent} onChange={setConsent} /></div>}
