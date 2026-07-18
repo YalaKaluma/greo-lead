@@ -437,6 +437,33 @@ class Meeting(Base):
     leadership_observations = relationship("MeetingLeadershipObservation", back_populates="meeting", cascade="all, delete-orphan")
     goal_links = relationship("MeetingGoalLink", back_populates="meeting", cascade="all, delete-orphan")
     project_links = relationship("MeetingProjectLink", back_populates="meeting", cascade="all, delete-orphan")
+    attendees = relationship("MeetingAttendee", back_populates="meeting", cascade="all, delete-orphan")
+    context_notes = relationship("MeetingContextNote", back_populates="meeting", cascade="all, delete-orphan")
+
+
+class MeetingAttendee(Base):
+    __tablename__ = "meeting_attendees"
+    __table_args__ = (UniqueConstraint("meeting_id", "person_id", name="uq_meeting_attendee_person"),)
+
+    id = Column(Integer, primary_key=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True)
+    person_id = Column(Integer, ForeignKey("journey_people.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    meeting = relationship("Meeting", back_populates="attendees")
+    person = relationship("JourneyPerson")
+
+
+class MeetingContextNote(Base):
+    __tablename__ = "meeting_context_notes"
+
+    id = Column(Integer, primary_key=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True)
+    elapsed_seconds = Column(Integer, nullable=False, default=0)
+    note_text = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    meeting = relationship("Meeting", back_populates="context_notes")
 
 
 class MeetingParticipant(Base):
@@ -1292,6 +1319,9 @@ class User(Base):
     tour_current_step = Column(String, nullable=True)  # Current tour step
     language_preference = Column(String(10), default="en", nullable=False)
     timezone_preference = Column(String(64), default="America/New_York", nullable=False)
+    voice_reference_data_url = Column(Text, nullable=True)
+    voice_reference_mime_type = Column(String(120), nullable=True)
+    voice_reference_consented_at = Column(DateTime(timezone=True), nullable=True)
 
     # ✅ FIXED: Use MutableList to track JSONB list mutations properly
     tour_completed_steps = Column(MutableList.as_mutable(JSONB), nullable=True)  # List of completed steps

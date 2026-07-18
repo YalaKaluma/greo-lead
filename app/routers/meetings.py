@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 import uuid
+import base64
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -15,7 +16,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
-from app.models import JourneyGoal, JourneyPerson, JourneyProject, Meeting, MeetingActionItem, MeetingGoalLink, MeetingParticipant, MeetingProjectLink, Task, User
+from app.models import JourneyGoal, JourneyPerson, JourneyProject, Meeting, MeetingActionItem, MeetingAttendee, MeetingContextNote, MeetingGoalLink, MeetingParticipant, MeetingProjectLink, Task, User
 from app.services.meeting_intelligence_service import process_meeting
 from app.services.journey_support import goal_level_variants, normalize_goal_level
 from app.services.timezone_service import get_user_timezone, today_for_timezone
@@ -64,6 +65,24 @@ class ParticipantMatch(BaseModel):
     is_current_user: bool = False
 
 
+class DraftMeetingCreate(BaseModel):
+    user_number: str
+    consent_acknowledged: bool
+    project_id: Optional[int] = None
+    started_at: Optional[datetime] = None
+
+
+class LiveAttendeesUpdate(BaseModel):
+    user_number: str
+    person_ids: list[int] = Field(default_factory=list, max_length=100)
+
+
+class ContextNoteCreate(BaseModel):
+    user_number: str
+    note_text: str = Field(min_length=1, max_length=4000)
+    elapsed_seconds: int = Field(default=0, ge=0)
+
+
 def _query(db: Session):
     return db.query(Meeting).options(
         selectinload(Meeting.participants),
@@ -74,6 +93,8 @@ def _query(db: Session):
         selectinload(Meeting.transcript_segments),
         selectinload(Meeting.goal_links).selectinload(MeetingGoalLink.goal),
         selectinload(Meeting.project_links).selectinload(MeetingProjectLink.project),
+        selectinload(Meeting.attendees).selectinload(MeetingAttendee.person),
+        selectinload(Meeting.context_notes),
     )
 
 
@@ -96,6 +117,7 @@ def _meeting_payload(meeting: Meeting, detail: bool = False):
         "has_recording": bool(meeting.recording_storage_key),
         "created_at": meeting.created_at,
         "updated_at": meeting.updated_at,
+        "selected_attendees": [{"id": item.person.id, "title": item.person.name} for item in meeting.attendees if item.person],
     }
     if detail:
         payload.update({
@@ -108,6 +130,7 @@ def _meeting_payload(meeting: Meeting, detail: bool = False):
             "transcript_segments": [{"id": s.id, "sequence_number": s.sequence_number, "speaker_label": s.speaker_label, "start_seconds": s.start_seconds, "end_seconds": s.end_seconds, "text": s.text} for s in sorted(meeting.transcript_segments, key=lambda item: item.sequence_number)],
             "related_goals": [{"id": link.goal.id, "title": link.goal.title or link.goal.goal_text} for link in meeting.goal_links],
             "related_projects": [{"id": link.project.id, "title": link.project.project_name} for link in meeting.project_links],
+            "context_notes": [{"id": note.id, "note_text": note.note_text, "elapsed_seconds": note.elapsed_seconds, "created_at": note.created_at} for note in sorted(meeting.context_notes, key=lambda item: (item.elapsed_seconds, item.id))],
         })
     return payload
 
@@ -189,6 +212,119 @@ def meeting_context_options(user_number: str, db: Session = Depends(get_db)):
         "goals": [{"id": item.id, "title": item.title or item.goal_text} for item in goals],
         "projects": [{"id": item.id, "title": item.project_name} for item in projects],
     }
+
+
+@router.post("/drafts", status_code=201)
+def create_recording_draft(payload: DraftMeetingCreate, db: Session = Depends(get_db)):
+    if not payload.consent_acknowledged:
+        raise HTTPException(status_code=400, detail="Recording consent acknowledgement is required.")
+    project = None
+    if payload.project_id is not None:
+        project = db.query(JourneyProject).filter(
+            JourneyProject.id == payload.project_id,
+            JourneyProject.user_number == payload.user_number,
+        ).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found.")
+    meeting = Meeting(
+        user_number=payload.user_number,
+        title="Meeting in progress",
+        source_type="recording",
+        processing_status="draft",
+        started_at=payload.started_at or datetime.now(timezone.utc),
+        consent_acknowledged_at=datetime.now(timezone.utc),
+    )
+    db.add(meeting)
+    db.flush()
+    if project:
+        db.add(MeetingProjectLink(meeting_id=meeting.id, project_id=project.id))
+    db.commit()
+    return {"id": meeting.id, "processing_status": "draft"}
+
+
+@router.put("/{meeting_id:int}/live-attendees")
+def update_live_attendees(meeting_id: int, payload: LiveAttendeesUpdate, db: Session = Depends(get_db)):
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_number == payload.user_number).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found.")
+    people = db.query(JourneyPerson).filter(
+        JourneyPerson.user_number == payload.user_number,
+        JourneyPerson.id.in_(set(payload.person_ids)),
+    ).all() if payload.person_ids else []
+    if len(people) != len(set(payload.person_ids)):
+        raise HTTPException(status_code=400, detail="One or more selected people are invalid.")
+    db.query(MeetingAttendee).filter(MeetingAttendee.meeting_id == meeting_id).delete(synchronize_session=False)
+    for person in people:
+        db.add(MeetingAttendee(meeting_id=meeting_id, person_id=person.id))
+    db.commit()
+    return {"attendees": [{"id": person.id, "title": person.name} for person in people]}
+
+
+@router.post("/{meeting_id:int}/context-notes", status_code=201)
+def add_live_context_note(meeting_id: int, payload: ContextNoteCreate, db: Session = Depends(get_db)):
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_number == payload.user_number).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found.")
+    note = MeetingContextNote(
+        meeting_id=meeting_id,
+        elapsed_seconds=payload.elapsed_seconds,
+        note_text=payload.note_text.strip(),
+    )
+    db.add(note)
+    db.commit()
+    db.refresh(note)
+    return {"id": note.id, "note_text": note.note_text, "elapsed_seconds": note.elapsed_seconds, "created_at": note.created_at}
+
+
+def _find_user(db: Session, user_number: str):
+    return db.query(User).filter((User.phone_number == user_number) | (User.email == user_number)).first()
+
+
+@router.get("/voice-profile")
+def get_voice_profile(user_number: str, db: Session = Depends(get_db)):
+    user = _find_user(db, user_number)
+    if not user:
+        raise HTTPException(status_code=404, detail="Current user not found.")
+    return {"enrolled": bool(user.voice_reference_data_url), "consented_at": user.voice_reference_consented_at}
+
+
+@router.post("/voice-profile")
+async def enroll_voice_profile(
+    user_number: str = Form(...),
+    consent_acknowledged: bool = Form(...),
+    duration_seconds: float = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    if not consent_acknowledged:
+        raise HTTPException(status_code=400, detail="Voice-reference consent is required.")
+    if duration_seconds < 2 or duration_seconds > 10:
+        raise HTTPException(status_code=400, detail="Record a voice sample between 2 and 10 seconds.")
+    content_type = (file.content_type or "").split(";", 1)[0].lower()
+    if content_type not in ALLOWED_AUDIO_TYPES:
+        raise HTTPException(status_code=415, detail="Unsupported voice sample format.")
+    data = await file.read(2 * 1024 * 1024 + 1)
+    if not data or len(data) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Voice sample must be smaller than 2 MB.")
+    user = _find_user(db, user_number)
+    if not user:
+        raise HTTPException(status_code=404, detail="Current user not found.")
+    user.voice_reference_data_url = f"data:{content_type};base64,{base64.b64encode(data).decode('ascii')}"
+    user.voice_reference_mime_type = content_type
+    user.voice_reference_consented_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"enrolled": True, "consented_at": user.voice_reference_consented_at}
+
+
+@router.delete("/voice-profile", status_code=204)
+def delete_voice_profile(user_number: str, db: Session = Depends(get_db)):
+    user = _find_user(db, user_number)
+    if not user:
+        raise HTTPException(status_code=404, detail="Current user not found.")
+    user.voice_reference_data_url = None
+    user.voice_reference_mime_type = None
+    user.voice_reference_consented_at = None
+    db.commit()
 
 
 @router.patch("/participants/{participant_id}")
@@ -304,6 +440,7 @@ async def upload_meeting(
     duration_seconds: Optional[int] = Form(None),
     source_type: str = Form("upload"),
     project_id: Optional[int] = Form(None),
+    meeting_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
 ):
     project = None
@@ -341,22 +478,28 @@ async def upload_meeting(
         storage_path.unlink(missing_ok=True)
         raise
 
-    meeting = Meeting(
-        user_number=user_number,
-        title=(title or Path(safe_name).stem or "Recorded meeting")[:240],
-        source_type=source_type if source_type in {"recording", "upload"} else "upload",
-        processing_status="queued",
-        started_at=started_at or datetime.now(timezone.utc),
-        duration_seconds=duration_seconds,
-        recording_filename=safe_name,
-        recording_content_type="audio/mp4" if generic_m4a else file.content_type,
-        recording_storage_key=str(storage_path),
-        consent_acknowledged_at=datetime.now(timezone.utc),
-    )
-    db.add(meeting)
+    meeting = None
+    if meeting_id is not None:
+        meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
+        if not meeting:
+            storage_path.unlink(missing_ok=True)
+            raise HTTPException(status_code=404, detail="Recording draft not found.")
+    if meeting is None:
+        meeting = Meeting(user_number=user_number)
+        db.add(meeting)
+    meeting.title = (title or (meeting.title if meeting.title != "Meeting in progress" else None) or Path(safe_name).stem or "Recorded meeting")[:240]
+    meeting.source_type = source_type if source_type in {"recording", "upload"} else "upload"
+    meeting.processing_status = "queued"
+    meeting.processing_error = None
+    meeting.started_at = started_at or meeting.started_at or datetime.now(timezone.utc)
+    meeting.duration_seconds = duration_seconds
+    meeting.recording_filename = safe_name
+    meeting.recording_content_type = "audio/mp4" if generic_m4a else file.content_type
+    meeting.recording_storage_key = str(storage_path)
+    meeting.consent_acknowledged_at = meeting.consent_acknowledged_at or datetime.now(timezone.utc)
     db.commit()
     db.refresh(meeting)
-    if project:
+    if project and not db.query(MeetingProjectLink).filter(MeetingProjectLink.meeting_id == meeting.id, MeetingProjectLink.project_id == project.id).first():
         db.add(MeetingProjectLink(meeting_id=meeting.id, project_id=project.id))
         db.commit()
     background_tasks.add_task(process_meeting, meeting.id)

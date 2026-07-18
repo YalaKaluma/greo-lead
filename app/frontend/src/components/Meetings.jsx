@@ -4,6 +4,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 const NativeMeetingRecorder = registerPlugin('MeetingRecorder');
 
 const STATUS_LABELS = {
+  draft: 'Recording draft',
   queued: 'Queued',
   transcribing: 'Transcribing',
   analyzing: 'Analyzing',
@@ -175,11 +176,25 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
   const [status, setStatus] = useState('idle');
   const [seconds, setSeconds] = useState(0);
   const [error, setError] = useState('');
+  const [draftId, setDraftId] = useState(null);
+  const draftIdRef = useRef(null);
+  const [people, setPeople] = useState([]);
+  const [selectedPeople, setSelectedPeople] = useState([]);
+  const [noteText, setNoteText] = useState('');
+  const [contextNotes, setContextNotes] = useState([]);
+  const [savingContext, setSavingContext] = useState(false);
   const recorderRef = useRef(null);
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
   const startedAtRef = useRef(null);
   const isNative = Capacitor.isNativePlatform();
+
+  useEffect(() => {
+    fetch(`${apiUrl}/api/meetings/context/options?user_number=${encodeURIComponent(userNumber)}`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => setPeople(data?.people || []))
+      .catch(() => {});
+  }, [apiUrl, userNumber]);
 
   useEffect(() => {
     if (status !== 'recording') return undefined;
@@ -192,9 +207,18 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
   const start = async () => {
     try {
       setError('');
+      const startedAt = new Date();
+      const draftResponse = await fetch(`${apiUrl}/api/meetings/drafts`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_number: userNumber, consent_acknowledged: consent, project_id: projectId, started_at: startedAt.toISOString() })
+      });
+      if (!draftResponse.ok) throw new Error((await draftResponse.json()).detail || 'Could not start the meeting draft.');
+      const draft = await draftResponse.json();
+      setDraftId(draft.id);
+      draftIdRef.current = draft.id;
       if (isNative) {
         await NativeMeetingRecorder.start();
-        startedAtRef.current = Date.now();
+        startedAtRef.current = startedAt.getTime();
         setStatus('recording');
         return;
       }
@@ -207,7 +231,7 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
       recorder.ondataavailable = (event) => event.data?.size && chunksRef.current.push(event.data);
       recorder.onstop = upload;
       recorder.start(1000);
-      startedAtRef.current = Date.now();
+      startedAtRef.current = startedAt.getTime();
       setStatus('recording');
     } catch (err) {
       setError(err?.name === 'NotAllowedError' ? 'Microphone permission was denied.' : 'Alfred could not start the microphone.');
@@ -228,6 +252,7 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
       body.append('source_type', 'recording');
       body.append('duration_seconds', String(seconds));
       body.append('started_at', new Date(startedAtRef.current).toISOString());
+      if (draftIdRef.current) body.append('meeting_id', String(draftIdRef.current));
       body.append('file', blob, `meeting-${Date.now()}.${extension}`);
       const response = await fetch(`${apiUrl}/api/meetings/upload`, { method: 'POST', body });
       if (!response.ok) throw new Error((await response.json()).detail || 'Upload failed.');
@@ -257,6 +282,7 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
       body.append('source_type', 'recording');
       body.append('duration_seconds', String(seconds));
       body.append('started_at', new Date(startedAtRef.current).toISOString());
+      if (draftIdRef.current) body.append('meeting_id', String(draftIdRef.current));
       body.append('file', blob, `meeting-${Date.now()}.m4a`);
       const uploadResponse = await fetch(`${apiUrl}/api/meetings/upload`, { method: 'POST', body });
       if (!uploadResponse.ok) throw new Error((await uploadResponse.json()).detail || 'Upload failed.');
@@ -294,15 +320,61 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
     }
   };
 
+  const togglePerson = async (personId) => {
+    if (!draftId) return;
+    const next = selectedPeople.includes(personId)
+      ? selectedPeople.filter((id) => id !== personId)
+      : [...selectedPeople, personId];
+    setSelectedPeople(next);
+    setSavingContext(true);
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/${draftId}/live-attendees`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_number: userNumber, person_ids: next })
+      });
+      if (!response.ok) throw new Error('Could not save attendees.');
+    } catch (err) {
+      setSelectedPeople(selectedPeople);
+      setError(err.message);
+    } finally { setSavingContext(false); }
+  };
+
+  const addContextNote = async () => {
+    if (!draftId || !noteText.trim()) return;
+    setSavingContext(true);
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/${draftId}/context-notes`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_number: userNumber, note_text: noteText.trim(), elapsed_seconds: seconds })
+      });
+      if (!response.ok) throw new Error('Could not save this context note.');
+      setContextNotes((current) => [...current, await response.json()]);
+      setNoteText('');
+    } catch (err) { setError(err.message); } finally { setSavingContext(false); }
+  };
+
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-slate-950 p-6 text-white">
+    <div className="fixed inset-0 z-[60] overflow-y-auto bg-slate-950 p-5 text-white">
       {(status === 'idle' || status === 'failed') && <button onClick={onCancel} className="absolute right-6 top-6 rounded-lg px-3 py-2 text-slate-300 hover:bg-white/10">Cancel</button>}
-      <div className="mb-8 flex h-28 w-28 items-center justify-center rounded-full border border-amber-300/40 bg-amber-400/10 text-5xl">A</div>
-      <h2 className="text-3xl font-semibold">{status === 'idle' ? 'Ready to Record' : status === 'uploading' ? 'Saving Meeting' : 'Meeting in Progress'}</h2>
-      <p className="mt-4 font-mono text-5xl tracking-wider">{formatTimer(seconds)}</p>
-      {status === 'idle' && <div className="mt-8 max-w-xl"><ConsentCheck checked={consent} onChange={setConsent} /></div>}
-      {error && <p className="mt-6 rounded-lg bg-red-500/20 px-4 py-3 text-red-100">{error}</p>}
-      <div className="mt-10 flex gap-4">
+      <div className="mx-auto flex min-h-full max-w-5xl flex-col items-center justify-center py-8">
+      <div className="mb-5 flex h-24 w-24 items-center justify-center rounded-full border border-amber-300/40 bg-amber-400/10 text-4xl">A</div>
+      <h2 className="text-3xl font-semibold">{status === 'idle' ? 'Ready to Record' : status === 'uploading' ? 'Saving Meeting' : 'Alfred is listening'}</h2>
+      <p className="mt-3 font-mono text-5xl tracking-wider">{formatTimer(seconds)}</p>
+      {status === 'idle' && <div className="mt-7 max-w-xl"><ConsentCheck checked={consent} onChange={setConsent} /></div>}
+      {error && <p className="mt-5 rounded-lg bg-red-500/20 px-4 py-3 text-red-100">{error}</p>}
+      {(status === 'recording' || status === 'paused') && <div className="mt-7 grid w-full gap-5 md:grid-cols-2">
+        <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div className="flex items-center justify-between"><h3 className="font-semibold">People in this meeting</h3>{savingContext && <span className="text-xs text-slate-400">Saving…</span>}</div>
+          <p className="mt-1 text-sm text-slate-400">Select people from My Team.</p>
+          <div className="mt-4 max-h-48 space-y-2 overflow-y-auto">{people.length ? people.map((person) => <label key={person.id} className="flex cursor-pointer items-center gap-3 rounded-lg bg-white/5 px-3 py-2 hover:bg-white/10"><input type="checkbox" checked={selectedPeople.includes(person.id)} onChange={() => togglePerson(person.id)} /><span>{person.title}</span></label>) : <p className="text-sm text-slate-400">No people have been added to My Team yet.</p>}</div>
+        </section>
+        <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          <h3 className="font-semibold">Context notes for Alfred</h3><p className="mt-1 text-sm text-slate-400">Notes are timestamped and treated as context, not spoken dialogue.</p>
+          <div className="mt-4 flex gap-2"><textarea rows={2} value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder="Berk owns the client relationship…" className="min-w-0 flex-1 rounded-lg border border-white/20 bg-slate-900 px-3 py-2 text-white placeholder:text-slate-500" /><button disabled={!noteText.trim() || savingContext} onClick={addContextNote} className="self-end rounded-lg bg-blue-600 px-4 py-2 font-semibold disabled:opacity-40">Add</button></div>
+          <div className="mt-3 max-h-32 space-y-2 overflow-y-auto">{contextNotes.map((note) => <div key={note.id} className="rounded-lg bg-white/5 px-3 py-2 text-sm"><span className="mr-2 font-mono text-xs text-slate-400">{formatTimer(note.elapsed_seconds)}</span>{note.note_text}</div>)}</div>
+        </section>
+      </div>}
+      <div className="mt-7 flex gap-4">
         {status === 'idle' && <button disabled={!consent} onClick={start} className="rounded-full bg-red-600 px-8 py-4 font-semibold hover:bg-red-500 disabled:bg-slate-700">Start Recording</button>}
         {(status === 'recording' || status === 'paused') && (
           <>
@@ -311,7 +383,8 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
           </>
         )}
       </div>
-      <p className="mt-10 max-w-lg text-center text-sm text-slate-400">{isNative ? 'Recording continues through screen lock and while Alfred is in the background. Android will show a persistent recording notification.' : 'Keep this browser tab active while recording. Use the Alfred Android app for lock-screen and background recording.'}</p>
+      <p className="mt-7 max-w-lg text-center text-sm text-slate-400">{isNative ? 'Recording continues through screen lock and while Alfred is in the background. Android will show a persistent recording notification.' : 'Keep this browser tab active while recording. Use the Alfred Android app for lock-screen and background recording.'}</p>
+      </div>
     </div>
   );
 }
@@ -446,6 +519,7 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
           <Section title={`Decisions (${meeting.decisions.length})`}>{meeting.decisions.length ? <div className="space-y-4">{meeting.decisions.map((decision) => <div key={decision.id}><div className="flex justify-between gap-3"><p className="font-medium text-slate-900">{decision.description}</p><Confidence value={decision.confidence} /></div><Evidence>{decision.evidence_excerpt}</Evidence></div>)}</div> : <p className="text-slate-500">No explicit decisions detected.</p>}</Section>
           <Section title={`Action Items (${meeting.action_items.length})`}>{meeting.action_items.length ? <div className="space-y-4">{meeting.action_items.map((action) => <div key={action.id} className="rounded-xl border border-slate-200 p-4"><div className="flex justify-between gap-3"><div><p className="font-medium">{action.description}</p><p className="mt-1 text-sm text-slate-500">Owner: {action.owner_name || 'Unclear'}{action.due_date ? ` · Due ${action.due_date}` : ''}</p></div><Confidence value={action.confidence} /></div><Evidence>{action.evidence_excerpt}</Evidence>{action.created_task_id ? <div className="mt-3 flex items-center gap-3"><span className="text-sm font-medium text-green-700">Added to tasks</span><button disabled={busyAction === action.id} onClick={() => makeTask(action.id, action.tracking_mode || 'my_todo')} className="text-sm font-semibold text-blue-600 hover:underline">Move to Today</button></div> : <div className="mt-3 flex flex-wrap gap-2"><button disabled={busyAction === action.id} onClick={() => makeTask(action.id, 'my_todo')} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Add to My Todo</button><button disabled={busyAction === action.id} onClick={() => makeTask(action.id, 'follow_up')} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">Track Someone Else</button></div>}</div>)}</div> : <p className="text-slate-500">No action items detected.</p>}</Section>
           <Section title="Leadership Reflection" privateLabel>{meeting.leadership_observations.length ? <div className="space-y-4">{meeting.leadership_observations.map((item) => <div key={item.id}><p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{item.category}</p><p className="mt-1 text-slate-800">{item.observation}</p><Evidence>{item.evidence_excerpt}</Evidence></div>)}</div> : <p className="text-slate-500">No evidence-backed leadership observations were generated.</p>}</Section>
+          {meeting.context_notes?.length > 0 && <Section title="Your Context Notes"><div className="space-y-3">{meeting.context_notes.map((note) => <div key={note.id} className="rounded-lg bg-amber-50 px-4 py-3"><span className="mr-3 font-mono text-xs text-amber-700">{formatTimer(note.elapsed_seconds)}</span><span className="text-slate-800">{note.note_text}</span></div>)}</div></Section>}
           <Section title="Transcript"><input value={transcriptSearch} onChange={(event) => setTranscriptSearch(event.target.value)} placeholder="Search this transcript" className="mb-4 w-full rounded-lg border border-slate-300 px-3 py-2" /><div className="max-h-[32rem] overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-700">{visibleTranscript || 'No matching transcript text.'}</div></Section>
         </div>
         <aside className="space-y-5">

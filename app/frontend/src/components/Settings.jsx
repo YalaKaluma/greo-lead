@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { useLanguage } from '../i18n/LanguageContext';
 import {
   disableNotifications,
@@ -42,6 +43,7 @@ const emptyForm = {
   email: '',
   is_admin: false
 };
+const NativeMeetingRecorder = registerPlugin('MeetingRecorder');
 
 export default function Settings({ apiUrl, userNumber, onBack }) {
   const {
@@ -274,6 +276,7 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
               <p className="mt-2 text-sm leading-6 text-slate-500">
                 You can request deletion of your Alfred account and associated data from the public account deletion page.
               </p>
+              <VoiceEnrollmentPanel apiUrl={apiUrl} userNumber={userNumber} />
               <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
                 <h3 className="text-base font-semibold text-slate-950">Account deletion</h3>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
@@ -298,6 +301,112 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
       </div>
     </div>
   );
+}
+
+function VoiceEnrollmentPanel({ apiUrl, userNumber }) {
+  const [profile, setProfile] = useState({ enrolled: false });
+  const [consent, setConsent] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [seconds, setSeconds] = useState(0);
+  const [working, setWorking] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const recorderRef = useRef(null);
+  const streamRef = useRef(null);
+  const chunksRef = useRef([]);
+  const startedRef = useRef(null);
+  const native = Capacitor.isNativePlatform();
+
+  const refresh = () => fetch(`${apiUrl}/api/meetings/voice-profile?user_number=${encodeURIComponent(userNumber)}`)
+    .then((response) => response.ok ? response.json() : { enrolled: false })
+    .then(setProfile)
+    .catch(() => {});
+  useEffect(refresh, [apiUrl, userNumber]);
+  useEffect(() => {
+    if (!recording) return undefined;
+    const timer = window.setInterval(() => {
+      const elapsed = (Date.now() - startedRef.current) / 1000;
+      setSeconds(elapsed);
+      if (elapsed >= 9) {
+        window.clearInterval(timer);
+        stopSample();
+      }
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, [recording]);
+
+  const uploadSample = async (blob, filename, duration) => {
+    setWorking(true); setError(''); setMessage('');
+    try {
+      const body = new FormData();
+      body.append('user_number', userNumber);
+      body.append('consent_acknowledged', 'true');
+      body.append('duration_seconds', String(duration));
+      body.append('file', blob, filename);
+      const response = await fetch(`${apiUrl}/api/meetings/voice-profile`, { method: 'POST', body });
+      if (!response.ok) throw new Error((await response.json()).detail || 'Could not save your voice sample.');
+      setProfile(await response.json());
+      setMessage('Your voice reference is ready. Alfred will identify it as Me in future meetings.');
+    } catch (err) { setError(err.message); } finally { setWorking(false); }
+  };
+
+  const startSample = async () => {
+    setError(''); setMessage(''); setSeconds(0); startedRef.current = Date.now();
+    try {
+      if (native) {
+        await NativeMeetingRecorder.start();
+      } else {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const type = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((item) => window.MediaRecorder?.isTypeSupported(item));
+        const recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+        chunksRef.current = []; streamRef.current = stream; recorderRef.current = recorder;
+        recorder.ondataavailable = (event) => event.data?.size && chunksRef.current.push(event.data);
+        recorder.start(250);
+      }
+      setRecording(true);
+    } catch (err) { setError(err.message || 'Could not start the microphone.'); }
+  };
+
+  const stopSample = async () => {
+    const duration = (Date.now() - startedRef.current) / 1000;
+    setRecording(false);
+    if (duration < 2) { setError('Please record for at least 2 seconds.'); return; }
+    try {
+      if (native) {
+        const result = await NativeMeetingRecorder.stop();
+        const response = await fetch(Capacitor.convertFileSrc(result.path));
+        const blob = await response.blob();
+        await uploadSample(new Blob([blob], { type: 'audio/mp4' }), 'my-voice.m4a', duration);
+        await NativeMeetingRecorder.removeFile({ path: result.path });
+      } else {
+        const recorder = recorderRef.current;
+        await new Promise((resolve) => { recorder.addEventListener('stop', resolve, { once: true }); recorder.stop(); });
+        streamRef.current?.getTracks().forEach((track) => track.stop());
+        const type = recorder.mimeType || 'audio/webm';
+        await uploadSample(new Blob(chunksRef.current, { type }), type.includes('mp4') ? 'my-voice.m4a' : 'my-voice.webm', duration);
+      }
+    } catch (err) { setError(err.message || 'Could not save your voice sample.'); }
+  };
+
+  const remove = async () => {
+    if (!window.confirm('Delete your personal voice reference?')) return;
+    setWorking(true);
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/voice-profile?user_number=${encodeURIComponent(userNumber)}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Could not delete the voice reference.');
+      setProfile({ enrolled: false }); setConsent(false); setMessage('Voice reference deleted.');
+    } catch (err) { setError(err.message); } finally { setWorking(false); }
+  };
+
+  return <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+    <h3 className="text-base font-semibold text-slate-950">Personal voice recognition</h3>
+    <p className="mt-2 text-sm leading-6 text-slate-600">Record 5–10 seconds of only your voice. Alfred will use it to label you as “Me” during future meeting transcription.</p>
+    <p className={`mt-3 text-sm font-medium ${profile.enrolled ? 'text-emerald-700' : 'text-slate-500'}`}>{profile.enrolled ? 'Voice reference enrolled' : 'No voice reference enrolled'}</p>
+    {!profile.enrolled && <label className="mt-4 flex items-start gap-3 text-sm text-slate-700"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} className="mt-1" /><span>I consent to Alfred storing and using this sample solely to identify my voice in my meeting transcripts.</span></label>}
+    <div className="mt-4 flex flex-wrap items-center gap-3">{recording ? <><span className="font-mono text-rose-700">Recording {seconds.toFixed(1)}s</span><button disabled={seconds < 2} onClick={stopSample} className="rounded-md bg-rose-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">Stop & Save</button></> : <button disabled={(!consent && !profile.enrolled) || working} onClick={startSample} className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:bg-slate-300">{profile.enrolled ? 'Replace voice reference' : 'Record my voice'}</button>}{profile.enrolled && <button disabled={working || recording} onClick={remove} className="rounded-md border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700">Delete voice reference</button>}</div>
+    {recording && seconds > 10 && <p className="mt-3 text-sm text-rose-700">The sample is too long. Stop and record again.</p>}
+    {message && <p className="mt-3 text-sm text-emerald-700">{message}</p>}{error && <p className="mt-3 text-sm text-rose-700">{error}</p>}
+  </div>;
 }
 
 function NotificationSettingsPanel({ apiUrl, userNumber }) {

@@ -19,13 +19,17 @@ from sqlalchemy.orm import Session
 from app.config import OPENAI_API_KEY
 from app.db import SessionLocal
 from app.models import (
+    JourneyPerson,
     Meeting,
     MeetingActionItem,
+    MeetingAttendee,
+    MeetingContextNote,
     MeetingDecision,
     MeetingLeadershipObservation,
     MeetingParticipant,
     MeetingTopic,
     MeetingTranscriptSegment,
+    User,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,13 +88,20 @@ def _safe_date(value):
         return None
 
 
-def _transcribe_file(path: str, filename: str, content_type: str | None) -> dict:
+def _transcribe_file(path: str, filename: str, content_type: str | None, voice_reference: str | None = None) -> dict:
     with open(path, "rb") as audio_file:
+        known_speaker_options = {}
+        if voice_reference:
+            known_speaker_options = {
+                "known_speaker_names": ["Me"],
+                "known_speaker_references": [voice_reference],
+            }
         transcript = client.audio.transcriptions.create(
             model="gpt-4o-transcribe-diarize",
             file=(filename, audio_file, content_type or "application/octet-stream"),
             response_format="diarized_json",
             chunking_strategy="auto",
+            **known_speaker_options,
         )
     segments = [
         {
@@ -139,10 +150,10 @@ def _create_audio_chunk(source_path: str, output_path: str, offset: float, durat
     )  # nosec B603 - argument list is passed directly with shell=False
 
 
-def transcribe_recording(path: str, filename: str, content_type: str | None) -> dict:
+def transcribe_recording(path: str, filename: str, content_type: str | None, voice_reference: str | None = None) -> dict:
     duration = _audio_duration_seconds(path)
     if duration is None or duration <= TRANSCRIPTION_CHUNK_SECONDS:
-        return _transcribe_file(path, filename, content_type)
+        return _transcribe_file(path, filename, content_type, voice_reference)
 
     chunk_count = math.ceil(duration / TRANSCRIPTION_CHUNK_SECONDS)
     logger.info(
@@ -160,7 +171,7 @@ def transcribe_recording(path: str, filename: str, content_type: str | None) -> 
             _create_audio_chunk(path, chunk_path, offset, chunk_duration)
             logger.info("Transcribing meeting audio chunk %s/%s", index + 1, chunk_count)
             result = _transcribe_file(
-                chunk_path, f"{Path(filename).stem}-part-{index + 1}.mp3", "audio/mpeg"
+                chunk_path, f"{Path(filename).stem}-part-{index + 1}.mp3", "audio/mpeg", voice_reference
             )
             combined_text.append(result["text"])
             for segment in result["segments"]:
@@ -172,7 +183,7 @@ def transcribe_recording(path: str, filename: str, content_type: str | None) -> 
     return {"text": "\n".join(combined_text).strip(), "segments": combined_segments}
 
 
-def analyze_transcript(transcript: str, supplied_title: str | None = None) -> dict:
+def analyze_transcript(transcript: str, supplied_title: str | None = None, supplied_context: str | None = None) -> dict:
     today = datetime.now(timezone.utc).date().isoformat()
     response = client.chat.completions.create(
         model=MEETING_MODEL,
@@ -200,6 +211,7 @@ def analyze_transcript(transcript: str, supplied_title: str | None = None) -> di
                     "leadership_observations:[{category,observation,confidence,evidence_excerpt}]}. "
                     "Executive summary should be 3-5 concise paragraphs for substantial transcripts, "
                     "and proportionally shorter for brief notes. Use null for unknown due dates.\n\n"
+                    f"USER-SUPPLIED MEETING CONTEXT (treat as context, not spoken transcript):\n{supplied_context or 'none'}\n\n"
                     f"TRANSCRIPT OR NOTES:\n{transcript[:120000]}"
                 ),
             },
@@ -280,12 +292,30 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
         "transcribing" if meeting.recording_storage_key else "analyzing"
     )
     meeting.processing_error = None
+    user = db.query(User).filter(
+        (User.phone_number == meeting.user_number) | (User.email == meeting.user_number)
+    ).first()
+    attendee_names = [name for (name,) in db.query(JourneyPerson.name).join(
+        MeetingAttendee, MeetingAttendee.person_id == JourneyPerson.id
+    ).filter(MeetingAttendee.meeting_id == meeting_id).all()]
+    context_notes = db.query(MeetingContextNote).filter(
+        MeetingContextNote.meeting_id == meeting_id
+    ).order_by(MeetingContextNote.elapsed_seconds, MeetingContextNote.id).all()
+    supplied_context_parts = []
+    if attendee_names:
+        supplied_context_parts.append("People selected as present: " + ", ".join(attendee_names))
+    supplied_context_parts.extend(
+        f"[{note.elapsed_seconds // 60:02d}:{note.elapsed_seconds % 60:02d}] {note.note_text}"
+        for note in context_notes
+    )
     return {
         "title": meeting.title,
         "recording_storage_key": meeting.recording_storage_key,
         "recording_filename": meeting.recording_filename,
         "recording_content_type": meeting.recording_content_type,
         "transcript": (meeting.transcript_text or meeting.user_notes or "").strip(),
+        "voice_reference": user.voice_reference_data_url if user else None,
+        "supplied_context": "\n".join(supplied_context_parts),
     }
 
 
@@ -320,6 +350,8 @@ def _save_transcription(db: Session, meeting_id: int, transcription: dict) -> st
             meeting_id=meeting_id,
             display_name=speaker_label,
             speaker_label=speaker_label,
+            match_status="current_user" if speaker_label == "Me" else "unmatched",
+            is_current_user=speaker_label == "Me",
         ))
     return transcription["text"].strip()
 
@@ -377,6 +409,7 @@ def process_meeting(meeting_id: int) -> None:
                 snapshot["recording_storage_key"],
                 snapshot["recording_filename"] or "meeting-audio",
                 snapshot["recording_content_type"],
+                snapshot["voice_reference"],
             )
             transcript = _with_fresh_session(
                 lambda db: _save_transcription(db, meeting_id, transcription),
@@ -390,7 +423,7 @@ def process_meeting(meeting_id: int) -> None:
             raise ValueError("No recording, transcript, or notes were provided.")
 
         logger.info("Meeting %s analysis started", meeting_id)
-        analysis = analyze_transcript(transcript, snapshot["title"])
+        analysis = analyze_transcript(transcript, snapshot["title"], snapshot["supplied_context"])
         _with_fresh_session(
             lambda db: _save_analysis(db, meeting_id, analysis), "save analysis"
         )

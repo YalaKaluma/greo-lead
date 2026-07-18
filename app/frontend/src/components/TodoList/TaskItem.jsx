@@ -270,25 +270,6 @@ function TaskCard({
         </div>
       )}
 
-      {!selectionMode && (
-        <button
-          type="button"
-          onClick={(e) => {
-            if (handleSelectionShortcut(e)) return;
-            e.stopPropagation();
-            onDoLater?.();
-          }}
-          className="absolute right-2 top-10 hidden h-7 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-700 sm:inline-flex"
-          title={doLaterLabel}
-          aria-label={doLaterLabel}
-        >
-          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M12 5v14" />
-            <path d="m19 12-7 7-7-7" />
-          </svg>
-        </button>
-      )}
-
       <div
         ref={cardRef}
         onTouchStart={onTouchStart}
@@ -309,19 +290,37 @@ function TaskCard({
         onClick={handleClick}
       >
       {!selectionMode && (
-        <button
-          type="button"
-          onClick={(e) => {
-            if (handleSelectionShortcut(e)) return;
-            e.stopPropagation();
-            onFollowUp?.();
-          }}
-          className="absolute right-2 top-2 hidden h-7 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 sm:inline-flex"
-          title="Create follow-up"
-          aria-label="Create follow-up"
-        >
-          <ClockReturnIcon />
-        </button>
+        <div className="absolute right-2 top-2 hidden flex-col gap-0.5 sm:flex">
+          <button
+            type="button"
+            onClick={(e) => {
+              if (handleSelectionShortcut(e)) return;
+              e.stopPropagation();
+              onFollowUp?.();
+            }}
+            className="inline-flex h-6 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            title="Create follow-up"
+            aria-label="Create follow-up"
+          >
+            <ClockReturnIcon />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              if (handleSelectionShortcut(e)) return;
+              e.stopPropagation();
+              onDoLater?.();
+            }}
+            className="inline-flex h-6 w-7 items-center justify-center rounded text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-700"
+            title={doLaterLabel}
+            aria-label={doLaterLabel}
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 5v14" />
+              <path d="m19 12-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
       )}
 
       <div className={`flex items-start gap-2 ${isCompleting ? 'line-through' : ''}`}>
