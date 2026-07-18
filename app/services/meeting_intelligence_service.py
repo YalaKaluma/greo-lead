@@ -20,6 +20,10 @@ from sqlalchemy.orm import Session
 from app.config import OPENAI_API_KEY
 from app.db import SessionLocal
 from app.models import (
+    BeltAssessment,
+    JournalEntry,
+    JourneyBeltTrial,
+    JourneyGoal,
     JourneyPerson,
     Meeting,
     MeetingActionItem,
@@ -35,7 +39,7 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
-MEETING_PROMPT_VERSION = "meeting-phase1-v1"
+MEETING_PROMPT_VERSION = "meeting-phase1-v3-self-speaker-resolution"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4o-mini")
 DB_WRITE_ATTEMPTS = max(1, int(os.getenv("MEETING_DB_WRITE_ATTEMPTS", "3")))
 TRANSCRIPTION_CHUNK_SECONDS = min(
@@ -184,7 +188,12 @@ def transcribe_recording(path: str, filename: str, content_type: str | None, voi
     return {"text": "\n".join(combined_text).strip(), "segments": combined_segments}
 
 
-def analyze_transcript(transcript: str, supplied_title: str | None = None, supplied_context: str | None = None) -> dict:
+def analyze_transcript(
+    transcript: str,
+    supplied_title: str | None = None,
+    supplied_context: str | None = None,
+    leadership_context: str | None = None,
+) -> dict:
     today = datetime.now(timezone.utc).date().isoformat()
     response = client.chat.completions.create(
         model=MEETING_MODEL,
@@ -197,8 +206,10 @@ def analyze_transcript(transcript: str, supplied_title: str | None = None, suppl
                     "You extract evidence-backed executive meeting intelligence. Return JSON only. "
                     "Never invent attendees, decisions, deadlines, or evidence. Confidence is 0 to 1. "
                     "Leadership observations must be tentative, useful, non-judgmental, and explicitly "
-                    "supported by transcript evidence. Use wording such as 'Based on this meeting...' or "
-                    "'Alfred estimates...'. Do not infer conversations that did not occur."
+                    "supported by transcript evidence. Personalize leadership coaching using the private "
+                    "leadership context when relevant, but never let it alter factual meeting extraction. "
+                    "Do not quote private journal or trial content verbatim. Use wording such as 'Based on "
+                    "this meeting...' or 'Alfred estimates...'. Do not infer conversations that did not occur."
                 ),
             },
             {
@@ -207,12 +218,29 @@ def analyze_transcript(transcript: str, supplied_title: str | None = None, suppl
                     f"Today is {today}. Supplied title: {supplied_title or 'none'}.\n"
                     "Return this exact JSON shape: {title, meeting_type, one_line_summary, "
                     "executive_summary, participants:[{display_name,speaker_label}], "
+                    "self_speaker_label, self_identification_confidence, "
                     "topics:[{title,summary}], decisions:[{description,confidence,evidence_excerpt}], "
                     "action_items:[{description,owner_name,due_date,confidence,evidence_excerpt}], "
                     "leadership_observations:[{category,observation,confidence,evidence_excerpt}]}. "
                     "Executive summary should be 3-5 concise paragraphs for substantial transcripts, "
                     "and proportionally shorter for brief notes. Use null for unknown due dates.\n\n"
+                    "The user participated in every uploaded meeting. Set self_speaker_label to exactly one "
+                    "speaker label that already appears in the transcript. If voice recognition labelled a "
+                    "speaker Me, choose Me. Otherwise select the most likely existing speaker using introductions, "
+                    "names, roles, supplied attendee/context information, first-person references, and the user's "
+                    "private leadership context. Never add Me as a separate participant when the transcript only "
+                    "contains generic labels such as A and B. Always make a best selection and express uncertainty "
+                    "through self_identification_confidence rather than inventing another speaker. Participants must "
+                    "contain only distinct speakers that actually appear in the transcript.\n\n"
+                    "For leadership_observations, focus only on self_speaker_label. When identification confidence "
+                    "is low, make the attribution uncertainty explicit. Produce 4-6 "
+                    "substantive observations where evidence allows, organized with these categories: "
+                    "What you did well; What could have been stronger; Leadership context connection; "
+                    "Next-meeting experiment. Include specific behavioral evidence, explain why it matters "
+                    "for this leader's current wheel/trials/journal themes, and make the experiment concrete. "
+                    "Balance strengths and growth edges; do not manufacture criticism to fill categories.\n\n"
                     f"USER-SUPPLIED MEETING CONTEXT (treat as context, not spoken transcript):\n{supplied_context or 'none'}\n\n"
+                    f"PRIVATE LEADERSHIP DEVELOPMENT CONTEXT (coaching only; paraphrase patterns, never quote):\n{leadership_context or 'none'}\n\n"
                     f"TRANSCRIPT OR NOTES:\n{transcript[:120000]}"
                 ),
             },
@@ -229,6 +257,15 @@ def _replace_analysis(db: Session, meeting: Meeting, analysis: dict) -> None:
     meeting.prompt_version = MEETING_PROMPT_VERSION
     meeting.model_version = MEETING_MODEL
 
+    transcript_labels = {
+        str(label).strip()
+        for (label,) in db.query(MeetingTranscriptSegment.speaker_label).filter(
+            MeetingTranscriptSegment.meeting_id == meeting.id
+        ).distinct().all()
+        if label and str(label).strip()
+    }
+    transcript_labels_by_key = {label.casefold(): label for label in transcript_labels}
+
     for participant in analysis.get("participants") or []:
         display_name = str(participant.get("display_name") or participant.get("speaker_label") or "Unknown participant").strip()
         raw_speaker_label = str(participant.get("speaker_label") or display_name).strip()
@@ -237,6 +274,12 @@ def _replace_analysis(db: Session, meeting: Meeting, analysis: dict) -> None:
         ).strip()[:80]
         if speaker_label.lower() == "me":
             speaker_label = "Me"
+        canonical_label = transcript_labels_by_key.get(speaker_label.casefold())
+        if transcript_labels and canonical_label is None:
+            # Analysis may describe a person by name, but participant rows represent
+            # diarized speakers. Do not create a phantom speaker outside the transcript.
+            continue
+        speaker_label = canonical_label or speaker_label
         existing = db.query(MeetingParticipant).filter(
             MeetingParticipant.meeting_id == meeting.id,
             MeetingParticipant.speaker_label.ilike(speaker_label),
@@ -252,6 +295,45 @@ def _replace_analysis(db: Session, meeting: Meeting, analysis: dict) -> None:
                 display_name=display_name[:200],
                 speaker_label=speaker_label,
             ))
+
+    self_label = str(analysis.get("self_speaker_label") or "").strip()
+    canonical_self_label = transcript_labels_by_key.get(self_label.casefold())
+    if not canonical_self_label and "me" in transcript_labels_by_key:
+        canonical_self_label = transcript_labels_by_key["me"]
+    if canonical_self_label:
+        user = db.query(User).filter(
+            (User.phone_number == meeting.user_number) | (User.email == meeting.user_number)
+        ).first()
+        selected_self = db.query(MeetingParticipant).filter(
+            MeetingParticipant.meeting_id == meeting.id,
+            MeetingParticipant.speaker_label.ilike(canonical_self_label),
+        ).first()
+        if not selected_self:
+            selected_self = MeetingParticipant(
+                meeting_id=meeting.id,
+                speaker_label=canonical_self_label,
+            )
+            db.add(selected_self)
+        db.query(MeetingParticipant).filter(
+            MeetingParticipant.meeting_id == meeting.id,
+            MeetingParticipant.speaker_label.not_ilike(canonical_self_label),
+        ).update(
+            {"is_current_user": False}, synchronize_session=False
+        )
+        selected_self.display_name = (user.name if user and user.name else "Me")[:200]
+        selected_self.person_id = None
+        selected_self.match_status = "current_user"
+        selected_self.is_current_user = True
+
+        # Remove old analysis-created self aliases. The real diarized speaker row
+        # above is now the single canonical representation of the current user.
+        stale_self_rows = db.query(MeetingParticipant).filter(
+            MeetingParticipant.meeting_id == meeting.id,
+            MeetingParticipant.speaker_label.ilike("me"),
+            MeetingParticipant.speaker_label.not_ilike(canonical_self_label),
+        ).all()
+        for stale_self in stale_self_rows:
+            db.delete(stale_self)
 
     for index, topic in enumerate(analysis.get("topics") or []):
         title = str(topic.get("title") or "").strip()
@@ -317,6 +399,67 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
         f"[{note.elapsed_seconds // 60:02d}:{note.elapsed_seconds % 60:02d}] {note.note_text}"
         for note in context_notes
     )
+    leadership_context_parts = []
+    user_identifiers = {meeting.user_number}
+    if user:
+        user_identifiers.update(value for value in (user.phone_number, user.email) if value)
+        assessment = db.query(BeltAssessment).filter(
+            BeltAssessment.user_number.in_(user_identifiers)
+        ).order_by(BeltAssessment.created_at.desc()).first()
+        if assessment:
+            assessment_snapshot = {
+                "current_belt": assessment.current_belt,
+                "readiness_score": assessment.readiness_score,
+                "strengths": assessment.strengths,
+                "growth_edges": assessment.growth_edges,
+                "wheel_scores": assessment.wheel_scores or assessment.dimension_scores,
+                "wheel_feedback": assessment.wheel_feedback,
+                "priority_next_actions": assessment.priority_next_actions or assessment.required_next_actions,
+            }
+            leadership_context_parts.append(
+                "Latest leadership wheel/assessment: " + json.dumps(assessment_snapshot, default=str)[:6000]
+            )
+        trials = db.query(JourneyBeltTrial).filter(
+            JourneyBeltTrial.user_number.in_(user_identifiers),
+            JourneyBeltTrial.status.in_(["in_progress", "submitted", "completed"]),
+        ).order_by(JourneyBeltTrial.updated_at.desc()).limit(6).all()
+        if trials:
+            trial_snapshot = [{
+                "dimension": trial.dimension_id,
+                "belt": trial.target_belt,
+                "type": trial.trial_type,
+                "status": trial.status,
+                "prompt": (trial.prompt or "")[:500],
+                "feedback": (trial.ai_feedback or "")[:700],
+                "score": trial.score,
+            } for trial in trials]
+            leadership_context_parts.append(
+                "Current/recent leadership trials: " + json.dumps(trial_snapshot, default=str)[:6000]
+            )
+        journal_entries = db.query(JournalEntry).filter(
+            JournalEntry.user_id == user.id
+        ).order_by(JournalEntry.created_at.desc()).limit(6).all()
+        if journal_entries:
+            journal_snapshot = [{
+                "date": entry.created_at.date().isoformat() if entry.created_at else None,
+                "reflection": (entry.text or "")[:1000],
+                "depth_label": entry.reflection_depth_label,
+            } for entry in journal_entries]
+            leadership_context_parts.append(
+                "Recent Growth Journal themes: " + json.dumps(journal_snapshot, default=str)[:7000]
+            )
+    goals = db.query(JourneyGoal).filter(
+        JourneyGoal.user_number.in_(user_identifiers),
+        JourneyGoal.parent_goal_id.is_(None),
+    ).order_by(JourneyGoal.sort_order.asc(), JourneyGoal.updated_at.desc()).limit(5).all()
+    if goals:
+        leadership_context_parts.append(
+            "Current top-level goals: " + json.dumps([{
+                "title": goal.title or goal.goal_text,
+                "why": (goal.why or "")[:500],
+                "horizon": goal.time_horizon,
+            } for goal in goals], default=str)[:4000]
+        )
     return {
         "title": meeting.title,
         "recording_storage_key": meeting.recording_storage_key,
@@ -325,6 +468,7 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
         "transcript": (meeting.transcript_text or meeting.user_notes or "").strip(),
         "voice_reference": user.voice_reference_data_url if user else None,
         "supplied_context": "\n".join(supplied_context_parts),
+        "leadership_context": "\n".join(leadership_context_parts)[:22000],
     }
 
 
@@ -432,7 +576,12 @@ def process_meeting(meeting_id: int) -> None:
             raise ValueError("No recording, transcript, or notes were provided.")
 
         logger.info("Meeting %s analysis started", meeting_id)
-        analysis = analyze_transcript(transcript, snapshot["title"], snapshot["supplied_context"])
+        analysis = analyze_transcript(
+            transcript,
+            snapshot["title"],
+            snapshot["supplied_context"],
+            snapshot["leadership_context"],
+        )
         _with_fresh_session(
             lambda db: _save_analysis(db, meeting_id, analysis), "save analysis"
         )

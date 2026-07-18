@@ -9,7 +9,7 @@ export default function OptimizeTodayModal({
   getTaskScore,
   loading,
   onCancel,
-  onApply,
+  onApplyMove,
   t = (key, fallback) => fallback || key,
 }) {
   const candidates = useMemo(() => tasks
@@ -38,13 +38,16 @@ export default function OptimizeTodayModal({
     return move ? { ...task, scheduled_date: move.targetDate, due_date: move.newDueDate || task.due_date } : task;
   });
 
-  const addMove = (targetDate, newDueDate = null) => {
-    setDecisions(previous => [...previous, {
+  const addMove = async (targetDate, newDueDate = null) => {
+    const move = {
       action: 'move',
       task: current.task,
       targetDate,
       newDueDate,
-    }]);
+    };
+    const applied = await onApplyMove(move);
+    if (!applied) return;
+    setDecisions(previous => [...previous, move]);
     setConversation(null);
     setShowDueDate(false);
     setDueDate('');
@@ -135,7 +138,7 @@ export default function OptimizeTodayModal({
                 <h3 className="font-semibold text-slate-900">{t('optimizeToday.review', 'Review proposed changes')}</h3>
                 <p className="mt-1 text-sm text-slate-600">
                   {moves.length >= requiredMoves
-                    ? t('optimizeToday.targetReached', 'The projected plan reaches 10 tasks for today.')
+                    ? t('optimizeToday.targetReachedLive', 'Today now has 10 scheduled tasks. Your approved changes have already been saved.')
                     : t('optimizeToday.targetNotReached', 'All candidates were reviewed, but more than 10 tasks remain today.')}
                 </p>
               </div>
@@ -172,7 +175,7 @@ export default function OptimizeTodayModal({
                   <div className="mt-3 flex flex-wrap justify-end gap-2">
                     <button type="button" onClick={() => setConversation(null)} className="rounded px-3 py-2 text-slate-600 hover:bg-white">{t('common.back', 'Back')}</button>
                     {conversation.type === 'deadline' && <button type="button" onClick={() => { setDueDate(''); setShowDueDate(true); setConversation(null); }} className="rounded border border-blue-200 bg-white px-3 py-2 font-medium text-blue-700">{t('calendar.chooseNewDueDate', 'Choose new due date')}</button>}
-                    {(conversation.type === 'next_week' || conversation.type === 'deadline') && <button type="button" onClick={() => addMove(conversation.targetDate, conversation.type === 'deadline' ? conversation.targetDate : conversation.newDueDate)} className="rounded bg-blue-600 px-3 py-2 font-semibold text-white">{conversation.type === 'deadline' ? t('calendar.confirmPastDueDate', 'Move and update due date') : t('optimizeToday.acceptDate', 'Accept proposed date')}</button>}
+                    {(conversation.type === 'next_week' || conversation.type === 'deadline') && <button type="button" disabled={loading} onClick={() => addMove(conversation.targetDate, conversation.type === 'deadline' ? conversation.targetDate : conversation.newDueDate)} className="rounded bg-blue-600 px-3 py-2 font-semibold text-white disabled:opacity-50">{conversation.type === 'deadline' ? t('calendar.confirmPastDueDate', 'Move and update due date') : t('optimizeToday.acceptDate', 'Accept proposed date')}</button>}
                   </div>
                 </div>
               ) : showDueDate ? (
@@ -186,10 +189,10 @@ export default function OptimizeTodayModal({
                 </div>
               ) : (
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <button type="button" onClick={() => evaluateMove('later_this_week')} className="rounded border border-slate-200 px-3 py-2 text-left text-sm font-medium hover:bg-slate-50">{t('calendar.laterThisWeek', 'Later this week')}</button>
-                  <button type="button" onClick={() => evaluateMove('next_week')} className="rounded border border-slate-200 px-3 py-2 text-left text-sm font-medium hover:bg-slate-50">{t('calendar.nextWeek', 'Next week')}</button>
+                  <button type="button" disabled={loading} onClick={() => evaluateMove('later_this_week')} className="rounded border border-slate-200 px-3 py-2 text-left text-sm font-medium hover:bg-slate-50 disabled:opacity-50">{t('calendar.laterThisWeek', 'Later this week')}</button>
+                  <button type="button" disabled={loading} onClick={() => evaluateMove('next_week')} className="rounded border border-slate-200 px-3 py-2 text-left text-sm font-medium hover:bg-slate-50 disabled:opacity-50">{t('calendar.nextWeek', 'Next week')}</button>
                   <button type="button" onClick={() => setShowDueDate(true)} className="rounded border border-slate-200 px-3 py-2 text-left text-sm font-medium hover:bg-slate-50">{t('calendar.enterDueDate', 'Enter due date')}</button>
-                  <button type="button" onClick={keepToday} className="rounded border border-slate-300 px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100">{t('optimizeToday.keepToday', 'Keep today')}</button>
+                  <button type="button" disabled={loading} onClick={keepToday} className="rounded border border-slate-300 px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50">{t('optimizeToday.keepToday', 'Keep today')}</button>
                 </div>
               )}
             </div>
@@ -199,8 +202,7 @@ export default function OptimizeTodayModal({
         <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-3">
           <span className="text-xs text-slate-500">{decisions.length} {t('optimizeToday.decisionsReviewed', 'decisions reviewed')}</span>
           <div className="flex gap-2">
-            <button type="button" onClick={onCancel} disabled={loading} className="rounded border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50">{t('common.cancel', 'Cancel')}</button>
-            {reviewReady && moves.length > 0 && <button type="button" onClick={() => onApply(moves)} disabled={loading} className="rounded bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{loading ? t('common.saving', 'Saving…') : t('optimizeToday.apply', 'Apply selected changes')}</button>}
+            <button type="button" onClick={onCancel} disabled={loading} className="rounded bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{loading ? t('common.saving', 'Saving…') : t('common.done', 'Done')}</button>
           </div>
         </div>
       </div>

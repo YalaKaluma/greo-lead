@@ -21,7 +21,7 @@ describe('OptimizeTodayModal', () => {
         getTaskScore={() => null}
         loading={false}
         onCancel={() => {}}
-        onApply={() => {}}
+        onApplyMove={async () => true}
       />
     );
 
@@ -30,8 +30,8 @@ describe('OptimizeTodayModal', () => {
     expect(screen.getByText('Task 2')).toBeInTheDocument();
   });
 
-  it('reviews changes before applying an accepted movement', () => {
-    const onApply = vi.fn();
+  it('applies an accepted movement immediately', async () => {
+    const onApplyMove = vi.fn(async () => true);
     render(
       <OptimizeTodayModal
         tasks={buildTasks(11)}
@@ -40,14 +40,14 @@ describe('OptimizeTodayModal', () => {
         getTaskScore={() => null}
         loading={false}
         onCancel={() => {}}
-        onApply={onApply}
+        onApplyMove={onApplyMove}
       />
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Later this week' }));
-    expect(screen.getByText('Review proposed changes')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Apply selected changes' }));
-    expect(onApply).toHaveBeenCalledTimes(1);
-    expect(onApply.mock.calls[0][0]).toHaveLength(1);
+    expect(await screen.findByText('Review proposed changes')).toBeInTheDocument();
+    expect(onApplyMove).toHaveBeenCalledTimes(1);
+    expect(onApplyMove.mock.calls[0][0]).toMatchObject({ action: 'move', targetDate: '2026-07-21' });
+    expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
   });
 });

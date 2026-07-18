@@ -608,56 +608,68 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
   };
 
-  const applyTodayOptimization = async (moves) => {
+  const applyTodayOptimizationMove = async (move) => {
     setDeferLoading(true);
     try {
-      await Promise.all(
-        moves.map(move => axios.put(
-          `${apiUrl}/api/tasks/${move.task.id}`,
-          {
-            scheduled_date: move.targetDate,
-            ...(move.newDueDate ? { due_date: move.newDueDate } : {}),
-          },
-          { params: { user_number: userNumber } }
-        ))
+      await axios.put(
+        `${apiUrl}/api/tasks/${move.task.id}`,
+        {
+          scheduled_date: move.targetDate,
+          ...(move.newDueDate ? { due_date: move.newDueDate } : {}),
+        },
+        { params: { user_number: userNumber } }
       );
-      await fetchTasks({ skipMtnBackfill: true });
-      setShowDeferModal(false);
+      return true;
     } catch (err) {
       console.error('Error applying today optimization:', err);
       alert(err.response?.data?.detail || t('optimizeToday.applyFailed', 'Failed to apply the optimization changes.'));
+      return false;
     } finally {
       setDeferLoading(false);
     }
   };
 
-  const applyBulkAction = async (updates) => {
+  const finishTodayOptimization = async () => {
+    setShowDeferModal(false);
+    await fetchTasks({ skipMtnBackfill: true });
+  };
+
+  const applyBulkAction = async (updates, { overrideDueDates = false } = {}) => {
     const selectedTaskRecords = tasks.filter(task => selectedTasks.includes(task.id));
     const invalidTasks = selectedTaskRecords.filter(task => {
       const nextScheduledDate = updates.scheduled_date || getTaskScheduledDate(task);
       const nextDueDate = updates.due_date || String(task.due_date || '').split('T')[0];
       return nextScheduledDate && nextDueDate && nextScheduledDate > nextDueDate;
     });
-    if (invalidTasks.length > 0) {
-      alert(`${invalidTasks.length} selected task(s) would be scheduled after their due date. Choose an earlier scheduled date or update the due date.`);
-      return;
+    if (invalidTasks.length > 0 && !overrideDueDates) {
+      return { conflicts: invalidTasks.length };
     }
     try {
       await Promise.all(
-        selectedTasks.map(taskId =>
+        selectedTaskRecords.map(task => {
+          const taskUpdates = { ...updates };
+          const nextScheduledDate = updates.scheduled_date || getTaskScheduledDate(task);
+          const nextDueDate = updates.due_date || String(task.due_date || '').split('T')[0];
+          if (overrideDueDates && nextScheduledDate && nextDueDate && nextScheduledDate > nextDueDate) {
+            taskUpdates.due_date = nextScheduledDate;
+          }
+          return (
           axios.put(
-            `${apiUrl}/api/tasks/${taskId}`,
-            updates,
+            `${apiUrl}/api/tasks/${task.id}`,
+            taskUpdates,
             { params: { user_number: userNumber } }
           )
-        )
+          );
+        })
       );
       await fetchTasks();
       exitSelectionMode();
       setShowBulkActionModal(false);
+      return { applied: true };
     } catch (err) {
       console.error('Error applying bulk action:', err);
       alert('Failed to update some tasks');
+      return { error: true };
     }
   };
 
@@ -961,8 +973,8 @@ export default function TodoList({ apiUrl, userNumber }) {
           capacity={calendarMtnCapacity}
           getTaskScore={getTaskScore}
           loading={deferLoading}
-          onCancel={() => setShowDeferModal(false)}
-          onApply={applyTodayOptimization}
+          onCancel={finishTodayOptimization}
+          onApplyMove={applyTodayOptimizationMove}
           t={t}
         />
       )}
