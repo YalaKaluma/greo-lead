@@ -471,7 +471,7 @@ def handle_clarifying(
         user_number=user_number,
         title=title[:200],
         status="open",
-        due_date=None,  # Don't set due_date unless specified
+        due_date=datetime.now(),
         created_at=datetime.now(),  # Changed from utcnow()
         updated_at=datetime.now()  # Changed from utcnow()
     )

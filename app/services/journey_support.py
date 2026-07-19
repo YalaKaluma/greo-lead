@@ -233,6 +233,8 @@ class PersonCreate(BaseModel):
     coaching_focus: Optional[str] = None
     performance_indicator: Optional[str] = None
     potential_indicator: Optional[str] = None
+    current_contribution: Optional[int] = None
+    potential_contribution: Optional[int] = None
     stakeholder_mission: Optional[str] = None
     stakeholder_priorities: Optional[str] = None
     success_metrics: Optional[str] = None
@@ -270,6 +272,8 @@ class PersonUpdate(BaseModel):
     coaching_focus: Optional[str] = None
     performance_indicator: Optional[str] = None
     potential_indicator: Optional[str] = None
+    current_contribution: Optional[int] = None
+    potential_contribution: Optional[int] = None
     stakeholder_mission: Optional[str] = None
     stakeholder_priorities: Optional[str] = None
     success_metrics: Optional[str] = None
@@ -810,6 +814,8 @@ class PersonResponse(BaseModel):
     coaching_focus: Optional[str] = None
     performance_indicator: Optional[str] = None
     potential_indicator: Optional[str] = None
+    current_contribution: Optional[int] = None
+    potential_contribution: Optional[int] = None
     stakeholder_mission: Optional[str] = None
     stakeholder_priorities: Optional[str] = None
     success_metrics: Optional[str] = None

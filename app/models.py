@@ -352,8 +352,7 @@ class Task(Base):
     notes = Column(Text, nullable=True)
     project = Column(String, nullable=True)
     delegated_to = Column(String, nullable=True)
-    scheduled_date = Column(Date, nullable=True)
-    due_date = Column(DateTime, nullable=True)
+    due_date = Column(DateTime, nullable=False, server_default=func.current_date())
     status = Column(String, default="open")  # open, completed, archived
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
@@ -658,6 +657,8 @@ class JourneyPerson(Base):
     coaching_focus = Column(Text, nullable=True)
     performance_indicator = Column(String, nullable=True)
     potential_indicator = Column(String, nullable=True)
+    current_contribution = Column(Integer, nullable=True)
+    potential_contribution = Column(Integer, nullable=True)
     stakeholder_mission = Column(Text, nullable=True)
     stakeholder_priorities = Column(Text, nullable=True)
     success_metrics = Column(Text, nullable=True)

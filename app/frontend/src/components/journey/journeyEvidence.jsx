@@ -19,7 +19,7 @@ export function TopicEvidencePanel({ dimension, activeTopic, setActiveTopic, ite
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Evidence Library</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">My Story</p>
           <h3 className="mt-1 text-xl font-semibold text-slate-950">{activeTopicConfig.label} Inputs</h3>
           <p className="mt-2 text-sm leading-6 text-slate-600">{subdomainQuestion}</p>
         </div>

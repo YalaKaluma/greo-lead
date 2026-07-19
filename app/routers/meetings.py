@@ -592,7 +592,6 @@ def convert_action_item(action_item_id: int, payload: ActionConversion, db: Sess
     if action.created_task_id:
         existing_task = db.query(Task).filter(Task.id == action.created_task_id, Task.user_number == payload.user_number).first()
         if existing_task:
-            existing_task.scheduled_date = today
             existing_task.due_date = today_due
             db.commit()
             return {"task_id": existing_task.id, "already_created": True}
@@ -608,7 +607,6 @@ def convert_action_item(action_item_id: int, payload: ActionConversion, db: Sess
         title=title,
         notes=f"Created from meeting: {action.meeting.title}",
         delegated_to=delegated_to,
-        scheduled_date=today,
         due_date=today_due,
         priority="Medium",
         status="open",

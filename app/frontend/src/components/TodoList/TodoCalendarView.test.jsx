@@ -125,7 +125,7 @@ describe('TodoCalendarView', () => {
       />
     );
 
-    expect(screen.getByText('Overdue')).toBeInTheDocument();
+    expect(screen.getByText('Previously scheduled')).toBeInTheDocument();
     expect(screen.getByText('Late strategic')).toBeInTheDocument();
   });
 
@@ -142,7 +142,7 @@ describe('TodoCalendarView', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Select task' }));
+    fireEvent.click(screen.getByRole('button', { name: /Select calendar task/ }), { ctrlKey: true });
     expect(onEnterSelection).toHaveBeenCalledWith(calendarTask.id);
 
     rerender(
@@ -155,7 +155,7 @@ describe('TodoCalendarView', () => {
         onSelectToggle={onSelectToggle}
       />
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Deselect task' }));
+    fireEvent.click(screen.getByRole('button', { name: /Select calendar task/ }));
     expect(onSelectToggle).toHaveBeenCalledWith(calendarTask.id);
     expect(screen.queryByRole('button', { name: 'Do later' })).not.toBeInTheDocument();
   });

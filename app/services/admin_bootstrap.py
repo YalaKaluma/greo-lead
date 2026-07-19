@@ -77,6 +77,8 @@ def ensure_admin_schema_and_seed() -> None:
             "manager_name VARCHAR",
             "circle_type VARCHAR",
             "strategic_importance VARCHAR",
+            "current_contribution INTEGER",
+            "potential_contribution INTEGER",
             "last_interaction_at TIMESTAMP",
             "next_action TEXT",
             "current_goals TEXT",

@@ -18,7 +18,7 @@ def create_task(
         notes=notes,
         goal_id=goal_id,
         priority=priority,
-        due_date=due_date,
+        due_date=due_date or datetime.utcnow(),
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
     )

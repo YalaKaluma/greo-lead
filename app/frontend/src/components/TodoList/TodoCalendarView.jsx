@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getCalendarMtnLabel, getCalendarTasks, summarizeCalendarDay } from '../../utils/todoCalendarLogic.js';
 import { getMtnStyle } from '../../utils/taskHelpers.js';
 import { formatShortDate } from '../../utils/todoDateLogic.js';
@@ -32,16 +32,57 @@ function CalendarTaskCard({
     goals.find(goal => goal.id === task.goal_id)?.goal_text ||
     task.goal_title ||
     '';
+  const longPressTimerRef = useRef(null);
+  const longPressFiredRef = useRef(false);
 
   const handleDragStart = (event) => {
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', String(task.id));
   };
 
+  const cancelLongPress = () => {
+    if (longPressTimerRef.current) window.clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = null;
+  };
+
+  const handleCardClick = (event) => {
+    if (longPressFiredRef.current) {
+      event.preventDefault();
+      longPressFiredRef.current = false;
+      return;
+    }
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      if (selectionMode) onSelectToggle(task.id);
+      else onEnterSelection(task.id);
+    } else if (selectionMode) {
+      event.preventDefault();
+      onSelectToggle(task.id);
+    } else {
+      onStartEdit(task);
+    }
+  };
+
+  const handleTouchStart = () => {
+    cancelLongPress();
+    longPressFiredRef.current = false;
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressFiredRef.current = true;
+      if (selectionMode) onSelectToggle(task.id);
+      else onEnterSelection(task.id);
+      navigator.vibrate?.(50);
+    }, 750);
+  };
+
   return (
     <div
       draggable={!selectionMode}
       onDragStart={handleDragStart}
+      onClick={handleCardClick}
+      onTouchStart={handleTouchStart}
+      onTouchMove={cancelLongPress}
+      onTouchEnd={cancelLongPress}
+      onTouchCancel={cancelLongPress}
       className={`w-full rounded border px-2 py-2 text-left shadow-sm transition hover:shadow ${
         isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'
       }`}
@@ -49,22 +90,7 @@ function CalendarTaskCard({
       <div className="flex items-start gap-1.5">
         <button
           type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            if (selectionMode) onSelectToggle(task.id);
-            else onEnterSelection(task.id);
-          }}
-          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold ${
-            isSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-transparent hover:border-blue-500'
-          }`}
-          aria-label={isSelected ? t('calendar.deselectTask', 'Deselect task') : t('calendar.selectTask', 'Select task')}
-          aria-pressed={isSelected}
-        >
-          ✓
-        </button>
-        <button
-          type="button"
-          onClick={() => selectionMode ? onSelectToggle(task.id) : onStartEdit(task)}
+          onClick={(event) => event.preventDefault()}
           className="flex min-w-0 flex-1 items-start gap-1.5 text-left"
         >
         {task.is_recurring && (
@@ -87,6 +113,21 @@ function CalendarTaskCard({
             No MTN
           </span>
         )}
+        {!selectionMode && (
+          <button
+            type="button"
+            onClick={(event) => { event.stopPropagation(); onOpenDoLater(task); }}
+            onTouchStart={(event) => event.stopPropagation()}
+            className="inline-flex h-6 w-6 items-center justify-center rounded text-blue-600 hover:bg-blue-50 hover:text-blue-800"
+            title={t('calendar.doLater', 'Do later')}
+            aria-label={t('calendar.doLater', 'Do later')}
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M5 12h14" />
+              <path d="m13 6 6 6-6 6" />
+            </svg>
+          </button>
+        )}
         {goalLabel && (
           <span className="max-w-full truncate rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">
             {goalLabel}
@@ -103,15 +144,6 @@ function CalendarTaskCard({
           </span>
         )}
       </div>
-      {!selectionMode && (
-        <button
-          type="button"
-          onClick={() => onOpenDoLater(task)}
-          className="mt-2 w-full rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-        >
-          {t('calendar.doLater', 'Do later')}
-        </button>
-      )}
     </div>
   );
 }
@@ -158,9 +190,9 @@ function TodoCalendarDayColumn({
         isDropTarget ? 'border-blue-300 bg-blue-50' : 'border-slate-200'
       }`}
     >
-      <div className="border-b border-slate-200 px-3 py-2">
+      <div className="rounded-t bg-slate-900 px-3 py-2 text-white">
         <div className="flex items-baseline justify-between gap-2">
-          <h3 className="text-sm font-semibold text-slate-900">{day.label}</h3>
+          <h3 className="text-sm font-semibold text-white">{day.label}</h3>
           <span className={`rounded border px-1.5 py-0.5 text-[11px] font-semibold ${{
             light: 'border-slate-200 bg-white text-slate-600',
             balanced: 'border-emerald-200 bg-emerald-50 text-emerald-700',
@@ -171,23 +203,23 @@ function TodoCalendarDayColumn({
             {t(`calendar.status.${summary.status}`, summary.status)}
           </span>
         </div>
-        <p className="mt-0.5 text-xs text-slate-500">{day.dateLabel}</p>
+        <p className="mt-0.5 text-xs text-slate-300">{day.dateLabel}</p>
         <dl className="mt-2 space-y-1 text-xs" aria-label={t('calendar.dailySummary', 'Daily planning summary')}>
           <div className="flex items-center justify-between gap-2">
-            <dt className="text-slate-500">{t('calendar.expectedMtn', 'Expected MTN')}</dt>
-            <dd className="font-semibold text-slate-900">{summary.expectedMtn.toFixed(1)}</dd>
+            <dt className="text-slate-300">{t('calendar.expectedMtn', 'Expected MTN')}</dt>
+            <dd className="font-semibold text-white">{summary.expectedMtn.toFixed(1)}</dd>
           </div>
           <div className="flex items-center justify-between gap-2">
-            <dt className="text-slate-500">{t('calendar.tasks', 'Tasks')}</dt>
-            <dd className="font-medium text-slate-700">{summary.taskCount}</dd>
+            <dt className="text-slate-300">{t('calendar.tasks', 'Tasks')}</dt>
+            <dd className="font-medium text-white">{summary.taskCount}</dd>
           </div>
           <div className="flex items-center justify-between gap-2">
-            <dt className="text-slate-500">{t('calendar.averageMtn', 'Average MTN')}</dt>
-            <dd className="font-medium text-slate-700">{summary.averageMtn === null ? '—' : summary.averageMtn.toFixed(1)}</dd>
+            <dt className="text-slate-300">{t('calendar.averageMtn', 'Average MTN')}</dt>
+            <dd className="font-medium text-white">{summary.averageMtn === null ? '—' : summary.averageMtn.toFixed(1)}</dd>
           </div>
         </dl>
         {summary.missingScoreCount > 0 && (
-          <p className="mt-1 text-[11px] text-slate-500">
+          <p className="mt-1 text-[11px] text-slate-300">
             {summary.missingScoreCount} {t('calendar.missingMtn', 'without an MTN score')}
           </p>
         )}
@@ -235,7 +267,7 @@ function OverdueSection({
   return (
     <div className="mb-4 rounded border border-red-200 bg-red-50 p-3">
       <div className="mb-2 flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-red-900">Overdue</h3>
+        <h3 className="text-sm font-semibold text-red-900">Previously scheduled</h3>
         <span className="text-xs font-medium text-red-700">{tasks.length} task(s)</span>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -303,20 +335,6 @@ export function DoLaterDialog({ task, onClose, onSchedule, t }) {
                 </div>
               </>
             )}
-            {conversation.error === 'deadline_conflict' && (
-              <>
-                <p className="text-sm text-slate-700">
-                  {t('calendar.deadlineConflict', 'The next capacity-safe workday is after the current due date.')} {t('calendar.currentDueDate', 'Current due date')}: <strong>{formatShortDate(conversation.dueDate)}</strong>. {t('calendar.proposedDate', 'Proposed date')}: <strong>{formatShortDate(conversation.fallbackDate)}</strong>.
-                </p>
-                <p className="text-xs text-slate-600">{t('calendar.deadlineChangeWarning', 'Confirming will move the task and update its due date to the proposed date.')}</p>
-                <div className="flex flex-wrap justify-end gap-2">
-                  <button type="button" onClick={() => { setDueDate(''); setShowDueDate(true); }} className="rounded border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50">{t('calendar.chooseNewDueDate', 'Choose new due date')}</button>
-                  <button type="button" disabled={saving} onClick={() => schedule('confirmed_date', conversation.fallbackDate)} className="rounded bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-                    {t('calendar.confirmPastDueDate', 'Move and update due date')}
-                  </button>
-                </div>
-              </>
-            )}
             {conversation.error === 'no_capacity' && (
               <>
                 <p className="text-sm text-slate-700">{t('calendar.noCapacityFound', 'Alfred could not find a capacity-safe workday in that period.')}</p>
@@ -344,7 +362,7 @@ export function DoLaterDialog({ task, onClose, onSchedule, t }) {
             <input id="do-later-due-date" type="date" value={dueDate} onChange={event => setDueDate(event.target.value)} className="w-full rounded border border-slate-300 px-3 py-2" />
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setShowDueDate(false)} className="rounded px-3 py-2 text-sm text-slate-600 hover:bg-slate-100">{t('common.back', 'Back')}</button>
-              <button type="button" disabled={!dueDate || saving} onClick={() => schedule('by_due_date', dueDate)} className="rounded bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+              <button type="button" disabled={!dueDate || saving} onClick={() => schedule('confirmed_date', dueDate)} className="rounded bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
                 {saving ? t('common.saving', 'Saving…') : t('calendar.scheduleTask', 'Schedule task')}
               </button>
             </div>
