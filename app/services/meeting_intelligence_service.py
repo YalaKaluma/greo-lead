@@ -9,12 +9,14 @@ import shutil
 import subprocess  # nosec B404 - commands are fixed binaries invoked without a shell
 import tempfile
 import time
+import traceback
+import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Callable, TypeVar
 
 from openai import OpenAI
-from sqlalchemy.exc import DBAPIError, OperationalError
+from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.config import OPENAI_API_KEY
@@ -39,7 +41,7 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
-MEETING_PROMPT_VERSION = "meeting-phase1-v3-self-speaker-resolution"
+MEETING_PROMPT_VERSION = "meeting-v3-contextual-self"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4o-mini")
 DB_WRITE_ATTEMPTS = max(1, int(os.getenv("MEETING_DB_WRITE_ATTEMPTS", "3")))
 TRANSCRIPTION_CHUNK_SECONDS = min(
@@ -48,7 +50,59 @@ TRANSCRIPTION_CHUNK_SECONDS = min(
 T = TypeVar("T")
 
 
-def _with_fresh_session(operation: Callable[[Session], T], label: str) -> T:
+def _meeting_log(
+    level: int,
+    event: str,
+    *,
+    meeting_id: int,
+    attempt_id: str,
+    stage: str,
+    **fields,
+) -> None:
+    """Emit searchable diagnostics without meeting or leadership content."""
+    payload = {
+        "event": event,
+        "meeting_id": meeting_id,
+        "attempt_id": attempt_id,
+        "stage": stage,
+        "deployment_commit": os.getenv("RAILWAY_GIT_COMMIT_SHA") or os.getenv("GIT_COMMIT_SHA") or "unknown",
+        **fields,
+    }
+    logger.log(level, "meeting_processing %s", json.dumps(payload, default=str, sort_keys=True))
+
+
+def _safe_error_fields(exc: Exception) -> dict:
+    """Return diagnostic metadata only; never serialize messages, SQL, or parameters."""
+    original = getattr(exc, "orig", None)
+    frames = traceback.extract_tb(exc.__traceback__) if exc.__traceback__ else []
+    origin = frames[-1] if frames else None
+    return {
+        "exception_type": type(exc).__name__,
+        "original_exception_type": type(original).__name__ if original else None,
+        "connection_invalidated": bool(getattr(exc, "connection_invalidated", False)),
+        "http_status": getattr(exc, "status_code", None),
+        "provider_error_code": getattr(exc, "code", None),
+        "sqlstate": getattr(original, "pgcode", None) if original else None,
+        "origin_file": Path(origin.filename).name if origin else None,
+        "origin_function": origin.name if origin else None,
+        "origin_line": origin.lineno if origin else None,
+    }
+
+
+def _is_transient_database_error(exc: DBAPIError) -> bool:
+    return (
+        isinstance(exc, (OperationalError, InterfaceError))
+        or bool(getattr(exc, "connection_invalidated", False))
+    )
+
+
+def _with_fresh_session(
+    operation: Callable[[Session], T],
+    label: str,
+    *,
+    meeting_id: int,
+    attempt_id: str,
+) -> T:
     """Run one short database transaction, reconnecting after transient failures."""
     last_error = None
     for attempt in range(1, DB_WRITE_ATTEMPTS + 1):
@@ -59,24 +113,64 @@ def _with_fresh_session(operation: Callable[[Session], T], label: str) -> T:
             return result
         except (OperationalError, DBAPIError) as exc:
             last_error = exc
+            if not _is_transient_database_error(exc):
+                try:
+                    db.rollback()
+                except DBAPIError:
+                    pass
+                _meeting_log(
+                    logging.ERROR,
+                    "database_non_retryable",
+                    meeting_id=meeting_id,
+                    attempt_id=attempt_id,
+                    stage=label,
+                    **_safe_error_fields(exc),
+                )
+                raise
+            rollback_failed = False
             try:
                 db.rollback()
             except DBAPIError:
-                pass
+                rollback_failed = True
+            connection_invalidated = False
             try:
                 # Ensure the next attempt cannot check the dead SSL connection
                 # back into the pool and receive it again.
                 db.invalidate()
+                connection_invalidated = True
             except (OperationalError, DBAPIError):
                 pass
-            logger.warning(
-                "Meeting database step '%s' lost its connection (attempt %s/%s).",
-                label, attempt, DB_WRITE_ATTEMPTS,
+            _meeting_log(
+                logging.WARNING,
+                "database_retry",
+                meeting_id=meeting_id,
+                attempt_id=attempt_id,
+                stage=label,
+                retry_attempt=attempt,
+                retry_limit=DB_WRITE_ATTEMPTS,
+                rollback_failed=rollback_failed,
+                session_invalidated=connection_invalidated,
+                **_safe_error_fields(exc),
             )
             if attempt < DB_WRITE_ATTEMPTS:
                 time.sleep(0.5 * (2 ** (attempt - 1)))
         except Exception:
-            db.rollback()
+            try:
+                db.rollback()
+            except (OperationalError, DBAPIError):
+                try:
+                    db.invalidate()
+                except (OperationalError, DBAPIError):
+                    pass
+                _meeting_log(
+                    logging.WARNING,
+                    "secondary_rollback_failure",
+                    meeting_id=meeting_id,
+                    attempt_id=attempt_id,
+                    stage=label,
+                )
+            # Preserve the primary operation exception; rollback/cleanup failures
+            # are logged separately and must never replace it.
             raise
         finally:
             try:
@@ -85,9 +179,13 @@ def _with_fresh_session(operation: Callable[[Session], T], label: str) -> T:
                 # rollback; cleanup must never override the retry decision above.
                 db.close()
             except (OperationalError, DBAPIError):
-                logger.warning(
-                    "Meeting database step '%s' ignored an error while closing a dead connection.",
-                    label,
+                _meeting_log(
+                    logging.WARNING,
+                    "database_cleanup_failure",
+                    meeting_id=meeting_id,
+                    attempt_id=attempt_id,
+                    stage=label,
+                    retry_attempt=attempt,
                 )
     raise last_error
 
@@ -170,26 +268,58 @@ def _create_audio_chunk(source_path: str, output_path: str, offset: float, durat
     )  # nosec B603 - argument list is passed directly with shell=False
 
 
-def transcribe_recording(path: str, filename: str, content_type: str | None, voice_reference: str | None = None) -> dict:
+def transcribe_recording(
+    path: str,
+    filename: str,
+    content_type: str | None,
+    voice_reference: str | None = None,
+    *,
+    meeting_id: int,
+    attempt_id: str,
+) -> dict:
     duration = _audio_duration_seconds(path)
     if duration is None or duration <= TRANSCRIPTION_CHUNK_SECONDS:
+        _meeting_log(
+            logging.INFO,
+            "transcription_plan",
+            meeting_id=meeting_id,
+            attempt_id=attempt_id,
+            stage="transcription",
+            duration_seconds=round(duration, 1) if duration is not None else None,
+            chunk_count=1,
+        )
         return _transcribe_file(path, filename, content_type, voice_reference)
 
     chunk_count = math.ceil(duration / TRANSCRIPTION_CHUNK_SECONDS)
-    logger.info(
-        "Long meeting audio is %.1f seconds; splitting it into %s chunks of at most %s seconds",
-        duration, chunk_count, TRANSCRIPTION_CHUNK_SECONDS,
+    _meeting_log(
+        logging.INFO,
+        "transcription_plan",
+        meeting_id=meeting_id,
+        attempt_id=attempt_id,
+        stage="transcription",
+        duration_seconds=round(duration, 1),
+        chunk_count=chunk_count,
+        maximum_chunk_seconds=TRANSCRIPTION_CHUNK_SECONDS,
     )
     combined_segments = []
     combined_text = []
     with tempfile.TemporaryDirectory(prefix="alfred-meeting-chunks-") as chunk_dir:
         for index in range(chunk_count):
+            chunk_started = time.monotonic()
             offset = index * TRANSCRIPTION_CHUNK_SECONDS
             chunk_duration = min(TRANSCRIPTION_CHUNK_SECONDS, duration - offset)
             chunk_path = str(Path(chunk_dir) / f"chunk-{index + 1:03d}.mp3")
-            logger.info("Creating meeting audio chunk %s/%s", index + 1, chunk_count)
+            _meeting_log(
+                logging.INFO,
+                "transcription_chunk_started",
+                meeting_id=meeting_id,
+                attempt_id=attempt_id,
+                stage="transcription",
+                chunk_number=index + 1,
+                chunk_count=chunk_count,
+                chunk_duration_seconds=round(chunk_duration, 1),
+            )
             _create_audio_chunk(path, chunk_path, offset, chunk_duration)
-            logger.info("Transcribing meeting audio chunk %s/%s", index + 1, chunk_count)
             result = _transcribe_file(
                 chunk_path, f"{Path(filename).stem}-part-{index + 1}.mp3", "audio/mpeg", voice_reference
             )
@@ -200,6 +330,17 @@ def transcribe_recording(path: str, filename: str, content_type: str | None, voi
                     "start": segment["start"] + offset,
                     "end": segment["end"] + offset,
                 })
+            _meeting_log(
+                logging.INFO,
+                "transcription_chunk_completed",
+                meeting_id=meeting_id,
+                attempt_id=attempt_id,
+                stage="transcription",
+                chunk_number=index + 1,
+                chunk_count=chunk_count,
+                segment_count=len(result.get("segments") or []),
+                duration_ms=round((time.monotonic() - chunk_started) * 1000),
+            )
     return {"text": "\n".join(combined_text).strip(), "segments": combined_segments}
 
 
@@ -269,8 +410,8 @@ def _replace_analysis(db: Session, meeting: Meeting, analysis: dict) -> None:
     meeting.meeting_type = (analysis.get("meeting_type") or "Other")[:80]
     meeting.one_line_summary = analysis.get("one_line_summary")
     meeting.executive_summary = analysis.get("executive_summary")
-    meeting.prompt_version = MEETING_PROMPT_VERSION
-    meeting.model_version = MEETING_MODEL
+    meeting.prompt_version = MEETING_PROMPT_VERSION[:40]
+    meeting.model_version = MEETING_MODEL[:80]
 
     transcript_labels = {
         str(label).strip()
@@ -541,13 +682,21 @@ def _save_analysis(db: Session, meeting_id: int, analysis: dict) -> None:
     meeting.updated_at = datetime.now(timezone.utc)
 
 
-def _mark_processing_failed(meeting_id: int, exc: Exception) -> None:
-    technical_error = str(exc)
-    public_error = (
-        "A temporary database connection interrupted processing. Your recording is safe; please retry."
-        if isinstance(exc, DBAPIError)
-        else technical_error[:1000]
-    )
+def _mark_processing_failed(meeting_id: int, exc: Exception, stage: str, attempt_id: str) -> None:
+    reference = f"MTG-{meeting_id}-{attempt_id}"
+    stage_label = stage.replace("_", " ")
+    if isinstance(exc, DBAPIError) and _is_transient_database_error(exc):
+        public_error = (
+            f"A temporary database connection interrupted processing while {stage_label}. "
+            f"Your recording is safe; please retry. Reference: {reference}"
+        )
+    elif isinstance(exc, DBAPIError):
+        public_error = (
+            f"Alfred could not save the generated meeting result while {stage_label}. "
+            f"Your recording and transcript are safe. Reference: {reference}"
+        )
+    else:
+        public_error = f"Processing failed while {stage_label}. Reference: {reference}"
 
     def mark(db: Session) -> None:
         meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
@@ -557,50 +706,154 @@ def _mark_processing_failed(meeting_id: int, exc: Exception) -> None:
             meeting.updated_at = datetime.now(timezone.utc)
 
     try:
-        _with_fresh_session(mark, "mark failed")
-    except Exception:
-        logger.exception("Could not persist failed status for meeting %s", meeting_id)
+        _with_fresh_session(
+            mark,
+            "persist_failure_status",
+            meeting_id=meeting_id,
+            attempt_id=attempt_id,
+        )
+    except Exception as persist_exc:
+        _meeting_log(
+            logging.ERROR,
+            "failure_status_persist_failed",
+            meeting_id=meeting_id,
+            attempt_id=attempt_id,
+            stage="persist_failure_status",
+            **_safe_error_fields(persist_exc),
+        )
 
 
 def process_meeting(meeting_id: int) -> None:
+    attempt_id = uuid.uuid4().hex[:8].upper()
+    processing_started = time.monotonic()
+    stage = "starting processing"
+    _meeting_log(
+        logging.INFO,
+        "processing_started",
+        meeting_id=meeting_id,
+        attempt_id=attempt_id,
+        stage="start_processing",
+    )
     try:
+        stage = "loading meeting context"
+        stage_started = time.monotonic()
         snapshot = _with_fresh_session(
-            lambda db: _start_processing(db, meeting_id), "start processing"
+            lambda db: _start_processing(db, meeting_id),
+            "load_meeting_context",
+            meeting_id=meeting_id,
+            attempt_id=attempt_id,
         )
         if not snapshot:
+            _meeting_log(
+                logging.WARNING,
+                "meeting_not_found",
+                meeting_id=meeting_id,
+                attempt_id=attempt_id,
+                stage="load_meeting_context",
+            )
             return
+        _meeting_log(
+            logging.INFO,
+            "stage_completed",
+            meeting_id=meeting_id,
+            attempt_id=attempt_id,
+            stage="load_meeting_context",
+            duration_ms=round((time.monotonic() - stage_started) * 1000),
+            has_saved_transcript=bool(snapshot["transcript"]),
+            has_recording=bool(snapshot["recording_storage_key"]),
+        )
 
         transcript = snapshot["transcript"]
         if not transcript and snapshot["recording_storage_key"]:
-            logger.info("Meeting %s transcription started", meeting_id)
+            stage = "transcribing recording"
+            stage_started = time.monotonic()
+            _meeting_log(logging.INFO, "stage_started", meeting_id=meeting_id, attempt_id=attempt_id, stage="transcription")
             transcription = transcribe_recording(
                 snapshot["recording_storage_key"],
                 snapshot["recording_filename"] or "meeting-audio",
                 snapshot["recording_content_type"],
                 snapshot["voice_reference"],
+                meeting_id=meeting_id,
+                attempt_id=attempt_id,
             )
+            _meeting_log(
+                logging.INFO,
+                "stage_completed",
+                meeting_id=meeting_id,
+                attempt_id=attempt_id,
+                stage="transcription",
+                duration_ms=round((time.monotonic() - stage_started) * 1000),
+                segment_count=len(transcription.get("segments") or []),
+            )
+            stage = "saving transcription"
+            stage_started = time.monotonic()
             transcript = _with_fresh_session(
                 lambda db: _save_transcription(db, meeting_id, transcription),
-                "save transcription",
+                "save_transcription",
+                meeting_id=meeting_id,
+                attempt_id=attempt_id,
             )
-            logger.info("Meeting %s transcription saved", meeting_id)
+            _meeting_log(
+                logging.INFO,
+                "stage_completed",
+                meeting_id=meeting_id,
+                attempt_id=attempt_id,
+                stage="save_transcription",
+                duration_ms=round((time.monotonic() - stage_started) * 1000),
+            )
         elif transcript:
-            logger.info("Meeting %s is reusing its saved transcript", meeting_id)
+            _meeting_log(logging.INFO, "saved_transcript_reused", meeting_id=meeting_id, attempt_id=attempt_id, stage="transcription")
 
         if not transcript:
             raise ValueError("No recording, transcript, or notes were provided.")
 
-        logger.info("Meeting %s analysis started", meeting_id)
+        stage = "analyzing meeting"
+        stage_started = time.monotonic()
+        _meeting_log(logging.INFO, "stage_started", meeting_id=meeting_id, attempt_id=attempt_id, stage="analysis")
         analysis = analyze_transcript(
             transcript,
             snapshot["title"],
             snapshot["supplied_context"],
             snapshot["leadership_context"],
         )
-        _with_fresh_session(
-            lambda db: _save_analysis(db, meeting_id, analysis), "save analysis"
+        _meeting_log(
+            logging.INFO,
+            "stage_completed",
+            meeting_id=meeting_id,
+            attempt_id=attempt_id,
+            stage="analysis",
+            duration_ms=round((time.monotonic() - stage_started) * 1000),
+            participant_count=len(analysis.get("participants") or []),
+            topic_count=len(analysis.get("topics") or []),
+            decision_count=len(analysis.get("decisions") or []),
+            action_item_count=len(analysis.get("action_items") or []),
+            leadership_observation_count=len(analysis.get("leadership_observations") or []),
         )
-        logger.info("Meeting %s processing completed", meeting_id)
+        stage = "saving analysis"
+        stage_started = time.monotonic()
+        _with_fresh_session(
+            lambda db: _save_analysis(db, meeting_id, analysis),
+            "save_analysis",
+            meeting_id=meeting_id,
+            attempt_id=attempt_id,
+        )
+        _meeting_log(
+            logging.INFO,
+            "processing_completed",
+            meeting_id=meeting_id,
+            attempt_id=attempt_id,
+            stage="save_analysis",
+            stage_duration_ms=round((time.monotonic() - stage_started) * 1000),
+            total_duration_ms=round((time.monotonic() - processing_started) * 1000),
+        )
     except Exception as exc:
-        _mark_processing_failed(meeting_id, exc)
-        logger.exception("Meeting %s processing failed", meeting_id)
+        _meeting_log(
+            logging.ERROR,
+            "processing_failed",
+            meeting_id=meeting_id,
+            attempt_id=attempt_id,
+            stage=stage.replace(" ", "_"),
+            total_duration_ms=round((time.monotonic() - processing_started) * 1000),
+            **_safe_error_fields(exc),
+        )
+        _mark_processing_failed(meeting_id, exc, stage, attempt_id)
