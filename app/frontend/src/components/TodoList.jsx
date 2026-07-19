@@ -58,6 +58,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [listDoLaterTask, setListDoLaterTask] = useState(null);
   const [listUndoMove, setListUndoMove] = useState(null);
   const [todayKey, setTodayKey] = useState(getTodayET(timezone));
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(getTodayET(timezone));
   const mtnBackfillRequestsRef = useRef(new Set());
   const appliedPrioritySortRef = useRef(null);
 
@@ -571,6 +572,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   };
 
   const openDeferNonTop10Modal = async () => {
+    const optimizationDate = activeTab === 'calendar' ? selectedCalendarDate : todayKey;
     setDeferLoading(true);
     try {
       const response = await axios.get(`${apiUrl}/api/tasks/`, {
@@ -578,9 +580,11 @@ export default function TodoList({ apiUrl, userNumber }) {
       });
       const allOpenTasks = (Array.isArray(response.data) ? response.data : [])
         .filter(task => String(task.status || 'open').toLowerCase() !== 'completed');
-      const todayTasks = allOpenTasks.filter(task => getTaskDate(task) === todayKey);
+      const todayTasks = allOpenTasks.filter(task => getTaskDate(task) === optimizationDate);
       if (todayTasks.length <= 10) {
-        alert(t('optimizeToday.alreadyOptimized', 'Today already has 10 or fewer tasks.'));
+        alert(activeTab === 'calendar'
+          ? t('optimizeDay.alreadyOptimized', 'The selected day already has 10 or fewer tasks.')
+          : t('optimizeToday.alreadyOptimized', 'Today already has 10 or fewer tasks.'));
         return;
       }
       setOptimizationTasks(allOpenTasks);
@@ -723,8 +727,9 @@ export default function TodoList({ apiUrl, userNumber }) {
     : [];
   const mtnBenchmark = buildDailyMtnBenchmark(mtnTrends);
   const calendarMtnCapacity = buildMtnCapacity(mtnTrends?.trend_chart, todayKey);
-  const todayTaskCount = tasks.filter(task => getTaskDate(task) === todayKey && String(task.status || 'open').toLowerCase() !== 'completed').length;
-  const optimizationTriggerCount = activeTab === 'calendar' ? todayTaskCount : tasks.length;
+  const selectedDayTaskCount = tasks.filter(task => getTaskDate(task) === selectedCalendarDate && String(task.status || 'open').toLowerCase() !== 'completed').length;
+  const optimizationTriggerCount = activeTab === 'calendar' ? selectedDayTaskCount : tasks.length;
+  const optimizationDate = activeTab === 'calendar' ? selectedCalendarDate : todayKey;
 
   // ============================================================================
   // RENDER
@@ -764,6 +769,9 @@ export default function TodoList({ apiUrl, userNumber }) {
           onRunPrioritization={handleRunPrioritization}
           onOpenOpportunityModal={openOpportunityModal}
           onOpenDeferModal={openDeferNonTop10Modal}
+          optimizeButtonLabel={activeTab === 'calendar'
+            ? `${t('optimizeDay.button', 'Optimize selected day')}: ${formatShortDate(selectedCalendarDate)}`
+            : t('optimizeToday.title', 'Optimize Today')}
           onAddTask={() => {
             setEditingTask(null);
             setShowTaskModal(true);
@@ -819,6 +827,8 @@ export default function TodoList({ apiUrl, userNumber }) {
             activeTab={activeTab}
             tasks={tasks}
             todayKey={todayKey}
+            selectedDate={selectedCalendarDate}
+            onSelectDate={setSelectedCalendarDate}
             selectedMtnTags={selectedMtnTags}
             searchQuery={searchQuery}
             goals={goals}
@@ -956,7 +966,8 @@ export default function TodoList({ apiUrl, userNumber }) {
       {showDeferModal && (
         <OptimizeTodayModal
           tasks={optimizationTasks}
-          todayKey={todayKey}
+          todayKey={optimizationDate}
+          isSelectedDay={activeTab === 'calendar'}
           capacity={calendarMtnCapacity}
           getTaskScore={getTaskScore}
           loading={deferLoading}

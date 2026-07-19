@@ -165,6 +165,8 @@ function TodoCalendarDayColumn({
   selectedTasks,
   onEnterSelection,
   onSelectToggle,
+  isSelected,
+  onSelect,
 }) {
   const handleDragOver = (event) => {
     event.preventDefault();
@@ -190,7 +192,19 @@ function TodoCalendarDayColumn({
         isDropTarget ? 'border-blue-300 bg-blue-50' : 'border-slate-200'
       }`}
     >
-      <div className="rounded-t bg-slate-900 px-3 py-2 text-white">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => onSelect(day.key)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onSelect(day.key);
+          }
+        }}
+        aria-pressed={isSelected}
+        className="w-full rounded-t bg-slate-900 px-3 py-2 text-left text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400"
+      >
         <div className="flex items-baseline justify-between gap-2">
           <h3 className="text-sm font-semibold text-white">{day.label}</h3>
           <span className={`rounded border px-1.5 py-0.5 text-[11px] font-semibold ${{
@@ -203,7 +217,11 @@ function TodoCalendarDayColumn({
             {t(`calendar.status.${summary.status}`, summary.status)}
           </span>
         </div>
-        <p className="mt-0.5 text-xs text-slate-300">{day.dateLabel}</p>
+        <p className="mt-0.5 text-xs text-slate-300">
+          <span className={`inline-flex min-h-6 items-center rounded-full px-2 ${isSelected ? 'bg-emerald-500 font-semibold text-white ring-2 ring-emerald-300' : ''}`}>
+            {day.dateLabel}
+          </span>
+        </p>
         <dl className="mt-2 space-y-1 text-xs" aria-label={t('calendar.dailySummary', 'Daily planning summary')}>
           <div className="flex items-center justify-between gap-2">
             <dt className="text-slate-300">{t('calendar.expectedMtn', 'Expected MTN')}</dt>
@@ -377,6 +395,8 @@ export default function TodoCalendarView({
   activeTab,
   tasks,
   todayKey,
+  selectedDate = todayKey,
+  onSelectDate = () => {},
   selectedMtnTags,
   searchQuery,
   goals,
@@ -453,6 +473,8 @@ export default function TodoCalendarView({
               selectedTasks={selectedTasks}
               onEnterSelection={onEnterSelection}
               onSelectToggle={onSelectToggle}
+              isSelected={selectedDate === day.key}
+              onSelect={onSelectDate}
             />
           ))}
         </div>
