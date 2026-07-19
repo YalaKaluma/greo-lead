@@ -56,6 +56,11 @@ const potentialOptions = [
   { value: 'Low', key: 'team.potentialLow', label: 'Low' }
 ];
 
+const ratingOptions = [1, 2, 3, 4, 5].map((value) => ({
+  value: String(value),
+  label: String(value)
+}));
+
 const personFields = [
   'name',
   'email',
@@ -80,6 +85,8 @@ const personFields = [
   'coaching_focus',
   'performance_indicator',
   'potential_indicator',
+  'current_contribution',
+  'potential_contribution',
   'stakeholder_mission',
   'stakeholder_priorities',
   'success_metrics',
@@ -417,6 +424,7 @@ function OverviewCard({ title, people, emptyText, onOpen, mode }) {
 
 function CircleTab({ copy, title, intro, emptyText, warning, people, allPeople, circleType, onOpen, onEdit, onMark }) {
   const candidates = allPeople.filter((person) => person.circle_type !== circleType);
+  const isSponsor = circleType === CIRCLE.SPONSOR;
   return (
     <div className="space-y-5">
       <section className="rounded-lg border border-slate-200 bg-white p-5">
@@ -433,21 +441,28 @@ function CircleTab({ copy, title, intro, emptyText, warning, people, allPeople, 
       {people.length === 0 ? (
         <section className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-slate-600">{emptyText}</section>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {people.map((person) => (
-            <PersonCard key={person.id} copy={copy} person={person} mode={circleType} onOpen={onOpen} onEdit={onEdit} onMark={onMark} />
-          ))}
-        </div>
+        <BubblePlot
+          people={people}
+          xLabel={isSponsor ? copy('team.currentContribution', 'What they bring today') : copy('team.performance', 'Performance')}
+          yLabel={isSponsor ? copy('team.potentialContribution', 'What they could bring') : copy('team.potential', 'Potential')}
+          xValue={isSponsor ? (person) => ratingValue(person.current_contribution) : (person) => performanceValue(person.performance_indicator)}
+          yValue={isSponsor ? (person) => ratingValue(person.potential_contribution) : (person) => potentialValue(person.potential_indicator)}
+          onOpen={onOpen}
+          onEdit={onEdit}
+          onRemove={(person) => onMark(person, circleType)}
+          copy={copy}
+        />
       )}
 
       {candidates.length > 0 && (
         <section className="rounded-lg border border-slate-200 bg-white p-5">
           <h3 className="font-bold text-slate-900">{copy('team.addToCircle', 'Add to this circle')}</h3>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {candidates.slice(0, 12).map((person) => (
-              <button key={person.id} onClick={() => onMark(person, circleType)} className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                {person.name}
-              </button>
+          <div className="mt-3 divide-y divide-slate-100 rounded border border-slate-200">
+            {candidates.map((person) => (
+              <div key={person.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                <button onClick={() => onOpen(person.id)} className="min-w-0 text-left text-sm font-medium text-slate-800 hover:text-blue-700">{person.name}</button>
+                <button onClick={() => onMark(person, circleType)} className="shrink-0 rounded border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50">{copy('team.add', 'Add')}</button>
+              </div>
             ))}
           </div>
         </section>
@@ -455,6 +470,40 @@ function CircleTab({ copy, title, intro, emptyText, warning, people, allPeople, 
     </div>
   );
 }
+
+function BubblePlot({ people, xLabel, yLabel, xValue, yValue, onOpen, onEdit, onRemove, copy }) {
+  const plotted = people.map((person, index) => ({ person, x: xValue(person), y: yValue(person), importance: ratingValue(person.strategic_importance), offset: (index % 3 - 1) * 1.5 })).filter(({ x, y, importance }) => x && y && importance);
+  const incomplete = people.filter((person) => !xValue(person) || !yValue(person) || !ratingValue(person.strategic_importance));
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="overflow-x-auto">
+        <svg viewBox="0 0 760 440" className="min-w-[680px] w-full" role="img" aria-label={`${xLabel} by ${yLabel}; bubble size represents importance`}>
+          <rect x="70" y="20" width="660" height="350" rx="8" fill="#f8fafc" />
+          {[1, 2, 3, 4, 5].map((tick) => {
+            const x = 70 + ((tick - 1) / 4) * 660;
+            const y = 370 - ((tick - 1) / 4) * 350;
+            return <g key={tick}><line x1={x} y1="20" x2={x} y2="370" stroke="#e2e8f0" /><line x1="70" y1={y} x2="730" y2={y} stroke="#e2e8f0" /><text x={x} y="392" textAnchor="middle" fontSize="12" fill="#64748b">{tick}</text><text x="55" y={y + 4} textAnchor="end" fontSize="12" fill="#64748b">{tick}</text></g>;
+          })}
+          {plotted.map(({ person, x, y, importance, offset }) => {
+            const cx = 70 + ((x - 1) / 4) * 660 + offset;
+            const cy = 370 - ((y - 1) / 4) * 350 + offset;
+            return <g key={person.id} onClick={() => onOpen(person.id)} className="cursor-pointer"><circle cx={cx} cy={cy} r={14 + importance * 5} fill="#2563eb" fillOpacity="0.68" stroke="#1d4ed8" strokeWidth="2"><title>{`${person.name}: ${xLabel} ${x}, ${yLabel} ${y}, importance ${importance}`}</title></circle><text x={cx} y={cy + 4} textAnchor="middle" fontSize="11" fontWeight="700" fill="white" pointerEvents="none">{initials(person.name)}</text><text x={cx} y={cy + 31 + importance * 5} textAnchor="middle" fontSize="11" fill="#334155" pointerEvents="none">{person.name}</text></g>;
+          })}
+          <text x="400" y="426" textAnchor="middle" fontSize="14" fontWeight="600" fill="#334155">{xLabel}</text>
+          <text x="17" y="195" textAnchor="middle" fontSize="14" fontWeight="600" fill="#334155" transform="rotate(-90 17 195)">{yLabel}</text>
+        </svg>
+      </div>
+      <p className="mt-2 text-xs text-slate-500">{copy('team.bubbleHelp', 'Bubble size represents importance. Select a bubble to open the person.')}</p>
+      {incomplete.length > 0 && <p className="mt-2 rounded bg-amber-50 px-3 py-2 text-xs text-amber-800">{copy('team.bubbleMissingRatings', 'Add all three ratings to plot:')} {incomplete.map((person) => person.name).join(', ')}</p>}
+      <div className="mt-3 flex flex-wrap gap-2">{people.map((person) => <div key={person.id} className="flex items-center rounded border border-slate-200"><button onClick={() => onEdit(person)} className="px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">{person.name}</button><button onClick={() => onRemove(person)} className="border-l border-slate-200 px-2 py-1.5 text-xs text-slate-500 hover:text-red-600" title={copy('team.removeFromCircle', 'Remove from circle')}>×</button></div>)}</div>
+    </section>
+  );
+}
+
+function ratingValue(value) { const number = Number.parseInt(value, 10); return number >= 1 && number <= 5 ? number : null; }
+function performanceValue(value) { return ({ Issue: 1, Concerns: 2, 'On track': 3, Strong: 4, Superstar: 5 })[value] || ratingValue(value); }
+function potentialValue(value) { return ({ Low: 1, Medium: 3, High: 5 })[value] || ratingValue(value); }
+function initials(name = '') { return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase(); }
 
 function PersonCard({ copy, person, mode, onOpen, onEdit, onMark }) {
   const isSponsor = mode === CIRCLE.SPONSOR;
@@ -1010,6 +1059,7 @@ function PersonForm({ copy, person, onSubmit, onCancel, onDelete }) {
             <option value={CIRCLE.SPONSOR}>{copy('team.sponsorTitle', 'Sponsor Circle')}</option>
           </select>
         </label>
+        <OptionSelect label={copy('team.strategicImportance', 'Importance (1-5)')} value={formData.strategic_importance} placeholder={copy('team.chooseImportance', 'Choose importance')} options={ratingOptions} copy={copy} onChange={(value) => setField('strategic_importance', value)} />
         <label className="block text-sm font-medium text-slate-700">
           {copy('team.relationshipHealth', 'Relationship health')}
           <select value={formData.relationship_health || ''} onChange={(event) => setField('relationship_health', event.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2">
@@ -1061,6 +1111,8 @@ function PersonForm({ copy, person, onSubmit, onCancel, onDelete }) {
         <fieldset className="space-y-4 rounded border border-slate-200 p-4">
           <legend className="px-2 text-sm font-bold text-slate-900">{copy('team.sponsorTitle', 'Sponsor Circle')}</legend>
           <div className="grid gap-4 md:grid-cols-2">
+            <OptionSelect label={copy('team.currentContribution', 'What they bring today (1-5)')} value={formData.current_contribution} placeholder={copy('team.chooseRating', 'Choose rating')} options={ratingOptions} copy={copy} onChange={(value) => setField('current_contribution', value)} />
+            <OptionSelect label={copy('team.potentialContribution', 'What they could bring (1-5)')} value={formData.potential_contribution} placeholder={copy('team.chooseRating', 'Choose rating')} options={ratingOptions} copy={copy} onChange={(value) => setField('potential_contribution', value)} />
             <TextArea label={copy('team.theirMission', 'Their mission')} value={formData.stakeholder_mission} onChange={(value) => setField('stakeholder_mission', value)} />
             <TextArea label={copy('team.theirPriorities', 'Their priorities')} value={formData.stakeholder_priorities} onChange={(value) => setField('stakeholder_priorities', value)} />
             <TextArea label={copy('team.successMetrics', 'Success metrics')} value={formData.success_metrics} onChange={(value) => setField('success_metrics', value)} />

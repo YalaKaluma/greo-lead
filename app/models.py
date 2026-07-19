@@ -657,6 +657,8 @@ class JourneyPerson(Base):
     coaching_focus = Column(Text, nullable=True)
     performance_indicator = Column(String, nullable=True)
     potential_indicator = Column(String, nullable=True)
+    current_contribution = Column(Integer, nullable=True)
+    potential_contribution = Column(Integer, nullable=True)
     stakeholder_mission = Column(Text, nullable=True)
     stakeholder_priorities = Column(Text, nullable=True)
     success_metrics = Column(Text, nullable=True)
