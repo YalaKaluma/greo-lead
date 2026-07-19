@@ -63,6 +63,12 @@ def _with_fresh_session(operation: Callable[[Session], T], label: str) -> T:
                 db.rollback()
             except DBAPIError:
                 pass
+            try:
+                # Ensure the next attempt cannot check the dead SSL connection
+                # back into the pool and receive it again.
+                db.invalidate()
+            except (OperationalError, DBAPIError):
+                pass
             logger.warning(
                 "Meeting database step '%s' lost its connection (attempt %s/%s).",
                 label, attempt, DB_WRITE_ATTEMPTS,
@@ -73,7 +79,16 @@ def _with_fresh_session(operation: Callable[[Session], T], label: str) -> T:
             db.rollback()
             raise
         finally:
-            db.close()
+            try:
+                # Closing a session normally rolls back any open transaction. A
+                # connection that disappeared mid-request can fail during that
+                # rollback; cleanup must never override the retry decision above.
+                db.close()
+            except (OperationalError, DBAPIError):
+                logger.warning(
+                    "Meeting database step '%s' ignored an error while closing a dead connection.",
+                    label,
+                )
     raise last_error
 
 

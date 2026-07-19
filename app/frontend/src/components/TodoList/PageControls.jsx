@@ -110,6 +110,7 @@ export function TodoPageHeader({
   onRunPrioritization,
   onOpenOpportunityModal,
   onOpenDeferModal,
+  optimizeButtonLabel = 'Optimize Today',
   onAddTask,
 }) {
   const isTaskPlanningTab = activeTab === 'tasks' || activeTab === 'calendar';
@@ -183,8 +184,8 @@ export function TodoPageHeader({
                 onClick={onOpenDeferModal}
                 disabled={sortedTaskCount === 0}
                 className="h-10 w-10 inline-flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Optimize Today"
-                aria-label="Optimize Today"
+                title={optimizeButtonLabel}
+                aria-label={optimizeButtonLabel}
               >
                 <CalendarArrowIcon />
               </button>
