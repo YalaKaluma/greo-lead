@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Callable, TypeVar
 
 from openai import OpenAI
-from sqlalchemy.exc import DBAPIError, OperationalError
+from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.config import OPENAI_API_KEY
@@ -41,7 +41,7 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
-MEETING_PROMPT_VERSION = "meeting-phase1-v3-self-speaker-resolution"
+MEETING_PROMPT_VERSION = "meeting-v3-contextual-self"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4o-mini")
 DB_WRITE_ATTEMPTS = max(1, int(os.getenv("MEETING_DB_WRITE_ATTEMPTS", "3")))
 TRANSCRIPTION_CHUNK_SECONDS = min(
@@ -89,6 +89,13 @@ def _safe_error_fields(exc: Exception) -> dict:
     }
 
 
+def _is_transient_database_error(exc: DBAPIError) -> bool:
+    return (
+        isinstance(exc, (OperationalError, InterfaceError))
+        or bool(getattr(exc, "connection_invalidated", False))
+    )
+
+
 def _with_fresh_session(
     operation: Callable[[Session], T],
     label: str,
@@ -106,6 +113,20 @@ def _with_fresh_session(
             return result
         except (OperationalError, DBAPIError) as exc:
             last_error = exc
+            if not _is_transient_database_error(exc):
+                try:
+                    db.rollback()
+                except DBAPIError:
+                    pass
+                _meeting_log(
+                    logging.ERROR,
+                    "database_non_retryable",
+                    meeting_id=meeting_id,
+                    attempt_id=attempt_id,
+                    stage=label,
+                    **_safe_error_fields(exc),
+                )
+                raise
             rollback_failed = False
             try:
                 db.rollback()
@@ -389,8 +410,8 @@ def _replace_analysis(db: Session, meeting: Meeting, analysis: dict) -> None:
     meeting.meeting_type = (analysis.get("meeting_type") or "Other")[:80]
     meeting.one_line_summary = analysis.get("one_line_summary")
     meeting.executive_summary = analysis.get("executive_summary")
-    meeting.prompt_version = MEETING_PROMPT_VERSION
-    meeting.model_version = MEETING_MODEL
+    meeting.prompt_version = MEETING_PROMPT_VERSION[:40]
+    meeting.model_version = MEETING_MODEL[:80]
 
     transcript_labels = {
         str(label).strip()
@@ -664,10 +685,15 @@ def _save_analysis(db: Session, meeting_id: int, analysis: dict) -> None:
 def _mark_processing_failed(meeting_id: int, exc: Exception, stage: str, attempt_id: str) -> None:
     reference = f"MTG-{meeting_id}-{attempt_id}"
     stage_label = stage.replace("_", " ")
-    if isinstance(exc, DBAPIError):
+    if isinstance(exc, DBAPIError) and _is_transient_database_error(exc):
         public_error = (
             f"A temporary database connection interrupted processing while {stage_label}. "
             f"Your recording is safe; please retry. Reference: {reference}"
+        )
+    elif isinstance(exc, DBAPIError):
+        public_error = (
+            f"Alfred could not save the generated meeting result while {stage_label}. "
+            f"Your recording and transcript are safe. Reference: {reference}"
         )
     else:
         public_error = f"Processing failed while {stage_label}. Reference: {reference}"
