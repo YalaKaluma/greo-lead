@@ -247,7 +247,10 @@ def _audio_duration_seconds(path: str) -> float | None:
             ],
             check=True, capture_output=True, text=True, timeout=60,
         )  # nosec B603 - argument list is passed directly with shell=False
-        return float(result.stdout.strip())
+        raw_duration = result.stdout.strip()
+        if not raw_duration or raw_duration.upper() == "N/A":
+            return None
+        return float(raw_duration)
     except (FileNotFoundError, subprocess.SubprocessError, ValueError):
         logger.exception("Could not determine duration for meeting audio %s", path)
         return None
@@ -268,6 +271,21 @@ def _create_audio_chunk(source_path: str, output_path: str, offset: float, durat
     )  # nosec B603 - argument list is passed directly with shell=False
 
 
+def _normalize_audio(source_path: str, output_path: str) -> None:
+    """Decode browser/native recordings into a seekable transcription-safe MP3."""
+    ffmpeg_path = shutil.which("ffmpeg")
+    if not ffmpeg_path:
+        raise RuntimeError("ffmpeg is not installed on this deployment")
+    subprocess.run(
+        [
+            ffmpeg_path, "-hide_banner", "-loglevel", "error", "-y",
+            "-i", source_path, "-vn", "-ac", "1", "-ar", "16000",
+            "-codec:a", "libmp3lame", "-b:a", "64k", output_path,
+        ],
+        check=True, capture_output=True, timeout=600,
+    )  # nosec B603 - argument list is passed directly with shell=False
+
+
 def transcribe_recording(
     path: str,
     filename: str,
@@ -276,8 +294,43 @@ def transcribe_recording(
     *,
     meeting_id: int,
     attempt_id: str,
+    _already_normalized: bool = False,
 ) -> dict:
     duration = _audio_duration_seconds(path)
+    if duration is None and not _already_normalized:
+        _meeting_log(
+            logging.WARNING,
+            "audio_normalization_started",
+            meeting_id=meeting_id,
+            attempt_id=attempt_id,
+            stage="transcription",
+            reason="duration_metadata_unavailable",
+        )
+        normalization_started = time.monotonic()
+        with tempfile.TemporaryDirectory(prefix="alfred-normalized-audio-") as normalization_dir:
+            normalized_path = str(Path(normalization_dir) / "normalized-recording.mp3")
+            _normalize_audio(path, normalized_path)
+            normalized_duration = _audio_duration_seconds(normalized_path)
+            _meeting_log(
+                logging.INFO,
+                "audio_normalization_completed",
+                meeting_id=meeting_id,
+                attempt_id=attempt_id,
+                stage="transcription",
+                duration_ms=round((time.monotonic() - normalization_started) * 1000),
+                normalized_duration_seconds=(
+                    round(normalized_duration, 1) if normalized_duration is not None else None
+                ),
+            )
+            return transcribe_recording(
+                normalized_path,
+                "normalized-recording.mp3",
+                "audio/mpeg",
+                voice_reference,
+                meeting_id=meeting_id,
+                attempt_id=attempt_id,
+                _already_normalized=True,
+            )
     if duration is None or duration <= TRANSCRIPTION_CHUNK_SECONDS:
         _meeting_log(
             logging.INFO,
