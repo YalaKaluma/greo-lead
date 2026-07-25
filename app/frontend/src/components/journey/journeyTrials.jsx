@@ -210,16 +210,22 @@ export function LeadershipStoryCard({ story }) {
     if (!isStoryOpen) return undefined;
 
     const previousOverflow = document.body.style.overflow;
+    const desktopViewport = window.matchMedia("(min-width: 1024px)");
     const handleKeyDown = (event) => {
       if (event.key === "Escape") setIsStoryOpen(false);
+    };
+    const handleViewportChange = (event) => {
+      if (!event.matches) setIsStoryOpen(false);
     };
 
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", handleKeyDown);
+    desktopViewport.addEventListener("change", handleViewportChange);
 
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
+      desktopViewport.removeEventListener("change", handleViewportChange);
     };
   }, [isStoryOpen]);
 
@@ -254,20 +260,50 @@ export function LeadershipStoryCard({ story }) {
           </figure>
         )}
         {(hasText(fullStory) || lessons.length > 0) && (
-          <button
-            type="button"
-            onClick={() => setIsStoryOpen(true)}
-            className="mt-4 flex w-full items-center justify-between gap-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          >
-            <span>Read story</span>
-            <span className="text-slate-500" aria-hidden="true">→</span>
-          </button>
+          <>
+            <details className="group mt-4 lg:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
+                <span>Read story</span>
+                <span className="text-slate-500 transition-transform group-open:rotate-180" aria-hidden="true">⌄</span>
+              </summary>
+              <div className="pt-5">
+                {hasText(fullStory) && (
+                  <p className="whitespace-pre-line text-base leading-7 text-slate-700">
+                    {fullStory}
+                  </p>
+                )}
+                {lessons.length > 0 && (
+                  <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-900">
+                      Key Lessons
+                    </p>
+                    <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
+                      {lessons.map((lesson) => (
+                        <li key={lesson} className="flex gap-3">
+                          <span className="text-amber-600" aria-hidden="true">•</span>
+                          <span>{lesson}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </details>
+            <button
+              type="button"
+              onClick={() => setIsStoryOpen(true)}
+              className="mt-4 hidden w-full items-center justify-between gap-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 lg:flex"
+            >
+              <span>Read story</span>
+              <span className="text-slate-500" aria-hidden="true">→</span>
+            </button>
+          </>
         )}
       </article>
 
       {isStoryOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6"
+          className="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-6 backdrop-blur-sm lg:flex"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setIsStoryOpen(false);
           }}
