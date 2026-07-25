@@ -2,15 +2,16 @@ import { addDays, dateFromKey, formatDateKey } from './todoDateLogic.js';
 import { getMtnLabel, normalizeDateString } from './taskHelpers.js';
 import { getVisibleTaskScore, taskMatchesSearch, taskMatchesSelectedMtnTags } from './todoListLogic.js';
 
-export const buildSevenDayWindow = (todayKey) => {
-  const startDate = dateFromKey(todayKey) || new Date();
+export const buildSevenDayWindow = (startKey, todayKey = startKey) => {
+  const startDate = dateFromKey(startKey) || new Date();
+  const tomorrowKey = formatDateKey(addDays(dateFromKey(todayKey) || new Date(), 1));
   return Array.from({ length: 7 }, (_, index) => {
     const date = addDays(startDate, index);
     const key = formatDateKey(date);
     return {
       key,
       date,
-      label: index === 0 ? 'Today' : index === 1 ? 'Tomorrow' : date.toLocaleDateString('en-US', { weekday: 'short' }),
+      label: key === todayKey ? 'Today' : key === tomorrowKey ? 'Tomorrow' : date.toLocaleDateString('en-US', { weekday: 'short' }),
       dateLabel: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     };
   });
@@ -145,11 +146,12 @@ export const findSuitableScheduleDate = ({
 export const getCalendarTasks = ({
   tasks,
   todayKey,
+  windowStartKey = todayKey,
   selectedMtnTags = [],
   searchQuery = '',
   getTaskScore = () => null,
 }) => {
-  const days = buildSevenDayWindow(todayKey);
+  const days = buildSevenDayWindow(windowStartKey, todayKey);
   const dayKeys = new Set(days.map(day => day.key));
   const groupedTasks = Object.fromEntries(days.map(day => [day.key, []]));
   const allGroupedTasks = Object.fromEntries(days.map(day => [day.key, []]));

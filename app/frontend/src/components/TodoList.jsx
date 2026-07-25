@@ -59,7 +59,10 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [listUndoMove, setListUndoMove] = useState(null);
   const [todayKey, setTodayKey] = useState(getTodayET(timezone));
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(getTodayET(timezone));
+  const [calendarHistoryMode, setCalendarHistoryMode] = useState(false);
+  const [calendarHistoryDays, setCalendarHistoryDays] = useState([]);
   const mtnBackfillRequestsRef = useRef(new Set());
+  const calendarHistoryRequestRef = useRef(0);
   const appliedPrioritySortRef = useRef(null);
 
   useEffect(() => {
@@ -277,6 +280,24 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
   };
 
+  const fetchCalendarHistory = async (startDate, endDate, historyMode) => {
+    setCalendarHistoryMode(historyMode);
+    if (!historyMode || apiUrl == null || !userNumber) return;
+    const requestId = calendarHistoryRequestRef.current + 1;
+    calendarHistoryRequestRef.current = requestId;
+    try {
+      const response = await axios.get(`${apiUrl}/api/tasks/mtn-history`, {
+        params: { user_number: userNumber, start_date: startDate, end_date: endDate },
+      });
+      if (calendarHistoryRequestRef.current === requestId) {
+        setCalendarHistoryDays(Array.isArray(response.data?.days) ? response.data.days : []);
+      }
+    } catch (err) {
+      console.error('Unable to load calendar history:', err);
+      if (calendarHistoryRequestRef.current === requestId) setCalendarHistoryDays([]);
+    }
+  };
+
   const {
     showOpportunityModal,
     opportunityLoading,
@@ -361,6 +382,8 @@ export default function TodoList({ apiUrl, userNumber }) {
     if (nextTab === 'calendar') {
       setFilterType('all');
       setSelectedMtnTags([]);
+      setCalendarHistoryMode(false);
+      setSelectedCalendarDate(todayKey);
     }
   };
 
@@ -728,7 +751,9 @@ export default function TodoList({ apiUrl, userNumber }) {
   const mtnBenchmark = buildDailyMtnBenchmark(mtnTrends);
   const calendarMtnCapacity = buildMtnCapacity(mtnTrends?.trend_chart, todayKey);
   const selectedDayTaskCount = tasks.filter(task => getTaskDate(task) === selectedCalendarDate && String(task.status || 'open').toLowerCase() !== 'completed').length;
-  const optimizationTriggerCount = activeTab === 'calendar' ? selectedDayTaskCount : tasks.length;
+  const optimizationTriggerCount = activeTab === 'calendar'
+    ? (calendarHistoryMode ? 0 : selectedDayTaskCount)
+    : tasks.length;
   const optimizationDate = activeTab === 'calendar' ? selectedCalendarDate : todayKey;
 
   // ============================================================================
@@ -829,11 +854,15 @@ export default function TodoList({ apiUrl, userNumber }) {
             todayKey={todayKey}
             selectedDate={selectedCalendarDate}
             onSelectDate={setSelectedCalendarDate}
+            onHistoryModeChange={setCalendarHistoryMode}
+            onWindowChange={fetchCalendarHistory}
             selectedMtnTags={selectedMtnTags}
             searchQuery={searchQuery}
             goals={goals}
             getTaskScore={getTaskScore}
             mtnCapacity={calendarMtnCapacity}
+            trends={mtnTrends}
+            historyDays={calendarHistoryDays}
             t={t}
             onStartEdit={(task) => {
               setEditingTask(task);

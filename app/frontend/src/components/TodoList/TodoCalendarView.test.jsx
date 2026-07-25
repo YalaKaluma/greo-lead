@@ -32,6 +32,13 @@ describe('TodoCalendarView', () => {
     getTaskScore: () => null,
     onStartEdit: () => {},
     onReschedule: () => {},
+    trends: {
+      summary: {
+        last_7_days: { average_score: 8, completed_tasks: 14 },
+        last_90_days: { average_score: 5, completed_tasks: 90 },
+      },
+      trend_chart: [],
+    },
   };
 
   it('renders seven day columns and defaults to top importance tasks', () => {
@@ -49,7 +56,9 @@ describe('TodoCalendarView', () => {
     expect(screen.getAllByRole('region')).toHaveLength(7);
     expect(screen.getByRole('region', { name: 'Today Jun 19' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Thu Jun 25' })).toBeInTheDocument();
-    expect(screen.getByText('Daily capacity: —')).toBeInTheDocument();
+    expect(screen.getByText('Average MTN · last 7 days')).toBeInTheDocument();
+    expect(screen.getByText('60% above the 90-day average')).toBeInTheDocument();
+    expect(screen.getByText('Tasks done per day · last 7 days')).toBeInTheDocument();
     expect(screen.getByText('Transformational today')).toBeInTheDocument();
     expect(screen.getByText('Strategic tomorrow')).toBeInTheDocument();
     expect(screen.queryByText('Operational hidden')).not.toBeInTheDocument();
@@ -158,5 +167,33 @@ describe('TodoCalendarView', () => {
     fireEvent.click(screen.getByRole('button', { name: /Select calendar task/ }));
     expect(onSelectToggle).toHaveBeenCalledWith(calendarTask.id);
     expect(screen.queryByRole('button', { name: 'Do later' })).not.toBeInTheDocument();
+  });
+
+  it('navigates to prior weeks and renders completed work with actual metrics', () => {
+    const onHistoryModeChange = vi.fn();
+    render(
+      <TodoCalendarView
+        {...baseProps}
+        tasks={[]}
+        onHistoryModeChange={onHistoryModeChange}
+        trends={{
+          ...baseProps.trends,
+          trend_chart: [{
+            date: '2026-06-18',
+            mtn_score: 12,
+            completed_tasks: 2,
+            tasks: [{ id: 7, title: 'Completed historical task', mtn_score: 8 }],
+          }],
+        }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous seven days' }));
+
+    expect(screen.getByText('Completed work and actual results')).toBeInTheDocument();
+    expect(screen.getByText('Completed historical task')).toBeInTheDocument();
+    expect(screen.getAllByText('Actual MTN')).toHaveLength(7);
+    expect(screen.queryByRole('button', { name: 'Do later' })).not.toBeInTheDocument();
+    expect(onHistoryModeChange).toHaveBeenCalledWith(true);
   });
 });
