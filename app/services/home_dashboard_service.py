@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from statistics import mean
 from typing import Any
 
-from sqlalchemy import desc, or_
+from sqlalchemy import desc, func, or_
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -13,6 +13,7 @@ from app.models import (
     HomeDashboardSnapshot,
     JourneyBeltTrial,
     JourneyGoal,
+    Message,
     OpportunitySuggestion,
     Task,
     TaskPriorityScore,
@@ -37,7 +38,7 @@ DOMAIN_LABELS = {
 }
 
 DOMAIN_ORDER = ["vision", "people", "execute", "energy", "learning"]
-HOME_DASHBOARD_SCHEMA_VERSION = 6
+HOME_DASHBOARD_SCHEMA_VERSION = 7
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
@@ -345,6 +346,27 @@ class HomeDashboardService:
             and "goal_progress_reviews" in payload
         )
 
+    def _journal_source_state(self, user_number: str) -> dict[str, Any]:
+        entry_count, latest_scored_at = (
+            self.db.query(func.count(Message.id), func.max(Message.reflection_depth_scored_at))
+            .filter(
+                Message.user_number == user_number,
+                Message.sender == "user",
+                Message.reflection_depth_score.isnot(None),
+            )
+            .one()
+        )
+        return {
+            "entry_count": int(entry_count or 0),
+            "latest_scored_at": _iso(latest_scored_at),
+        }
+
+    def _is_fresh(self, snapshot: HomeDashboardSnapshot | None, user_number: str) -> bool:
+        if not self._has_current_schema(snapshot):
+            return False
+        payload = snapshot.payload or {}
+        return (payload.get("source_state") or {}).get("journal") == self._journal_source_state(user_number)
+
     def get_or_refresh(self, user_number: str, force: bool = False, source: str = "on_demand") -> HomeDashboardSnapshot:
         timezone_name = get_user_timezone(self.db, user_number)
         snapshot_date = today_for_timezone(timezone_name)
@@ -353,7 +375,7 @@ class HomeDashboardService:
             .filter(HomeDashboardSnapshot.user_number == user_number, HomeDashboardSnapshot.snapshot_date == snapshot_date)
             .first()
         )
-        if snapshot and not force and self._has_current_schema(snapshot):
+        if snapshot and not force and self._is_fresh(snapshot, user_number):
             return snapshot
         if not force:
             latest_snapshot = (
@@ -362,7 +384,7 @@ class HomeDashboardService:
                 .order_by(HomeDashboardSnapshot.snapshot_date.desc(), HomeDashboardSnapshot.updated_at.desc())
                 .first()
             )
-            if latest_snapshot and self._has_current_schema(latest_snapshot):
+            if latest_snapshot and self._is_fresh(latest_snapshot, user_number):
                 return latest_snapshot
         return self.refresh(user_number, source=source)
 
@@ -454,6 +476,9 @@ class HomeDashboardService:
             "schema_version": HOME_DASHBOARD_SCHEMA_VERSION,
             "snapshot_date": today.isoformat(),
             "generated_at": datetime.now(timezone.utc).isoformat(),
+            "source_state": {
+                "journal": self._journal_source_state(user_number),
+            },
             "activation_ready": activation_ready,
             "metrics": {
                 "mtn": {
