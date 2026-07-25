@@ -86,6 +86,8 @@ Also verify:
 - Login works against the restored branch.
 - The Journey page loads.
 - The task list loads.
+- The task calendar loads scheduled and completed-task history.
+- The Meetings list/detail loads, including stored transcript and analysis records.
 - Journal list loads, without checking private content in logs.
 - Settings notification status loads.
 - Admin System Health loads for an admin user.

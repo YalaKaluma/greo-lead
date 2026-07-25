@@ -111,7 +111,7 @@ DIRECT_DATABASE_URL="postgresql://..." alembic upgrade head
 
 Run this only after reviewing the migration and confirming backup/restore readiness.
 
-Current post-baseline revisions include CTO Director persistence, `tasks.completed_at`, and generic notification tables. Confirm each target environment has applied the same Alembic head before comparing behavior.
+Current post-baseline revisions include CTO Director persistence, `tasks.completed_at`, generic notification tables, meeting intelligence persistence, task-date consolidation into `tasks.due_date`, and sponsor-circle contribution fields. Confirm each target environment has applied the same Alembic head before comparing behavior.
 
 ## Rollback Notes
 

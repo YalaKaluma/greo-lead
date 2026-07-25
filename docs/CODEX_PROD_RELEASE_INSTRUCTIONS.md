@@ -146,6 +146,8 @@ After deploy, recommend an authenticated smoke test for:
 - Home
 - Goals
 - Tasks
+- Task calendar and MTN history
+- Meetings, including processing status and meeting Q&A
 - Journey
 - Journal
 - Habits

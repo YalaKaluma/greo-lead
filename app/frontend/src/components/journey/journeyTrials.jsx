@@ -198,6 +198,7 @@ export function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBe
 }
 
 export function LeadershipStoryCard({ story }) {
+  const [isStoryOpen, setIsStoryOpen] = React.useState(false);
   const hasStory = hasText(story?.title) || hasText(story?.full_story);
   const lessons = Array.isArray(story?.lessons) ? story.lessons.filter(hasText) : [];
   const fullStory = String(story?.full_story || "");
@@ -205,68 +206,141 @@ export function LeadershipStoryCard({ story }) {
   const imageSrc = resolveStoryImageSrc(story?.image_src);
   const tagline = String(story?.tagline || "").trim();
 
+  React.useEffect(() => {
+    if (!isStoryOpen) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setIsStoryOpen(false);
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isStoryOpen]);
+
   if (!hasStory) return null;
 
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-        Leadership Story
-      </p>
-      {hasText(story?.title) && (
-        <h3 className="mt-2 text-xl font-semibold text-slate-950">
-          {story.title}
-        </h3>
-      )}
-      {hasText(story?.theme) && (
-        <p className="mt-1 text-sm font-semibold text-slate-600">Theme: {story.theme}</p>
-      )}
-      {hasImage && (
-        <figure className="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
-          <img
-            src={imageSrc}
-            alt={story.image_alt || story.title || "Leadership story image"}
-            className="h-auto w-full object-contain"
-          />
-          {tagline && (
-            <figcaption className="border-t border-slate-200 bg-white px-4 py-3 text-center text-base font-semibold leading-6 text-slate-950">
-              {tagline}
-            </figcaption>
-          )}
-        </figure>
-      )}
-      {(hasText(fullStory) || lessons.length > 0) && (
-        <details className="group mt-4">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100">
-            <span>{hasImage ? "Read full story" : "Full story"}</span>
-            <span className="text-slate-500 transition-transform group-open:rotate-180" aria-hidden="true">
-              v
-            </span>
-          </summary>
-          <div className="pt-4">
-            {hasText(fullStory) && (
-              <p className="whitespace-pre-line text-sm leading-6 text-slate-700">
-                {fullStory}
+    <>
+      <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+          Leadership Story
+        </p>
+        {hasText(story?.title) && (
+          <h3 className="mt-2 text-xl font-semibold text-slate-950">
+            {story.title}
+          </h3>
+        )}
+        {hasText(story?.theme) && (
+          <p className="mt-1 text-sm font-semibold text-slate-600">Theme: {story.theme}</p>
+        )}
+        {hasImage && (
+          <figure className="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
+            <img
+              src={imageSrc}
+              alt={story.image_alt || story.title || "Leadership story image"}
+              className="h-auto w-full object-contain"
+            />
+            {tagline && (
+              <figcaption className="border-t border-slate-200 bg-white px-4 py-3 text-center text-base font-semibold leading-6 text-slate-950">
+                {tagline}
+              </figcaption>
+            )}
+          </figure>
+        )}
+        {(hasText(fullStory) || lessons.length > 0) && (
+          <button
+            type="button"
+            onClick={() => setIsStoryOpen(true)}
+            className="mt-4 flex w-full items-center justify-between gap-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          >
+            <span>Read story</span>
+            <span className="text-slate-500" aria-hidden="true">→</span>
+          </button>
+        )}
+      </article>
+
+      {isStoryOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 backdrop-blur-sm sm:p-6"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setIsStoryOpen(false);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={hasText(story?.title) ? "leadership-story-title" : undefined}
+            aria-label={hasText(story?.title) ? undefined : "Leadership story"}
+            className="relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-y-auto rounded-xl bg-white shadow-2xl lg:grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:overflow-hidden"
+          >
+            <button
+              type="button"
+              autoFocus
+              onClick={() => setIsStoryOpen(false)}
+              aria-label="Close leadership story"
+              className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-2xl leading-none text-slate-600 shadow-sm transition hover:bg-slate-100 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              ×
+            </button>
+
+            {hasImage && (
+              <figure className="bg-slate-100 lg:flex lg:min-h-0 lg:flex-col lg:justify-center lg:overflow-y-auto">
+                <img
+                  src={imageSrc}
+                  alt={story.image_alt || story.title || "Leadership story image"}
+                  className="max-h-[38vh] w-full object-contain lg:max-h-none"
+                />
+                {tagline && (
+                  <figcaption className="border-t border-slate-200 bg-white px-6 py-4 text-center text-base font-semibold leading-6 text-slate-950">
+                    {tagline}
+                  </figcaption>
+                )}
+              </figure>
+            )}
+
+            <div className={`px-6 py-8 sm:px-9 lg:min-h-0 lg:overflow-y-auto lg:px-10 lg:py-10 ${hasImage ? "" : "lg:col-span-2 lg:mx-auto lg:max-w-3xl"}`}>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                Leadership Story
               </p>
-            )}
-            {lessons.length > 0 && (
-              <div className="mt-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">
-                  Key Lessons
+              {hasText(story?.title) && (
+                <h2 id="leadership-story-title" className="mt-3 pr-10 text-2xl font-semibold leading-tight text-slate-950 sm:text-3xl">
+                  {story.title}
+                </h2>
+              )}
+              {hasText(story?.theme) && (
+                <p className="mt-2 text-sm font-semibold text-slate-600">Theme: {story.theme}</p>
+              )}
+              {hasText(fullStory) && (
+                <p className="mt-7 whitespace-pre-line text-base leading-7 text-slate-700">
+                  {fullStory}
                 </p>
-                <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-700">
-                  {lessons.map((lesson) => (
-                    <li key={lesson} className="flex gap-2">
-                      <span aria-hidden="true">-</span>
-                      <span>{lesson}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        </details>
+              )}
+              {lessons.length > 0 && (
+                <div className="mt-8 rounded-lg border border-amber-200 bg-amber-50 p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-900">
+                    Key Lessons
+                  </p>
+                  <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
+                    {lessons.map((lesson) => (
+                      <li key={lesson} className="flex gap-3">
+                        <span className="text-amber-600" aria-hidden="true">•</span>
+                        <span>{lesson}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
       )}
-    </article>
+    </>
   );
 }
 
