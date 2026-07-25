@@ -105,6 +105,14 @@ export default function TodoList({ apiUrl, userNumber }) {
     };
   }, []);
 
+  // The list view always opens on today's work. Calendar navigation keeps its
+  // own selected date and is intentionally unaffected.
+  useEffect(() => {
+    if (activeTab === 'tasks') {
+      setFilterType('due_today');
+    }
+  }, [activeTab]);
+
   // Read goal filter from URL parameter on mount AND when URL changes
   useEffect(() => {
     const readUrlParams = () => {
@@ -603,7 +611,12 @@ export default function TodoList({ apiUrl, userNumber }) {
       });
       const allOpenTasks = (Array.isArray(response.data) ? response.data : [])
         .filter(task => String(task.status || 'open').toLowerCase() !== 'completed');
-      const todayTasks = allOpenTasks.filter(task => getTaskDate(task) === optimizationDate);
+      const todayTasks = allOpenTasks.filter(task => {
+        const taskDate = getTaskDate(task);
+        return activeTab === 'calendar'
+          ? taskDate === optimizationDate
+          : Boolean(taskDate && taskDate <= optimizationDate);
+      });
       if (todayTasks.length <= 10) {
         alert(activeTab === 'calendar'
           ? t('optimizeDay.alreadyOptimized', 'The selected day already has 10 or fewer tasks.')
