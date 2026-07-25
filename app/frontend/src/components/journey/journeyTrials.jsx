@@ -290,17 +290,19 @@ export function LeadershipStoryCard({ story }) {
             </button>
 
             {hasImage && (
-              <figure className="bg-slate-100 lg:flex lg:min-h-0 lg:flex-col lg:justify-center lg:overflow-y-auto">
-                <img
-                  src={imageSrc}
-                  alt={story.image_alt || story.title || "Leadership story image"}
-                  className="max-h-[38vh] w-full object-contain lg:max-h-none"
-                />
-                {tagline && (
-                  <figcaption className="border-t border-slate-200 bg-white px-6 py-4 text-center text-base font-semibold leading-6 text-slate-950">
-                    {tagline}
-                  </figcaption>
-                )}
+              <figure className="min-h-0 bg-slate-100 lg:flex lg:items-center lg:justify-center lg:overflow-hidden lg:p-6">
+                <div className="w-full bg-white lg:max-w-full lg:overflow-hidden lg:rounded-lg lg:border lg:border-slate-200 lg:shadow-sm">
+                  <img
+                    src={imageSrc}
+                    alt={story.image_alt || story.title || "Leadership story image"}
+                    className="max-h-[38vh] w-full object-contain lg:max-h-[calc(92vh-10rem)]"
+                  />
+                  {tagline && (
+                    <figcaption className="border-t border-slate-200 bg-white px-6 py-4 text-center text-base font-semibold leading-6 text-slate-950">
+                      {tagline}
+                    </figcaption>
+                  )}
+                </div>
               </figure>
             )}
 
