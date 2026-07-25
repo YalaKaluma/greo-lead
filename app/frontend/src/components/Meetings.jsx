@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { useLanguage } from '../i18n/LanguageContext';
 
 const NativeMeetingRecorder = registerPlugin('MeetingRecorder');
 
@@ -430,6 +431,7 @@ function EditMeetingModal({ meeting, apiUrl, userNumber, onClose, onSaved }) {
 }
 
 export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, onDeleted }) {
+  const { t } = useLanguage();
   const [transcriptSearch, setTranscriptSearch] = useState('');
   const [busyAction, setBusyAction] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -492,7 +494,7 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_number: userNumber, question, history: meetingChat.slice(-8) })
       });
-      if (!response.ok) throw new Error('Alfred could not answer that question.');
+      if (!response.ok) throw new Error(t('meetings.chat.error'));
       const data = await response.json();
       setMeetingChat((current) => [...current, { role: 'user', content: question }, { role: 'assistant', content: data.answer }]);
       setMeetingQuestion('');
@@ -555,15 +557,15 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
           <Section title="Transcript"><input value={transcriptSearch} onChange={(event) => setTranscriptSearch(event.target.value)} placeholder="Search this transcript" className="mb-4 w-full rounded-lg border border-slate-300 px-3 py-2" /><div className="max-h-[32rem] overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-700">{visibleTranscript || 'No matching transcript text.'}</div></Section>
         </div>
         <aside className="space-y-5">
-          <Section title="Ask Alfred">
+          <Section title={t('meetings.chat.title')}>
             <div className="max-h-72 space-y-3 overflow-y-auto">
-              {meetingChat.length === 0 && <p className="text-sm text-slate-500">Ask about decisions, commitments, themes, or how you showed up in this meeting.</p>}
+              {meetingChat.length === 0 && <p className="text-sm text-slate-500">{t('meetings.chat.empty')}</p>}
               {meetingChat.map((message, index) => <div key={`${message.role}-${index}`} className={`rounded-lg px-3 py-2 text-sm ${message.role === 'user' ? 'ml-6 bg-blue-600 text-white' : 'mr-4 bg-slate-100 text-slate-800'}`}>{message.content}</div>)}
             </div>
             <form onSubmit={askAlfred} className="mt-4">
-              <textarea value={meetingQuestion} onChange={(event) => setMeetingQuestion(event.target.value)} rows={3} placeholder="What did we decide about…?" className="w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+              <textarea value={meetingQuestion} onChange={(event) => setMeetingQuestion(event.target.value)} rows={3} placeholder={t('meetings.chat.placeholder')} className="w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm" />
               {meetingChatError && <p className="mt-2 text-xs text-red-600">{meetingChatError}</p>}
-              <button disabled={askingAlfred || !meetingQuestion.trim()} className="mt-2 w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{askingAlfred ? 'Alfred is thinking…' : 'Ask Alfred'}</button>
+              <button disabled={askingAlfred || !meetingQuestion.trim()} className="mt-2 w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{askingAlfred ? t('meetings.chat.thinking') : t('meetings.chat.submit')}</button>
             </form>
           </Section>
           <Section title="Overview"><dl className="space-y-3 text-sm"><div><dt className="text-slate-500">Meeting type</dt><dd className="font-medium">{meeting.meeting_type || 'Other'}</dd></div><div><dt className="text-slate-500">Participants</dt><dd className="mt-2 space-y-2">{meeting.participants.length ? meeting.participants.map((participant) => <label key={participant.id} className="block"><span className="mb-1 block text-xs font-medium">{participant.is_current_user ? 'Me' : participant.speaker_label || participant.display_name}</span><select value={participant.is_current_user ? '__me__' : participant.person_id || ''} onChange={(event) => matchParticipant(participant.id, event.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-2"><option value="">Unmatched — {participant.speaker_label || participant.display_name}</option><option value="__me__">Me — {contextOptions.current_user?.title || 'Current user'}</option>{contextOptions.people.map((person) => <option key={person.id} value={person.id}>{person.title}</option>)}</select></label>) : <span className="font-medium">Not identified</span>}</dd></div></dl></Section>
