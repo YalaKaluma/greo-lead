@@ -30,13 +30,23 @@ import yaml
 import pandas as pd
 from pathlib import Path
 from typing import Optional, List, Dict, NamedTuple
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from app.db import get_db
 from app.services.journey_context import build_journey_context
 from app.services.message_service import load_conversation_history, save_message
 from app.services.timezone_service import get_user_timezone, today_for_timezone
-from app.models import Task, Habit, HabitCompletion, JourneyGoal, Message, User
+from app.models import (
+    Task,
+    Habit,
+    HabitCompletion,
+    JourneyGoal,
+    Meeting,
+    MeetingLeadershipObservation,
+    Message,
+    User,
+)
 from app.services.habit_coaching_service import refresh_habit_coaching_review
 from app.services.notifications import send_notification
 from app.services.vision_progress_review_service import VisionProgressReviewService
@@ -921,6 +931,63 @@ def reload_nudge_configs() -> None:
 # Core Nudge Function (used by all endpoints)
 # -------------------------------------------------
 
+def build_evening_meeting_leadership_context(
+        db: Session,
+        user_number: str,
+) -> str:
+    """Summarize today's stored coaching observations without sharing transcripts."""
+    timezone_name = get_user_timezone(db, user_number)
+    local_timezone = ZoneInfo(timezone_name)
+    local_day = datetime.now(local_timezone).date()
+    day_start = datetime.combine(local_day, datetime.min.time(), tzinfo=local_timezone).astimezone(timezone.utc)
+    next_local_day = local_day + timedelta(days=1)
+    day_end = datetime.combine(
+        next_local_day,
+        datetime.min.time(),
+        tzinfo=local_timezone,
+    ).astimezone(timezone.utc)
+
+    meetings = db.query(Meeting).filter(
+        Meeting.user_number == user_number,
+        Meeting.processing_status == "ready",
+        Meeting.started_at >= day_start,
+        Meeting.started_at < day_end,
+    ).order_by(Meeting.started_at.asc()).limit(8).all()
+    if not meetings:
+        return ""
+
+    meeting_ids = [meeting.id for meeting in meetings]
+    observations = db.query(MeetingLeadershipObservation).filter(
+        MeetingLeadershipObservation.meeting_id.in_(meeting_ids)
+    ).order_by(
+        MeetingLeadershipObservation.meeting_id,
+        MeetingLeadershipObservation.id,
+    ).all()
+    observations_by_meeting = {}
+    for observation in observations:
+        observations_by_meeting.setdefault(observation.meeting_id, []).append(observation)
+
+    meeting_lines = []
+    for meeting in meetings:
+        feedback = observations_by_meeting.get(meeting.id, [])[:5]
+        if not feedback:
+            continue
+        themes = " | ".join(
+            f"{item.category}: {item.observation[:700]}"
+            for item in feedback
+        )
+        meeting_lines.append(f"- {meeting.title}: {themes}")
+    if not meeting_lines:
+        return ""
+
+    return (
+        "\nTODAY'S MEETING LEADERSHIP FEEDBACK:\n"
+        + "\n".join(meeting_lines)[:9000]
+        + "\nUse these themes to ask one timely, evidence-based reflection question. "
+          "Do not quote transcript evidence or list every observation. Synthesize the most meaningful pattern.\n"
+    )
+
+
 def send_nudge_for_user(
         user_number: str,
         nudge_type: str,
@@ -953,6 +1020,20 @@ def send_nudge_for_user(
 
         # Build full context
         context_text, conversation_history = build_full_context(db, user_number)
+        if nudge_type == "evening":
+            meeting_leadership_context = build_evening_meeting_leadership_context(db, user_number)
+            if meeting_leadership_context:
+                context_text = f"{context_text}\n{meeting_leadership_context}"
+                logger.info(
+                    "[evening_meeting_context] user_number=%s included=true characters=%s",
+                    user_number,
+                    len(meeting_leadership_context),
+                )
+            else:
+                logger.info(
+                    "[evening_meeting_context] user_number=%s included=false characters=0",
+                    user_number,
+                )
 
         from app.services.morning_briefing_service import MorningBriefingService
 

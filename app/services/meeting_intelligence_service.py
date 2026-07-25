@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.config import OPENAI_API_KEY
 from app.db import SessionLocal
+from app.services.meeting_task_extraction_service import extract_action_items
 from app.models import (
     BeltAssessment,
     JournalEntry,
@@ -430,7 +431,6 @@ def analyze_transcript(
                     "executive_summary, participants:[{display_name,speaker_label}], "
                     "self_speaker_label, self_identification_confidence, "
                     "topics:[{title,summary}], decisions:[{description,confidence,evidence_excerpt}], "
-                    "action_items:[{description,owner_name,due_date,confidence,evidence_excerpt}], "
                     "suggested_person_matches:[{speaker_label,person_id,confidence}], "
                     "suggested_goal_ids:[{id,confidence}], suggested_project_ids:[{id,confidence}]}. "
                     "Executive summary should be 3-5 concise paragraphs for substantial transcripts, "
@@ -439,7 +439,7 @@ def analyze_transcript(
                     "speaker label that already appears in the transcript. If voice recognition labelled a "
                     "speaker Me, choose Me. Otherwise select the most likely existing speaker using introductions, "
                     "names, roles, supplied attendee/context information, first-person references, and the user's "
-                    "private leadership context. Never add Me as a separate participant when the transcript only "
+                    "supplied meeting context. Never add Me as a separate participant when the transcript only "
                     "contains generic labels such as A and B. Always make a best selection and express uncertainty "
                     "through self_identification_confidence rather than inventing another speaker. Participants must "
                     "contain only distinct speakers that actually appear in the transcript.\n\n"
@@ -837,7 +837,13 @@ def _save_transcription(db: Session, meeting_id: int, transcription: dict) -> st
     return transcription["text"].strip()
 
 
-def _save_analysis(db: Session, meeting_id: int, analysis: dict, coaching: dict) -> None:
+def _save_analysis(
+    db: Session,
+    meeting_id: int,
+    analysis: dict,
+    tasks: dict,
+    coaching: dict,
+) -> None:
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
         raise ValueError("Meeting was deleted while it was being analyzed.")
@@ -848,7 +854,11 @@ def _save_analysis(db: Session, meeting_id: int, analysis: dict, coaching: dict)
     db.query(MeetingLeadershipObservation).filter(
         MeetingLeadershipObservation.meeting_id == meeting_id
     ).delete(synchronize_session=False)
-    analysis_with_coaching = {**analysis, "leadership_observations": coaching.get("leadership_observations") or []}
+    analysis_with_coaching = {
+        **analysis,
+        "action_items": tasks.get("action_items") or [],
+        "leadership_observations": coaching.get("leadership_observations") or [],
+    }
     _replace_analysis(db, meeting, analysis_with_coaching)
     meeting.processing_status = "ready"
     meeting.processing_error = None
@@ -999,12 +1009,26 @@ def process_meeting(meeting_id: int) -> None:
             participant_count=len(analysis.get("participants") or []),
             topic_count=len(analysis.get("topics") or []),
             decision_count=len(analysis.get("decisions") or []),
-            action_item_count=len(analysis.get("action_items") or []),
+        )
+        stage = "extracting action items"
+        stage_started = time.monotonic()
+        _meeting_log(logging.INFO, "stage_started", meeting_id=meeting_id, attempt_id=attempt_id, stage="task_extraction")
+        tasks = extract_action_items(transcript, analysis, snapshot["supplied_context"])
+        _meeting_log(
+            logging.INFO, "stage_completed", meeting_id=meeting_id, attempt_id=attempt_id,
+            stage="task_extraction",
+            duration_ms=round((time.monotonic() - stage_started) * 1000),
+            action_item_count=len(tasks.get("action_items") or []),
         )
         stage = "generating leadership coaching"
         stage_started = time.monotonic()
         _meeting_log(logging.INFO, "stage_started", meeting_id=meeting_id, attempt_id=attempt_id, stage="leadership_coaching")
-        coaching = analyze_leadership_feedback(transcript, analysis, snapshot["leadership_context"])
+        coaching_analysis = {**analysis, "action_items": tasks.get("action_items") or []}
+        coaching = analyze_leadership_feedback(
+            transcript,
+            coaching_analysis,
+            snapshot["leadership_context"],
+        )
         _meeting_log(
             logging.INFO, "stage_completed", meeting_id=meeting_id, attempt_id=attempt_id,
             stage="leadership_coaching",
@@ -1014,7 +1038,7 @@ def process_meeting(meeting_id: int) -> None:
         stage = "saving analysis"
         stage_started = time.monotonic()
         _with_fresh_session(
-            lambda db: _save_analysis(db, meeting_id, analysis, coaching),
+            lambda db: _save_analysis(db, meeting_id, analysis, tasks, coaching),
             "save_analysis",
             meeting_id=meeting_id,
             attempt_id=attempt_id,
