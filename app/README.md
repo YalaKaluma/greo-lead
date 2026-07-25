@@ -5,7 +5,7 @@ This folder contains the FastAPI backend for Alfred / Leadership OS.
 ## What Lives Here
 
 - `main.py` creates the FastAPI app, checks core environment variables, registers routers, configures CORS, serves the built React frontend from `static/`, exposes `/api/health`, and starts the email polling loop.
-- `models.py` contains SQLAlchemy models for users, messages, tasks, opportunities, habits, Journey memory, priority review, goal reviews, leadership coaching, settings, notifications, usage, admin operations, CTO review, and system health.
+- `models.py` contains SQLAlchemy models for users, messages, tasks, projects, meeting intelligence, opportunities, habits, Journey memory, priority review, goal reviews, leadership coaching, settings, notifications, usage, admin operations, CTO review, and system health.
 - `db.py` manages the SQLAlchemy engine/session connection to Neon/PostgreSQL.
 - `config.py` centralizes environment-backed settings.
 - `journey_trials.yaml` is the Journey 2.0 belt curriculum source of truth.
@@ -94,12 +94,19 @@ Alfred combines:
 - Journey 2.0 domains, subdomains, belts, trials, readiness assessment, and behavioral evidence.
 - Vision/Pillar/Outcome goals, transformation roadmap waves, goal progress reviews, and AI-assisted opportunity suggestions.
 - Task, habit, people, journal, priority review, message feedback, signal classification, audio, settings, and coaching workflows.
+- Meeting capture from live recording, uploaded audio, or notes, followed by transcription, structured analysis, leadership coaching, participant matching, goal/project linking, meeting Q&A, and task conversion.
+- A task calendar and MTN history API that use `tasks.due_date` as the single scheduling field and `completed_at` for completed-task history.
 - Home dashboard snapshots that route activated users to Home and new users toward goals.
 - Browser push notification subscriptions, preferences, delivery logs, and settings-page test notifications.
 - Trust & Security policy surfaces for privacy, terms, security, GDPR/account deletion, and cookies, available in-app and through public routes.
 - Capacitor Android packaging for debug APK and signed Play Store AAB workflows, including Firebase-backed installed-app notifications.
 - Admin surfaces for user management, feedback review, usage analytics, system health, AI briefings, Operations Director drafts, and CTO Director findings.
 - Persisted language and timezone preferences used by UI and time-sensitive product logic.
+
+Meeting processing is asynchronous and stage-aware. The service reuses saved
+transcripts on retry, separates summary analysis, action-item extraction, and
+leadership coaching, retries transient database writes, and stores a
+user-facing failure reference without exposing technical details.
 
 ## Development
 

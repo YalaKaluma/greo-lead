@@ -4,12 +4,13 @@ This folder contains the main React UI surfaces for Alfred.
 
 ## Core Screens
 
-- `Home.jsx` renders the activation-aware dashboard snapshot and helps route users into the right next workflow.
+- `Home.jsx` renders the activation-aware dashboard snapshot, seven-day journal consistency, reflection depth, normalized daily MTN, habits, energy, and 30-day behavioral trends.
 - `goals/MyGoals.jsx` renders Vision/Pillar/Outcome goals and coordinates goal panels, tree/list views, goal reviews, linked tasks, and the transformation roadmap.
 - `MyLeadershipJourney.jsx` renders Journey 2.0: leadership wheel, clickable subdomains, belt trials, readiness assessment, trial response modal, My Story, and subdomain add/edit modal.
-- `TodoList.jsx` coordinates task data, filters, task mutations, and page-level orchestration while focused TodoList modules render list, modal, trend, and action surfaces.
+- `TodoList.jsx` coordinates task data, filters, list/calendar modes, task mutations, and page-level orchestration while focused TodoList modules render list, calendar, modal, trend, and action surfaces.
+- `Meetings.jsx` handles meeting capture, upload/notes intake, processing status, transcript search, summaries, decisions, action items, leadership observations, participant matching, related work, meeting Q&A, and responsive list/detail views.
 - `MyHabits.jsx` renders habit tracking, daily states, energy check-ins, history, trends, scores, heatmap, leaderboard, and habit coaching.
-- `MyTeam.jsx` renders people/team surfaces and relationship review workflows.
+- `MyTeam.jsx` renders people/team surfaces, relationship review workflows, and current-versus-potential contribution circle plots.
 - `MyJournal.jsx` renders journal/reflection content, journal trends, and reflection-depth details.
 - `MyCoachingSessions.jsx` renders dedicated leadership coaching sessions.
 - `Settings.jsx` renders user preferences for language and timezone.
@@ -46,10 +47,12 @@ Focused TodoList support modules currently own:
 - `TodoList/TaskListPanel.jsx`: list rendering, empty states, drag/drop container, and task item wiring
 - `TodoList/PageControls.jsx`: header actions, tabs, selection bar, follow-up/defer/opportunity modal UI, and column headers
 - `TodoList/MtnTrends.jsx`: MTN needle, trends tab, chart, heatmap, breakdown modal, and trends error boundary
+- `TodoList/TodoCalendarView.jsx`: day/week/month calendar navigation, drag-and-drop scheduling, overdue/completed visibility, daily summaries, and MTN history details
 - `hooks/useTodoInteractions.js`: opportunity, follow-up, and selection interaction state
 - `utils/todoListLogic.js`: task filtering, visible score resolution, and sort order logic
 - `utils/todoMtnTrends.js`: MTN benchmark, chart, heatmap, and trend payload helpers
 - `utils/todoDateLogic.js`: shared calendar/date formatting helpers used by task follow-up and MTN trend views
+- `utils/todoCalendarLogic.js`: calendar range selection, date bucketing, MTN labeling, and per-day summary helpers
 
 ## Journey 2.0 Component Structure
 

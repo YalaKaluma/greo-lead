@@ -14,7 +14,7 @@ Use this before a deliberate production release, typically Sunday.
 - [ ] Merge or push to `prod`.
 - [ ] Confirm Railway production deployment succeeds.
 - [ ] Run a production smoke test, including `/api/health`.
-- [ ] Smoke test Home, Goals, Tasks, Journey, Journal, Habits, Settings, notifications status, and admin System Health.
+- [ ] Smoke test Home, Goals, Tasks (list and calendar), Meetings, Journey, Journal, Habits, Settings, notifications status, and admin System Health.
 - [ ] Build/upload/test Play Store internal testing app if this release includes Android.
 - [ ] Review Railway production logs.
 - [ ] Notify or invite users if needed.

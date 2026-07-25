@@ -29,6 +29,8 @@ Use this checklist before every production release to `prod`.
 - [ ] Journey page
 - [ ] Journal page
 - [ ] Task list
+- [ ] Task day/week/month calendar, including rescheduling and completed-task MTN history
+- [ ] Meetings list and detail, notes intake or safe test upload, transcript/summary, meeting Q&A, and action-item conversion
 - [ ] Admin System Health page for admin users
 
 ## After Release

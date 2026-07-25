@@ -276,6 +276,8 @@ Run this after every production deploy, rollback, database restore, or critical 
 - [ ] Open Home.
 - [ ] Open My Goals.
 - [ ] Open Todo List.
+- [ ] Open the task calendar and verify day/week/month navigation, scheduling, and completed-task MTN details.
+- [ ] Open Meetings and verify list/detail loading, processing status, transcript/summary display, meeting Q&A, and action-item conversion with safe test data.
 - [ ] Open My Journey.
 - [ ] Open My Journal.
 - [ ] Open My Habits.

@@ -11,7 +11,7 @@ This folder contains FastAPI routers. Routers should stay thin: validate request
 - `journal.py` under `/api/journal/journal` for journal CRUD and trends. The nested path comes from both `main.py` and `journal.py` adding a journal prefix.
 - `webhook.py` under `/api` for WhatsApp and email webhooks.
 - `webhook_brain.py` under `/api/brain` for alternate brain webhook flows.
-- `tasks.py` under `/api/tasks` for tasks, filters, MTN trends, reordering, recurring metadata, postpone behavior, and enrichment.
+- `tasks.py` under `/api/tasks` for tasks, filters, MTN trends and history, calendar scheduling through `due_date`, reordering, recurring metadata, postpone behavior, follow-ups, and enrichment.
 - `nudge.py` under `/api` for morning/evening/weekly nudges, batch sends, config reload, logs, and health.
 - `journey.py` under `/api/journey` for Journey 2.0, goals, roadmap waves, people reviews, and Journey evidence.
 - `messages.py` under `/api` for message history.
@@ -24,6 +24,8 @@ This folder contains FastAPI routers. Routers should stay thin: validate request
 - `admin_operations.py` under `/api/admin` for Operations Director health-event review, issue drafts, approval/status changes, chat, and GitHub issue creation.
 - `admin_cto.py` under `/api/admin` for CTO Director reviews, findings, executive summaries, status changes, and GitHub issue creation.
 - `audio.py` under `/api/audio` for transcription and speech.
+- `meetings.py` under `/api/meetings` for live meeting drafts, attendee/context capture, audio upload, notes, processing retries, participant matching, goal/project links, recording access, action-item conversion, meeting Q&A, editing, and deletion.
+- `projects.py` under `/api/projects` for user-scoped project data used by task, Journey, and meeting workflows.
 - `message_feedback.py` under `/api` for message feedback capture.
 - `message_signals.py` under `/api/message-signals` for signal classification and backfill.
 - `opportunities.py` under `/api/opportunities` for opportunity generation and accept/decline actions.
@@ -39,6 +41,15 @@ This folder contains FastAPI routers. Routers should stay thin: validate request
 - `/api/admin/cto/...` runs and stores architecture/release-readiness reviews with findings that can become GitHub issues.
 - `/api/notifications/...` stores push subscriptions, updates preferences, reports status, and sends test notifications.
 - `/api/home/dashboard` returns or refreshes a stored dashboard snapshot used by the frontend startup route.
+
+## Meeting And Task Calendar API Surface
+
+- `GET /api/meetings` and `GET /api/meetings/{meeting_id}` list and load meeting intelligence.
+- `POST /api/meetings/drafts`, `PUT /api/meetings/{meeting_id}/live-attendees`, and `POST /api/meetings/{meeting_id}/context-notes` support live capture.
+- `POST /api/meetings/upload` and `POST /api/meetings/notes` queue audio- or notes-based processing; `POST /api/meetings/{meeting_id}/retry` safely reuses a saved transcript when available.
+- `POST /api/meetings/{meeting_id}/ask` answers questions using only the selected meeting and its stored context.
+- `POST /api/meetings/action-items/{action_item_id}/task` turns an extracted commitment into the user's own task or a follow-up task.
+- `GET /api/tasks/mtn-history` returns bounded, timezone-aware completed-task facts for calendar views; `GET /api/tasks/mtn-trends` includes the contributing task list for each day.
 
 ## Journey 2.0 API Surface
 

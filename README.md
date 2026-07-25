@@ -1,12 +1,12 @@
 # Alfred / Leadership OS
 
-Alfred is an executive operating system for leaders. It combines AI coaching, task execution, goals, habits, people review, journaling, message intelligence, notifications, admin operations, and Journey 2.0 leadership development.
+Alfred is an executive operating system for leaders. It combines AI coaching, task execution, goals, projects, meeting intelligence, habits, people review, journaling, notifications, admin operations, and Journey 2.0 leadership development.
 
 The application is a FastAPI backend with a Vite/React frontend, backed by PostgreSQL/Neon through SQLAlchemy.
 
 ## Current Documentation
 
-- `Leadership_OS_Documentation_v6_CURRENT.docx` - broader product and technical overview.
+- `Leadership_OS_Documentation_vCURRENT.docx` - broader product and technical overview.
 - `app/README.md` - backend application map, runtime notes, and environment variables.
 - `app/routers/README.md` - API router map.
 - `app/services/README.md` - orchestration and service-layer map.
@@ -34,6 +34,9 @@ Alfred currently includes:
 - Journey 2.0 belt progression, trials, readiness assessment, wheel feedback, and behavioral validation.
 - Vision/Pillar/Outcome goal hierarchy, transformation roadmap waves, goal reviews, and progress reviews.
 - Task execution with MTN prioritization, goal links, recurring task metadata, postpone tracking, and opportunity suggestions.
+- A unified task calendar with day/week/month views, drag-and-drop scheduling, overdue handling, completed-task history, and per-day MTN totals.
+- Meeting intelligence for live recording, audio upload, or pasted notes; transcription; summaries; topics; decisions; action items; leadership observations; participant matching; goal/project linking; meeting-scoped Q&A; and task creation.
+- Project tracking connected to meetings, goals, tasks, and Journey context.
 - Habit tracking with three-state completion, trends, daily energy check-ins, and AI habit coaching.
 - People review, relationship context, review history, and synthesis.
 - Journaling with reflection-depth scoring and trend views.
@@ -42,7 +45,7 @@ Alfred currently includes:
 - Trust & Security policy center with privacy, terms, security, GDPR/account-deletion, and cookies content available in-app and at public routes.
 - Message feedback and signal classification for response quality and behavioral telemetry.
 - Admin user management, feedback review, usage analytics, system health, AI briefings, Operations Director issue drafting, and CTO Director review.
-- Home dashboard snapshots for activation-aware startup routing.
+- Home dashboard snapshots for activation-aware startup routing, daily MTN normalization, seven-day journal consistency, reflection depth, habits, energy, and 30-day behavioral trends.
 - User settings for English/French language preference and timezone preference.
 - Capacitor Android packaging for debug APK and signed Play Store AAB workflows, including Firebase-backed native push configuration.
 
@@ -161,6 +164,13 @@ When adding database-backed behavior:
 - Keep reads and writes scoped by `user_number`.
 - Update the relevant README if a new product surface or endpoint appears.
 
+The July 2026 task/meeting schema revisions consolidate task scheduling into
+`tasks.due_date`, add sponsor-circle contribution fields to `journey_people`,
+and persist meeting records, attendees, context notes, transcript segments,
+topics, decisions, action items, leadership observations, and goal/project
+links. Apply every Alembic revision through the current head before testing
+these surfaces.
+
 ## Journey 2.0
 
 Journey 2.0 is the current leadership development engine. It uses:
@@ -186,6 +196,6 @@ npm run test
 npm run build
 ```
 
-Current focused backend test coverage includes CTO Director, Operations Director, notifications, nudge targeting, onboarding starter goals, priority timezone behavior, security hardening, task MTN trends, habits, and Journey roadmap imports.
+Current focused backend test coverage includes CTO Director, Operations Director, notifications, nudge targeting, onboarding starter goals, priority timezone behavior, security hardening, task MTN trends/history, meeting intelligence, habits, and Journey roadmap imports.
 
 For local frontend work in this workspace, do not run `pnpm i18n:check`, `pnpm build`, `pnpm test`, or `vite build` unless explicitly requested. Prefer CI, Railway, GitHub Actions, or another known working build environment for those validation steps.

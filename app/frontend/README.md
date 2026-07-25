@@ -19,6 +19,7 @@ This folder contains Alfred's Vite/React frontend.
 - My Vision & Goals
 - My Journey / Journey 2.0
 - My Tasks
+- My Meetings
 - My Habits
 - My Team
 - My Coaching Sessions
@@ -49,6 +50,20 @@ The frontend language/timezone layer lives in `src/i18n/`.
 - Task, habit, notification, and dashboard helpers use timezone-aware logic so "today", overdue, streaks, trends, energy check-ins, and notification timing align with the user's preference.
 
 Existing chat history and user-generated content are not translated retroactively.
+
+## Tasks And Meetings
+
+The task surface supports list and calendar workflows. The calendar offers
+day, week, and month navigation, drag-and-drop rescheduling, overdue and
+completed-task visibility, day summaries, and MTN totals based on the tasks
+completed on each local calendar day. `due_date` is the single task scheduling
+field.
+
+The Meetings surface accepts live recordings, audio uploads, and pasted notes.
+It shows processing state, transcript search, summaries, decisions, action
+items, leadership observations, participant matching, related goals/projects,
+recording controls, and a meeting-scoped Ask Alfred chat. The list uses a
+compact mobile layout while retaining the full desktop grid.
 
 ## Translation Coverage Rule
 
