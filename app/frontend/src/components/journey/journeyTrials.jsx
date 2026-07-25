@@ -1,5 +1,6 @@
 import React from "react";
 import VoiceRecorder from "../VoiceRecorder";
+import { useLanguage } from "../../i18n/LanguageContext";
 import {
   BELT_DOMAIN_PURPOSES,
   BELT_GUIDE,
@@ -198,6 +199,7 @@ export function PathToNextBeltPanel({ dimension, currentBelt, targetBelt, nextBe
 }
 
 export function LeadershipStoryCard({ story }) {
+  const { t } = useLanguage();
   const [isStoryOpen, setIsStoryOpen] = React.useState(false);
   const hasStory = hasText(story?.title) || hasText(story?.full_story);
   const lessons = Array.isArray(story?.lessons) ? story.lessons.filter(hasText) : [];
@@ -235,7 +237,7 @@ export function LeadershipStoryCard({ story }) {
     <>
       <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-          Leadership Story
+          {t("journey.story.label")}
         </p>
         {hasText(story?.title) && (
           <h3 className="mt-2 text-xl font-semibold text-slate-950">
@@ -243,13 +245,13 @@ export function LeadershipStoryCard({ story }) {
           </h3>
         )}
         {hasText(story?.theme) && (
-          <p className="mt-1 text-sm font-semibold text-slate-600">Theme: {story.theme}</p>
+          <p className="mt-1 text-sm font-semibold text-slate-600">{t("journey.story.theme")}: {story.theme}</p>
         )}
         {hasImage && (
           <figure className="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
             <img
               src={imageSrc}
-              alt={story.image_alt || story.title || "Leadership story image"}
+              alt={story.image_alt || story.title || t("journey.story.imageAlt")}
               className="h-auto w-full object-contain"
             />
             {tagline && (
@@ -263,7 +265,7 @@ export function LeadershipStoryCard({ story }) {
           <>
             <details className="group mt-4 lg:hidden">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
-                <span>Read story</span>
+                <span>{t("journey.story.read")}</span>
                 <span className="text-slate-500 transition-transform group-open:rotate-180" aria-hidden="true">⌄</span>
               </summary>
               <div className="pt-5">
@@ -275,7 +277,7 @@ export function LeadershipStoryCard({ story }) {
                 {lessons.length > 0 && (
                   <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-900">
-                      Key Lessons
+                      {t("journey.story.keyLessons")}
                     </p>
                     <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
                       {lessons.map((lesson) => (
@@ -294,7 +296,7 @@ export function LeadershipStoryCard({ story }) {
               onClick={() => setIsStoryOpen(true)}
               className="mt-4 hidden w-full items-center justify-between gap-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 lg:flex"
             >
-              <span>Read story</span>
+              <span>{t("journey.story.read")}</span>
               <span className="text-slate-500" aria-hidden="true">→</span>
             </button>
           </>
@@ -312,14 +314,14 @@ export function LeadershipStoryCard({ story }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby={hasText(story?.title) ? "leadership-story-title" : undefined}
-            aria-label={hasText(story?.title) ? undefined : "Leadership story"}
+            aria-label={hasText(story?.title) ? undefined : t("journey.story.label")}
             className="relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-y-auto rounded-xl bg-white shadow-2xl lg:grid lg:h-[92vh] lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden"
           >
             <button
               type="button"
               autoFocus
               onClick={() => setIsStoryOpen(false)}
-              aria-label="Close leadership story"
+              aria-label={t("journey.story.close")}
               className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-2xl leading-none text-slate-600 shadow-sm transition hover:bg-slate-100 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               ×
@@ -330,7 +332,7 @@ export function LeadershipStoryCard({ story }) {
                 <div className="w-full bg-white lg:max-w-full lg:overflow-hidden lg:rounded-lg lg:border lg:border-slate-200 lg:shadow-sm">
                   <img
                     src={imageSrc}
-                    alt={story.image_alt || story.title || "Leadership story image"}
+                    alt={story.image_alt || story.title || t("journey.story.imageAlt")}
                     className="max-h-[38vh] w-full object-contain lg:max-h-[calc(92vh-10rem)]"
                   />
                   {tagline && (
@@ -344,7 +346,7 @@ export function LeadershipStoryCard({ story }) {
 
             <div className={`px-6 py-8 sm:px-9 lg:min-h-0 lg:overflow-y-auto lg:px-10 lg:py-10 ${hasImage ? "" : "lg:col-span-2 lg:mx-auto lg:max-w-3xl"}`}>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                Leadership Story
+                {t("journey.story.label")}
               </p>
               {hasText(story?.title) && (
                 <h2 id="leadership-story-title" className="mt-3 pr-10 text-2xl font-semibold leading-tight text-slate-950 sm:text-3xl">
@@ -352,7 +354,7 @@ export function LeadershipStoryCard({ story }) {
                 </h2>
               )}
               {hasText(story?.theme) && (
-                <p className="mt-2 text-sm font-semibold text-slate-600">Theme: {story.theme}</p>
+                <p className="mt-2 text-sm font-semibold text-slate-600">{t("journey.story.theme")}: {story.theme}</p>
               )}
               {hasText(fullStory) && (
                 <p className="mt-7 whitespace-pre-line text-base leading-7 text-slate-700">
@@ -362,7 +364,7 @@ export function LeadershipStoryCard({ story }) {
               {lessons.length > 0 && (
                 <div className="mt-8 rounded-lg border border-amber-200 bg-amber-50 p-5">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-900">
-                    Key Lessons
+                    {t("journey.story.keyLessons")}
                   </p>
                   <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
                     {lessons.map((lesson) => (
