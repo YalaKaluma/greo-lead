@@ -423,5 +423,11 @@
   "team.choosePotential": "Choose potential",
   "team.potentialHigh": "High",
   "team.potentialMedium": "Medium",
-  "team.potentialLow": "Low"
+  "team.potentialLow": "Low",
+  "meetings.chat.title": "Ask Alfred",
+  "meetings.chat.empty": "Ask about decisions, commitments, themes, or how you showed up in this meeting.",
+  "meetings.chat.placeholder": "What did we decide about…?",
+  "meetings.chat.thinking": "Alfred is thinking…",
+  "meetings.chat.submit": "Ask Alfred",
+  "meetings.chat.error": "Alfred could not answer that question."
 }

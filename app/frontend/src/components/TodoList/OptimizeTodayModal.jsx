@@ -16,13 +16,17 @@ export default function OptimizeTodayModal({
 }) {
   const candidates = useMemo(() => tasks
     .map((task, index) => ({ task, index, score: getExpectedMtnScore(task, getTaskScore) }))
-    .filter(({ task }) => String(task.status || 'open').toLowerCase() !== 'completed' && getTaskDate(task) === todayKey)
+    .filter(({ task }) => {
+      const taskDate = getTaskDate(task);
+      const isInScope = isSelectedDay ? taskDate === todayKey : Boolean(taskDate && taskDate <= todayKey);
+      return String(task.status || 'open').toLowerCase() !== 'completed' && isInScope;
+    })
     .sort((left, right) => {
       if (left.score === null && right.score !== null) return 1;
       if (left.score !== null && right.score === null) return -1;
       if (left.score !== right.score) return (left.score ?? 0) - (right.score ?? 0);
       return right.index - left.index;
-    }), [tasks, todayKey, getTaskScore]);
+    }), [tasks, todayKey, getTaskScore, isSelectedDay]);
 
   const [decisions, setDecisions] = useState([]);
   const [conversation, setConversation] = useState(null);

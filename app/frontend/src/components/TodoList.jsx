@@ -59,7 +59,10 @@ export default function TodoList({ apiUrl, userNumber }) {
   const [listUndoMove, setListUndoMove] = useState(null);
   const [todayKey, setTodayKey] = useState(getTodayET(timezone));
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(getTodayET(timezone));
+  const [calendarHistoryMode, setCalendarHistoryMode] = useState(false);
+  const [calendarHistoryDays, setCalendarHistoryDays] = useState([]);
   const mtnBackfillRequestsRef = useRef(new Set());
+  const calendarHistoryRequestRef = useRef(0);
   const appliedPrioritySortRef = useRef(null);
 
   useEffect(() => {
@@ -101,6 +104,14 @@ export default function TodoList({ apiUrl, userNumber }) {
       setSelectionMode(false);
     };
   }, []);
+
+  // The list view always opens on today's work. Calendar navigation keeps its
+  // own selected date and is intentionally unaffected.
+  useEffect(() => {
+    if (activeTab === 'tasks') {
+      setFilterType('due_today');
+    }
+  }, [activeTab]);
 
   // Read goal filter from URL parameter on mount AND when URL changes
   useEffect(() => {
@@ -277,6 +288,24 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
   };
 
+  const fetchCalendarHistory = async (startDate, endDate, historyMode) => {
+    setCalendarHistoryMode(historyMode);
+    if (!historyMode || apiUrl == null || !userNumber) return;
+    const requestId = calendarHistoryRequestRef.current + 1;
+    calendarHistoryRequestRef.current = requestId;
+    try {
+      const response = await axios.get(`${apiUrl}/api/tasks/mtn-history`, {
+        params: { user_number: userNumber, start_date: startDate, end_date: endDate },
+      });
+      if (calendarHistoryRequestRef.current === requestId) {
+        setCalendarHistoryDays(Array.isArray(response.data?.days) ? response.data.days : []);
+      }
+    } catch (err) {
+      console.error('Unable to load calendar history:', err);
+      if (calendarHistoryRequestRef.current === requestId) setCalendarHistoryDays([]);
+    }
+  };
+
   const {
     showOpportunityModal,
     opportunityLoading,
@@ -361,6 +390,8 @@ export default function TodoList({ apiUrl, userNumber }) {
     if (nextTab === 'calendar') {
       setFilterType('all');
       setSelectedMtnTags([]);
+      setCalendarHistoryMode(false);
+      setSelectedCalendarDate(todayKey);
     }
   };
 
@@ -580,7 +611,12 @@ export default function TodoList({ apiUrl, userNumber }) {
       });
       const allOpenTasks = (Array.isArray(response.data) ? response.data : [])
         .filter(task => String(task.status || 'open').toLowerCase() !== 'completed');
-      const todayTasks = allOpenTasks.filter(task => getTaskDate(task) === optimizationDate);
+      const todayTasks = allOpenTasks.filter(task => {
+        const taskDate = getTaskDate(task);
+        return activeTab === 'calendar'
+          ? taskDate === optimizationDate
+          : Boolean(taskDate && taskDate <= optimizationDate);
+      });
       if (todayTasks.length <= 10) {
         alert(activeTab === 'calendar'
           ? t('optimizeDay.alreadyOptimized', 'The selected day already has 10 or fewer tasks.')
@@ -728,7 +764,9 @@ export default function TodoList({ apiUrl, userNumber }) {
   const mtnBenchmark = buildDailyMtnBenchmark(mtnTrends);
   const calendarMtnCapacity = buildMtnCapacity(mtnTrends?.trend_chart, todayKey);
   const selectedDayTaskCount = tasks.filter(task => getTaskDate(task) === selectedCalendarDate && String(task.status || 'open').toLowerCase() !== 'completed').length;
-  const optimizationTriggerCount = activeTab === 'calendar' ? selectedDayTaskCount : tasks.length;
+  const optimizationTriggerCount = activeTab === 'calendar'
+    ? (calendarHistoryMode ? 0 : selectedDayTaskCount)
+    : tasks.length;
   const optimizationDate = activeTab === 'calendar' ? selectedCalendarDate : todayKey;
 
   // ============================================================================
@@ -829,11 +867,15 @@ export default function TodoList({ apiUrl, userNumber }) {
             todayKey={todayKey}
             selectedDate={selectedCalendarDate}
             onSelectDate={setSelectedCalendarDate}
+            onHistoryModeChange={setCalendarHistoryMode}
+            onWindowChange={fetchCalendarHistory}
             selectedMtnTags={selectedMtnTags}
             searchQuery={searchQuery}
             goals={goals}
             getTaskScore={getTaskScore}
             mtnCapacity={calendarMtnCapacity}
+            trends={mtnTrends}
+            historyDays={calendarHistoryDays}
             t={t}
             onStartEdit={(task) => {
               setEditingTask(task);

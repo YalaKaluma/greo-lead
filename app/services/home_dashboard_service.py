@@ -259,6 +259,7 @@ def _weekly_journal_metrics(journal: dict[str, Any]) -> dict[str, Any]:
     week = chart[-7:]
     previous_month = chart[-37:-7]
     entries = sum(int(item.get("entry_count") or 0) for item in week)
+    journal_days = sum(1 for item in week if int(item.get("entry_count") or 0) > 0)
     month_entries = sum(int(item.get("entry_count") or 0) for item in previous_month)
     month_avg_entries_per_week = (month_entries / len(previous_month)) * 7 if previous_month else 0
     weekly_depth = [float(item.get("daily_average") or 0) for item in week if item.get("daily_average")]
@@ -267,6 +268,8 @@ def _weekly_journal_metrics(journal: dict[str, Any]) -> dict[str, Any]:
     month_avg_depth_10 = mean(monthly_depth) if monthly_depth else 0
     return {
         "entries_this_week": entries,
+        "journal_days_this_week": journal_days,
+        "journal_day_percentage": round((journal_days / 7) * 100),
         "month_average_entries_per_week": round(month_avg_entries_per_week, 1),
         "delta_entries": round(entries - month_avg_entries_per_week, 1),
         "average_depth_5": round(avg_depth_10 / 2, 1),
@@ -456,6 +459,7 @@ class HomeDashboardService:
                 "mtn": {
                     "score": _as_float(mtn_week.get("average_score"), 0),
                     "completed_tasks": int(mtn_week.get("completed_tasks") or 0),
+                    "average_tasks_per_day": round(int(mtn_week.get("completed_tasks") or 0) / 7, 1),
                     "delta": _as_float((mtn_week.get("trend") or {}).get("delta_vs_30"), 0),
                     "status": (mtn_week.get("trend") or {}).get("label") or "Stable",
                     "sparkline": [item.get("rolling_average") for item in (mtn.get("trend_chart") or [])[-14:]],

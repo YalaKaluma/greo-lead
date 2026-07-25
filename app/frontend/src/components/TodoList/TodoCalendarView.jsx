@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getCalendarMtnLabel, getCalendarTasks, summarizeCalendarDay } from '../../utils/todoCalendarLogic.js';
 import { getMtnStyle } from '../../utils/taskHelpers.js';
-import { formatShortDate } from '../../utils/todoDateLogic.js';
+import { addDays, dateFromKey, formatCalendarRangeLabel, formatDateKey, formatShortDate } from '../../utils/todoDateLogic.js';
 
 function RepeatIcon() {
   return (
@@ -11,6 +11,54 @@ function RepeatIcon() {
       <path d="m7 22-4-4 4-4" />
       <path d="M21 13v2a4 4 0 0 1-4 4H3" />
     </svg>
+  );
+}
+
+const formatMetric = (value) => Number(value || 0).toFixed(1);
+
+const describeComparison = (recent, baseline) => {
+  const recentValue = Number(recent || 0);
+  const baselineValue = Number(baseline || 0);
+  if (baselineValue <= 0) return '90-day baseline is still forming';
+  const percent = Math.round(((recentValue - baselineValue) / baselineValue) * 100);
+  if (percent > 0) return `${percent}% above the 90-day average`;
+  if (percent < 0) return `${Math.abs(percent)}% below the 90-day average`;
+  return 'In line with the 90-day average';
+};
+
+function CalendarSummaryCards({ trends }) {
+  const last7 = trends?.summary?.last_7_days || {};
+  const last90 = trends?.summary?.last_90_days || {};
+  const last7TaskAverage = Number(last7.completed_tasks || 0) / 7;
+  const last90TaskAverage = Number(last90.completed_tasks || 0) / 90;
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Average MTN · last 7 days</p>
+        <p className="mt-1 text-2xl font-semibold text-slate-900">{formatMetric(last7.average_score)}</p>
+        <p className="mt-1 text-sm text-slate-600">{describeComparison(last7.average_score, last90.average_score)}</p>
+        <p className="mt-2 text-xs text-slate-400">90-day average: {formatMetric(last90.average_score)}</p>
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tasks done per day · last 7 days</p>
+        <p className="mt-1 text-2xl font-semibold text-slate-900">{formatMetric(last7TaskAverage)}</p>
+        <p className="mt-1 text-sm text-slate-600">{describeComparison(last7TaskAverage, last90TaskAverage)}</p>
+        <p className="mt-2 text-xs text-slate-400">90-day average: {formatMetric(last90TaskAverage)}</p>
+      </div>
+    </div>
+  );
+}
+
+function HistoricalTaskCard({ task }) {
+  return (
+    <div className="w-full rounded border border-slate-200 bg-slate-100 px-2 py-2 text-left opacity-75">
+      <p className="text-sm font-medium leading-snug text-slate-600 line-through decoration-slate-400">{task.title}</p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <span className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[11px] font-medium text-slate-600">MTN {formatMetric(task.mtn_score)}</span>
+        {task.project && <span className="max-w-full truncate rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-medium text-slate-600">{task.project}</span>}
+      </div>
+    </div>
   );
 }
 
@@ -167,14 +215,18 @@ function TodoCalendarDayColumn({
   onSelectToggle,
   isSelected,
   onSelect,
+  isHistory = false,
+  actualSummary = null,
 }) {
   const handleDragOver = (event) => {
+    if (isHistory) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
     setDropTarget(day.key);
   };
 
   const handleDrop = (event) => {
+    if (isHistory) return;
     event.preventDefault();
     setDropTarget('');
     const taskId = Number(event.dataTransfer.getData('text/plain'));
@@ -185,7 +237,7 @@ function TodoCalendarDayColumn({
   return (
     <section
       aria-label={`${day.label} ${day.dateLabel}`}
-      onDragOver={handleDragOver}
+      onDragOver={isHistory ? undefined : handleDragOver}
       onDragLeave={() => setDropTarget('')}
       onDrop={handleDrop}
       className={`flex min-h-[22rem] min-w-[11rem] flex-1 flex-col rounded border bg-slate-50 transition-colors ${
@@ -207,7 +259,9 @@ function TodoCalendarDayColumn({
       >
         <div className="flex items-baseline justify-between gap-2">
           <h3 className="text-sm font-semibold text-white">{day.label}</h3>
-          <span className={`rounded border px-1.5 py-0.5 text-[11px] font-semibold ${{
+          {isHistory ? (
+            <span className="rounded border border-slate-500 bg-slate-700 px-1.5 py-0.5 text-[11px] font-semibold text-slate-100">Actual</span>
+          ) : <span className={`rounded border px-1.5 py-0.5 text-[11px] font-semibold ${{
             light: 'border-slate-200 bg-white text-slate-600',
             balanced: 'border-emerald-200 bg-emerald-50 text-emerald-700',
             heavy: 'border-amber-200 bg-amber-50 text-amber-700',
@@ -215,7 +269,7 @@ function TodoCalendarDayColumn({
             unknown: 'border-slate-200 bg-slate-100 text-slate-600',
           }[summary.status]}`}>
             {t(`calendar.status.${summary.status}`, summary.status)}
-          </span>
+          </span>}
         </div>
         <p className="mt-0.5 text-xs text-slate-300">
           <span className={`inline-flex min-h-6 items-center rounded-full px-2 ${isSelected ? 'bg-emerald-500 font-semibold text-white ring-2 ring-emerald-300' : ''}`}>
@@ -224,26 +278,30 @@ function TodoCalendarDayColumn({
         </p>
         <dl className="mt-2 space-y-1 text-xs" aria-label={t('calendar.dailySummary', 'Daily planning summary')}>
           <div className="flex items-center justify-between gap-2">
-            <dt className="text-slate-300">{t('calendar.expectedMtn', 'Expected MTN')}</dt>
-            <dd className="font-semibold text-white">{summary.expectedMtn.toFixed(1)}</dd>
+            <dt className="text-slate-300">{isHistory ? 'Actual MTN' : t('calendar.expectedMtn', 'Expected MTN')}</dt>
+            <dd className="font-semibold text-white">{isHistory ? formatMetric(actualSummary?.mtn_score) : summary.expectedMtn.toFixed(1)}</dd>
           </div>
           <div className="flex items-center justify-between gap-2">
-            <dt className="text-slate-300">{t('calendar.tasks', 'Tasks')}</dt>
-            <dd className="font-medium text-white">{summary.taskCount}</dd>
+            <dt className="text-slate-300">{isHistory ? 'Tasks done' : t('calendar.tasks', 'Tasks')}</dt>
+            <dd className="font-medium text-white">{isHistory ? Number(actualSummary?.completed_tasks || 0) : summary.taskCount}</dd>
           </div>
           <div className="flex items-center justify-between gap-2">
             <dt className="text-slate-300">{t('calendar.averageMtn', 'Average MTN')}</dt>
-            <dd className="font-medium text-white">{summary.averageMtn === null ? '—' : summary.averageMtn.toFixed(1)}</dd>
+            <dd className="font-medium text-white">{isHistory
+              ? (Number(actualSummary?.completed_tasks || 0) ? formatMetric(Number(actualSummary?.mtn_score || 0) / Number(actualSummary.completed_tasks)) : '—')
+              : (summary.averageMtn === null ? '—' : summary.averageMtn.toFixed(1))}</dd>
           </div>
         </dl>
-        {summary.missingScoreCount > 0 && (
+        {!isHistory && summary.missingScoreCount > 0 && (
           <p className="mt-1 text-[11px] text-slate-300">
             {summary.missingScoreCount} {t('calendar.missingMtn', 'without an MTN score')}
           </p>
         )}
       </div>
       <div className="flex flex-1 flex-col gap-2 p-2">
-        {tasks.map(task => (
+        {isHistory ? tasks.map(task => (
+          <HistoricalTaskCard key={task.id} task={task} />
+        )) : tasks.map(task => (
           <CalendarTaskCard
             key={task.id}
             task={task}
@@ -260,7 +318,7 @@ function TodoCalendarDayColumn({
         ))}
         {tasks.length === 0 && (
           <div className="flex flex-1 items-center justify-center rounded border border-dashed border-slate-200 px-2 text-center text-xs text-slate-400">
-            Drop task here
+            {isHistory ? 'No tasks completed' : 'Drop task here'}
           </div>
         )}
       </div>
@@ -397,6 +455,8 @@ export default function TodoCalendarView({
   todayKey,
   selectedDate = todayKey,
   onSelectDate = () => {},
+  onHistoryModeChange = () => {},
+  onWindowChange = () => {},
   selectedMtnTags,
   searchQuery,
   goals,
@@ -410,15 +470,35 @@ export default function TodoCalendarView({
   onEnterSelection = () => {},
   onSelectToggle = () => {},
   mtnCapacity = null,
+  trends = null,
+  historyDays = [],
   t = (key, fallback) => fallback || key,
 }) {
   const [dropTarget, setDropTarget] = useState('');
   const [doLaterTask, setDoLaterTask] = useState(null);
   const [undoMove, setUndoMove] = useState(null);
+  const [windowStartKey, setWindowStartKey] = useState(todayKey);
   const { days, groupedTasks, allGroupedTasks, overdueTasks } = useMemo(
-    () => getCalendarTasks({ tasks, todayKey, selectedMtnTags, searchQuery, getTaskScore }),
-    [tasks, todayKey, selectedMtnTags, searchQuery, getTaskScore]
+    () => getCalendarTasks({ tasks, todayKey, windowStartKey, selectedMtnTags, searchQuery, getTaskScore }),
+    [tasks, todayKey, windowStartKey, selectedMtnTags, searchQuery, getTaskScore]
   );
+  const windowEndKey = days[days.length - 1]?.key || windowStartKey;
+  const isHistory = windowEndKey < todayKey;
+  const isCurrentWindow = windowStartKey === todayKey;
+  const historyByDate = useMemo(() => Object.fromEntries(
+    [...(trends?.trend_chart || []), ...historyDays].map(row => [row.date, row])
+  ), [trends, historyDays]);
+
+  const navigateWindow = (dayOffset) => {
+    const nextStart = formatDateKey(addDays(dateFromKey(windowStartKey) || new Date(), dayOffset));
+    setWindowStartKey(nextStart);
+    onSelectDate(nextStart);
+    const nextEnd = formatDateKey(addDays(dateFromKey(nextStart), 6));
+    const nextIsHistory = nextEnd < todayKey;
+    onHistoryModeChange(nextIsHistory);
+    onWindowChange(nextStart, nextEnd, nextIsHistory);
+    setDropTarget('');
+  };
 
   useEffect(() => {
     if (!undoMove) return undefined;
@@ -430,16 +510,19 @@ export default function TodoCalendarView({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-200 bg-white px-3 py-2">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-900">{t('calendar.sevenDayPlan', 'Seven-day plan')}</h2>
-          <p className="text-xs text-slate-500">{t('calendar.capacityHelp', 'Capacity starts at 25 and rises when your average achieved daily MTN over the previous 3 weeks is higher.')}</p>
+      <CalendarSummaryCards trends={trends} />
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+        <button type="button" onClick={() => navigateWindow(-7)} className="inline-flex h-9 w-9 items-center justify-center rounded border border-slate-200 text-slate-700 hover:bg-slate-50" aria-label="Previous seven days">←</button>
+        <div className="text-center">
+          <p className="text-sm font-semibold text-slate-900">{formatCalendarRangeLabel(days[0].date, days[days.length - 1].date)}</p>
+          <p className="text-xs text-slate-500">{isHistory ? 'Completed work and actual results' : 'Planned work and expected results'}</p>
         </div>
-        <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
-          {t('calendar.dailyCapacity', 'Daily capacity')}: {mtnCapacity === null ? '—' : mtnCapacity.toFixed(1)}
-        </span>
+        <div className="flex items-center gap-2">
+          {!isCurrentWindow && <button type="button" onClick={() => { setWindowStartKey(todayKey); onSelectDate(todayKey); onHistoryModeChange(false); }} className="rounded px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50">Today</button>}
+          <button type="button" onClick={() => navigateWindow(7)} className="inline-flex h-9 w-9 items-center justify-center rounded border border-slate-200 text-slate-700 hover:bg-slate-50" aria-label="Next seven days">→</button>
+        </div>
       </div>
-      <OverdueSection
+      {isCurrentWindow && <OverdueSection
         tasks={overdueTasks}
         goals={goals}
         getTaskScore={getTaskScore}
@@ -450,7 +533,7 @@ export default function TodoCalendarView({
         selectedTasks={selectedTasks}
         onEnterSelection={onEnterSelection}
         onSelectToggle={onSelectToggle}
-      />
+      />}
 
       <div className="overflow-x-auto pb-2">
         <div className="flex min-w-[72rem] gap-3">
@@ -458,7 +541,7 @@ export default function TodoCalendarView({
             <TodoCalendarDayColumn
               key={day.key}
               day={day}
-              tasks={groupedTasks[day.key] || []}
+              tasks={isHistory ? (historyByDate[day.key]?.tasks || []) : (groupedTasks[day.key] || [])}
               allTasks={tasks}
               goals={goals}
               getTaskScore={getTaskScore}
@@ -475,11 +558,13 @@ export default function TodoCalendarView({
               onSelectToggle={onSelectToggle}
               isSelected={selectedDate === day.key}
               onSelect={onSelectDate}
+              isHistory={isHistory}
+              actualSummary={historyByDate[day.key]}
             />
           ))}
         </div>
       </div>
-      {doLaterTask && (
+      {!isHistory && doLaterTask && (
         <DoLaterDialog
           key={doLaterTask.id}
           task={doLaterTask}

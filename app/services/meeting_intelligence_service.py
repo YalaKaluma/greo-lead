@@ -21,19 +21,23 @@ from sqlalchemy.orm import Session
 
 from app.config import OPENAI_API_KEY
 from app.db import SessionLocal
+from app.services.meeting_task_extraction_service import extract_action_items
 from app.models import (
     BeltAssessment,
     JournalEntry,
     JourneyBeltTrial,
     JourneyGoal,
     JourneyPerson,
+    JourneyProject,
     Meeting,
     MeetingActionItem,
     MeetingAttendee,
     MeetingContextNote,
     MeetingDecision,
     MeetingLeadershipObservation,
+    MeetingGoalLink,
     MeetingParticipant,
+    MeetingProjectLink,
     MeetingTopic,
     MeetingTranscriptSegment,
     User,
@@ -41,8 +45,9 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
-MEETING_PROMPT_VERSION = "meeting-v3-contextual-self"
+MEETING_PROMPT_VERSION = "meeting-v4-coaching-links"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4o-mini")
+MEETING_COACHING_MODEL = os.getenv("MEETING_COACHING_MODEL", MEETING_MODEL)
 DB_WRITE_ATTEMPTS = max(1, int(os.getenv("MEETING_DB_WRITE_ATTEMPTS", "3")))
 TRANSCRIPTION_CHUNK_SECONDS = min(
     1200, max(300, int(os.getenv("MEETING_TRANSCRIPTION_CHUNK_SECONDS", "1200")))
@@ -401,7 +406,7 @@ def analyze_transcript(
     transcript: str,
     supplied_title: str | None = None,
     supplied_context: str | None = None,
-    leadership_context: str | None = None,
+    matching_context: str | None = None,
 ) -> dict:
     today = datetime.now(timezone.utc).date().isoformat()
     response = client.chat.completions.create(
@@ -414,11 +419,8 @@ def analyze_transcript(
                 "content": (
                     "You extract evidence-backed executive meeting intelligence. Return JSON only. "
                     "Never invent attendees, decisions, deadlines, or evidence. Confidence is 0 to 1. "
-                    "Leadership observations must be tentative, useful, non-judgmental, and explicitly "
-                    "supported by transcript evidence. Personalize leadership coaching using the private "
-                    "leadership context when relevant, but never let it alter factual meeting extraction. "
-                    "Do not quote private journal or trial content verbatim. Use wording such as 'Based on "
-                    "this meeting...' or 'Alfred estimates...'. Do not infer conversations that did not occur."
+                    "Do not infer conversations that did not occur. Candidate IDs are opaque identifiers: "
+                    "only return an ID present in the supplied candidate catalog."
                 ),
             },
             {
@@ -429,33 +431,96 @@ def analyze_transcript(
                     "executive_summary, participants:[{display_name,speaker_label}], "
                     "self_speaker_label, self_identification_confidence, "
                     "topics:[{title,summary}], decisions:[{description,confidence,evidence_excerpt}], "
-                    "action_items:[{description,owner_name,due_date,confidence,evidence_excerpt}], "
-                    "leadership_observations:[{category,observation,confidence,evidence_excerpt}]}. "
+                    "suggested_person_matches:[{speaker_label,person_id,confidence}], "
+                    "suggested_goal_ids:[{id,confidence}], suggested_project_ids:[{id,confidence}]}. "
                     "Executive summary should be 3-5 concise paragraphs for substantial transcripts, "
                     "and proportionally shorter for brief notes. Use null for unknown due dates.\n\n"
                     "The user participated in every uploaded meeting. Set self_speaker_label to exactly one "
                     "speaker label that already appears in the transcript. If voice recognition labelled a "
                     "speaker Me, choose Me. Otherwise select the most likely existing speaker using introductions, "
                     "names, roles, supplied attendee/context information, first-person references, and the user's "
-                    "private leadership context. Never add Me as a separate participant when the transcript only "
+                    "supplied meeting context. Never add Me as a separate participant when the transcript only "
                     "contains generic labels such as A and B. Always make a best selection and express uncertainty "
                     "through self_identification_confidence rather than inventing another speaker. Participants must "
                     "contain only distinct speakers that actually appear in the transcript.\n\n"
-                    "For leadership_observations, focus only on self_speaker_label. When identification confidence "
-                    "is low, make the attribution uncertainty explicit. Produce 4-6 "
-                    "substantive observations where evidence allows, organized with these categories: "
-                    "What you did well; What could have been stronger; Leadership context connection; "
-                    "Next-meeting experiment. Include specific behavioral evidence, explain why it matters "
-                    "for this leader's current wheel/trials/journal themes, and make the experiment concrete. "
-                    "Balance strengths and growth edges; do not manufacture criticism to fill categories.\n\n"
+                    "Suggest people, goals, and projects only when there is meaningful evidence. Prefer no link "
+                    "over a weak link. Use confidence of at least 0.75 only for strong matches.\n\n"
                     f"USER-SUPPLIED MEETING CONTEXT (treat as context, not spoken transcript):\n{supplied_context or 'none'}\n\n"
-                    f"PRIVATE LEADERSHIP DEVELOPMENT CONTEXT (coaching only; paraphrase patterns, never quote):\n{leadership_context or 'none'}\n\n"
+                    f"AVAILABLE LINK TARGETS:\n{matching_context or 'none'}\n\n"
                     f"TRANSCRIPT OR NOTES:\n{transcript[:120000]}"
                 ),
             },
         ],
     )
     return json.loads(response.choices[0].message.content)
+
+
+def analyze_leadership_feedback(
+    transcript: str,
+    analysis: dict,
+    leadership_context: str | None,
+) -> dict:
+    response = client.chat.completions.create(
+        model=MEETING_COACHING_MODEL,
+        response_format={"type": "json_object"},
+        temperature=0.35,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are Alfred, a rigorous but supportive executive coach. This is a dedicated coaching "
+                    "analysis, separate from factual meeting extraction. Focus only on the user's identified "
+                    "speaker. Ground every behavioral claim in meeting evidence. Explicitly connect useful "
+                    "feedback to the leader's wheel, trials, goals, and recent journal patterns. Never quote "
+                    "private journal, assessment, or trial text; paraphrase the relevant pattern. Distinguish "
+                    "observation from inference and do not manufacture criticism."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Return JSON only: {leadership_observations:[{category,observation,confidence,"
+                    "evidence_excerpt}]}. Produce 5-8 substantive observations when evidence allows, covering: "
+                    "What you did well; What could have been stronger; Connection to your leadership context; "
+                    "A missed leadership opportunity; and a concrete next-meeting experiment. Explain why each "
+                    "point matters for this leader now. Make recommendations behaviorally specific.\n\n"
+                    f"MEETING ANALYSIS:\n{json.dumps(analysis, default=str)[:20000]}\n\n"
+                    f"PRIVATE LEADERSHIP CONTEXT (paraphrase, never quote):\n{leadership_context or 'none'}\n\n"
+                    f"TRANSCRIPT:\n{transcript[:120000]}"
+                ),
+            },
+        ],
+    )
+    return json.loads(response.choices[0].message.content)
+
+
+def answer_meeting_question(meeting_context: dict, question: str, history: list[dict] | None = None) -> str:
+    safe_history = [
+        {"role": item.get("role"), "content": str(item.get("content") or "")[:3000]}
+        for item in (history or [])[-8:]
+        if item.get("role") in {"user", "assistant"}
+    ]
+    response = client.chat.completions.create(
+        model=MEETING_MODEL,
+        temperature=0.2,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You answer questions about one meeting using only the supplied meeting record. Be concise "
+                    "but useful. Separate explicit facts from reasonable inference, cite speaker names and "
+                    "timestamps when available, and say when the meeting does not contain the answer."
+                ),
+            },
+            {
+                "role": "user",
+                "content": "MEETING RECORD:\n" + json.dumps(meeting_context, default=str)[:120000],
+            },
+            *safe_history,
+            {"role": "user", "content": question[:4000]},
+        ],
+    )
+    return (response.choices[0].message.content or "").strip()
 
 
 def _replace_analysis(db: Session, meeting: Meeting, analysis: dict) -> None:
@@ -582,6 +647,49 @@ def _replace_analysis(db: Session, meeting: Meeting, analysis: dict) -> None:
                 evidence_excerpt=observation.get("evidence_excerpt"),
             ))
 
+    candidate_people = {
+        person.id: person for person in db.query(JourneyPerson).filter(
+            JourneyPerson.user_number == meeting.user_number
+        ).all()
+    }
+    for suggestion in analysis.get("suggested_person_matches") or []:
+        if _safe_confidence(suggestion.get("confidence")) < 0.75:
+            continue
+        person = candidate_people.get(suggestion.get("person_id"))
+        label = str(suggestion.get("speaker_label") or "").strip()
+        participant = db.query(MeetingParticipant).filter(
+            MeetingParticipant.meeting_id == meeting.id,
+            MeetingParticipant.speaker_label.ilike(label),
+            MeetingParticipant.is_current_user.is_(False),
+        ).first()
+        if person and participant and participant.match_status != "confirmed":
+            participant.person_id = person.id
+            participant.display_name = person.name[:200]
+            participant.match_status = "auto_matched"
+
+    valid_goals = {
+        goal.id for goal in db.query(JourneyGoal).filter(
+            JourneyGoal.user_number == meeting.user_number,
+            JourneyGoal.parent_goal_id.is_(None),
+        ).all()
+    }
+    valid_projects = {
+        project.id for project in db.query(JourneyProject).filter(
+            JourneyProject.user_number == meeting.user_number,
+            JourneyProject.status == "active",
+        ).all()
+    }
+    existing_goal_ids = {link.goal_id for link in meeting.goal_links}
+    existing_project_ids = {link.project_id for link in meeting.project_links}
+    for suggestion in analysis.get("suggested_goal_ids") or []:
+        goal_id = suggestion.get("id")
+        if goal_id in valid_goals and goal_id not in existing_goal_ids and _safe_confidence(suggestion.get("confidence")) >= 0.75:
+            db.add(MeetingGoalLink(meeting_id=meeting.id, goal_id=goal_id))
+    for suggestion in analysis.get("suggested_project_ids") or []:
+        project_id = suggestion.get("id")
+        if project_id in valid_projects and project_id not in existing_project_ids and _safe_confidence(suggestion.get("confidence")) >= 0.75:
+            db.add(MeetingProjectLink(meeting_id=meeting.id, project_id=project_id))
+
 
 def _start_processing(db: Session, meeting_id: int) -> dict | None:
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
@@ -647,7 +755,7 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
             )
         journal_entries = db.query(JournalEntry).filter(
             JournalEntry.user_id == user.id
-        ).order_by(JournalEntry.created_at.desc()).limit(6).all()
+        ).order_by(JournalEntry.created_at.desc()).limit(7).all()
         if journal_entries:
             journal_snapshot = [{
                 "date": entry.created_at.date().isoformat() if entry.created_at else None,
@@ -669,6 +777,16 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
                 "horizon": goal.time_horizon,
             } for goal in goals], default=str)[:4000]
         )
+    people = db.query(JourneyPerson).filter(JourneyPerson.user_number == meeting.user_number).all()
+    projects = db.query(JourneyProject).filter(
+        JourneyProject.user_number == meeting.user_number,
+        JourneyProject.status == "active",
+    ).all()
+    matching_context = {
+        "people": [{"id": p.id, "name": p.name, "organization": p.organization, "context": (p.context or "")[:300]} for p in people],
+        "goals": [{"id": g.id, "title": g.title or g.goal_text, "description": (g.goal_text or "")[:400]} for g in goals],
+        "projects": [{"id": p.id, "title": p.project_name, "description": (p.description or p.goal or "")[:400]} for p in projects],
+    }
     return {
         "title": meeting.title,
         "recording_storage_key": meeting.recording_storage_key,
@@ -678,6 +796,7 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
         "voice_reference": user.voice_reference_data_url if user else None,
         "supplied_context": "\n".join(supplied_context_parts),
         "leadership_context": "\n".join(leadership_context_parts)[:22000],
+        "matching_context": json.dumps(matching_context, default=str)[:22000],
     }
 
 
@@ -718,7 +837,13 @@ def _save_transcription(db: Session, meeting_id: int, transcription: dict) -> st
     return transcription["text"].strip()
 
 
-def _save_analysis(db: Session, meeting_id: int, analysis: dict) -> None:
+def _save_analysis(
+    db: Session,
+    meeting_id: int,
+    analysis: dict,
+    tasks: dict,
+    coaching: dict,
+) -> None:
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
         raise ValueError("Meeting was deleted while it was being analyzed.")
@@ -729,7 +854,12 @@ def _save_analysis(db: Session, meeting_id: int, analysis: dict) -> None:
     db.query(MeetingLeadershipObservation).filter(
         MeetingLeadershipObservation.meeting_id == meeting_id
     ).delete(synchronize_session=False)
-    _replace_analysis(db, meeting, analysis)
+    analysis_with_coaching = {
+        **analysis,
+        "action_items": tasks.get("action_items") or [],
+        "leadership_observations": coaching.get("leadership_observations") or [],
+    }
+    _replace_analysis(db, meeting, analysis_with_coaching)
     meeting.processing_status = "ready"
     meeting.processing_error = None
     meeting.updated_at = datetime.now(timezone.utc)
@@ -867,7 +997,7 @@ def process_meeting(meeting_id: int) -> None:
             transcript,
             snapshot["title"],
             snapshot["supplied_context"],
-            snapshot["leadership_context"],
+            snapshot["matching_context"],
         )
         _meeting_log(
             logging.INFO,
@@ -879,13 +1009,36 @@ def process_meeting(meeting_id: int) -> None:
             participant_count=len(analysis.get("participants") or []),
             topic_count=len(analysis.get("topics") or []),
             decision_count=len(analysis.get("decisions") or []),
-            action_item_count=len(analysis.get("action_items") or []),
-            leadership_observation_count=len(analysis.get("leadership_observations") or []),
+        )
+        stage = "extracting action items"
+        stage_started = time.monotonic()
+        _meeting_log(logging.INFO, "stage_started", meeting_id=meeting_id, attempt_id=attempt_id, stage="task_extraction")
+        tasks = extract_action_items(transcript, analysis, snapshot["supplied_context"])
+        _meeting_log(
+            logging.INFO, "stage_completed", meeting_id=meeting_id, attempt_id=attempt_id,
+            stage="task_extraction",
+            duration_ms=round((time.monotonic() - stage_started) * 1000),
+            action_item_count=len(tasks.get("action_items") or []),
+        )
+        stage = "generating leadership coaching"
+        stage_started = time.monotonic()
+        _meeting_log(logging.INFO, "stage_started", meeting_id=meeting_id, attempt_id=attempt_id, stage="leadership_coaching")
+        coaching_analysis = {**analysis, "action_items": tasks.get("action_items") or []}
+        coaching = analyze_leadership_feedback(
+            transcript,
+            coaching_analysis,
+            snapshot["leadership_context"],
+        )
+        _meeting_log(
+            logging.INFO, "stage_completed", meeting_id=meeting_id, attempt_id=attempt_id,
+            stage="leadership_coaching",
+            duration_ms=round((time.monotonic() - stage_started) * 1000),
+            leadership_observation_count=len(coaching.get("leadership_observations") or []),
         )
         stage = "saving analysis"
         stage_started = time.monotonic()
         _with_fresh_session(
-            lambda db: _save_analysis(db, meeting_id, analysis),
+            lambda db: _save_analysis(db, meeting_id, analysis, tasks, coaching),
             "save_analysis",
             meeting_id=meeting_id,
             attempt_id=attempt_id,

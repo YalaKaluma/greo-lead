@@ -33,15 +33,6 @@ const pointDelta = (value) => {
   return '0 pts';
 };
 
-const entryDelta = (value) => {
-  const number = toNumber(value, 0);
-  const absolute = Math.abs(number);
-  const formatted = absolute % 1 > 0 ? absolute.toFixed(1) : Math.round(absolute).toString();
-  if (number > 0) return `+${formatted}`;
-  if (number < 0) return `-${formatted}`;
-  return '0';
-};
-
 const goalHealthStyles = {
   green: {
     accent: 'border-l-emerald-500',
@@ -80,7 +71,7 @@ function MtnScoreCard({ metric }) {
       <div className="mt-5 flex items-center justify-between gap-4">
         <ScoreCircle value={toNumber(metric?.score, 0).toFixed(1)} label="index" />
         <div className="min-w-0 flex-1">
-          <p className="text-sm text-slate-600">{toNumber(metric?.completed_tasks, 0)} completed tasks</p>
+          <p className="text-sm text-slate-600">{toNumber(metric?.average_tasks_per_day, 0).toFixed(1)} tasks completed / day</p>
           <p className={`mt-3 text-sm font-semibold ${delta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
             {delta} vs month average
           </p>
@@ -126,24 +117,21 @@ function HabitsMetricCard({ metric }) {
 
 function JournalMetricCard({ metric }) {
   const depthDelta = scoreDelta(metric?.delta_depth_5);
-  const frequencyDelta = entryDelta(metric?.delta_entries);
-  const entriesThisWeek = toNumber(metric?.entries_this_week, 0);
-  const monthAverageEntries = toNumber(metric?.month_average_entries_per_week, 0).toFixed(1);
+  const journalDayPercentage = Math.round(toNumber(metric?.journal_day_percentage, 0));
+  const journalDays = toNumber(metric?.journal_days_this_week, 0);
   const averageDepth = toNumber(metric?.average_depth_5, 0).toFixed(1);
   const monthAverageDepth = toNumber(metric?.month_average_depth_5, 0).toFixed(1);
   return (
     <section className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <KpiInfoButton label="About the Wisdom Index">
-        Frequency counts journal entries in the last 7 days. Depth is the average reflection quality on a 5-point scale, compared with the recent monthly baseline.
+        Journal consistency is the percentage of the last 7 days with at least one journal entry. Depth is the average reflection quality on a 5-point scale, compared with the recent monthly baseline.
       </KpiInfoButton>
       <CardHeader title="Wisdom Index" />
       <div className="mt-5 grid grid-cols-2 gap-3">
         <div className="rounded-lg bg-slate-50 p-4 text-center">
-          <div className="text-3xl font-semibold text-slate-950">{entriesThisWeek}</div>
-          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Frequency</p>
-          <p className={`mt-3 text-xs font-semibold ${frequencyDelta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
-            vs {monthAverageEntries}/wk avg ({frequencyDelta})
-          </p>
+          <div className="text-3xl font-semibold text-slate-950">{journalDayPercentage}%</div>
+          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Journal consistency</p>
+          <p className="mt-3 text-xs font-semibold text-slate-600">{journalDays} of the last 7 days</p>
         </div>
         <div className="rounded-lg bg-slate-50 p-4 text-center">
           <div className="text-3xl font-semibold text-slate-950">{averageDepth}</div>
@@ -170,8 +158,14 @@ function CombinedTrendChart({ trends }) {
   const innerHeight = height - padding.top - padding.bottom;
   const byDate = (items) => new Map(items.map((item) => [item.date, item]));
   const maps = { mtn: byDate(mtn), habits: byDate(habits), journal: byDate(journal), energy: byDate(energy) };
+  const dailyMtnTotals = dates.map((date) => toNumber(maps.mtn.get(date)?.mtn_score, 0));
+  const highestDailyMtn = Math.max(...dailyMtnTotals, 0);
+  const mtnPoints = dates.map((date, index) => ({
+    date,
+    value: highestDailyMtn ? clamp((dailyMtnTotals[index] / highestDailyMtn) * 100) : 0,
+  }));
   const series = [
-    { label: 'Move-the-needle', color: '#0f766e', points: dates.map((date) => ({ date, value: clamp(toNumber(maps.mtn.get(date)?.rolling_average, 0) * 10) })) },
+    { label: 'Move-the-needle', color: '#0f766e', points: mtnPoints },
     { label: 'Habits', color: '#2563eb', points: dates.map((date) => ({ date, value: clamp(toNumber(maps.habits.get(date)?.rolling_average, 0)) })) },
     { label: 'Journal depth', color: '#7c3aed', points: dates.map((date) => ({ date, value: clamp(toNumber(maps.journal.get(date)?.weekly_average, 0) * 10) })) },
     { label: 'Energy', color: '#ea580c', points: dates.map((date) => ({ date, value: maps.energy.get(date)?.energy_level ? clamp((toNumber(maps.energy.get(date)?.energy_level) / 5) * 100) : null })) },
@@ -190,7 +184,7 @@ function CombinedTrendChart({ trends }) {
   return (
     <div className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <KpiInfoButton label="About behavioral trends">
-        A 30-day view of the main operating signals. MTN, habits, journal depth, and energy are normalized to a 0-100 scale so their direction can be compared.
+        A 30-day view of the main operating signals. Daily MTN is the sum of the scores for tasks completed that day, shown as a percentage of the highest daily MTN total in the visible period. Habits, journal depth, and energy are also normalized to a 0-100 scale.
       </KpiInfoButton>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>

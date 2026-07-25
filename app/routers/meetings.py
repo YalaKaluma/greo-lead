@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
 from app.models import JourneyGoal, JourneyPerson, JourneyProject, Meeting, MeetingActionItem, MeetingAttendee, MeetingContextNote, MeetingGoalLink, MeetingParticipant, MeetingProjectLink, Task, User
-from app.services.meeting_intelligence_service import process_meeting
+from app.services.meeting_intelligence_service import answer_meeting_question, process_meeting
 from app.services.journey_support import goal_level_variants, normalize_goal_level
 from app.services.timezone_service import get_user_timezone, today_for_timezone
 
@@ -63,6 +63,17 @@ class ParticipantMatch(BaseModel):
     user_number: str
     person_id: Optional[int] = None
     is_current_user: bool = False
+
+
+class MeetingChatMessage(BaseModel):
+    role: str
+    content: str = Field(min_length=1, max_length=4000)
+
+
+class MeetingQuestion(BaseModel):
+    user_number: str
+    question: str = Field(min_length=1, max_length=4000)
+    history: list[MeetingChatMessage] = Field(default_factory=list, max_length=8)
 
 
 class DraftMeetingCreate(BaseModel):
@@ -589,10 +600,30 @@ def convert_action_item(action_item_id: int, payload: ActionConversion, db: Sess
         raise HTTPException(status_code=400, detail="Mode must be my_todo or follow_up.")
     today = today_for_timezone(get_user_timezone(db, payload.user_number))
     today_due = datetime.combine(today, datetime.min.time())
+    goal_links = db.query(MeetingGoalLink).filter(MeetingGoalLink.meeting_id == action.meeting_id).all()
+    project_links = db.query(MeetingProjectLink).filter(MeetingProjectLink.meeting_id == action.meeting_id).all()
+    linked_goals = db.query(JourneyGoal).filter(JourneyGoal.id.in_([link.goal_id for link in goal_links])).all() if goal_links else []
+    linked_projects = db.query(JourneyProject).filter(JourneyProject.id.in_([link.project_id for link in project_links])).all() if project_links else []
+    context_lines = [
+        f"Related meeting: {action.meeting.title}",
+        f"Meeting date: {(action.meeting.started_at or action.meeting.created_at).date().isoformat()}",
+    ]
+    if action.meeting.one_line_summary:
+        context_lines.append(f"Why this matters: {action.meeting.one_line_summary}")
+    if action.evidence_excerpt:
+        context_lines.append(f"Meeting context: {action.evidence_excerpt}")
+    if linked_goals:
+        context_lines.append("Related goal(s): " + ", ".join(goal.title or goal.goal_text for goal in linked_goals))
+    if linked_projects:
+        context_lines.append("Related project(s): " + ", ".join(project.project_name for project in linked_projects))
+    enriched_notes = "\n".join(context_lines)
     if action.created_task_id:
         existing_task = db.query(Task).filter(Task.id == action.created_task_id, Task.user_number == payload.user_number).first()
         if existing_task:
             existing_task.due_date = today_due
+            existing_task.notes = enriched_notes
+            existing_task.goal_id = linked_goals[0].id if linked_goals else existing_task.goal_id
+            existing_task.project = linked_projects[0].project_name if linked_projects else existing_task.project
             db.commit()
             return {"task_id": existing_task.id, "already_created": True}
         action.created_task_id = None
@@ -605,7 +636,9 @@ def convert_action_item(action_item_id: int, payload: ActionConversion, db: Sess
     task = Task(
         user_number=payload.user_number,
         title=title,
-        notes=f"Created from meeting: {action.meeting.title}",
+        notes=enriched_notes,
+        goal_id=linked_goals[0].id if linked_goals else None,
+        project=linked_projects[0].project_name if linked_projects else None,
         delegated_to=delegated_to,
         due_date=today_due,
         priority="Medium",
@@ -617,6 +650,39 @@ def convert_action_item(action_item_id: int, payload: ActionConversion, db: Sess
     action.tracking_mode = payload.mode
     db.commit()
     return {"task_id": task.id, "already_created": False}
+
+
+@router.post("/{meeting_id:int}/ask")
+def ask_about_meeting(meeting_id: int, payload: MeetingQuestion, db: Session = Depends(get_db)):
+    meeting = _query(db).filter(
+        Meeting.id == meeting_id,
+        Meeting.user_number == payload.user_number,
+    ).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found.")
+    if not (meeting.transcript_text or meeting.user_notes):
+        raise HTTPException(status_code=409, detail="This meeting has no transcript or notes yet.")
+    context = {
+        "title": meeting.title,
+        "date": meeting.started_at,
+        "summary": meeting.executive_summary,
+        "participants": [participant.display_name for participant in meeting.participants],
+        "topics": [{"title": topic.title, "summary": topic.summary} for topic in meeting.topics],
+        "decisions": [decision.description for decision in meeting.decisions],
+        "action_items": [
+            {"description": action.description, "owner": action.owner_name, "due_date": action.due_date}
+            for action in meeting.action_items
+        ],
+        "leadership_feedback": [observation.observation for observation in meeting.leadership_observations],
+        "context_notes": [note.note_text for note in meeting.context_notes],
+        "transcript": meeting.transcript_text or meeting.user_notes,
+    }
+    answer = answer_meeting_question(
+        context,
+        payload.question,
+        [message.model_dump() for message in payload.history],
+    )
+    return {"answer": answer}
 
 
 @router.delete("/{meeting_id:int}", status_code=204)

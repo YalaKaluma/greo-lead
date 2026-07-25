@@ -9,7 +9,7 @@ from datetime import datetime, date, timedelta
 from typing import Optional, List, Union
 from app.services.task_enrichment_service import enrich_task
 from app.services.timezone_service import get_user_timezone, today_for_timezone
-from app.services.task_mtn_trend_service import get_task_mtn_trends
+from app.services.task_mtn_trend_service import get_task_mtn_history, get_task_mtn_trends
 from app.services.onboarding_seed_service import ensure_starter_tasks_visible_today
 from app.services.audit_log_service import user_id_for_identifier, write_audit_log
 
@@ -474,6 +474,28 @@ def get_mtn_trends(user_number: str, db: Session = Depends(get_db)):
     """Get completed-task MTN score totals for the last 90 days."""
 
     return get_task_mtn_trends(user_number, db, get_user_timezone(db, user_number))
+
+
+@router.get("/mtn-history")
+def get_mtn_history(
+    user_number: str,
+    start_date: date,
+    end_date: date,
+    db: Session = Depends(get_db),
+):
+    if end_date < start_date:
+        raise HTTPException(status_code=400, detail="end_date must be on or after start_date")
+    if (end_date - start_date).days > 31:
+        raise HTTPException(status_code=400, detail="History requests are limited to 32 days")
+    return {
+        "days": get_task_mtn_history(
+            user_number,
+            db,
+            start_date,
+            end_date,
+            get_user_timezone(db, user_number),
+        )
+    }
 
 
 @router.post("/", response_model=TaskResponse)

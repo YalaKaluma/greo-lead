@@ -196,6 +196,7 @@ def get_task_mtn_trends(
             "mtn_score": score,
             "completed_tasks": daily["completed_tasks"],
             "rolling_average": round(mean(rolling_values), 2) if rolling_values else 0,
+            "tasks": sorted(daily["tasks"], key=lambda item: item["mtn_score"], reverse=True),
         })
 
     summary = {
@@ -230,3 +231,71 @@ def get_task_mtn_trends(
         "summary": summary,
         "trend_chart": trend_chart,
     }
+
+
+def get_task_mtn_history(
+    user_number: str,
+    db: Session,
+    start_date: date,
+    end_date: date,
+    timezone_name: str = DEFAULT_TIMEZONE,
+) -> list[dict[str, Any]]:
+    """Return completed-task facts for a bounded calendar window."""
+    query_start = datetime.combine(start_date - timedelta(days=1), datetime.min.time())
+    query_end = datetime.combine(end_date + timedelta(days=2), datetime.min.time())
+    tasks = (
+        db.query(Task)
+        .filter(
+            Task.user_number == user_number,
+            Task.status == COMPLETED_STATUS,
+            func.coalesce(Task.completed_at, Task.updated_at) >= query_start,
+            func.coalesce(Task.completed_at, Task.updated_at) < query_end,
+        )
+        .all()
+    )
+    task_ids = [task.id for task in tasks]
+    scores = []
+    if task_ids:
+        scores = (
+            db.query(TaskPriorityScore)
+            .filter(
+                TaskPriorityScore.user_number == user_number,
+                TaskPriorityScore.task_id.in_(task_ids),
+            )
+            .order_by(TaskPriorityScore.task_id, TaskPriorityScore.scored_at.desc())
+            .all()
+        )
+    score_lookup: dict[int, list[TaskPriorityScore]] = {}
+    for score in scores:
+        score_lookup.setdefault(score.task_id, []).append(score)
+
+    by_day = {
+        day: {"mtn_score": 0.0, "completed_tasks": 0, "tasks": []}
+        for day in _date_range(start_date, end_date)
+    }
+    for task in tasks:
+        completed_day = _task_completed_day(task, timezone_name)
+        if completed_day not in by_day:
+            continue
+        completed_at = getattr(task, "completed_at", None) or task.updated_at
+        mtn_score = _task_mtn_score(task, completed_at, score_lookup)
+        by_day[completed_day]["mtn_score"] += mtn_score
+        by_day[completed_day]["completed_tasks"] += 1
+        by_day[completed_day]["tasks"].append({
+            "id": task.id,
+            "title": task.title,
+            "mtn_score": round(mtn_score, 1),
+            "completed_at": _local_completed_at_iso(task, timezone_name),
+            "project": task.project,
+            "goal_id": task.goal_id,
+        })
+
+    return [
+        {
+            "date": _iso(day),
+            "mtn_score": round(by_day[day]["mtn_score"], 2),
+            "completed_tasks": by_day[day]["completed_tasks"],
+            "tasks": sorted(by_day[day]["tasks"], key=lambda item: item["mtn_score"], reverse=True),
+        }
+        for day in _date_range(start_date, end_date)
+    ]

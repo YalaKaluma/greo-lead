@@ -65,10 +65,10 @@ export default function TaskItem({
     }
 
     const currentX = e.touches[0].clientX;
-    const distance = Math.max(0, touchStartX - currentX);
-    const nextDistance = Math.min(distance, 120);
+    const distance = touchStartX - currentX;
+    const nextDistance = Math.max(-120, Math.min(distance, 120));
     swipeDistanceRef.current = nextDistance;
-    if (nextDistance > 10) {
+    if (Math.abs(nextDistance) > 10) {
       suppressClickRef.current = true;
     }
     setSwipeDistance(nextDistance);
@@ -82,11 +82,15 @@ export default function TaskItem({
     const width = cardRef.current?.offsetWidth || 0;
     const threshold = Math.min(120, Math.max(80, width * 0.25));
     const shouldOpenFollowUp = !selectionMode && !longPressFiredRef.current && swipeDistanceRef.current >= threshold;
+    const shouldOpenDoLater = !selectionMode && !longPressFiredRef.current && swipeDistanceRef.current <= -threshold;
     swipeDistanceRef.current = 0;
     setSwipeDistance(0);
 
     if (shouldOpenFollowUp && onFollowUp) {
       onFollowUp();
+    }
+    if (shouldOpenDoLater && onDoLater) {
+      onDoLater();
     }
 
     window.setTimeout(() => {
@@ -262,6 +266,18 @@ function TaskCard({
       className="relative overflow-hidden rounded"
     >
       {!selectionMode && (
+        <div className="absolute inset-y-0 left-0 flex w-32 items-center justify-start bg-blue-700 pl-4 text-white sm:hidden">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold">
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M5 12h14" />
+              <path d="m12 5 7 7-7 7" />
+            </svg>
+            {doLaterLabel}
+          </span>
+        </div>
+      )}
+
+      {!selectionMode && (
         <div className="absolute inset-y-0 right-0 flex w-32 items-center justify-end bg-slate-800 pr-4 text-white sm:hidden">
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold">
             <ClockReturnIcon />
@@ -276,7 +292,7 @@ function TaskCard({
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         style={{
-          transform: `translateX(-${swipeDistance}px)`,
+          transform: `translateX(${-swipeDistance}px)`,
         }}
         className={`
           relative border-2 rounded px-3 py-2 sm:pr-10
