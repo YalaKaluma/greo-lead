@@ -277,7 +277,7 @@ export function LeadershipStoryCard({ story }) {
             aria-modal="true"
             aria-labelledby={hasText(story?.title) ? "leadership-story-title" : undefined}
             aria-label={hasText(story?.title) ? undefined : "Leadership story"}
-            className="relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-y-auto rounded-xl bg-white shadow-2xl lg:grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:overflow-hidden"
+            className="relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-y-auto rounded-xl bg-white shadow-2xl lg:grid lg:h-[92vh] lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden"
           >
             <button
               type="button"
