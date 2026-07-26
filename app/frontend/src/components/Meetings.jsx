@@ -167,7 +167,7 @@ function ConsentCheck({ checked, onChange }) {
   return (
     <label className="flex items-start gap-3 rounded-lg bg-amber-50 p-4 text-sm text-amber-950">
       <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="mt-1" />
-      <span>Please ensure all meeting participants have consented to the recording in accordance with your organization’s policies and applicable laws.</span>
+      <span>I confirm that participants have been informed of the recording and that I have permission to record in accordance with applicable laws and organizational policies.</span>
     </label>
   );
 }
@@ -367,6 +367,12 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
       <h2 className="text-3xl font-semibold">{status === 'idle' ? 'Ready to Record' : status === 'uploading' ? 'Saving Meeting' : 'Alfred is listening'}</h2>
       <p className="mt-3 font-mono text-5xl tracking-wider">{formatTimer(seconds)}</p>
       {status === 'idle' && <div className="mt-7 max-w-xl"><ConsentCheck checked={consent} onChange={setConsent} /></div>}
+      {(status === 'recording' || status === 'paused') && (
+        <div className="mt-5 flex items-center gap-2 rounded-full bg-red-600/20 px-4 py-2 text-sm font-semibold text-red-100">
+          <span className={`h-2.5 w-2.5 rounded-full ${status === 'recording' ? 'animate-pulse bg-red-400' : 'bg-amber-300'}`} />
+          {status === 'recording' ? 'Recording in progress' : 'Recording paused'}
+        </div>
+      )}
       {error && <p className="mt-5 rounded-lg bg-red-500/20 px-4 py-3 text-red-100">{error}</p>}
       {(status === 'recording' || status === 'paused') && <div className="mt-7 grid w-full gap-5 md:grid-cols-2">
         <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
