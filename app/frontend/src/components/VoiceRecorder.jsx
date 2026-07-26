@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+const NativeVoiceRecorder = registerPlugin('MeetingRecorder');
 
 export default function VoiceRecorder({
   onTranscript,
@@ -16,10 +19,18 @@ export default function VoiceRecorder({
   const recorderRef = useRef(null);
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
+  const nativePathRef = useRef(null);
+  const isNative = Capacitor.isNativePlatform();
 
   useEffect(() => {
     return () => {
       stopTracks();
+      if (nativePathRef.current) {
+        NativeVoiceRecorder.stop()
+          .then((result) => NativeVoiceRecorder.removeFile({ path: result.path }))
+          .catch(() => {});
+        nativePathRef.current = null;
+      }
     };
   }, []);
 
@@ -28,13 +39,13 @@ export default function VoiceRecorder({
     streamRef.current = null;
   };
 
-  const transcribeAudio = async (audioBlob) => {
+  const transcribeAudio = async (audioBlob, filename = 'recording.webm') => {
     setIsTranscribing(true);
     setError('');
 
     try {
       const formData = new FormData();
-      formData.append('file', audioBlob, 'recording.webm');
+      formData.append('file', audioBlob, filename);
 
       const response = await axios.post(
         `${apiUrl}/api/audio/transcribe`,
@@ -63,6 +74,14 @@ export default function VoiceRecorder({
     try {
       setError('');
       chunksRef.current = [];
+
+      if (isNative) {
+        const result = await NativeVoiceRecorder.start({ recordingContext: 'voice_entry' });
+        nativePathRef.current = result.path;
+        setIsRecording(true);
+        onRecordingChange?.(true);
+        return;
+      }
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -97,12 +116,38 @@ export default function VoiceRecorder({
         AbortError: 'Microphone access was interrupted. Please try again.',
         SecurityError: 'Microphone access is blocked by the browser security settings.'
       };
-      setError(microphoneErrors[err?.name] || 'Could not access microphone.');
+      setError(
+        microphoneErrors[err?.name]
+        || err?.message
+        || 'Could not access microphone.'
+      );
       stopTracks();
     }
   };
 
-  const stopRecording = () => {
+  const stopRecording = async () => {
+    if (isNative) {
+      const path = nativePathRef.current;
+      nativePathRef.current = null;
+      setIsRecording(false);
+      onRecordingChange?.(false);
+      try {
+        const result = await NativeVoiceRecorder.stop();
+        const localUrl = Capacitor.convertFileSrc(result.path);
+        const response = await fetch(localUrl);
+        if (!response.ok) throw new Error('Could not read the completed recording.');
+        const audioBlob = await response.blob();
+        await transcribeAudio(audioBlob, 'recording.m4a');
+        await NativeVoiceRecorder.removeFile({ path: result.path });
+      } catch (err) {
+        console.error('Native voice recording error:', err);
+        setError(err?.message || 'Could not process the voice recording.');
+        if (path) {
+          NativeVoiceRecorder.removeFile({ path }).catch(() => {});
+        }
+      }
+      return;
+    }
     if (recorderRef.current && recorderRef.current.state !== 'inactive') {
       recorderRef.current.stop();
     }
@@ -110,11 +155,11 @@ export default function VoiceRecorder({
     onRecordingChange?.(false);
   };
 
-  const handleClick = () => {
+  const handleClick = async () => {
     if (isRecording) {
-      stopRecording();
+      await stopRecording();
     } else {
-      startRecording();
+      await startRecording();
     }
   };
 

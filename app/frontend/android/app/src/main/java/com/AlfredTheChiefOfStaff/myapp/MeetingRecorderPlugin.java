@@ -65,6 +65,14 @@ public class MeetingRecorderPlugin extends Plugin {
         Intent intent = new Intent(getContext(), MeetingRecordingService.class);
         intent.setAction(MeetingRecordingService.ACTION_START);
         intent.putExtra("outputPath", output.getAbsolutePath());
+        String recordingContext = call.getString("recordingContext");
+        if ("voice_entry".equals(recordingContext)) {
+            intent.putExtra("notificationTitle", "Alfred is recording");
+            intent.putExtra("notificationText", "Voice entry recording in progress");
+        } else {
+            intent.putExtra("notificationTitle", "Alfred is recording");
+            intent.putExtra("notificationText", "Meeting recording in progress");
+        }
         ContextCompat.startForegroundService(getContext(), intent);
         JSObject result = new JSObject();
         result.put("path", output.getAbsolutePath());
