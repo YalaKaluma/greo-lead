@@ -3,6 +3,7 @@ package com.AlfredTheChiefOfStaff.myapp;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
 import android.media.MediaRecorder;
@@ -91,11 +92,21 @@ public class MeetingRecordingService extends Service {
     }
 
     private Notification buildNotification(String text) {
+        Intent openAlfred = new Intent(this, MainActivity.class);
+        openAlfred.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent contentIntent = PendingIntent.getActivity(
+                this,
+                0,
+                openAlfred,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle("Meeting in Progress")
+                .setContentTitle(paused ? "Meeting recording paused" : "Alfred is recording")
                 .setContentText(text)
+                .setContentIntent(contentIntent)
                 .setOngoing(true)
+                .setOnlyAlertOnce(true)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build();

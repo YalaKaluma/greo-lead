@@ -18,26 +18,41 @@ import java.io.File;
 
 @CapacitorPlugin(
         name = "MeetingRecorder",
-        permissions = @Permission(alias = "microphone", strings = { Manifest.permission.RECORD_AUDIO })
+        permissions = {
+                @Permission(alias = "microphone", strings = { Manifest.permission.RECORD_AUDIO }),
+                @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS })
+        }
 )
 public class MeetingRecorderPlugin extends Plugin {
-    private PluginCall pendingStart;
-
     @PluginMethod
     public void start(PluginCall call) {
-        if (getPermissionState("microphone") != PermissionState.GRANTED) {
-            pendingStart = call;
-            requestPermissionForAlias("microphone", call, "microphonePermissionCallback");
+        if (getPermissionState("microphone") != PermissionState.GRANTED
+                || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && getPermissionState("notifications") != PermissionState.GRANTED)) {
+            requestPermissionForAliases(
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                            ? new String[] { "microphone", "notifications" }
+                            : new String[] { "microphone" },
+                    call,
+                    "recordingPermissionCallback"
+            );
             return;
         }
         startService(call);
     }
 
     @com.getcapacitor.annotation.PermissionCallback
-    private void microphonePermissionCallback(PluginCall call) {
-        if (getPermissionState("microphone") == PermissionState.GRANTED) startService(call);
-        else call.reject("Microphone permission was denied.");
-        pendingStart = null;
+    private void recordingPermissionCallback(PluginCall call) {
+        if (getPermissionState("microphone") != PermissionState.GRANTED) {
+            call.reject("Microphone permission was denied.");
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && getPermissionState("notifications") != PermissionState.GRANTED) {
+            call.reject("Notification permission is required so Android can clearly show when Alfred is recording.");
+            return;
+        }
+        startService(call);
     }
 
     private void startService(PluginCall call) {
