@@ -55,6 +55,10 @@ TRANSCRIPTION_CHUNK_SECONDS = min(
 T = TypeVar("T")
 
 
+class NoIntelligibleSpeechError(ValueError):
+    """Raised when a valid audio recording contains no transcribable speech."""
+
+
 def _meeting_log(
     level: int,
     event: str,
@@ -868,7 +872,12 @@ def _save_analysis(
 def _mark_processing_failed(meeting_id: int, exc: Exception, stage: str, attempt_id: str) -> None:
     reference = f"MTG-{meeting_id}-{attempt_id}"
     stage_label = stage.replace("_", " ")
-    if isinstance(exc, DBAPIError) and _is_transient_database_error(exc):
+    if isinstance(exc, NoIntelligibleSpeechError):
+        public_error = (
+            "No intelligible speech was detected in this recording. "
+            f"Please try again and speak clearly near the microphone. Reference: {reference}"
+        )
+    elif isinstance(exc, DBAPIError) and _is_transient_database_error(exc):
         public_error = (
             f"A temporary database connection interrupted processing while {stage_label}. "
             f"Your recording is safe; please retry. Reference: {reference}"
@@ -968,6 +977,8 @@ def process_meeting(meeting_id: int) -> None:
                 duration_ms=round((time.monotonic() - stage_started) * 1000),
                 segment_count=len(transcription.get("segments") or []),
             )
+            if not (transcription.get("text") or "").strip():
+                raise NoIntelligibleSpeechError
             stage = "saving transcription"
             stage_started = time.monotonic()
             transcript = _with_fresh_session(
