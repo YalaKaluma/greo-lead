@@ -10,7 +10,7 @@ Use this before a deliberate production release, typically Sunday.
 - [ ] Open or update a PR from `main` into `prod`.
 - [ ] Confirm Production Release CI passes.
 - [ ] Confirm backend tests, frontend tests, i18n check, frontend build, Gitleaks, Bandit, and pip-audit have passed or have documented exceptions.
-- [ ] Run the production migration intentionally with the production `DIRECT_DATABASE_URL`.
+- [ ] If migrations are included, run the `Production DB Migration` GitHub Actions workflow on the PR head branch/ref before merging.
 - [ ] Merge or push to `prod`.
 - [ ] Confirm Railway production deployment succeeds.
 - [ ] Run a production smoke test, including `/api/health`.
@@ -48,5 +48,14 @@ Use this before a deliberate production release, typically Sunday.
 
 ## Production Migration Command
 
+Preferred path: run `.github/workflows/production-db-migration.yml` from GitHub Actions with:
+
+- Branch/ref: the PR head branch, usually `main`
+- `confirm_backup`: `BACKUP_DONE`
+- `target_revision`: `head`
+
+Fallback local command:
+
 ```bash
 DIRECT_DATABASE_URL="postgresql://..." alembic upgrade head
+```

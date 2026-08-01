@@ -46,22 +46,19 @@ npm run build
 Preferred release path:
 
 ```bash
-git checkout prod
-git pull origin prod
-git merge main
-# run prod migration intentionally
-alembic upgrade head
-git push origin prod
-git checkout main
-```
-
-Safer GitHub path:
-
-```bash
 # Open a PR from main to prod
 # Wait for Production Release CI to pass
+# If migrations are included, run the Production DB Migration workflow on the PR head branch
 # Merge the PR
-# Run or confirm the production migration intentionally
+# Confirm Railway production deploys the new prod commit
+```
+
+Legacy local fallback:
+
+```bash
+git checkout main
+git pull origin main
+DIRECT_DATABASE_URL="postgresql://..." alembic upgrade head
 ```
 
 Pushing or merging into `prod` lets Railway deploy production. GitHub Actions does not deploy.
@@ -105,11 +102,11 @@ Do not automatically run production migrations during Railway deploy yet.
 
 Production migrations are manual and deliberate:
 
-```bash
-DIRECT_DATABASE_URL="postgresql://..." alembic upgrade head
-```
+1. Confirm backup/restore readiness.
+2. Run the `Production DB Migration` GitHub Actions workflow on the PR head branch/ref, usually `main`, with `confirm_backup` set to `BACKUP_DONE`.
+3. Confirm the workflow reaches the expected Alembic head.
 
-Run this only after reviewing the migration and confirming backup/restore readiness.
+Use the local `DIRECT_DATABASE_URL="postgresql://..." alembic upgrade head` command only as a fallback when the workflow is unavailable.
 
 Current post-baseline revisions include CTO Director persistence, `tasks.completed_at`, generic notification tables, meeting intelligence persistence, task-date consolidation into `tasks.due_date`, and sponsor-circle contribution fields. Confirm each target environment has applied the same Alembic head before comparing behavior.
 
