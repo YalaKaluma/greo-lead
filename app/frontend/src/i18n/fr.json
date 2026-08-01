@@ -462,5 +462,8 @@
   "meetings.leadership.assessing": "Évaluation de la réunion…",
   "meetings.leadership.reassess": "Réévaluer la réunion",
   "meetings.leadership.assess": "Évaluer cette réunion",
-  "meetings.leadership.additional": "Observations de coaching supplémentaires"
+  "meetings.leadership.additional": "Observations de coaching supplémentaires",
+  "meetings.leadership.historyTitle": "Le retour sur le leadership est disponible pour les réunions passées.",
+  "meetings.leadership.historyHint": "Ouvrez une réunion terminée pour consulter ou générer son évaluation en cinq domaines.",
+  "meetings.leadership.openLatest": "Ouvrir la plus récente"
 }

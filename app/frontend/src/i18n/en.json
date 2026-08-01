@@ -462,5 +462,8 @@
   "meetings.leadership.assessing": "Assessing meeting…",
   "meetings.leadership.reassess": "Reassess meeting",
   "meetings.leadership.assess": "Assess this meeting",
-  "meetings.leadership.additional": "Additional coaching observations"
+  "meetings.leadership.additional": "Additional coaching observations",
+  "meetings.leadership.historyTitle": "Leadership feedback is available for past meetings.",
+  "meetings.leadership.historyHint": "Open any completed meeting to view or generate its five-domain assessment.",
+  "meetings.leadership.openLatest": "Open latest"
 }
