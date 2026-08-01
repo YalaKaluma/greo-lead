@@ -30,6 +30,7 @@ import {
   JourneyProgressReviewTab,
   LeadershipCoachingSessionsTab,
   LeadershipStoryCard,
+  LeadershipTrendsTab,
   LeadershipWheel,
   LeadershipWheelModal,
   MyLeadershipTab,
@@ -693,6 +694,8 @@ export default function MyLeadershipJourney({ apiUrl, userNumber, onNavigate }) 
             nextBelt={journeyNextBelt}
             latestAssessment={latestAssessment}
           />
+        ) : activeJourneyTab === "trends" ? (
+          <LeadershipTrendsTab apiUrl={apiUrl} userNumber={userNumber} />
         ) : activeJourneyTab === "story" ? (
           <div className="grid gap-6 xl:grid-cols-[520px_minmax(0,1fr)]">
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">

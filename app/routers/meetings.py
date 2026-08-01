@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.db import get_db
 from app.models import JourneyGoal, JourneyPerson, JourneyProject, Meeting, MeetingActionItem, MeetingAttendee, MeetingContextNote, MeetingGoalLink, MeetingParticipant, MeetingProjectLink, Task, User
 from app.services.meeting_intelligence_service import answer_meeting_question, process_meeting, reassess_meeting_leadership
+from app.services.leadership_trends_service import get_leadership_trends
 from app.services.journey_support import goal_level_variants, normalize_goal_level
 from app.services.timezone_service import get_user_timezone, today_for_timezone
 
@@ -263,6 +264,11 @@ def list_meeting_action_items(user_number: str, db: Session = Depends(get_db)):
         "owner_name": action.owner_name,
         "created_at": action.created_at,
     } for action, meeting in rows]
+
+
+@router.get("/leadership-trends")
+def leadership_trends(user_number: str, db: Session = Depends(get_db)):
+    return get_leadership_trends(db, user_number, days=90)
 
 
 @router.patch("/action-items/{action_item_id}")

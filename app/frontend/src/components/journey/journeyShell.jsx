@@ -135,6 +135,18 @@ export function JourneyHeaderTabs({
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
             )}
           </button>
+          <button
+            type="button"
+            onClick={() => setActiveJourneyTab("trends")}
+            className={`relative px-2 pb-3 font-medium transition-colors ${
+              activeJourneyTab === "trends" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            Leadership Trends
+            {activeJourneyTab === "trends" && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+            )}
+          </button>
           {!isAssessmentLockedUntilYellow && (
             <button
               type="button"
