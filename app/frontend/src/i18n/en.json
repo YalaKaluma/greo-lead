@@ -446,5 +446,21 @@
   "meetings.tasks.swipeHint": "Swipe right to ignore · Swipe left to add to your to-do list",
   "meetings.tasks.loadError": "Could not load meeting tasks.",
   "meetings.tasks.addError": "Could not add this task to your to-do list.",
-  "meetings.tasks.updateError": "Could not update this meeting task."
+  "meetings.tasks.updateError": "Could not update this meeting task.",
+  "meetings.leadership.title": "Meeting Leadership Feedback",
+  "meetings.leadership.wheelAria": "Five-domain meeting leadership wheel",
+  "meetings.leadership.hub": "Leadership",
+  "meetings.leadership.hubFeedback": "Meeting feedback",
+  "meetings.leadership.domain.Vision": "Vision",
+  "meetings.leadership.domain.People": "People",
+  "meetings.leadership.domain.Prioritize & Execute": "Prioritize|& Execute",
+  "meetings.leadership.domain.Time & Energy": "Time &|Energy",
+  "meetings.leadership.domain.Learning & Development": "Learning &|Development",
+  "meetings.leadership.notAssessed": "Not assessed",
+  "meetings.leadership.emptyDomain": "Generate the assessment to evaluate this domain from the meeting evidence.",
+  "meetings.leadership.disclaimer": "Scores reflect observable behavior in this meeting, not your overall leadership capability.",
+  "meetings.leadership.assessing": "Assessing meeting…",
+  "meetings.leadership.reassess": "Reassess meeting",
+  "meetings.leadership.assess": "Assess this meeting",
+  "meetings.leadership.additional": "Additional coaching observations"
 }

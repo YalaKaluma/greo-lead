@@ -446,5 +446,21 @@
   "meetings.tasks.swipeHint": "Balayez vers la droite pour ignorer · vers la gauche pour ajouter à votre liste",
   "meetings.tasks.loadError": "Impossible de charger les tâches de réunion.",
   "meetings.tasks.addError": "Impossible d’ajouter cette tâche à votre liste.",
-  "meetings.tasks.updateError": "Impossible de mettre à jour cette tâche de réunion."
+  "meetings.tasks.updateError": "Impossible de mettre à jour cette tâche de réunion.",
+  "meetings.leadership.title": "Retour sur votre leadership en réunion",
+  "meetings.leadership.wheelAria": "Roue des cinq domaines de leadership de la réunion",
+  "meetings.leadership.hub": "Leadership",
+  "meetings.leadership.hubFeedback": "Retour de réunion",
+  "meetings.leadership.domain.Vision": "Vision",
+  "meetings.leadership.domain.People": "Équipe",
+  "meetings.leadership.domain.Prioritize & Execute": "Prioriser|et exécuter",
+  "meetings.leadership.domain.Time & Energy": "Temps et|énergie",
+  "meetings.leadership.domain.Learning & Development": "Apprentissage et|développement",
+  "meetings.leadership.notAssessed": "Non évalué",
+  "meetings.leadership.emptyDomain": "Générez l’évaluation pour analyser ce domaine à partir des éléments de la réunion.",
+  "meetings.leadership.disclaimer": "Les scores reflètent les comportements observables pendant cette réunion, et non votre capacité globale de leadership.",
+  "meetings.leadership.assessing": "Évaluation de la réunion…",
+  "meetings.leadership.reassess": "Réévaluer la réunion",
+  "meetings.leadership.assess": "Évaluer cette réunion",
+  "meetings.leadership.additional": "Observations de coaching supplémentaires"
 }
