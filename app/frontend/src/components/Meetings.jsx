@@ -589,6 +589,7 @@ function Section({ title, children, privateLabel = false }) {
 }
 
 function MeetingTaskCard({ task, busy, onAdd, onIgnore, onRename }) {
+  const { t } = useLanguage();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(task.description);
   const [swipe, setSwipe] = useState(0);
@@ -606,18 +607,18 @@ function MeetingTaskCard({ task, busy, onAdd, onIgnore, onRename }) {
     setSwipe(0);
   };
   return <div className="relative overflow-hidden rounded-lg">
-    <div className="absolute inset-y-0 left-0 flex w-32 items-center bg-slate-700 pl-4 text-xs font-semibold text-white sm:hidden">Ignore</div>
-    <div className="absolute inset-y-0 right-0 flex w-32 items-center justify-end bg-blue-600 pr-4 text-xs font-semibold text-white sm:hidden">Add to List</div>
+    <div className="absolute inset-y-0 left-0 flex w-32 items-center bg-slate-700 pl-4 text-xs font-semibold text-white sm:hidden">{t('meetings.tasks.ignore')}</div>
+    <div className="absolute inset-y-0 right-0 flex w-32 items-center justify-end bg-blue-600 pr-4 text-xs font-semibold text-white sm:hidden">{t('meetings.tasks.addToList')}</div>
     <div onTouchStart={(event) => { touchStart.current = event.touches[0].clientX; }} onTouchMove={(event) => { if (touchStart.current != null) setSwipe(Math.max(-120, Math.min(120, event.touches[0].clientX - touchStart.current))); }} onTouchEnd={finishSwipe} style={{ transform: `translateX(${swipe}px)` }} className="relative rounded-lg border-2 border-slate-200 bg-white px-4 py-3 transition-transform hover:border-slate-300">
       <div className="flex items-start gap-3">
-        <button type="button" disabled={busy} onClick={() => onAdd(task)} className="mt-0.5 hidden h-5 w-5 flex-none items-center justify-center rounded-full border-2 border-slate-300 text-xs text-transparent hover:border-blue-600 hover:text-blue-600 sm:flex" aria-label={`Add ${task.description} to the to-do list`}>✓</button>
+        <button type="button" disabled={busy} onClick={() => onAdd(task)} className="mt-0.5 hidden h-5 w-5 flex-none items-center justify-center rounded-full border-2 border-slate-300 text-xs text-transparent hover:border-blue-600 hover:text-blue-600 sm:flex" aria-label={`${t('meetings.tasks.addToList')}: ${task.description}`}>✓</button>
         <div className="min-w-0 flex-1">
           {editing ? <input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} onBlur={finishEdit} onKeyDown={(event) => { if (event.key === 'Enter') finishEdit(); if (event.key === 'Escape') { setTitle(task.description); setEditing(false); } }} className="w-full rounded border border-blue-400 px-2 py-1 font-medium text-slate-900 outline-none ring-2 ring-blue-100" /> : <button type="button" onClick={() => setEditing(true)} className="block w-full text-left font-medium text-slate-900 hover:text-blue-700">{task.description}</button>}
           <p className="mt-1 truncate text-sm text-blue-600" title={task.meeting_title}>{task.meeting_title}</p>
         </div>
         <div className="hidden flex-none gap-2 sm:flex">
-          <button type="button" disabled={busy} onClick={() => onAdd(task)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">Add to List</button>
-          <button type="button" disabled={busy} onClick={() => onIgnore(task)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50">Ignore</button>
+          <button type="button" disabled={busy} onClick={() => onAdd(task)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{t('meetings.tasks.addToList')}</button>
+          <button type="button" disabled={busy} onClick={() => onIgnore(task)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50">{t('meetings.tasks.ignore')}</button>
         </div>
       </div>
     </div>
@@ -625,6 +626,7 @@ function MeetingTaskCard({ task, busy, onAdd, onIgnore, onRename }) {
 }
 
 function MeetingTasks({ apiUrl, userNumber }) {
+  const { t } = useLanguage();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -632,17 +634,17 @@ function MeetingTasks({ apiUrl, userNumber }) {
   useEffect(() => {
     let cancelled = false;
     fetch(`${apiUrl}/api/meetings/action-items/tasks?user_number=${encodeURIComponent(userNumber)}`)
-      .then((response) => { if (!response.ok) throw new Error('Could not load meeting tasks.'); return response.json(); })
+      .then((response) => { if (!response.ok) throw new Error(t('meetings.tasks.loadError')); return response.json(); })
       .then((items) => { if (!cancelled) { setTasks(items); setError(''); } })
       .catch((err) => { if (!cancelled) setError(err.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [apiUrl, userNumber]);
+  }, [apiUrl, userNumber, t]);
   const addToList = async (task) => {
     setBusyId(task.id);
     try {
       const response = await fetch(`${apiUrl}/api/meetings/action-items/${task.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, mode: 'my_todo' }) });
-      if (!response.ok) throw new Error('Could not add this task to your to-do list.');
+      if (!response.ok) throw new Error(t('meetings.tasks.addError'));
       setTasks((items) => items.filter((item) => item.id !== task.id));
     } catch (err) { setError(err.message); } finally { setBusyId(null); }
   };
@@ -650,15 +652,16 @@ function MeetingTasks({ apiUrl, userNumber }) {
     setBusyId(task.id);
     try {
       const response = await fetch(`${apiUrl}/api/meetings/action-items/${task.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, ...changes }) });
-      if (!response.ok) throw new Error('Could not update this meeting task.');
+      if (!response.ok) throw new Error(t('meetings.tasks.updateError'));
       setTasks((items) => changes.ignored ? items.filter((item) => item.id !== task.id) : items.map((item) => item.id === task.id ? { ...item, description: changes.description } : item));
     } catch (err) { setError(err.message); } finally { setBusyId(null); }
   };
-  if (loading) return <p className="mt-10 text-center text-slate-500">Loading meeting tasks…</p>;
-  return <div className="mt-6">{error && <p className="mb-4 rounded-lg bg-red-50 p-4 text-red-700">{error}</p>}{tasks.length === 0 ? <div className="rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center"><h2 className="text-xl font-semibold text-slate-900">You’re all caught up</h2><p className="mt-2 text-slate-600">New commitments collected from your meetings will appear here.</p></div> : <div className="space-y-2">{tasks.map((task) => <MeetingTaskCard key={task.id} task={task} busy={busyId === task.id} onAdd={addToList} onIgnore={(item) => updateTask(item, { ignored: true })} onRename={(item, description) => updateTask(item, { description })} />)}</div>}<p className="mt-4 text-center text-xs text-slate-500 sm:hidden">Swipe right to ignore · Swipe left to add to your to-do list</p></div>;
+  if (loading) return <p className="mt-10 text-center text-slate-500">{t('meetings.tasks.loading')}</p>;
+  return <div className="mt-6">{error && <p className="mb-4 rounded-lg bg-red-50 p-4 text-red-700">{error}</p>}{tasks.length === 0 ? <div className="rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center"><h2 className="text-xl font-semibold text-slate-900">{t('meetings.tasks.emptyTitle')}</h2><p className="mt-2 text-slate-600">{t('meetings.tasks.emptyBody')}</p></div> : <div className="space-y-2">{tasks.map((task) => <MeetingTaskCard key={task.id} task={task} busy={busyId === task.id} onAdd={addToList} onIgnore={(item) => updateTask(item, { ignored: true })} onRename={(item, description) => updateTask(item, { description })} />)}</div>}<p className="mt-4 text-center text-xs text-slate-500 sm:hidden">{t('meetings.tasks.swipeHint')}</p></div>;
 }
 
 export default function Meetings({ apiUrl, userNumber }) {
+  const { t } = useLanguage();
   const [meetings, setMeetings] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -711,7 +714,7 @@ export default function Meetings({ apiUrl, userNumber }) {
   return (
     <div className="mx-auto max-w-7xl p-5 lg:p-10">
       <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-wider text-blue-600">Executive Memory</p><h1 className="mt-1 text-3xl font-semibold text-slate-950">Meetings</h1><p className="mt-2 text-slate-600">Every conversation, decision, and commitment—remembered.</p></div>{activeTab === 'meetings' && <button onClick={() => setShowAdd(true)} className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-blue-700">Add Meeting</button>}</div>
-      <div className="mt-7 border-b border-slate-200"><div className="flex gap-6">{[['meetings', 'Meetings'], ['tasks', 'Tasks']].map(([id, label]) => <button key={id} type="button" onClick={() => setActiveTab(id)} className={`relative px-2 pb-3 font-medium transition-colors ${activeTab === id ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>{label}{activeTab === id && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />}</button>)}</div></div>
+      <div className="mt-7 border-b border-slate-200"><div className="flex gap-6">{[['meetings', t('meetings.tabs.meetings')], ['tasks', t('meetings.tabs.tasks')]].map(([id, label]) => <button key={id} type="button" onClick={() => setActiveTab(id)} className={`relative px-2 pb-3 font-medium transition-colors ${activeTab === id ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>{label}{activeTab === id && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />}</button>)}</div></div>
       {activeTab === 'tasks' ? <MeetingTasks apiUrl={apiUrl} userNumber={userNumber} /> : <>
       <div className="mt-6 flex flex-wrap gap-3 rounded-xl border border-slate-200 bg-white p-4"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search meetings and transcripts" className="min-w-[240px] flex-1 rounded-lg border border-slate-300 px-3 py-2" /><select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2"><option value="">All statuses</option><option value="ready">Ready</option><option value="queued">Queued</option><option value="transcribing">Transcribing</option><option value="analyzing">Analyzing</option><option value="failed">Needs attention</option></select></div>
       {error && <p className="mt-5 rounded-lg bg-red-50 p-4 text-red-700">{error}</p>}

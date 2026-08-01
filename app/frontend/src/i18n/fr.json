@@ -435,5 +435,16 @@
   "meetings.chat.placeholder": "Qu’avons-nous décidé à propos de… ?",
   "meetings.chat.thinking": "Alfred réfléchit…",
   "meetings.chat.submit": "Demander à Alfred",
-  "meetings.chat.error": "Alfred n’a pas pu répondre à cette question."
+  "meetings.chat.error": "Alfred n’a pas pu répondre à cette question.",
+  "meetings.tabs.meetings": "Réunions",
+  "meetings.tabs.tasks": "Tâches",
+  "meetings.tasks.ignore": "Ignorer",
+  "meetings.tasks.addToList": "Ajouter à la liste",
+  "meetings.tasks.loading": "Chargement des tâches de réunion…",
+  "meetings.tasks.emptyTitle": "Tout est à jour",
+  "meetings.tasks.emptyBody": "Les nouveaux engagements recueillis pendant vos réunions apparaîtront ici.",
+  "meetings.tasks.swipeHint": "Balayez vers la droite pour ignorer · vers la gauche pour ajouter à votre liste",
+  "meetings.tasks.loadError": "Impossible de charger les tâches de réunion.",
+  "meetings.tasks.addError": "Impossible d’ajouter cette tâche à votre liste.",
+  "meetings.tasks.updateError": "Impossible de mettre à jour cette tâche de réunion."
 }

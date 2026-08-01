@@ -15,7 +15,11 @@ import {
   wedgePath
 } from "./journeyModel";
 import { StatusPill } from "./journeyEvidence";
-import { AssessmentFeedback, DevelopmentalScoringAccordion } from "./journeyAssessmentDetails";
+import {
+  AssessmentFeedback,
+  DevelopmentalScoringAccordion,
+  DimensionDeepDive,
+} from "./journeyAssessmentDetails";
 
 export function MyLeadershipTab({ dimension, dimensionState, currentBelt, nextBelt, latestAssessment }) {
   const [selectedHeatmapSubdomain, setSelectedHeatmapSubdomain] = useState(null);
