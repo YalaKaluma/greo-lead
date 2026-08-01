@@ -322,6 +322,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
         assistantMessage
       ]);
       setTrends(null);
+      window.dispatchEvent(new Event('alfred-sidebar-counts-refresh'));
 
       setActiveSession(null);
       setCurrentStage(null);

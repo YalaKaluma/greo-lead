@@ -63,7 +63,7 @@ function LeadershipDomainWheel({ assessments = [] }) {
     const innerEnd = polar(end, 58); const innerStart = polar(start, 58);
     return `M ${outerStart.x} ${outerStart.y} A 150 150 0 0 1 ${outerEnd.x} ${outerEnd.y} L ${innerEnd.x} ${innerEnd.y} A 58 58 0 0 0 ${innerStart.x} ${innerStart.y} Z`;
   };
-  return <div className="grid gap-8 xl:grid-cols-[410px_1fr] xl:items-center">
+  return <div className="space-y-8">
     <div>
       <svg viewBox="0 0 360 360" className="mx-auto w-full max-w-[390px]" role="img" aria-label={t('meetings.leadership.wheelAria')}>
         {LEADERSHIP_DOMAIN_ORDER.map((domain, index) => {
@@ -80,7 +80,7 @@ function LeadershipDomainWheel({ assessments = [] }) {
       </svg>
       <div className="mt-2 flex justify-center gap-3 text-xs text-slate-600">{[1, 2, 3, 4, 5].map((score) => <span key={score} className="flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: SCORE_COLORS[score] }} />{score}</span>)}</div>
     </div>
-    <div className="space-y-3">{LEADERSHIP_DOMAIN_ORDER.map((domain) => { const item = byDomain[domain]; return <div key={domain} className="rounded-xl border border-slate-200 bg-slate-50 p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-slate-950">{t(`meetings.leadership.domain.${domain}`).replace('|', ' ')}</h3><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${item?.score ? 'text-slate-950' : 'bg-slate-200 text-slate-600'}`} style={item?.score ? { backgroundColor: SCORE_COLORS[item.score] } : undefined}>{item?.score ? `${item.score}/5` : t('meetings.leadership.notAssessed')}</span></div><p className="mt-2 text-sm leading-6 text-slate-700">{item?.feedback || t('meetings.leadership.emptyDomain')}</p><Evidence>{item?.evidence_excerpt}</Evidence></div>; })}</div>
+    <div className="space-y-3">{LEADERSHIP_DOMAIN_ORDER.map((domain) => { const item = byDomain[domain]; return <div key={domain} className="rounded-xl border border-slate-200 bg-slate-50 p-5"><div className="flex items-center justify-between gap-4"><h3 className="font-semibold text-slate-950">{t(`meetings.leadership.domain.${domain}`).replace('|', ' ')}</h3><span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${item?.score ? 'text-slate-950' : 'bg-slate-200 text-slate-600'}`} style={item?.score ? { backgroundColor: SCORE_COLORS[item.score] } : undefined}>{item?.score ? `${item.score}/5` : t('meetings.leadership.notAssessed')}</span></div><p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-700">{item?.feedback || t('meetings.leadership.emptyDomain')}</p><Evidence>{item?.evidence_excerpt}</Evidence></div>; })}</div>
   </div>;
 }
 

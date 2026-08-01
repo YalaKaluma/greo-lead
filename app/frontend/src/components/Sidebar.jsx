@@ -4,7 +4,7 @@ import { useLanguage } from '../i18n/LanguageContext';
 export default function Sidebar({ apiUrl, userNumber, currentPage, onNavigate, isOpen, isMobile, onClose }) {
 
   const { t } = useLanguage();
-  const [counts, setCounts] = useState({ tasks: 0, habits: 0, meetings: 0 });
+  const [counts, setCounts] = useState({ tasks: 0, habits: 0, meetings: 0, journal: 0 });
 
   const loadCounts = useCallback(() => {
     if (!userNumber) return;
@@ -14,6 +14,7 @@ export default function Sidebar({ apiUrl, userNumber, currentPage, onNavigate, i
         tasks: Number(data.tasks) || 0,
         habits: Number(data.habits) || 0,
         meetings: Number(data.meetings) || 0,
+        journal: Number(data.journal) || 0,
       }))
       .catch(() => {
         // Navigation remains usable if the optional counts cannot be loaded.
@@ -42,7 +43,7 @@ export default function Sidebar({ apiUrl, userNumber, currentPage, onNavigate, i
     { id: 'my-team', label: t('nav.team'), disabled: false },
     { id: 'meetings', label: t('nav.meetings'), disabled: false, count: counts.meetings },
 //    { id: 'coaching-sessions', label: t('nav.coaching'), disabled: false },
-    { id: 'my-journal', label: t('nav.journal'), disabled: false },
+    { id: 'my-journal', label: t('nav.journal'), disabled: false, count: counts.journal },
     // { id: 'my-feedback', label: t('nav.feedback'), disabled: true },
 //    { id: 'my-calendar', label: t('nav.calendar'), disabled: true },
   ];

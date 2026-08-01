@@ -509,7 +509,10 @@ def analyze_leadership_feedback(
                     "mostly reactive, unclear, or inconsistent; 3 = effective baseline with a meaningful improvement "
                     "available; 4 = strong, intentional, and consistent in this meeting; 5 = exceptional and catalytic, "
                     "improving both the outcome and other people's leadership. Calibrate 5 sparingly. If evidence is "
-                    "mixed, score the demonstrated pattern and explain the tension. Keep each domain feedback concise, "
+                    "mixed, score the demonstrated pattern and explain the tension. For every domain, write feedback "
+                    "as three labeled parts in one string: 'Demonstrated: ...\nGrowth edge: ...\nNext meeting: ...'. "
+                    "Demonstrated must cite specific behavior from this meeting, Growth edge must name the highest-value "
+                    "improvement, and Next meeting must propose one observable experiment. Keep each part concise, "
                     "specific, and evidence-based. Produce 5-8 substantive observations when evidence allows, covering: "
                     "What you did well; What could have been stronger; Connection to your leadership context; "
                     "A missed leadership opportunity; and a concrete next-meeting experiment. Explain why each "
@@ -521,7 +524,84 @@ def analyze_leadership_feedback(
             },
         ],
     )
-    return json.loads(response.choices[0].message.content)
+    result = json.loads(response.choices[0].message.content)
+    expected_domains = [
+        "Vision",
+        "People",
+        "Prioritize & Execute",
+        "Time & Energy",
+        "Learning & Development",
+    ]
+    assessments = [item for item in (result.get("domain_assessments") or []) if isinstance(item, dict)]
+    assessments_by_domain = {
+        str(item.get("domain") or "").strip(): item
+        for item in assessments
+        if str(item.get("domain") or "").strip() in expected_domains
+    }
+    required_feedback_parts = ("Demonstrated:", "Growth edge:", "Next meeting:")
+    retry_domains = [
+        domain for domain in expected_domains
+        if domain not in assessments_by_domain
+        or not all(
+            part in str(assessments_by_domain[domain].get("feedback") or "")
+            for part in required_feedback_parts
+        )
+    ]
+
+    if retry_domains:
+        completion = client.chat.completions.create(
+            model=MEETING_COACHING_MODEL,
+            response_format={"type": "json_object"},
+            temperature=0.25,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are Alfred, a rigorous executive coach completing an omitted portion of a meeting "
+                        "assessment. Focus only on the identified user's speaker. Infer leadership behavior from "
+                        "how the leader listens, frames, questions, decides, manages the conversation, and learns; "
+                        "a domain does not need to be named explicitly. Ground every score in transcript evidence."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        "Return JSON only: {domain_assessments:[{domain,score,feedback,evidence_excerpt}]}. "
+                        f"Assess exactly these missing or underdeveloped domains: {', '.join(retry_domains)}. "
+                        "Replace any earlier shallow feedback with a complete assessment. Give a 1-5 score when "
+                        "there is reasonable direct or converging behavioral evidence; use null only if the user's "
+                        "speaker cannot be identified or the transcript is genuinely too sparse. Use the same scale: "
+                        "1 harmful/materially absent when required; 2 reactive or inconsistent; 3 effective baseline; "
+                        "4 strong and intentional; 5 exceptional and catalytic. Feedback must use: "
+                        "'Demonstrated: ...\nGrowth edge: ...\nNext meeting: ...'. Include one strongest transcript "
+                        "excerpt for each domain.\n\n"
+                        f"MEETING ANALYSIS:\n{json.dumps(analysis, default=str)[:20000]}\n\n"
+                        f"TRANSCRIPT:\n{transcript[:120000]}"
+                    ),
+                },
+            ],
+        )
+        completion_result = json.loads(completion.choices[0].message.content)
+        assessments.extend(
+            item for item in (completion_result.get("domain_assessments") or [])
+            if isinstance(item, dict) and item.get("domain") in retry_domains
+        )
+
+    assessments_by_domain = {
+        str(item.get("domain") or "").strip(): item
+        for item in assessments
+        if str(item.get("domain") or "").strip() in expected_domains
+    }
+    result["domain_assessments"] = [
+        assessments_by_domain.get(domain, {
+            "domain": domain,
+            "score": None,
+            "feedback": "The assessment could not establish a reliable signal for this domain.",
+            "evidence_excerpt": None,
+        })
+        for domain in expected_domains
+    ]
+    return result
 
 
 def reassess_meeting_leadership(meeting_id: int) -> None:
