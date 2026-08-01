@@ -1,15 +1,15 @@
 """Track the leadership assessment intelligence version used per meeting.
 
-Revision ID: 20260801_0003
-Revises: 20260801_0002
+Revision ID: 20260801_0004
+Revises: 20260801_0003
 """
 
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = "20260801_0003"
-down_revision = "20260801_0002"
+revision = "20260801_0004"
+down_revision = "20260801_0003"
 branch_labels = None
 depends_on = None
 
