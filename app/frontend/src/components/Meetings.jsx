@@ -49,6 +49,28 @@ function Evidence({ children }) {
   return <blockquote className="mt-2 border-l-2 border-slate-300 pl-3 text-sm italic text-slate-600">“{children}”</blockquote>;
 }
 
+function LeadershipFeedback({ feedback, fallback }) {
+  const text = feedback || fallback;
+  const labels = ['Demonstrated', 'Growth edge', 'Next meeting'];
+  const matches = [...text.matchAll(/(?:^|\n|\s)(Demonstrated|Growth edge|Next meeting):\s*/gi)];
+
+  if (matches.length !== labels.length) {
+    return <p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-700">{text}</p>;
+  }
+
+  const sections = matches.map((match, index) => ({
+    label: match[1],
+    text: text.slice(match.index + match[0].length, matches[index + 1]?.index ?? text.length).trim()
+  }));
+
+  return <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
+    {sections.map((section) => <li key={section.label} className="flex gap-2">
+      <span aria-hidden="true" className="mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />
+      <span><strong className="font-semibold text-slate-900">{section.label}:</strong> {section.text}</span>
+    </li>)}
+  </ul>;
+}
+
 const LEADERSHIP_DOMAIN_ORDER = ['Vision', 'People', 'Prioritize & Execute', 'Time & Energy', 'Learning & Development'];
 const SCORE_COLORS = { 1: '#dc2626', 2: '#f97316', 3: '#facc15', 4: '#6ee7b7', 5: '#16a34a' };
 
@@ -80,7 +102,7 @@ function LeadershipDomainWheel({ assessments = [] }) {
       </svg>
       <div className="mt-2 flex justify-center gap-3 text-xs text-slate-600">{[1, 2, 3, 4, 5].map((score) => <span key={score} className="flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: SCORE_COLORS[score] }} />{score}</span>)}</div>
     </div>
-    <div className="space-y-3">{LEADERSHIP_DOMAIN_ORDER.map((domain) => { const item = byDomain[domain]; return <div key={domain} className="rounded-xl border border-slate-200 bg-slate-50 p-5"><div className="flex items-center justify-between gap-4"><h3 className="font-semibold text-slate-950">{t(`meetings.leadership.domain.${domain}`).replace('|', ' ')}</h3><span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${item?.score ? 'text-slate-950' : 'bg-slate-200 text-slate-600'}`} style={item?.score ? { backgroundColor: SCORE_COLORS[item.score] } : undefined}>{item?.score ? `${item.score}/5` : t('meetings.leadership.notAssessed')}</span></div><p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-700">{item?.feedback || t('meetings.leadership.emptyDomain')}</p><Evidence>{item?.evidence_excerpt}</Evidence></div>; })}</div>
+    <div className="space-y-3">{LEADERSHIP_DOMAIN_ORDER.map((domain) => { const item = byDomain[domain]; return <div key={domain} className="rounded-xl border border-slate-200 bg-slate-50 p-5"><div className="flex items-center justify-between gap-4"><h3 className="font-semibold text-slate-950">{t(`meetings.leadership.domain.${domain}`).replace('|', ' ')}</h3><span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${item?.score ? 'text-slate-950' : 'bg-slate-200 text-slate-600'}`} style={item?.score ? { backgroundColor: SCORE_COLORS[item.score] } : undefined}>{item?.score ? `${item.score}/5` : t('meetings.leadership.notAssessed')}</span></div><LeadershipFeedback feedback={item?.feedback} fallback={t('meetings.leadership.emptyDomain')} /><Evidence>{item?.evidence_excerpt}</Evidence></div>; })}</div>
   </div>;
 }
 
@@ -812,7 +834,6 @@ export default function Meetings({ apiUrl, userNumber }) {
       {activeTab === 'tasks' ? <MeetingTasks apiUrl={apiUrl} userNumber={userNumber} /> : <>
       <div className="mt-6 flex flex-wrap gap-3 rounded-xl border border-slate-200 bg-white p-4"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search meetings and transcripts" className="min-w-[240px] flex-1 rounded-lg border border-slate-300 px-3 py-2" /><select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2"><option value="">All statuses</option><option value="processed">Processed</option><option value="ready">Ready to process</option><option value="queued">Queued</option><option value="transcribing">Transcribing</option><option value="analyzing">Analyzing</option><option value="failed">Needs attention</option></select></div>
       {error && <p className="mt-5 rounded-lg bg-red-50 p-4 text-red-700">{error}</p>}
-      {!loading && meetings.length > 0 && <button type="button" onClick={() => loadDetail(meetings[0].id)} className="mt-5 flex w-full items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-950 hover:bg-amber-100"><span><strong>{t('meetings.leadership.historyTitle')}</strong> {t('meetings.leadership.historyHint')}</span><span className="font-semibold">{t('meetings.leadership.openLatest')} →</span></button>}
       {loading ? <p className="mt-10 text-center text-slate-500">Loading meetings…</p> : meetings.length === 0 ? <div className="mt-10 rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center"><h2 className="text-xl font-semibold">Alfred is ready for your first meeting</h2><p className="mt-2 text-slate-600">Record a conversation, upload audio, or paste your notes.</p><button onClick={() => setShowAdd(true)} className="mt-5 rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white">Add your first meeting</button></div> : (
         <><div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="hidden grid-cols-[2fr_1fr_1fr_100px_130px_110px] gap-4 border-b bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid"><span>Meeting</span><span>Date</span><span>Participants</span><span>Items</span><span>Status</span><span>Actions</span></div>{meetings.map((meeting) => <div key={meeting.id} role="button" tabIndex={0} onClick={() => loadDetail(meeting.id)} onKeyDown={(event) => { if (event.key === 'Enter') loadDetail(meeting.id); }} className="flex w-full cursor-pointer items-center gap-3 border-b border-slate-100 p-3 text-left hover:bg-slate-50 md:grid md:grid-cols-[2fr_1fr_1fr_100px_130px_110px] md:p-5"><div className="min-w-0 flex-1"><p className="truncate font-semibold text-slate-900">{meeting.title}</p><p className="mt-1 hidden line-clamp-2 text-sm text-slate-500 md:block">{meeting.one_line_summary || 'Alfred is preparing this meeting…'}</p></div><p className="flex-none text-xs text-slate-600 md:text-sm">{formatDate(meeting.started_at)}</p><p className="hidden truncate text-sm text-slate-600 sm:block md:block">{meeting.participants.map((p) => p.display_name).join(', ') || '—'}</p><p className="hidden text-sm text-slate-600 md:block">{meeting.action_item_count} actions<br />{meeting.decision_count} decisions</p><span className={`hidden w-fit rounded-full px-3 py-1 text-xs font-semibold md:block ${meeting.status === 'processed' ? 'bg-emerald-100 text-emerald-800' : meeting.processing_status === 'ready' ? 'bg-amber-100 text-amber-800' : meeting.processing_status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>{meeting.status === 'processed' ? 'Processed' : meeting.processing_status === 'ready' ? 'Ready to process' : STATUS_LABELS[meeting.processing_status] || meeting.processing_status}</span><div className="hidden gap-3 text-sm font-semibold md:flex"><button onClick={(event) => { event.stopPropagation(); editFromList(meeting.id); }} className="text-blue-600 hover:underline">Edit</button><button onClick={(event) => { event.stopPropagation(); deleteFromList(meeting); }} className="text-red-600 hover:underline">Delete</button></div></div>)}</div><div className="mt-4 flex items-center justify-between gap-4"><p className="text-sm text-slate-500">{pagination.total} meeting{pagination.total === 1 ? '' : 's'} · Page {page} of {pagination.total_pages}</p><div className="flex gap-2"><button type="button" disabled={page === 1} onClick={() => setPage((value) => value - 1)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Previous</button><button type="button" disabled={page >= pagination.total_pages} onClick={() => setPage((value) => value + 1)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Next</button></div></div></>
       )}
