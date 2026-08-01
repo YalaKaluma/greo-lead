@@ -35,6 +35,7 @@ from app.models import (
     MeetingContextNote,
     MeetingDecision,
     MeetingLeadershipObservation,
+    MeetingLeadershipDomainAssessment,
     MeetingGoalLink,
     MeetingParticipant,
     MeetingProjectLink,
@@ -487,7 +488,19 @@ def analyze_leadership_feedback(
                 "role": "user",
                 "content": (
                     "Return JSON only: {leadership_observations:[{category,observation,confidence,"
-                    "evidence_excerpt}]}. Produce 5-8 substantive observations when evidence allows, covering: "
+                    "evidence_excerpt}],domain_assessments:[{domain,score,feedback,evidence_excerpt}]}. "
+                    "Always return exactly one domain assessment, in this order, for Vision, People, "
+                    "Prioritize & Execute, Time & Energy, and Learning & Development. Score 1-5 only when "
+                    "the identified speaker provides observable evidence; otherwise use null and explain what "
+                    "could not be assessed. Apply these criteria: Vision = purpose, direction, values, and "
+                    "strategic framing; People = listening, inclusion, trust, coaching, delegation, and clarity; "
+                    "Prioritize & Execute = focus, decisions, ownership, follow-through, and handling tradeoffs; "
+                    "Time & Energy = pacing, boundaries, attention, emotional regulation, and sustainable use of "
+                    "time; Learning & Development = curiosity, reflection, feedback-seeking, adaptability, and "
+                    "turning insight into experiments. A 1 is counterproductive behavior, 2 is inconsistent or "
+                    "mostly reactive, 3 is effective baseline behavior, 4 is strong and intentional, and 5 is "
+                    "exceptional, repeatable behavior that develops others. Keep each domain feedback concise, "
+                    "specific, and evidence-based. Produce 5-8 substantive observations when evidence allows, covering: "
                     "What you did well; What could have been stronger; Connection to your leadership context; "
                     "A missed leadership opportunity; and a concrete next-meeting experiment. Explain why each "
                     "point matters for this leader now. Make recommendations behaviorally specific.\n\n"
@@ -499,6 +512,59 @@ def analyze_leadership_feedback(
         ],
     )
     return json.loads(response.choices[0].message.content)
+
+
+def reassess_meeting_leadership(meeting_id: int) -> None:
+    """Generate the current five-domain assessment for an already processed meeting."""
+    attempt_id = uuid.uuid4().hex[:8].upper()
+    snapshot = _with_fresh_session(lambda db: _load_existing_leadership_snapshot(db, meeting_id), "load_leadership_snapshot", meeting_id=meeting_id, attempt_id=attempt_id)
+    if not snapshot["transcript"]:
+        raise ValueError("This meeting has no transcript or notes to assess.")
+    analysis = _with_fresh_session(lambda db: _meeting_payload_for_coaching(db, meeting_id), "load_meeting_analysis", meeting_id=meeting_id, attempt_id=attempt_id)
+    coaching = analyze_leadership_feedback(snapshot["transcript"], analysis, snapshot["leadership_context"])
+    _with_fresh_session(lambda db: _save_leadership_assessment(db, meeting_id, coaching), "save_leadership_assessment", meeting_id=meeting_id, attempt_id=attempt_id)
+
+
+def _load_existing_leadership_snapshot(db: Session, meeting_id: int) -> dict:
+    snapshot = _start_processing(db, meeting_id)
+    if not snapshot:
+        raise ValueError("Meeting was deleted before it could be assessed.")
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    meeting.processing_status = "ready"
+    return snapshot
+
+
+def _meeting_payload_for_coaching(db: Session, meeting_id: int) -> dict:
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise ValueError("Meeting was deleted before it could be assessed.")
+    return {
+        "title": meeting.title,
+        "meeting_type": meeting.meeting_type,
+        "one_line_summary": meeting.one_line_summary,
+        "executive_summary": meeting.executive_summary,
+        "participants": [
+            {"speaker_label": item.speaker_label, "display_name": item.display_name, "is_current_user": item.is_current_user}
+            for item in meeting.participants
+        ],
+        "topics": [{"title": item.title, "summary": item.summary} for item in meeting.topics],
+        "decisions": [{"description": item.description, "evidence_excerpt": item.evidence_excerpt} for item in meeting.decisions],
+        "action_items": [{"description": item.description, "owner_name": item.owner_name, "evidence_excerpt": item.evidence_excerpt} for item in meeting.action_items],
+    }
+
+
+def _save_leadership_assessment(db: Session, meeting_id: int, coaching: dict) -> None:
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise ValueError("Meeting was deleted before its assessment could be saved.")
+    db.query(MeetingLeadershipObservation).filter(MeetingLeadershipObservation.meeting_id == meeting_id).delete(synchronize_session=False)
+    db.query(MeetingLeadershipDomainAssessment).filter(MeetingLeadershipDomainAssessment.meeting_id == meeting_id).delete(synchronize_session=False)
+    _replace_analysis(db, meeting, {
+        "title": meeting.title,
+        "meeting_type": meeting.meeting_type,
+        "leadership_observations": coaching.get("leadership_observations") or [],
+        "domain_assessments": coaching.get("domain_assessments") or [],
+    })
 
 
 def answer_meeting_question(meeting_context: dict, question: str, history: list[dict] | None = None) -> str:
@@ -652,6 +718,19 @@ def _replace_analysis(db: Session, meeting: Meeting, analysis: dict) -> None:
                 observation=text,
                 confidence=_safe_confidence(observation.get("confidence")),
                 evidence_excerpt=observation.get("evidence_excerpt"),
+            ))
+
+    for assessment in analysis.get("domain_assessments") or []:
+        domain = str(assessment.get("domain") or "").strip()
+        if domain:
+            raw_score = assessment.get("score")
+            score = int(raw_score) if isinstance(raw_score, (int, float)) and 1 <= int(raw_score) <= 5 else None
+            db.add(MeetingLeadershipDomainAssessment(
+                meeting_id=meeting.id,
+                domain=domain[:80],
+                score=score,
+                feedback=str(assessment.get("feedback") or "Not enough evidence to assess this domain.").strip(),
+                evidence_excerpt=assessment.get("evidence_excerpt"),
             ))
 
     candidate_people = {
@@ -861,10 +940,14 @@ def _save_analysis(
     db.query(MeetingLeadershipObservation).filter(
         MeetingLeadershipObservation.meeting_id == meeting_id
     ).delete(synchronize_session=False)
+    db.query(MeetingLeadershipDomainAssessment).filter(
+        MeetingLeadershipDomainAssessment.meeting_id == meeting_id
+    ).delete(synchronize_session=False)
     analysis_with_coaching = {
         **analysis,
         "action_items": tasks.get("action_items") or [],
         "leadership_observations": coaching.get("leadership_observations") or [],
+        "domain_assessments": coaching.get("domain_assessments") or [],
     }
     _replace_analysis(db, meeting, analysis_with_coaching)
     meeting.processing_status = "ready"

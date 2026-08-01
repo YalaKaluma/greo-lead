@@ -40,6 +40,7 @@ New production schema changes should be added as Alembic revisions in `alembic/v
 - `alembic/versions/20260614_0002_task_completed_at.py` adds `tasks.completed_at`, backfills completed tasks from `updated_at`, and indexes user/status/completion lookups.
 - `alembic/versions/20260620_0001_notifications.py` adds generic push notification subscriptions, preferences, and delivery logs.
 - The July 2026 Alembic chain adds project and meeting-intelligence persistence, live-meeting attendee/context records, and supporting meeting indexes.
+- `alembic/versions/20260801_0002_meeting_leadership_domains.py` stores evidence-backed five-domain feedback for new and historical meetings.
 - `alembic/versions/20260718_0007_consolidate_task_date.py` migrates calendar scheduling into the required `tasks.due_date` field and removes the duplicate `scheduled_date` column.
 - `alembic/versions/20260718_0008_circle_plot_fields.py` adds current and potential contribution values used by the My Team sponsor-circle plot.
 

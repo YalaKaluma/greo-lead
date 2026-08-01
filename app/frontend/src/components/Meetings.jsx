@@ -49,6 +49,40 @@ function Evidence({ children }) {
   return <blockquote className="mt-2 border-l-2 border-slate-300 pl-3 text-sm italic text-slate-600">“{children}”</blockquote>;
 }
 
+const LEADERSHIP_DOMAIN_ORDER = ['Vision', 'People', 'Prioritize & Execute', 'Time & Energy', 'Learning & Development'];
+const SCORE_COLORS = { 1: '#dc2626', 2: '#f97316', 3: '#facc15', 4: '#6ee7b7', 5: '#16a34a' };
+
+function LeadershipDomainWheel({ assessments = [] }) {
+  const byDomain = Object.fromEntries(assessments.map((item) => [item.domain, item]));
+  const polar = (angle, radius) => ({ x: 150 + radius * Math.cos((angle - 90) * Math.PI / 180), y: 150 + radius * Math.sin((angle - 90) * Math.PI / 180) });
+  const segmentPath = (index) => {
+    const start = index * 72;
+    const end = start + 72;
+    const outerStart = polar(start, 120); const outerEnd = polar(end, 120);
+    const innerEnd = polar(end, 55); const innerStart = polar(start, 55);
+    return `M ${outerStart.x} ${outerStart.y} A 120 120 0 0 1 ${outerEnd.x} ${outerEnd.y} L ${innerEnd.x} ${innerEnd.y} A 55 55 0 0 0 ${innerStart.x} ${innerStart.y} Z`;
+  };
+  return <div className="grid gap-6 lg:grid-cols-[320px_1fr] lg:items-center">
+    <div>
+      <svg viewBox="0 0 300 300" className="mx-auto w-full max-w-[300px]" role="img" aria-label="Five-domain meeting leadership wheel">
+        {LEADERSHIP_DOMAIN_ORDER.map((domain, index) => {
+          const item = byDomain[domain];
+          const label = polar(index * 72 + 36, 89);
+          const words = domain === 'Prioritize & Execute' ? ['Prioritize', '& Execute'] : domain === 'Learning & Development' ? ['Learning &', 'Development'] : domain === 'Time & Energy' ? ['Time &', 'Energy'] : [domain];
+          return <g key={domain}><path d={segmentPath(index)} fill={SCORE_COLORS[item?.score] || '#e2e8f0'} stroke="white" strokeWidth="3" />
+            <text x={label.x} y={label.y - ((words.length - 1) * 7)} textAnchor="middle" className="fill-slate-900 text-[10px] font-semibold">{words.map((word, line) => <tspan key={word} x={label.x} dy={line ? 13 : 0}>{word}</tspan>)}</text>
+          </g>;
+        })}
+        <circle cx="150" cy="150" r="51" fill="#020617" />
+        <text x="150" y="144" textAnchor="middle" className="fill-white text-base font-semibold">Leadership</text>
+        <text x="150" y="164" textAnchor="middle" className="fill-amber-300 text-xs">Meeting feedback</text>
+      </svg>
+      <div className="mt-2 flex justify-center gap-3 text-xs text-slate-600">{[1, 2, 3, 4, 5].map((score) => <span key={score} className="flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: SCORE_COLORS[score] }} />{score}</span>)}</div>
+    </div>
+    <div className="space-y-3">{LEADERSHIP_DOMAIN_ORDER.map((domain) => { const item = byDomain[domain]; return <div key={domain} className="rounded-xl border border-slate-200 bg-slate-50 p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-slate-950">{domain}</h3><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${item?.score ? 'text-slate-950' : 'bg-slate-200 text-slate-600'}`} style={item?.score ? { backgroundColor: SCORE_COLORS[item.score] } : undefined}>{item?.score ? `${item.score}/5` : 'Not assessed'}</span></div><p className="mt-2 text-sm leading-6 text-slate-700">{item?.feedback || 'Generate the assessment to evaluate this domain from the meeting evidence.'}</p><Evidence>{item?.evidence_excerpt}</Evidence></div>; })}</div>
+  </div>;
+}
+
 export function AddMeetingModal({ onClose, onCreated, apiUrl, userNumber, projectId = null }) {
   const [mode, setMode] = useState(null);
   const [title, setTitle] = useState('');
@@ -446,6 +480,7 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
   const [meetingChat, setMeetingChat] = useState([]);
   const [askingAlfred, setAskingAlfred] = useState(false);
   const [meetingChatError, setMeetingChatError] = useState('');
+  const [assessingLeadership, setAssessingLeadership] = useState(false);
   const [contextOptions, setContextOptions] = useState({ current_user: { title: 'Me' }, people: [], goals: [], projects: [] });
   const transcript = meeting.transcript_text || meeting.user_notes || '';
   const visibleTranscript = useMemo(() => {
@@ -511,6 +546,22 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
     }
   };
 
+  const generateLeadershipAssessment = async () => {
+    setAssessingLeadership(true);
+    const response = await fetch(`${apiUrl}/api/meetings/${meeting.id}/leadership-assessment?user_number=${encodeURIComponent(userNumber)}`, { method: 'POST' });
+    if (!response.ok) {
+      setAssessingLeadership(false);
+      window.alert((await response.json()).detail || 'Could not generate the leadership assessment.');
+      return;
+    }
+    let checks = 0;
+    const poll = window.setInterval(() => {
+      onChanged(meeting.id);
+      checks += 1;
+      if (checks >= 8) { window.clearInterval(poll); setAssessingLeadership(false); }
+    }, 4000);
+  };
+
   const deleteMeeting = async () => {
     const confirmed = window.confirm(
       'Delete this meeting permanently? This removes its recording, transcript, summary, decisions, and action items. Tasks already created from this meeting will remain.'
@@ -558,7 +609,10 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
           <Section title="Executive Summary"><div className="whitespace-pre-line text-slate-700">{meeting.executive_summary || 'No summary available.'}</div></Section>
           <Section title={`Decisions (${meeting.decisions.length})`}>{meeting.decisions.length ? <div className="space-y-4">{meeting.decisions.map((decision) => <div key={decision.id}><div className="flex justify-between gap-3"><p className="font-medium text-slate-900">{decision.description}</p><Confidence value={decision.confidence} /></div><Evidence>{decision.evidence_excerpt}</Evidence></div>)}</div> : <p className="text-slate-500">No explicit decisions detected.</p>}</Section>
           <Section title={`Action Items (${meeting.action_items.length})`}>{meeting.action_items.length ? <div className="space-y-4">{meeting.action_items.map((action) => <div key={action.id} className="rounded-xl border border-slate-200 p-4"><div className="flex justify-between gap-3"><div><p className="font-medium">{action.description}</p><p className="mt-1 text-sm text-slate-500">Owner: {action.owner_name || 'Unclear'}{action.due_date ? ` · Due ${action.due_date}` : ''}</p></div><Confidence value={action.confidence} /></div><Evidence>{action.evidence_excerpt}</Evidence>{action.created_task_id ? <div className="mt-3 flex items-center gap-3"><span className="text-sm font-medium text-green-700">Added to tasks</span><button disabled={busyAction === action.id} onClick={() => makeTask(action.id, action.tracking_mode || 'my_todo')} className="text-sm font-semibold text-blue-600 hover:underline">Move to Today</button></div> : action.ignored ? <p className="mt-3 text-sm font-medium text-slate-500">Ignored</p> : <div className="mt-3 flex flex-wrap gap-2"><button disabled={busyAction === action.id} onClick={() => makeTask(action.id, 'my_todo')} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Add to My Todo</button><button disabled={busyAction === action.id} onClick={() => makeTask(action.id, 'follow_up')} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">Track Someone Else</button></div>}</div>)}</div> : <p className="text-slate-500">No action items detected.</p>}</Section>
-          <Section title="Leadership Reflection" privateLabel>{meeting.leadership_observations.length ? <div className="space-y-4">{meeting.leadership_observations.map((item) => <div key={item.id}><p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{item.category}</p><p className="mt-1 text-slate-800">{item.observation}</p><Evidence>{item.evidence_excerpt}</Evidence></div>)}</div> : <p className="text-slate-500">No evidence-backed leadership observations were generated.</p>}</Section>
+          <Section title="Meeting Leadership Feedback" privateLabel><LeadershipDomainWheel assessments={meeting.leadership_domain_assessments || []} />
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4"><p className="text-sm text-slate-500">Scores reflect observable behavior in this meeting, not your overall leadership capability.</p><button onClick={generateLeadershipAssessment} disabled={assessingLeadership} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{assessingLeadership ? 'Assessing meeting…' : meeting.leadership_domain_assessments?.length ? 'Reassess meeting' : 'Assess this meeting'}</button></div>
+            {meeting.leadership_observations.length > 0 && <details className="mt-5 border-t border-slate-200 pt-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">Additional coaching observations</summary><div className="mt-4 space-y-4">{meeting.leadership_observations.map((item) => <div key={item.id}><p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{item.category}</p><p className="mt-1 text-slate-800">{item.observation}</p><Evidence>{item.evidence_excerpt}</Evidence></div>)}</div></details>}
+          </Section>
           {meeting.context_notes?.length > 0 && <Section title="Your Context Notes"><div className="space-y-3">{meeting.context_notes.map((note) => <div key={note.id} className="rounded-lg bg-amber-50 px-4 py-3"><span className="mr-3 font-mono text-xs text-amber-700">{formatTimer(note.elapsed_seconds)}</span><span className="text-slate-800">{note.note_text}</span></div>)}</div></Section>}
           <Section title="Transcript"><input value={transcriptSearch} onChange={(event) => setTranscriptSearch(event.target.value)} placeholder="Search this transcript" className="mb-4 w-full rounded-lg border border-slate-300 px-3 py-2" /><div className="max-h-[32rem] overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-700">{visibleTranscript || 'No matching transcript text.'}</div></Section>
         </div>

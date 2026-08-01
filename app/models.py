@@ -434,6 +434,7 @@ class Meeting(Base):
     decisions = relationship("MeetingDecision", back_populates="meeting", cascade="all, delete-orphan")
     action_items = relationship("MeetingActionItem", back_populates="meeting", cascade="all, delete-orphan")
     leadership_observations = relationship("MeetingLeadershipObservation", back_populates="meeting", cascade="all, delete-orphan")
+    leadership_domain_assessments = relationship("MeetingLeadershipDomainAssessment", back_populates="meeting", cascade="all, delete-orphan")
     goal_links = relationship("MeetingGoalLink", back_populates="meeting", cascade="all, delete-orphan")
     project_links = relationship("MeetingProjectLink", back_populates="meeting", cascade="all, delete-orphan")
     attendees = relationship("MeetingAttendee", back_populates="meeting", cascade="all, delete-orphan")
@@ -556,6 +557,21 @@ class MeetingLeadershipObservation(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     meeting = relationship("Meeting", back_populates="leadership_observations")
+
+
+class MeetingLeadershipDomainAssessment(Base):
+    __tablename__ = "meeting_leadership_domain_assessments"
+    __table_args__ = (UniqueConstraint("meeting_id", "domain", name="uq_meeting_leadership_domain"),)
+
+    id = Column(Integer, primary_key=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True)
+    domain = Column(String(80), nullable=False)
+    score = Column(Integer, nullable=True)
+    feedback = Column(Text, nullable=False)
+    evidence_excerpt = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    meeting = relationship("Meeting", back_populates="leadership_domain_assessments")
 
 
 class MeetingGoalLink(Base):

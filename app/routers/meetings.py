@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
 from app.models import JourneyGoal, JourneyPerson, JourneyProject, Meeting, MeetingActionItem, MeetingAttendee, MeetingContextNote, MeetingGoalLink, MeetingParticipant, MeetingProjectLink, Task, User
-from app.services.meeting_intelligence_service import answer_meeting_question, process_meeting
+from app.services.meeting_intelligence_service import answer_meeting_question, process_meeting, reassess_meeting_leadership
 from app.services.journey_support import goal_level_variants, normalize_goal_level
 from app.services.timezone_service import get_user_timezone, today_for_timezone
 
@@ -107,6 +107,7 @@ def _query(db: Session):
         selectinload(Meeting.decisions),
         selectinload(Meeting.action_items),
         selectinload(Meeting.leadership_observations),
+        selectinload(Meeting.leadership_domain_assessments),
         selectinload(Meeting.transcript_segments),
         selectinload(Meeting.goal_links).selectinload(MeetingGoalLink.goal),
         selectinload(Meeting.project_links).selectinload(MeetingProjectLink.project),
@@ -183,6 +184,7 @@ def _meeting_payload(meeting: Meeting, detail: bool = False):
             "decisions": [{"id": d.id, "description": d.description, "confidence": d.confidence, "evidence_excerpt": d.evidence_excerpt} for d in meeting.decisions],
             "action_items": [{"id": a.id, "description": a.description, "owner_name": a.owner_name, "due_date": a.due_date, "confidence": a.confidence, "evidence_excerpt": a.evidence_excerpt, "created_task_id": a.created_task_id, "tracking_mode": a.tracking_mode, "ignored": bool(a.ignored_at)} for a in meeting.action_items],
             "leadership_observations": [{"id": o.id, "category": o.category, "observation": o.observation, "confidence": o.confidence, "evidence_excerpt": o.evidence_excerpt} for o in meeting.leadership_observations],
+            "leadership_domain_assessments": [{"id": item.id, "domain": item.domain, "score": item.score, "feedback": item.feedback, "evidence_excerpt": item.evidence_excerpt} for item in meeting.leadership_domain_assessments],
             "transcript_segments": [{"id": s.id, "sequence_number": s.sequence_number, "speaker_label": s.speaker_label, "start_seconds": s.start_seconds, "end_seconds": s.end_seconds, "text": s.text} for s in sorted(meeting.transcript_segments, key=lambda item: item.sequence_number)],
             "related_goals": [{"id": link.goal.id, "title": link.goal.title or link.goal.goal_text} for link in meeting.goal_links],
             "related_projects": [{"id": link.project.id, "title": link.project.project_name} for link in meeting.project_links],
@@ -552,6 +554,17 @@ def retry_meeting(meeting_id: int, user_number: str, background_tasks: Backgroun
     db.commit()
     background_tasks.add_task(process_meeting, meeting.id)
     return {"id": meeting.id, "processing_status": "queued"}
+
+
+@router.post("/{meeting_id}/leadership-assessment", status_code=202)
+def create_leadership_assessment(meeting_id: int, user_number: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found.")
+    if meeting.processing_status != "ready":
+        raise HTTPException(status_code=409, detail="The meeting must finish processing before it can be assessed.")
+    background_tasks.add_task(reassess_meeting_leadership, meeting.id)
+    return {"id": meeting.id, "assessment_status": "queued"}
 
 
 @router.post("/upload", status_code=202)
