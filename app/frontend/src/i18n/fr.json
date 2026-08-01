@@ -305,7 +305,8 @@
   "journal.title": "Mon journal de croissance",
   "journey.title": "Système d'exploitation du leadership",
   "journey.map": "Carte du parcours",
-  "journey.assessment": "Évaluation",
+  "journey.assessment": "Évaluation de ceinture",
+  "journey.practiceInsights": "Enseignements de la pratique",
   "journey.coaching": "Coaching",
   "journey.progressReview": "Revue de progression",
   "journey.story.label": "Histoire de leadership",
@@ -466,7 +467,7 @@
   "meetings.leadership.historyTitle": "Le retour sur le leadership est disponible pour les réunions passées.",
   "meetings.leadership.historyHint": "Ouvrez une réunion terminée pour consulter ou générer son évaluation en cinq domaines.",
   "meetings.leadership.openLatest": "Ouvrir la plus récente",
-  "journey.trends.tab": "Tendances de leadership",
+  "journey.trends.tab": "Enseignements du leadership",
   "journey.trends.title": "Tendances de leadership",
   "journey.trends.wheelAria": "Scores moyens de leadership pour les réunions évaluées au cours des 90 derniers jours",
   "journey.trends.hub": "Tendances sur 90 jours",
@@ -484,5 +485,8 @@
   "journey.trends.assessments": "évaluations",
   "journey.trends.strengths": "Forces récurrentes",
   "journey.trends.growthEdges": "Axes de progression récurrents",
-  "journey.trends.nextFocus": "Priorité pour vos prochaines réunions"
+  "journey.trends.nextFocus": "Priorité pour vos prochaines réunions",
+  "journey.trends.refresh": "Actualiser les tendances",
+  "journey.trends.refreshing": "Actualisation…",
+  "journey.trends.lastUpdated": "Dernière mise à jour"
 }

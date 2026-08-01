@@ -574,6 +574,17 @@ class MeetingLeadershipDomainAssessment(Base):
     meeting = relationship("Meeting", back_populates="leadership_domain_assessments")
 
 
+class LeadershipTrendsSnapshot(Base):
+    __tablename__ = "leadership_trends_snapshots"
+
+    id = Column(Integer, primary_key=True)
+    user_number = Column(String, nullable=False, unique=True, index=True)
+    period_days = Column(Integer, nullable=False, default=90)
+    result_payload = Column(JSON, nullable=False)
+    generated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+
 class MeetingGoalLink(Base):
     __tablename__ = "meeting_goal_links"
     __table_args__ = (UniqueConstraint("meeting_id", "goal_id", name="uq_meeting_goal_link"),)

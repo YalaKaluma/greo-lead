@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Meeting
+from app.models import LeadershipTrendsSnapshot, Meeting
 from app.services.meeting_intelligence_service import MEETING_COACHING_MODEL, client
 
 
@@ -20,7 +20,7 @@ DOMAINS = [
 ]
 
 
-def get_leadership_trends(db: Session, user_number: str, days: int = 90) -> dict:
+def _generate_leadership_trends(db: Session, user_number: str, days: int) -> dict:
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     meetings = (
         db.query(Meeting)
@@ -109,3 +109,33 @@ def get_leadership_trends(db: Session, user_number: str, days: int = 90) -> dict
     )
     base["synthesis"] = json.loads(response.choices[0].message.content)
     return base
+
+
+def get_leadership_trends(db: Session, user_number: str, days: int = 90, refresh: bool = False) -> dict:
+    snapshot = db.query(LeadershipTrendsSnapshot).filter(
+        LeadershipTrendsSnapshot.user_number == user_number,
+    ).first()
+    if snapshot and not refresh:
+        return {
+            **snapshot.result_payload,
+            "generated_at": snapshot.generated_at,
+        }
+
+    result = _generate_leadership_trends(db, user_number, days)
+    generated_at = datetime.now(timezone.utc)
+    if snapshot:
+        snapshot.period_days = days
+        snapshot.result_payload = result
+        snapshot.generated_at = generated_at
+        snapshot.updated_at = generated_at
+    else:
+        snapshot = LeadershipTrendsSnapshot(
+            user_number=user_number,
+            period_days=days,
+            result_payload=result,
+            generated_at=generated_at,
+            updated_at=generated_at,
+        )
+        db.add(snapshot)
+    db.commit()
+    return {**result, "generated_at": generated_at}

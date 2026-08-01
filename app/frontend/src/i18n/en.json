@@ -405,7 +405,8 @@
   "journal.title": "My Growth Journal",
   "journey.title": "Leadership Operating System",
   "journey.map": "Journey Map",
-  "journey.assessment": "Assessment",
+  "journey.assessment": "Belt Assessment",
+  "journey.practiceInsights": "Practice Insights",
   "journey.coaching": "Coaching",
   "journey.progressReview": "Progress Review",
   "journey.story.label": "Leadership Story",
@@ -466,7 +467,7 @@
   "meetings.leadership.historyTitle": "Leadership feedback is available for past meetings.",
   "meetings.leadership.historyHint": "Open any completed meeting to view or generate its five-domain assessment.",
   "meetings.leadership.openLatest": "Open latest",
-  "journey.trends.tab": "Leadership Trends",
+  "journey.trends.tab": "Leadership Insights",
   "journey.trends.title": "Leadership Trends",
   "journey.trends.wheelAria": "Average leadership scores across assessed meetings in the last 90 days",
   "journey.trends.hub": "90-day trends",
@@ -484,5 +485,8 @@
   "journey.trends.assessments": "assessments",
   "journey.trends.strengths": "Recurring strengths",
   "journey.trends.growthEdges": "Recurring growth edges",
-  "journey.trends.nextFocus": "Focus for upcoming meetings"
+  "journey.trends.nextFocus": "Focus for upcoming meetings",
+  "journey.trends.refresh": "Refresh trends",
+  "journey.trends.refreshing": "Refreshing…",
+  "journey.trends.lastUpdated": "Last updated"
 }

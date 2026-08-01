@@ -271,6 +271,11 @@ def leadership_trends(user_number: str, db: Session = Depends(get_db)):
     return get_leadership_trends(db, user_number, days=90)
 
 
+@router.post("/leadership-trends/refresh")
+def refresh_leadership_trends(user_number: str, db: Session = Depends(get_db)):
+    return get_leadership_trends(db, user_number, days=90, refresh=True)
+
+
 @router.patch("/action-items/{action_item_id}")
 def update_action_item(action_item_id: int, payload: ActionItemUpdate, db: Session = Depends(get_db)):
     action = db.query(MeetingActionItem).join(Meeting).filter(
