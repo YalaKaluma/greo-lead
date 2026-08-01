@@ -12,7 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
@@ -149,11 +149,17 @@ def _deduplicated_participants(meeting: Meeting) -> list[MeetingParticipant]:
 
 def _meeting_payload(meeting: Meeting, detail: bool = False):
     participants = _deduplicated_participants(meeting)
+    is_processed = meeting.processing_status == "ready" and all(
+        action.created_task_id is not None or action.ignored_at is not None
+        for action in meeting.action_items
+    )
     payload = {
         "id": meeting.id,
         "title": meeting.title,
         "source_type": meeting.source_type,
         "processing_status": meeting.processing_status,
+        "status": "processed" if is_processed else meeting.processing_status,
+        "is_processed": is_processed,
         "processing_error": meeting.processing_error,
         "meeting_type": meeting.meeting_type,
         "started_at": meeting.started_at,
@@ -175,7 +181,7 @@ def _meeting_payload(meeting: Meeting, detail: bool = False):
             "transcript_text": meeting.transcript_text,
             "topics": [{"id": t.id, "title": t.title, "summary": t.summary} for t in sorted(meeting.topics, key=lambda item: item.sequence_number)],
             "decisions": [{"id": d.id, "description": d.description, "confidence": d.confidence, "evidence_excerpt": d.evidence_excerpt} for d in meeting.decisions],
-            "action_items": [{"id": a.id, "description": a.description, "owner_name": a.owner_name, "due_date": a.due_date, "confidence": a.confidence, "evidence_excerpt": a.evidence_excerpt, "created_task_id": a.created_task_id, "tracking_mode": a.tracking_mode} for a in meeting.action_items],
+            "action_items": [{"id": a.id, "description": a.description, "owner_name": a.owner_name, "due_date": a.due_date, "confidence": a.confidence, "evidence_excerpt": a.evidence_excerpt, "created_task_id": a.created_task_id, "tracking_mode": a.tracking_mode, "ignored": bool(a.ignored_at)} for a in meeting.action_items],
             "leadership_observations": [{"id": o.id, "category": o.category, "observation": o.observation, "confidence": o.confidence, "evidence_excerpt": o.evidence_excerpt} for o in meeting.leadership_observations],
             "transcript_segments": [{"id": s.id, "sequence_number": s.sequence_number, "speaker_label": s.speaker_label, "start_seconds": s.start_seconds, "end_seconds": s.end_seconds, "text": s.text} for s in sorted(meeting.transcript_segments, key=lambda item: item.sequence_number)],
             "related_goals": [{"id": link.goal.id, "title": link.goal.title or link.goal.goal_text} for link in meeting.goal_links],
@@ -196,13 +202,25 @@ def list_meetings(
     participant_id: Optional[int] = None,
     goal_id: Optional[int] = None,
     project_id: Optional[int] = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=20),
     db: Session = Depends(get_db),
 ):
     query = _query(db).filter(Meeting.user_number == user_number)
     if search:
         pattern = f"%{search.strip()}%"
         query = query.filter(or_(Meeting.title.ilike(pattern), Meeting.one_line_summary.ilike(pattern), Meeting.transcript_text.ilike(pattern)))
-    if status:
+    if status == "processed":
+        query = query.filter(
+            Meeting.processing_status == "ready",
+            ~Meeting.action_items.any(and_(MeetingActionItem.created_task_id.is_(None), MeetingActionItem.ignored_at.is_(None))),
+        )
+    elif status == "ready":
+        query = query.filter(
+            Meeting.processing_status == "ready",
+            Meeting.action_items.any(and_(MeetingActionItem.created_task_id.is_(None), MeetingActionItem.ignored_at.is_(None))),
+        )
+    elif status:
         query = query.filter(Meeting.processing_status == status)
     if meeting_type:
         query = query.filter(Meeting.meeting_type == meeting_type)
@@ -217,8 +235,15 @@ def list_meetings(
     if project_id:
         query = query.join(MeetingProjectLink).filter(MeetingProjectLink.project_id == project_id)
     query = query.distinct()
-    meetings = query.order_by(Meeting.started_at.desc().nullslast(), Meeting.created_at.desc()).limit(250).all()
-    return [_meeting_payload(meeting) for meeting in meetings]
+    total = query.count()
+    meetings = query.order_by(Meeting.started_at.desc().nullslast(), Meeting.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    return {
+        "items": [_meeting_payload(meeting) for meeting in meetings],
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": max(1, (total + page_size - 1) // page_size),
+    }
 
 
 @router.get("/action-items/tasks")
