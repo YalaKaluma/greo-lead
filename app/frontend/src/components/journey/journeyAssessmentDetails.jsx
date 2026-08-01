@@ -1,5 +1,15 @@
 import React from "react";
-import { DIMENSIONS } from "./journeyModel";
+import { DIMENSIONS, HEATMAP_COLORS, HEATMAP_TEXT } from "./journeyModel";
+
+function heatmapColor(score) {
+  const value = Math.max(1, Math.min(5, Number(score) || 1));
+  return HEATMAP_COLORS[value] || "#E5E7EB";
+}
+
+function heatmapTextColor(score) {
+  const value = Math.max(1, Math.min(5, Number(score) || 1));
+  return HEATMAP_TEXT[value] || "#111827";
+}
 
 function AssessmentScores({ scores }) {
   if (!scores || Object.keys(scores).length === 0) return null;
