@@ -261,8 +261,7 @@ export function AssessmentFeedback({ title, feedback }) {
   );
 }
 
-export function DimensionDeepDive({ dimension, dimensionState, belt, nextBelt, latestAssessment }) {
-  const assessment = latestAssessment ? directAssessmentCopy(latestAssessment) : null;
+export function DimensionDeepDive({ dimension, dimensionState, belt, nextBelt, assessment }) {
   const profile = assessment?.leadership_profile || {};
   const headline = profile.headline || "Your leadership style is still emerging";
   const description = profile.description || dimensionState.assessment;

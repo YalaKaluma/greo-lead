@@ -34,7 +34,7 @@ export function MyLeadershipTab({ dimension, dimensionState, currentBelt, nextBe
         dimensionState={dimensionState}
         belt={currentBelt}
         nextBelt={nextBelt}
-        latestAssessment={latestAssessment}
+        assessment={assessment}
       />
 
       {wheelScores ? (
