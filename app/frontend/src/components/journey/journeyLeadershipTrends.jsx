@@ -98,8 +98,8 @@ export function LeadershipTrendsTab({ apiUrl, userNumber }) {
       {data.synthesis?.productive_tension && <div className="rounded-xl border border-violet-200 bg-violet-50 p-5"><h3 className="font-semibold text-violet-950">{t('journey.trends.tension')}</h3><p className="mt-2 text-sm leading-6 text-violet-950">{data.synthesis.productive_tension}</p></div>}
     </div>}
 
-    <div className="grid gap-6 xl:grid-cols-[460px_minmax(0,1fr)] xl:items-start">
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><TrendsWheel averages={data.domain_averages || []} /></div>
+    <div className="space-y-6">
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm"><TrendsWheel averages={data.domain_averages || []} /></div>
       <div className="space-y-3">{DOMAINS.map((domain) => {
         const average = data.domain_averages?.find((item) => item.domain === domain);
         const insight = insights[domain];
