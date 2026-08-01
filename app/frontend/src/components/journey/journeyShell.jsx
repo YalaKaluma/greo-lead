@@ -142,7 +142,7 @@ export function JourneyHeaderTabs({
               activeJourneyTab === "trends" ? "text-blue-600" : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            Leadership Trends
+            {t('journey.trends.tab')}
             {activeJourneyTab === "trends" && (
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
             )}

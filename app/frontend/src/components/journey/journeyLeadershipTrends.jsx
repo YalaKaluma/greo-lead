@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import { useLanguage } from "../../i18n/LanguageContext";
 
 const DOMAINS = ['Vision', 'People', 'Prioritize & Execute', 'Time & Energy', 'Learning & Development'];
 const SCORE_COLORS = { 1: '#dc2626', 2: '#f97316', 3: '#facc15', 4: '#6ee7b7', 5: '#16a34a' };
 
 function TrendsWheel({ averages }) {
+  const { t } = useLanguage();
   const byDomain = Object.fromEntries(averages.map((item) => [item.domain, item]));
   const polar = (angle, radius) => ({ x: 180 + radius * Math.cos((angle - 90) * Math.PI / 180), y: 180 + radius * Math.sin((angle - 90) * Math.PI / 180) });
   const segmentPath = (index) => {
@@ -16,11 +18,11 @@ function TrendsWheel({ averages }) {
   };
 
   return <div>
-    <svg viewBox="0 0 360 360" className="mx-auto w-full max-w-[430px]" role="img" aria-label="Average leadership scores across assessed meetings in the last 90 days">
+    <svg viewBox="0 0 360 360" className="mx-auto w-full max-w-[430px]" role="img" aria-label={t('journey.trends.wheelAria')}>
       {DOMAINS.map((domain, index) => {
         const item = byDomain[domain];
         const label = polar(index * 72 + 36, 108);
-        const words = domain === 'Prioritize & Execute' ? ['Prioritize', '& Execute'] : domain === 'Learning & Development' ? ['Learning &', 'Development'] : domain === 'Time & Energy' ? ['Time &', 'Energy'] : [domain];
+        const words = t(`meetings.leadership.domain.${domain}`).split('|');
         const color = item?.average_score ? SCORE_COLORS[Math.round(item.average_score)] : '#e2e8f0';
         return <g key={domain}>
           <path d={segmentPath(index)} fill={color} stroke="white" strokeWidth="3" />
@@ -30,14 +32,15 @@ function TrendsWheel({ averages }) {
         </g>;
       })}
       <circle cx="180" cy="180" r="53" fill="#020617" />
-      <text x="180" y="174" textAnchor="middle" className="fill-white text-[15px] font-semibold">Leadership</text>
-      <text x="180" y="194" textAnchor="middle" className="fill-amber-300 text-[11px]">90-day trends</text>
+      <text x="180" y="174" textAnchor="middle" className="fill-white text-[15px] font-semibold">{t('meetings.leadership.hub')}</text>
+      <text x="180" y="194" textAnchor="middle" className="fill-amber-300 text-[11px]">{t('journey.trends.hub')}</text>
     </svg>
     <div className="mt-2 flex justify-center gap-3 text-xs text-slate-600">{[1, 2, 3, 4, 5].map((score) => <span key={score} className="flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: SCORE_COLORS[score] }} />{score}</span>)}</div>
   </div>;
 }
 
 export function LeadershipTrendsTab({ apiUrl, userNumber }) {
+  const { t } = useLanguage();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -50,24 +53,24 @@ export function LeadershipTrendsTab({ apiUrl, userNumber }) {
       .then((response) => { if (!cancelled) setData(response.data); })
       .catch((requestError) => {
         console.error('Failed to load leadership trends', requestError);
-        if (!cancelled) setError('Alfred could not synthesize your meeting feedback right now. Please try again later.');
+        if (!cancelled) setError(t('journey.trends.loadError'));
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [apiUrl, userNumber]);
+  }, [apiUrl, userNumber, t]);
 
   const patterns = useMemo(() => Object.fromEntries((data?.synthesis?.domain_synthesis || []).map((item) => [item.domain, item.pattern])), [data]);
 
-  if (loading) return <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-600 shadow-sm">Synthesizing your leadership patterns across the last 90 days…</div>;
+  if (loading) return <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-600 shadow-sm">{t('journey.trends.loading')}</div>;
   if (error) return <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">{error}</div>;
-  if (!data?.meeting_count) return <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm"><h2 className="text-xl font-semibold text-slate-950">Leadership Trends</h2><p className="mx-auto mt-2 max-w-2xl text-slate-600">Your 90-day view will appear once at least one meeting has a completed five-domain leadership assessment.</p></div>;
+  if (!data?.meeting_count) return <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm"><h2 className="text-xl font-semibold text-slate-950">{t('journey.trends.title')}</h2><p className="mx-auto mt-2 max-w-2xl text-slate-600">{t('journey.trends.empty')}</p></div>;
 
   return <section className="space-y-6">
     <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">Last 90 days</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">{t('journey.trends.period')}</p>
       <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
-        <div><h2 className="text-2xl font-semibold text-slate-950">Leadership Trends</h2><p className="mt-1 text-sm text-slate-600">Based on {data.meeting_count} assessed {data.meeting_count === 1 ? 'meeting' : 'meetings'}. No individual meeting was reassessed.</p></div>
-        <span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-700">90-day average</span>
+        <div><h2 className="text-2xl font-semibold text-slate-950">{t('journey.trends.title')}</h2><p className="mt-1 text-sm text-slate-600">{t('journey.trends.basedOn')} {data.meeting_count} {data.meeting_count === 1 ? t('journey.trends.meeting') : t('journey.trends.meetings')}. {t('journey.trends.noReassessment')}</p></div>
+        <span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-700">{t('journey.trends.average')}</span>
       </div>
       <p className="mt-5 max-w-4xl text-base leading-7 text-slate-700">{data.synthesis?.overall_summary}</p>
     </div>
@@ -77,17 +80,17 @@ export function LeadershipTrendsTab({ apiUrl, userNumber }) {
       <div className="space-y-3">{DOMAINS.map((domain) => {
         const average = data.domain_averages?.find((item) => item.domain === domain);
         return <div key={domain} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-slate-950">{domain}</h3><span className="shrink-0 rounded-full px-2.5 py-1 text-xs font-bold text-slate-950" style={{ backgroundColor: average?.average_score ? SCORE_COLORS[Math.round(average.average_score)] : '#e2e8f0' }}>{average?.average_score != null ? `${average.average_score}/5` : 'Not assessed'}</span></div>
-          <p className="mt-2 text-sm leading-6 text-slate-700">{patterns[domain] || 'There is not yet enough saved feedback to identify a broader pattern in this domain.'}</p>
-          {average?.assessment_count > 0 && <p className="mt-2 text-xs text-slate-500">Based on {average.assessment_count} {average.assessment_count === 1 ? 'assessment' : 'assessments'}</p>}
+          <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-slate-950">{t(`meetings.leadership.domain.${domain}`).replace('|', ' ')}</h3><span className="shrink-0 rounded-full px-2.5 py-1 text-xs font-bold text-slate-950" style={{ backgroundColor: average?.average_score ? SCORE_COLORS[Math.round(average.average_score)] : '#e2e8f0' }}>{average?.average_score != null ? `${average.average_score}/5` : t('meetings.leadership.notAssessed')}</span></div>
+          <p className="mt-2 text-sm leading-6 text-slate-700">{patterns[domain] || t('journey.trends.insufficientDomain')}</p>
+          {average?.assessment_count > 0 && <p className="mt-2 text-xs text-slate-500">{t('journey.trends.basedOn')} {average.assessment_count} {average.assessment_count === 1 ? t('journey.trends.assessment') : t('journey.trends.assessments')}</p>}
         </div>;
       })}</div>
     </div>
 
     <div className="grid gap-4 lg:grid-cols-2">
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5"><h3 className="font-semibold text-emerald-950">Recurring strengths</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-emerald-950">{(data.synthesis?.recurring_strengths || []).map((item) => <li key={item} className="flex gap-2"><span aria-hidden="true">•</span><span>{item}</span></li>)}</ul></div>
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-5"><h3 className="font-semibold text-amber-950">Recurring growth edges</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-amber-950">{(data.synthesis?.recurring_growth_edges || []).map((item) => <li key={item} className="flex gap-2"><span aria-hidden="true">•</span><span>{item}</span></li>)}</ul></div>
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5"><h3 className="font-semibold text-emerald-950">{t('journey.trends.strengths')}</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-emerald-950">{(data.synthesis?.recurring_strengths || []).map((item) => <li key={item} className="flex gap-2"><span aria-hidden="true">•</span><span>{item}</span></li>)}</ul></div>
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-5"><h3 className="font-semibold text-amber-950">{t('journey.trends.growthEdges')}</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-amber-950">{(data.synthesis?.recurring_growth_edges || []).map((item) => <li key={item} className="flex gap-2"><span aria-hidden="true">•</span><span>{item}</span></li>)}</ul></div>
     </div>
-    <div className="rounded-xl bg-slate-950 p-6 text-white shadow-sm"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-300">Focus for upcoming meetings</p><p className="mt-3 max-w-4xl text-base leading-7 text-slate-100">{data.synthesis?.next_focus}</p></div>
+    <div className="rounded-xl bg-slate-950 p-6 text-white shadow-sm"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-300">{t('journey.trends.nextFocus')}</p><p className="mt-3 max-w-4xl text-base leading-7 text-slate-100">{data.synthesis?.next_focus}</p></div>
   </section>;
 }
