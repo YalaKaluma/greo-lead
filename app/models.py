@@ -537,6 +537,7 @@ class MeetingActionItem(Base):
     transcript_segment_id = Column(Integer, ForeignKey("meeting_transcript_segments.id", ondelete="SET NULL"), nullable=True)
     created_task_id = Column(Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
     tracking_mode = Column(String(30), nullable=True)  # my_todo, follow_up
+    ignored_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     meeting = relationship("Meeting", back_populates="action_items")

@@ -588,6 +588,76 @@ function Section({ title, children, privateLabel = false }) {
   return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-semibold text-slate-950">{title}</h2>{privateLabel && <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">Private</span>}</div>{children}</section>;
 }
 
+function MeetingTaskCard({ task, busy, onAdd, onIgnore, onRename }) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(task.description);
+  const [swipe, setSwipe] = useState(0);
+  const touchStart = useRef(null);
+  const finishEdit = async () => {
+    const next = title.trim();
+    if (next && next !== task.description) await onRename(task, next);
+    if (!next) setTitle(task.description);
+    setEditing(false);
+  };
+  const finishSwipe = () => {
+    if (swipe >= 90) onIgnore(task);
+    if (swipe <= -90) onAdd(task);
+    touchStart.current = null;
+    setSwipe(0);
+  };
+  return <div className="relative overflow-hidden rounded-lg">
+    <div className="absolute inset-y-0 left-0 flex w-32 items-center bg-slate-700 pl-4 text-xs font-semibold text-white sm:hidden">Ignore</div>
+    <div className="absolute inset-y-0 right-0 flex w-32 items-center justify-end bg-blue-600 pr-4 text-xs font-semibold text-white sm:hidden">Add to List</div>
+    <div onTouchStart={(event) => { touchStart.current = event.touches[0].clientX; }} onTouchMove={(event) => { if (touchStart.current != null) setSwipe(Math.max(-120, Math.min(120, event.touches[0].clientX - touchStart.current))); }} onTouchEnd={finishSwipe} style={{ transform: `translateX(${swipe}px)` }} className="relative rounded-lg border-2 border-slate-200 bg-white px-4 py-3 transition-transform hover:border-slate-300">
+      <div className="flex items-start gap-3">
+        <button type="button" disabled={busy} onClick={() => onAdd(task)} className="mt-0.5 hidden h-5 w-5 flex-none items-center justify-center rounded-full border-2 border-slate-300 text-xs text-transparent hover:border-blue-600 hover:text-blue-600 sm:flex" aria-label={`Add ${task.description} to the to-do list`}>✓</button>
+        <div className="min-w-0 flex-1">
+          {editing ? <input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} onBlur={finishEdit} onKeyDown={(event) => { if (event.key === 'Enter') finishEdit(); if (event.key === 'Escape') { setTitle(task.description); setEditing(false); } }} className="w-full rounded border border-blue-400 px-2 py-1 font-medium text-slate-900 outline-none ring-2 ring-blue-100" /> : <button type="button" onClick={() => setEditing(true)} className="block w-full text-left font-medium text-slate-900 hover:text-blue-700">{task.description}</button>}
+          <p className="mt-1 truncate text-sm text-blue-600" title={task.meeting_title}>{task.meeting_title}</p>
+        </div>
+        <div className="hidden flex-none gap-2 sm:flex">
+          <button type="button" disabled={busy} onClick={() => onAdd(task)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">Add to List</button>
+          <button type="button" disabled={busy} onClick={() => onIgnore(task)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50">Ignore</button>
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+function MeetingTasks({ apiUrl, userNumber }) {
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${apiUrl}/api/meetings/action-items/tasks?user_number=${encodeURIComponent(userNumber)}`)
+      .then((response) => { if (!response.ok) throw new Error('Could not load meeting tasks.'); return response.json(); })
+      .then((items) => { if (!cancelled) { setTasks(items); setError(''); } })
+      .catch((err) => { if (!cancelled) setError(err.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [apiUrl, userNumber]);
+  const addToList = async (task) => {
+    setBusyId(task.id);
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/action-items/${task.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, mode: 'my_todo' }) });
+      if (!response.ok) throw new Error('Could not add this task to your to-do list.');
+      setTasks((items) => items.filter((item) => item.id !== task.id));
+    } catch (err) { setError(err.message); } finally { setBusyId(null); }
+  };
+  const updateTask = async (task, changes) => {
+    setBusyId(task.id);
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/action-items/${task.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, ...changes }) });
+      if (!response.ok) throw new Error('Could not update this meeting task.');
+      setTasks((items) => changes.ignored ? items.filter((item) => item.id !== task.id) : items.map((item) => item.id === task.id ? { ...item, description: changes.description } : item));
+    } catch (err) { setError(err.message); } finally { setBusyId(null); }
+  };
+  if (loading) return <p className="mt-10 text-center text-slate-500">Loading meeting tasks…</p>;
+  return <div className="mt-6">{error && <p className="mb-4 rounded-lg bg-red-50 p-4 text-red-700">{error}</p>}{tasks.length === 0 ? <div className="rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center"><h2 className="text-xl font-semibold text-slate-900">You’re all caught up</h2><p className="mt-2 text-slate-600">New commitments collected from your meetings will appear here.</p></div> : <div className="space-y-2">{tasks.map((task) => <MeetingTaskCard key={task.id} task={task} busy={busyId === task.id} onAdd={addToList} onIgnore={(item) => updateTask(item, { ignored: true })} onRename={(item, description) => updateTask(item, { description })} />)}</div>}<p className="mt-4 text-center text-xs text-slate-500 sm:hidden">Swipe right to ignore · Swipe left to add to your to-do list</p></div>;
+}
+
 export default function Meetings({ apiUrl, userNumber }) {
   const [meetings, setMeetings] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -597,6 +667,7 @@ export default function Meetings({ apiUrl, userNumber }) {
   const [status, setStatus] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState(null);
+  const [activeTab, setActiveTab] = useState('meetings');
 
   const loadMeetings = async () => {
     try {
@@ -639,14 +710,17 @@ export default function Meetings({ apiUrl, userNumber }) {
 
   return (
     <div className="mx-auto max-w-7xl p-5 lg:p-10">
-      <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-wider text-blue-600">Executive Memory</p><h1 className="mt-1 text-3xl font-semibold text-slate-950">Meetings</h1><p className="mt-2 text-slate-600">Every conversation, decision, and commitment—remembered.</p></div><button onClick={() => setShowAdd(true)} className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-blue-700">Add Meeting</button></div>
-      <div className="mt-7 flex flex-wrap gap-3 rounded-xl border border-slate-200 bg-white p-4"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search meetings and transcripts" className="min-w-[240px] flex-1 rounded-lg border border-slate-300 px-3 py-2" /><select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2"><option value="">All statuses</option><option value="ready">Ready</option><option value="queued">Queued</option><option value="transcribing">Transcribing</option><option value="analyzing">Analyzing</option><option value="failed">Needs attention</option></select></div>
+      <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-wider text-blue-600">Executive Memory</p><h1 className="mt-1 text-3xl font-semibold text-slate-950">Meetings</h1><p className="mt-2 text-slate-600">Every conversation, decision, and commitment—remembered.</p></div>{activeTab === 'meetings' && <button onClick={() => setShowAdd(true)} className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-blue-700">Add Meeting</button>}</div>
+      <div className="mt-7 border-b border-slate-200"><div className="flex gap-6">{[['meetings', 'Meetings'], ['tasks', 'Tasks']].map(([id, label]) => <button key={id} type="button" onClick={() => setActiveTab(id)} className={`relative px-2 pb-3 font-medium transition-colors ${activeTab === id ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>{label}{activeTab === id && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />}</button>)}</div></div>
+      {activeTab === 'tasks' ? <MeetingTasks apiUrl={apiUrl} userNumber={userNumber} /> : <>
+      <div className="mt-6 flex flex-wrap gap-3 rounded-xl border border-slate-200 bg-white p-4"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search meetings and transcripts" className="min-w-[240px] flex-1 rounded-lg border border-slate-300 px-3 py-2" /><select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2"><option value="">All statuses</option><option value="ready">Ready</option><option value="queued">Queued</option><option value="transcribing">Transcribing</option><option value="analyzing">Analyzing</option><option value="failed">Needs attention</option></select></div>
       {error && <p className="mt-5 rounded-lg bg-red-50 p-4 text-red-700">{error}</p>}
       {loading ? <p className="mt-10 text-center text-slate-500">Loading meetings…</p> : meetings.length === 0 ? <div className="mt-10 rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center"><h2 className="text-xl font-semibold">Alfred is ready for your first meeting</h2><p className="mt-2 text-slate-600">Record a conversation, upload audio, or paste your notes.</p><button onClick={() => setShowAdd(true)} className="mt-5 rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white">Add your first meeting</button></div> : (
         <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="hidden grid-cols-[2fr_1fr_1fr_100px_130px_110px] gap-4 border-b bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid"><span>Meeting</span><span>Date</span><span>Participants</span><span>Items</span><span>Status</span><span>Actions</span></div>{meetings.map((meeting) => <div key={meeting.id} role="button" tabIndex={0} onClick={() => loadDetail(meeting.id)} onKeyDown={(event) => { if (event.key === 'Enter') loadDetail(meeting.id); }} className="flex w-full cursor-pointer items-center gap-3 border-b border-slate-100 p-3 text-left hover:bg-slate-50 md:grid md:grid-cols-[2fr_1fr_1fr_100px_130px_110px] md:p-5"><div className="min-w-0 flex-1"><p className="truncate font-semibold text-slate-900">{meeting.title}</p><p className="mt-1 hidden line-clamp-2 text-sm text-slate-500 md:block">{meeting.one_line_summary || 'Alfred is preparing this meeting…'}</p></div><p className="flex-none text-xs text-slate-600 md:text-sm">{formatDate(meeting.started_at)}</p><p className="hidden truncate text-sm text-slate-600 sm:block md:block">{meeting.participants.map((p) => p.display_name).join(', ') || '—'}</p><p className="hidden text-sm text-slate-600 md:block">{meeting.action_item_count} actions<br />{meeting.decision_count} decisions</p><span className={`hidden w-fit rounded-full px-3 py-1 text-xs font-semibold md:block ${meeting.processing_status === 'ready' ? 'bg-green-100 text-green-800' : meeting.processing_status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>{STATUS_LABELS[meeting.processing_status] || meeting.processing_status}</span><div className="hidden gap-3 text-sm font-semibold md:flex"><button onClick={(event) => { event.stopPropagation(); editFromList(meeting.id); }} className="text-blue-600 hover:underline">Edit</button><button onClick={(event) => { event.stopPropagation(); deleteFromList(meeting); }} className="text-red-600 hover:underline">Delete</button></div></div>)}</div>
       )}
       {showAdd && <AddMeetingModal apiUrl={apiUrl} userNumber={userNumber} onClose={() => setShowAdd(false)} onCreated={({ id }) => { setShowAdd(false); loadMeetings(); loadDetail(id); }} />}
       {editingMeeting && <EditMeetingModal meeting={editingMeeting} apiUrl={apiUrl} userNumber={userNumber} onClose={() => setEditingMeeting(null)} onSaved={() => { setEditingMeeting(null); loadMeetings(); }} />}
+      </>}
     </div>
   );
 }

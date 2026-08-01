@@ -424,13 +424,16 @@ def analyze_transcript(
                     "You extract evidence-backed executive meeting intelligence. Return JSON only. "
                     "Never invent attendees, decisions, deadlines, or evidence. Confidence is 0 to 1. "
                     "Do not infer conversations that did not occur. Candidate IDs are opaque identifiers: "
-                    "only return an ID present in the supplied candidate catalog."
+                    "only return an ID present in the supplied candidate catalog. Always generate a concise, "
+                    "specific meeting title that names the main subject or outcome of the conversation. The title "
+                    "must stand on its own in a meeting history; never return a filename, 'Meeting notes', "
+                    "'Recorded meeting', 'Meeting in progress', or 'Untitled meeting'."
                 ),
             },
             {
                 "role": "user",
                 "content": (
-                    f"Today is {today}. Supplied title: {supplied_title or 'none'}.\n"
+                    f"Today is {today}. User-supplied title (context only; replace it with a content-based title): {supplied_title or 'none'}.\n"
                     "Return this exact JSON shape: {title, meeting_type, one_line_summary, "
                     "executive_summary, participants:[{display_name,speaker_label}], "
                     "self_speaker_label, self_identification_confidence, "

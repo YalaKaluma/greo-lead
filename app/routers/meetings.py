@@ -54,6 +54,12 @@ class ActionConversion(BaseModel):
     mode: str
 
 
+class ActionItemUpdate(BaseModel):
+    user_number: str
+    description: Optional[str] = Field(default=None, min_length=1, max_length=2000)
+    ignored: Optional[bool] = None
+
+
 class MeetingLinkCreate(BaseModel):
     user_number: str
     target_id: int
@@ -213,6 +219,39 @@ def list_meetings(
     query = query.distinct()
     meetings = query.order_by(Meeting.started_at.desc().nullslast(), Meeting.created_at.desc()).limit(250).all()
     return [_meeting_payload(meeting) for meeting in meetings]
+
+
+@router.get("/action-items/tasks")
+def list_meeting_action_items(user_number: str, db: Session = Depends(get_db)):
+    rows = db.query(MeetingActionItem, Meeting).join(Meeting).filter(
+        Meeting.user_number == user_number,
+        MeetingActionItem.created_task_id.is_(None),
+        MeetingActionItem.ignored_at.is_(None),
+    ).order_by(Meeting.started_at.desc().nullslast(), MeetingActionItem.created_at.desc()).limit(500).all()
+    return [{
+        "id": action.id,
+        "description": action.description,
+        "meeting_id": meeting.id,
+        "meeting_title": meeting.title,
+        "owner_name": action.owner_name,
+        "created_at": action.created_at,
+    } for action, meeting in rows]
+
+
+@router.patch("/action-items/{action_item_id}")
+def update_action_item(action_item_id: int, payload: ActionItemUpdate, db: Session = Depends(get_db)):
+    action = db.query(MeetingActionItem).join(Meeting).filter(
+        MeetingActionItem.id == action_item_id,
+        Meeting.user_number == payload.user_number,
+    ).first()
+    if not action:
+        raise HTTPException(status_code=404, detail="Action item not found.")
+    if payload.description is not None:
+        action.description = payload.description.strip()
+    if payload.ignored is not None:
+        action.ignored_at = datetime.now(timezone.utc) if payload.ignored else None
+    db.commit()
+    return {"id": action.id, "description": action.description, "ignored": bool(action.ignored_at)}
 
 
 @router.get("/{meeting_id:int}")

@@ -129,7 +129,19 @@ The response must show:
 
 If PowerShell or curl has local TLS issues, use another available HTTP client such as Node `fetch`.
 
-10. Report the result to the user.
+10. Trigger the Android AAB workflow for Play Store upload.
+
+Run the `Android AAB` GitHub Actions workflow on the `prod` branch after production health is verified.
+
+Use:
+
+- Workflow file: `.github/workflows/android-aab.yml`
+- Branch: `prod`
+- `api_url`: `https://greo-lead-production.up.railway.app`
+
+Wait for the workflow to finish. If it succeeds, report the workflow run URL and artifact name `alfred-release-aab`. If Codex cannot trigger the workflow because the available GitHub connector lacks workflow-dispatch support or the browser/CLI is not authenticated, report that clearly and ask the user to either sign in to GitHub in the browser or provide an authenticated workflow-dispatch route.
+
+11. Report the result to the user.
 
 Include:
 
@@ -137,6 +149,7 @@ Include:
 - merged production commit SHA
 - Railway deployment status
 - `/api/health` result
+- Android AAB workflow status and artifact availability
 - anything not verified, especially production migrations or authenticated smoke tests
 
 ## Smoke Test Reminder
