@@ -74,7 +74,7 @@ export function LeadershipTrendsTab({ apiUrl, userNumber }) {
     }
   };
 
-  const patterns = useMemo(() => Object.fromEntries((data?.synthesis?.domain_synthesis || []).map((item) => [item.domain, item.pattern])), [data]);
+  const insights = useMemo(() => Object.fromEntries((data?.synthesis?.domain_synthesis || []).map((item) => [item.domain, item])), [data]);
 
   if (loading) return <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-600 shadow-sm">{t('journey.trends.loading')}</div>;
   if (error && !data) return <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">{error}</div>;
@@ -89,16 +89,30 @@ export function LeadershipTrendsTab({ apiUrl, userNumber }) {
         <div className="flex flex-col items-end gap-2"><span className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-700">{t('journey.trends.average')}</span><button type="button" onClick={refreshTrends} disabled={refreshing} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-500 hover:text-slate-950 disabled:opacity-50">{refreshing ? t('journey.trends.refreshing') : t('journey.trends.refresh')}</button></div>
       </div>
       {data.generated_at && <p className="mt-3 text-xs text-slate-500">{t('journey.trends.lastUpdated')} {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(data.generated_at))}</p>}
-      <p className="mt-5 max-w-4xl text-base leading-7 text-slate-700">{data.synthesis?.overall_summary}</p>
+      <p className="mt-5 max-w-5xl whitespace-pre-line text-base leading-7 text-slate-700">{data.synthesis?.overall_summary}</p>
     </div>
+
+    {(data.synthesis?.leadership_signature || data.synthesis?.highest_leverage_opportunity || data.synthesis?.productive_tension) && <div className="grid gap-4 lg:grid-cols-3">
+      {data.synthesis?.leadership_signature && <div className="rounded-xl border border-blue-200 bg-blue-50 p-5"><h3 className="font-semibold text-blue-950">{t('journey.trends.signature')}</h3><p className="mt-2 text-sm leading-6 text-blue-950">{data.synthesis.leadership_signature}</p></div>}
+      {data.synthesis?.highest_leverage_opportunity && <div className="rounded-xl border border-amber-200 bg-amber-50 p-5"><h3 className="font-semibold text-amber-950">{t('journey.trends.leverage')}</h3><p className="mt-2 text-sm leading-6 text-amber-950">{data.synthesis.highest_leverage_opportunity}</p></div>}
+      {data.synthesis?.productive_tension && <div className="rounded-xl border border-violet-200 bg-violet-50 p-5"><h3 className="font-semibold text-violet-950">{t('journey.trends.tension')}</h3><p className="mt-2 text-sm leading-6 text-violet-950">{data.synthesis.productive_tension}</p></div>}
+    </div>}
 
     <div className="grid gap-6 xl:grid-cols-[460px_minmax(0,1fr)] xl:items-start">
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><TrendsWheel averages={data.domain_averages || []} /></div>
       <div className="space-y-3">{DOMAINS.map((domain) => {
         const average = data.domain_averages?.find((item) => item.domain === domain);
+        const insight = insights[domain];
         return <div key={domain} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-slate-950">{t(`meetings.leadership.domain.${domain}`).replace('|', ' ')}</h3><span className="shrink-0 rounded-full px-2.5 py-1 text-xs font-bold text-slate-950" style={{ backgroundColor: average?.average_score ? SCORE_COLORS[Math.round(average.average_score)] : '#e2e8f0' }}>{average?.average_score != null ? `${average.average_score}/5` : t('meetings.leadership.notAssessed')}</span></div>
-          <p className="mt-2 text-sm leading-6 text-slate-700">{patterns[domain] || t('journey.trends.insufficientDomain')}</p>
+          <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold text-slate-950">{t(`meetings.leadership.domain.${domain}`).replace('|', ' ')}</h3><div className="flex items-center gap-2">{insight?.signal_strength && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{t(`journey.trends.signal.${insight.signal_strength}`, insight.signal_strength)}</span>}<span className="shrink-0 rounded-full px-2.5 py-1 text-xs font-bold text-slate-950" style={{ backgroundColor: average?.average_score ? SCORE_COLORS[Math.round(average.average_score)] : '#e2e8f0' }}>{average?.average_score != null ? `${average.average_score}/5` : t('meetings.leadership.notAssessed')}</span></div></div>
+          <p className="mt-3 text-sm font-medium leading-6 text-slate-900">{insight?.pattern || t('journey.trends.insufficientDomain')}</p>
+          {(insight?.demonstrated || insight?.growth_edge || insight?.why_it_matters || insight?.next_experiment) && <ul className="mt-3 space-y-2 border-t border-slate-100 pt-3 text-sm leading-6 text-slate-700">
+            {insight.demonstrated && <li><strong className="font-semibold text-slate-900">{t('journey.trends.demonstrated')}:</strong> {insight.demonstrated}</li>}
+            {insight.growth_edge && <li><strong className="font-semibold text-slate-900">{t('journey.trends.growthEdge')}:</strong> {insight.growth_edge}</li>}
+            {insight.why_it_matters && <li><strong className="font-semibold text-slate-900">{t('journey.trends.whyItMatters')}:</strong> {insight.why_it_matters}</li>}
+            {insight.next_experiment && <li><strong className="font-semibold text-slate-900">{t('journey.trends.experiment')}:</strong> {insight.next_experiment}</li>}
+          </ul>}
+          {insight?.supporting_meetings?.length > 0 && <div className="mt-3 border-t border-slate-100 pt-3"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('journey.trends.supportingMeetings')}</p><div className="mt-2 flex flex-wrap gap-2">{insight.supporting_meetings.map((meeting) => <span key={meeting.meeting_id} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">{meeting.meeting_title}</span>)}</div></div>}
           {average?.assessment_count > 0 && <p className="mt-2 text-xs text-slate-500">{t('journey.trends.basedOn')} {average.assessment_count} {average.assessment_count === 1 ? t('journey.trends.assessment') : t('journey.trends.assessments')}</p>}
         </div>;
       })}</div>

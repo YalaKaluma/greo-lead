@@ -502,5 +502,16 @@
   "journey.trends.nextFocus": "Priorité pour vos prochaines réunions",
   "journey.trends.refresh": "Actualiser les tendances",
   "journey.trends.refreshing": "Actualisation…",
-  "journey.trends.lastUpdated": "Dernière mise à jour"
+  "journey.trends.lastUpdated": "Dernière mise à jour",
+  "journey.trends.signature": "Votre signature de leadership",
+  "journey.trends.leverage": "Occasion à plus fort impact",
+  "journey.trends.tension": "Tension constructive",
+  "journey.trends.demonstrated": "Comportements démontrés",
+  "journey.trends.growthEdge": "Axe de progression",
+  "journey.trends.whyItMatters": "Pourquoi c’est important",
+  "journey.trends.experiment": "Expérience pour la prochaine réunion",
+  "journey.trends.supportingMeetings": "Réunions à l’appui",
+  "journey.trends.signal.Recurring": "Signal récurrent",
+  "journey.trends.signal.Emerging": "Signal émergent",
+  "journey.trends.signal.Limited evidence": "Données limitées"
 }

@@ -502,5 +502,16 @@
   "journey.trends.nextFocus": "Focus for upcoming meetings",
   "journey.trends.refresh": "Refresh trends",
   "journey.trends.refreshing": "Refreshing…",
-  "journey.trends.lastUpdated": "Last updated"
+  "journey.trends.lastUpdated": "Last updated",
+  "journey.trends.signature": "Your leadership signature",
+  "journey.trends.leverage": "Highest-leverage opportunity",
+  "journey.trends.tension": "Productive tension",
+  "journey.trends.demonstrated": "Demonstrated",
+  "journey.trends.growthEdge": "Growth edge",
+  "journey.trends.whyItMatters": "Why it matters",
+  "journey.trends.experiment": "Next-meeting experiment",
+  "journey.trends.supportingMeetings": "Supporting meetings",
+  "journey.trends.signal.Recurring": "Recurring signal",
+  "journey.trends.signal.Emerging": "Emerging signal",
+  "journey.trends.signal.Limited evidence": "Limited evidence"
 }
