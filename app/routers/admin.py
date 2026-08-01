@@ -1,11 +1,13 @@
 import os
 import json
+import logging
+import threading
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -20,6 +22,7 @@ from app.models import (
     LeadershipCoachingSession,
     Message,
     MessageFeedback,
+    Meeting,
     Task,
     TaskPriorityDecision,
     UsageEvent,
@@ -30,9 +33,22 @@ from app.utils.security import generate_temporary_password, hash_password
 from app.services.admin_system_health_service import AdminSystemHealthService
 from app.services.admin_ai_briefing_service import AdminAIBriefingService
 from app.services.onboarding_seed_service import ensure_starter_examples_seeded
+from app.services.meeting_intelligence_service import (
+    LEADERSHIP_ASSESSMENT_VERSION,
+    reassess_meeting_leadership,
+)
 
 
 router = APIRouter(tags=["admin"])
+logger = logging.getLogger(__name__)
+_leadership_reassessment_lock = threading.Lock()
+_leadership_reassessment_state = {
+    "running": False,
+    "queued": 0,
+    "processed": 0,
+    "failed": 0,
+    "last_error": None,
+}
 
 
 class CreateAdminUserRequest(BaseModel):
@@ -192,6 +208,103 @@ def require_admin(
     db: Session = Depends(get_db),
 ) -> User:
     return _get_admin_user(admin_user_number, db)
+
+
+def _assessable_meetings_query(db: Session):
+    return db.query(Meeting).filter(
+        Meeting.processing_status == "ready",
+        or_(
+            func.length(func.trim(Meeting.transcript_text)) > 0,
+            func.length(func.trim(Meeting.user_notes)) > 0,
+        ),
+    )
+
+
+def _run_leadership_reassessment(meeting_ids: list[int]) -> None:
+    _leadership_reassessment_state.update({
+        "running": True,
+        "queued": len(meeting_ids),
+        "processed": 0,
+        "failed": 0,
+        "last_error": None,
+    })
+    try:
+        for meeting_id in meeting_ids:
+            try:
+                reassess_meeting_leadership(meeting_id)
+            except Exception as error:
+                _leadership_reassessment_state["failed"] += 1
+                _leadership_reassessment_state["last_error"] = type(error).__name__
+                logger.exception("Historical leadership reassessment failed for meeting_id=%s", meeting_id)
+            else:
+                _leadership_reassessment_state["processed"] += 1
+    finally:
+        _leadership_reassessment_state["running"] = False
+        _leadership_reassessment_lock.release()
+
+
+@router.get("/meeting-leadership-assessments/status")
+def meeting_leadership_reassessment_status(
+    admin_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    del admin_user
+    assessable = _assessable_meetings_query(db)
+    total = assessable.count()
+    current = assessable.filter(
+        Meeting.leadership_assessment_version == LEADERSHIP_ASSESSMENT_VERSION
+    ).count()
+    return {
+        **_leadership_reassessment_state,
+        "total": total,
+        "current": current,
+        "remaining": max(0, total - current),
+        "assessment_version": LEADERSHIP_ASSESSMENT_VERSION,
+    }
+
+
+@router.post("/meeting-leadership-assessments/reassess-all", status_code=202)
+def reassess_all_meeting_leadership(
+    background_tasks: BackgroundTasks,
+    admin_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if not _leadership_reassessment_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="A leadership reassessment is already running.")
+
+    meeting_ids = [
+        meeting_id
+        for (meeting_id,) in _assessable_meetings_query(db).filter(
+            or_(
+                Meeting.leadership_assessment_version.is_(None),
+                Meeting.leadership_assessment_version != LEADERSHIP_ASSESSMENT_VERSION,
+            )
+        ).order_by(Meeting.id).with_entities(Meeting.id).all()
+    ]
+    _log_admin_action(
+        db,
+        admin_user,
+        "queued_all_meeting_leadership_reassessments",
+        metadata={
+            "meeting_count": len(meeting_ids),
+            "assessment_version": LEADERSHIP_ASSESSMENT_VERSION,
+        },
+    )
+    db.commit()
+
+    if not meeting_ids:
+        _leadership_reassessment_lock.release()
+        return {"status": "complete", "queued": 0}
+
+    _leadership_reassessment_state.update({
+        "running": True,
+        "queued": len(meeting_ids),
+        "processed": 0,
+        "failed": 0,
+        "last_error": None,
+    })
+    background_tasks.add_task(_run_leadership_reassessment, meeting_ids)
+    return {"status": "queued", "queued": len(meeting_ids)}
 
 
 def _active_admin_count(db: Session) -> int:

@@ -49,6 +49,9 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 MEETING_PROMPT_VERSION = "meeting-v4-coaching-links"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4o-mini")
 MEETING_COACHING_MODEL = os.getenv("MEETING_COACHING_MODEL", MEETING_MODEL)
+# Increment this whenever the leadership assessment prompt or scoring logic changes.
+# The admin reassessment action uses it to resume safely and avoid duplicate AI work.
+LEADERSHIP_ASSESSMENT_VERSION = "leadership-v1-five-domains"
 DB_WRITE_ATTEMPTS = max(1, int(os.getenv("MEETING_DB_WRITE_ATTEMPTS", "3")))
 TRANSCRIPTION_CHUNK_SECONDS = min(
     1200, max(300, int(os.getenv("MEETING_TRANSCRIPTION_CHUNK_SECONDS", "1200")))
@@ -655,6 +658,7 @@ def _save_leadership_assessment(db: Session, meeting_id: int, coaching: dict) ->
         "leadership_observations": coaching.get("leadership_observations") or [],
         "domain_assessments": coaching.get("domain_assessments") or [],
     })
+    meeting.leadership_assessment_version = LEADERSHIP_ASSESSMENT_VERSION
 
 
 def answer_meeting_question(meeting_context: dict, question: str, history: list[dict] | None = None) -> str:
@@ -1040,6 +1044,7 @@ def _save_analysis(
         "domain_assessments": coaching.get("domain_assessments") or [],
     }
     _replace_analysis(db, meeting, analysis_with_coaching)
+    meeting.leadership_assessment_version = LEADERSHIP_ASSESSMENT_VERSION
     meeting.processing_status = "ready"
     meeting.processing_error = None
     meeting.updated_at = datetime.now(timezone.utc)

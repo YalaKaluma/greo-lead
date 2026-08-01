@@ -1821,13 +1821,40 @@ function AdminCTODirectorPanel({ apiUrl, userNumber }) {
 }
 
 function AdminSystemHealthPanel({ apiUrl, userNumber }) {
+  const { t } = useLanguage();
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [analysisRefreshing, setAnalysisRefreshing] = useState(false);
   const [analysisRefreshRequest, setAnalysisRefreshRequest] = useState(0);
   const [error, setError] = useState('');
+  const [assessmentStatus, setAssessmentStatus] = useState(null);
+  const [assessmentActionError, setAssessmentActionError] = useState('');
+  const [assessmentStarting, setAssessmentStarting] = useState(false);
   const adminParams = { user_number: userNumber };
+
+  const loadAssessmentStatus = async () => {
+    try {
+      const response = await axios.get(`${apiUrl}/api/admin/meeting-leadership-assessments/status`, { params: adminParams });
+      setAssessmentStatus(response.data);
+    } catch (err) {
+      setAssessmentActionError(err.response?.data?.detail || t('admin.assessments.statusError'));
+    }
+  };
+
+  const startAssessmentRefresh = async () => {
+    if (!window.confirm(t('admin.assessments.confirm'))) return;
+    setAssessmentStarting(true);
+    setAssessmentActionError('');
+    try {
+      await axios.post(`${apiUrl}/api/admin/meeting-leadership-assessments/reassess-all`, null, { params: adminParams });
+      await loadAssessmentStatus();
+    } catch (err) {
+      setAssessmentActionError(err.response?.data?.detail || t('admin.assessments.startError'));
+    } finally {
+      setAssessmentStarting(false);
+    }
+  };
 
   const loadHealth = async ({ showLoading = true } = {}) => {
     if (showLoading) {
@@ -1857,7 +1884,14 @@ function AdminSystemHealthPanel({ apiUrl, userNumber }) {
 
   useEffect(() => {
     loadHealth();
+    loadAssessmentStatus();
   }, [apiUrl, userNumber]);
+
+  useEffect(() => {
+    if (!assessmentStatus?.running) return undefined;
+    const interval = window.setInterval(loadAssessmentStatus, 5000);
+    return () => window.clearInterval(interval);
+  }, [assessmentStatus?.running, apiUrl, userNumber]);
 
   if (loading) {
     return <div className="py-6 text-sm text-slate-500">Loading system health...</div>;
@@ -1915,6 +1949,37 @@ function AdminSystemHealthPanel({ apiUrl, userNumber }) {
         refreshRequest={analysisRefreshRequest}
         onGeneratingChange={setAnalysisRefreshing}
       />
+
+      <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="font-semibold text-slate-900">{t('admin.assessments.title')}</h3>
+            <p className="mt-1 text-sm text-slate-500">{t('admin.assessments.description')}</p>
+            {assessmentStatus && (
+              <p className="mt-2 text-sm text-slate-700">
+                {assessmentStatus.running
+                  ? t('admin.assessments.running')
+                  : t('admin.assessments.ready')}{' '}
+                {assessmentStatus.current}/{assessmentStatus.total} {t('admin.assessments.current')}
+                {assessmentStatus.failed > 0 ? ` · ${assessmentStatus.failed} ${t('admin.assessments.failed')}` : ''}
+              </p>
+            )}
+            {assessmentActionError && <p className="mt-2 text-sm text-rose-700">{assessmentActionError}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={startAssessmentRefresh}
+            disabled={assessmentStarting || assessmentStatus?.running || assessmentStatus?.remaining === 0}
+            className="shrink-0 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            {assessmentStarting
+              ? t('admin.assessments.starting')
+              : assessmentStatus?.running
+                ? t('admin.assessments.inProgress')
+                : t('admin.assessments.button')}
+          </button>
+        </div>
+      </div>
 
       <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
         <div className="flex flex-wrap items-center gap-3">

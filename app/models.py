@@ -424,6 +424,7 @@ class Meeting(Base):
     consent_acknowledged_at = Column(DateTime(timezone=True), nullable=True)
     prompt_version = Column(String(40), nullable=True)
     model_version = Column(String(80), nullable=True)
+    leadership_assessment_version = Column(String(80), nullable=True, index=True)
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)

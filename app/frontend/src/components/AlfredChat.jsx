@@ -3,7 +3,7 @@ import axios from 'axios';
 import ReadAloudButton from './ReadAloudButton';
 import MessageFeedbackButton from './MessageFeedbackButton';
 
-export default function AlfredChat({ apiUrl, userNumber, currentPage, showLauncher = true }) {
+export default function AlfredChat({ apiUrl, userNumber, currentPage, showLauncher = true, onUnreadCountChange }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -14,6 +14,10 @@ export default function AlfredChat({ apiUrl, userNumber, currentPage, showLaunch
   const [energySelections, setEnergySelections] = useState({});
   const [energySaving, setEnergySaving] = useState({});
   const [energyErrors, setEnergyErrors] = useState({});
+
+  useEffect(() => {
+    onUnreadCountChange?.(unreadCount);
+  }, [onUnreadCountChange, unreadCount]);
 
   const loadMessages = async () => {
     if (!userNumber) return;
