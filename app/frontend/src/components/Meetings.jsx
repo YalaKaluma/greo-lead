@@ -475,6 +475,7 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
   const { t } = useLanguage();
   const [transcriptSearch, setTranscriptSearch] = useState('');
   const [busyAction, setBusyAction] = useState(null);
+  const [actionError, setActionError] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [meetingQuestion, setMeetingQuestion] = useState('');
@@ -515,13 +516,38 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
     onChanged(meeting.id);
   };
 
-  const makeTask = async (actionId, mode) => {
+  const makeTask = async (actionId) => {
     setBusyAction(actionId);
-    await fetch(`${apiUrl}/api/meetings/action-items/${actionId}/task`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, mode })
-    });
-    setBusyAction(null);
-    onChanged(meeting.id);
+    setActionError('');
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/action-items/${actionId}/task`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, mode: 'auto' })
+      });
+      if (!response.ok) throw new Error('Could not add this action to your to-do list.');
+      window.dispatchEvent(new Event('alfred-sidebar-counts-refresh'));
+      onChanged(meeting.id);
+    } catch (error) {
+      setActionError(error.message);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const ignoreAction = async (actionId) => {
+    setBusyAction(actionId);
+    setActionError('');
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/action-items/${actionId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, ignored: true })
+      });
+      if (!response.ok) throw new Error('Could not ignore this action item.');
+      window.dispatchEvent(new Event('alfred-sidebar-counts-refresh'));
+      onChanged(meeting.id);
+    } catch (error) {
+      setActionError(error.message);
+    } finally {
+      setBusyAction(null);
+    }
   };
 
   const askAlfred = async (event) => {
@@ -598,6 +624,8 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
         {meeting.one_line_summary && <p className="mt-5 max-w-4xl text-lg text-slate-200">{meeting.one_line_summary}</p>}
       </div>
 
+      {actionError && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{actionError}</p>}
+
       {meeting.processing_status !== 'ready' && (
         <div className={`mt-6 rounded-xl p-5 ${meeting.processing_status === 'failed' ? 'bg-red-50 text-red-800' : 'bg-blue-50 text-blue-800'}`}>
           {meeting.processing_status === 'failed' ? <div><p>{meeting.processing_error || 'Processing failed.'}</p><button onClick={async () => { await fetch(`${apiUrl}/api/meetings/${meeting.id}/retry?user_number=${encodeURIComponent(userNumber)}`, { method: 'POST' }); onChanged(meeting.id); }} className="mt-3 rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white">Retry processing</button></div> : 'Alfred is processing this meeting. This page will update automatically.'}
@@ -609,7 +637,7 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
           <Section title="Discussion Topics"><div className="grid gap-3 sm:grid-cols-2">{meeting.topics.map((topic) => <div key={topic.id} className="rounded-lg bg-slate-50 p-4"><h3 className="font-semibold">{topic.title}</h3><p className="mt-1 text-sm text-slate-600">{topic.summary}</p></div>)}</div></Section>
           <Section title="Executive Summary"><div className="whitespace-pre-line text-slate-700">{meeting.executive_summary || 'No summary available.'}</div></Section>
           <Section title={`Decisions (${meeting.decisions.length})`}>{meeting.decisions.length ? <div className="space-y-4">{meeting.decisions.map((decision) => <div key={decision.id}><div className="flex justify-between gap-3"><p className="font-medium text-slate-900">{decision.description}</p><Confidence value={decision.confidence} /></div><Evidence>{decision.evidence_excerpt}</Evidence></div>)}</div> : <p className="text-slate-500">No explicit decisions detected.</p>}</Section>
-          <Section title={`Action Items (${meeting.action_items.length})`}>{meeting.action_items.length ? <div className="space-y-4">{meeting.action_items.map((action) => <div key={action.id} className="rounded-xl border border-slate-200 p-4"><div className="flex justify-between gap-3"><div><p className="font-medium">{action.description}</p><p className="mt-1 text-sm text-slate-500">Owner: {action.owner_name || 'Unclear'}{action.due_date ? ` · Due ${action.due_date}` : ''}</p></div><Confidence value={action.confidence} /></div><Evidence>{action.evidence_excerpt}</Evidence>{action.created_task_id ? <div className="mt-3 flex items-center gap-3"><span className="text-sm font-medium text-green-700">Added to tasks</span><button disabled={busyAction === action.id} onClick={() => makeTask(action.id, action.tracking_mode || 'my_todo')} className="text-sm font-semibold text-blue-600 hover:underline">Move to Today</button></div> : action.ignored ? <p className="mt-3 text-sm font-medium text-slate-500">Ignored</p> : <div className="mt-3 flex flex-wrap gap-2"><button disabled={busyAction === action.id} onClick={() => makeTask(action.id, 'my_todo')} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Add to My Todo</button><button disabled={busyAction === action.id} onClick={() => makeTask(action.id, 'follow_up')} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">Track Someone Else</button></div>}</div>)}</div> : <p className="text-slate-500">No action items detected.</p>}</Section>
+          <Section title={`Action Items (${meeting.action_items.length})`}>{meeting.action_items.length ? <div className="space-y-4">{meeting.action_items.map((action) => <div key={action.id} className="rounded-xl border border-slate-200 p-4"><div className="flex justify-between gap-3"><div><p className="font-medium">{action.description}</p><p className="mt-1 text-sm text-slate-500">Owner: {action.owner_name || 'Unclear'}{action.due_date ? ` · Due ${action.due_date}` : ''}</p></div><Confidence value={action.confidence} /></div><Evidence>{action.evidence_excerpt}</Evidence>{action.created_task_id ? <div className="mt-3 flex items-center gap-3"><span className="text-sm font-medium text-green-700">Added to tasks</span><button disabled={busyAction === action.id} onClick={() => makeTask(action.id)} className="text-sm font-semibold text-blue-600 hover:underline">Move to Today</button></div> : action.ignored ? <p className="mt-3 text-sm font-medium text-slate-500">Ignored</p> : <div className="mt-3 flex flex-wrap gap-2"><button disabled={busyAction === action.id} onClick={() => makeTask(action.id)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Add to My Todo</button><button disabled={busyAction === action.id} onClick={() => ignoreAction(action.id)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800">Ignore</button></div>}</div>)}</div> : <p className="text-slate-500">No action items detected.</p>}</Section>
           <Section title={t('meetings.leadership.title')} privateLabel><LeadershipDomainWheel assessments={meeting.leadership_domain_assessments || []} />
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4"><p className="text-sm text-slate-500">{t('meetings.leadership.disclaimer')}</p><button onClick={generateLeadershipAssessment} disabled={assessingLeadership} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{assessingLeadership ? t('meetings.leadership.assessing') : meeting.leadership_domain_assessments?.length ? t('meetings.leadership.reassess') : t('meetings.leadership.assess')}</button></div>
             {meeting.leadership_observations.length > 0 && <details className="mt-5 border-t border-slate-200 pt-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">{t('meetings.leadership.additional')}</summary><div className="mt-4 space-y-4">{meeting.leadership_observations.map((item) => <div key={item.id}><p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{item.category}</p><p className="mt-1 text-slate-800">{item.observation}</p><Evidence>{item.evidence_excerpt}</Evidence></div>)}</div></details>}

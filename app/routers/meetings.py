@@ -51,7 +51,7 @@ class MeetingUpdate(BaseModel):
 
 class ActionConversion(BaseModel):
     user_number: str
-    mode: str
+    mode: str = "auto"
 
 
 class ActionItemUpdate(BaseModel):
@@ -673,8 +673,8 @@ def convert_action_item(action_item_id: int, payload: ActionConversion, db: Sess
     ).first()
     if not action:
         raise HTTPException(status_code=404, detail="Action item not found.")
-    if payload.mode not in {"my_todo", "follow_up"}:
-        raise HTTPException(status_code=400, detail="Mode must be my_todo or follow_up.")
+    if payload.mode not in {"auto", "my_todo", "follow_up"}:
+        raise HTTPException(status_code=400, detail="Mode must be auto, my_todo, or follow_up.")
     today = today_for_timezone(get_user_timezone(db, payload.user_number))
     today_due = datetime.combine(today, datetime.min.time())
     goal_links = db.query(MeetingGoalLink).filter(MeetingGoalLink.meeting_id == action.meeting_id).all()
@@ -704,12 +704,32 @@ def convert_action_item(action_item_id: int, payload: ActionConversion, db: Sess
             db.commit()
             return {"task_id": existing_task.id, "already_created": True}
         action.created_task_id = None
+    owner = (action.owner_name or "").strip()
+    normalized_owner = re.sub(r"[^a-z0-9]+", " ", owner.lower()).strip()
+    unclear_owners = {"", "unclear", "unknown", "not specified", "n a", "none", "tbd"}
+    self_names = {"me", "myself", "i", "current user"}
+    user = db.query(User).filter(User.phone_number == payload.user_number).first()
+    if user and user.name:
+        self_names.add(re.sub(r"[^a-z0-9]+", " ", user.name.lower()).strip())
+    for participant in action.meeting.participants:
+        if participant.is_current_user or participant.match_status == "current_user":
+            for label in (participant.display_name, participant.speaker_label):
+                if label:
+                    self_names.add(re.sub(r"[^a-z0-9]+", " ", label.lower()).strip())
+
+    mode = payload.mode
+    if mode == "auto":
+        mode = "clarify_owner" if normalized_owner in unclear_owners else ("my_todo" if normalized_owner in self_names else "follow_up")
+
     title = action.description
     delegated_to = None
-    if payload.mode == "follow_up":
-        owner = action.owner_name or "the owner"
-        title = f"Follow up with {owner} regarding {action.description}"
+    if mode == "follow_up":
+        title = f"Follow up with {owner}: {action.description}"
         delegated_to = owner
+    elif mode == "clarify_owner":
+        title = f"Clarify ownership: {action.description}"
+    context_lines.append(f"Original action owner: {owner or 'Unclear'}")
+    enriched_notes = "\n".join(context_lines)
     task = Task(
         user_number=payload.user_number,
         title=title,
@@ -724,7 +744,7 @@ def convert_action_item(action_item_id: int, payload: ActionConversion, db: Sess
     db.add(task)
     db.flush()
     action.created_task_id = task.id
-    action.tracking_mode = payload.mode
+    action.tracking_mode = mode
     db.commit()
     return {"task_id": task.id, "already_created": False}
 

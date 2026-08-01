@@ -1,19 +1,46 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useLanguage } from '../i18n/LanguageContext';
 
-export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onClose }) {
+export default function Sidebar({ apiUrl, userNumber, currentPage, onNavigate, isOpen, isMobile, onClose }) {
 
   const { t } = useLanguage();
+  const [counts, setCounts] = useState({ tasks: 0, habits: 0, meetings: 0 });
+
+  const loadCounts = useCallback(() => {
+    if (!userNumber) return;
+    fetch(`${apiUrl}/api/home/sidebar-counts?user_number=${encodeURIComponent(userNumber)}`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => data && setCounts({
+        tasks: Number(data.tasks) || 0,
+        habits: Number(data.habits) || 0,
+        meetings: Number(data.meetings) || 0,
+      }))
+      .catch(() => {
+        // Navigation remains usable if the optional counts cannot be loaded.
+      });
+  }, [apiUrl, userNumber]);
+
+  useEffect(() => {
+    loadCounts();
+    const interval = window.setInterval(loadCounts, 30000);
+    window.addEventListener('focus', loadCounts);
+    window.addEventListener('alfred-sidebar-counts-refresh', loadCounts);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', loadCounts);
+      window.removeEventListener('alfred-sidebar-counts-refresh', loadCounts);
+    };
+  }, [loadCounts, currentPage]);
 
   const menuItems = [
     { id: 'home', label: t('nav.home'), disabled: false },
     { id: 'my-goals', label: t('nav.goals'), disabled: false },
     { id: 'projects', label: t('nav.projects'), disabled: false },
-    { id: 'todo-list', label: t('nav.tasks'), disabled: false },
+    { id: 'todo-list', label: t('nav.tasks'), disabled: false, count: counts.tasks },
     { id: 'my-journey', label: t('nav.journey'), disabled: false },
-    { id: 'my-habits', label: t('nav.habits'), disabled: false },
+    { id: 'my-habits', label: t('nav.habits'), disabled: false, count: counts.habits },
     { id: 'my-team', label: t('nav.team'), disabled: false },
-    { id: 'meetings', label: t('nav.meetings'), disabled: false },
+    { id: 'meetings', label: t('nav.meetings'), disabled: false, count: counts.meetings },
 //    { id: 'coaching-sessions', label: t('nav.coaching'), disabled: false },
     { id: 'my-journal', label: t('nav.journal'), disabled: false },
     // { id: 'my-feedback', label: t('nav.feedback'), disabled: true },
@@ -93,7 +120,11 @@ export default function Sidebar({ currentPage, onNavigate, isOpen, isMobile, onC
                 
                 <div className="flex items-center justify-between w-full">
                   <span>{item.label}</span>
-
+                  {item.count > 0 && (
+                    <span className="ml-3 min-w-6 rounded-full bg-blue-500 px-2 py-0.5 text-center text-xs font-semibold leading-5 text-white" aria-label={`${item.count} remaining`}>
+                      {item.count > 99 ? '99+' : item.count}
+                    </span>
+                  )}
                 </div>
 
               </button>

@@ -378,6 +378,7 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
   const handleTaskToggle = async (taskId) => {
     try {
       await axios.patch(`${apiUrl}/api/tasks/${taskId}/toggle`, {}, { params: { user_number: userNumber } });
+      window.dispatchEvent(new Event('alfred-sidebar-counts-refresh'));
       setSnapshot((prev) => ({
         ...prev,
         payload: {

@@ -322,6 +322,8 @@ function MainAppShell({
       )}
 
       <Sidebar
+        apiUrl={API_URL}
+        userNumber={userNumber}
         currentPage={currentPage}
         onNavigate={handleNavigate}
         isOpen={isSidebarOpen}
