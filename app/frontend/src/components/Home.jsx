@@ -51,16 +51,35 @@ function CardHeader({ title }) {
   );
 }
 
-function ScoreCircle({ value, label, color = '#0f766e' }) {
+const GAUGE_SEGMENTS = ['#dc2626', '#f97316', '#facc15', '#65a30d', '#16a34a'];
+
+function SegmentedGauge({ value, benchmark, valueLabel, t }) {
+  const numericValue = Math.max(0, toNumber(value, 0));
+  const numericBenchmark = Math.max(0, toNumber(benchmark, 0));
+  const position = numericBenchmark > 0
+    ? clamp((numericValue / numericBenchmark) * 50, 3, 97)
+    : 50;
+  const description = `${valueLabel}. ${t('home.gauge.fiveWeekAverage', 'Five-week average')}: ${numericBenchmark.toFixed(1)}`;
   return (
-    <div className="flex h-24 w-24 shrink-0 flex-col items-center justify-center rounded-full border-[8px] bg-white" style={{ borderColor: color }}>
-      <div className="text-2xl font-semibold text-slate-950">{value}</div>
-      {label && <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>}
+    <div className="w-full" role="img" aria-label={description} title={description}>
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-3xl font-semibold text-slate-950">{valueLabel}</span>
+        <span className="text-xs font-medium text-slate-500">{t('home.gauge.midpoint', 'Midpoint')}: {numericBenchmark.toFixed(1)}</span>
+      </div>
+      <div className="relative mt-3 h-9 px-[3%]">
+        <div className="absolute inset-x-[3%] top-3 flex h-3 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
+          {GAUGE_SEGMENTS.map((color) => <span key={color} className="flex-1" style={{ backgroundColor: color }} />)}
+        </div>
+        <div className="absolute top-0 h-8 w-1 rounded-full bg-slate-900 shadow-sm" style={{ left: `${position}%` }}>
+          <span className="absolute -left-[5px] -top-1 h-0 w-0 border-l-[7px] border-r-[7px] border-t-[8px] border-l-transparent border-r-transparent border-t-slate-900" />
+        </div>
+      </div>
+      <p className="mt-1 text-center text-[11px] font-medium text-slate-500">{t('home.gauge.fiveWeekAverage', 'Five-week average')} - {t('home.gauge.centered', 'centered on the gauge')}</p>
     </div>
   );
 }
 
-function MtnScoreCard({ metric }) {
+function MtnScoreCard({ metric, t }) {
   const delta = scoreDelta(metric?.delta);
   return (
     <section className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -68,9 +87,9 @@ function MtnScoreCard({ metric }) {
         The 7-day average MTN score from completed tasks. It is compared with the 30-day average to show whether execution momentum is improving.
       </KpiInfoButton>
       <CardHeader title="Move-the-needle Index" />
-      <div className="mt-5 flex items-center justify-between gap-4">
-        <ScoreCircle value={toNumber(metric?.score, 0).toFixed(1)} label="index" />
-        <div className="min-w-0 flex-1">
+      <div className="mt-4">
+        <SegmentedGauge value={metric?.score} benchmark={metric?.five_week_average} valueLabel={toNumber(metric?.score, 0).toFixed(1)} t={t} />
+        <div className="mt-3 flex flex-wrap justify-between gap-2">
           <p className="text-sm text-slate-600">{toNumber(metric?.average_tasks_per_day, 0).toFixed(1)} tasks completed / day</p>
           <p className={`mt-3 text-sm font-semibold ${delta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
             {delta} vs month average
@@ -81,20 +100,7 @@ function MtnScoreCard({ metric }) {
   );
 }
 
-function ProgressRing({ value }) {
-  const radius = 34;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (clamp(value) / 100) * circumference;
-  return (
-    <svg className="h-24 w-24 shrink-0" viewBox="0 0 88 88" role="img" aria-label={`${value}% complete`}>
-      <circle cx="44" cy="44" r={radius} stroke="#e2e8f0" strokeWidth="9" fill="none" />
-      <circle cx="44" cy="44" r={radius} stroke="#0f766e" strokeWidth="9" fill="none" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={offset} transform="rotate(-90 44 44)" />
-      <text x="44" y="49" textAnchor="middle" className="fill-slate-900 text-lg font-semibold">{Math.round(value)}%</text>
-    </svg>
-  );
-}
-
-function HabitsMetricCard({ metric }) {
+function HabitsMetricCard({ metric, t }) {
   const delta = pointDelta(metric?.delta);
   return (
     <section className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -102,42 +108,48 @@ function HabitsMetricCard({ metric }) {
         The share of planned habits completed in the last 7 days. It is compared with the 90-day habit baseline to show habit balance.
       </KpiInfoButton>
       <CardHeader title="Balance Index" />
-      <div className="mt-5 flex items-center justify-between gap-5">
-        <div className="min-w-0 flex-1">
+      <div className="mt-4">
+        <SegmentedGauge value={metric?.compliance_rate} benchmark={metric?.five_week_average} valueLabel={`${Math.round(toNumber(metric?.compliance_rate, 0))}%`} t={t} />
+        <div className="mt-3 flex flex-wrap justify-between gap-2">
           <p className="text-sm text-slate-600">{toNumber(metric?.completed, 0)} completed / {toNumber(metric?.expected, 0)} planned</p>
           <p className={`mt-3 text-sm font-semibold ${delta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
             {delta} vs 90-day average
           </p>
         </div>
-        <ProgressRing value={toNumber(metric?.compliance_rate, 0)} />
       </div>
     </section>
   );
 }
 
-function JournalMetricCard({ metric }) {
-  const depthDelta = scoreDelta(metric?.delta_depth_5);
+function JournalMetricCard({ metric, t }) {
+  const depthDelta = pointDelta(metric?.delta_depth_percentage);
   const journalDayPercentage = Math.round(toNumber(metric?.journal_day_percentage, 0));
   const journalDays = toNumber(metric?.journal_days_this_week, 0);
-  const averageDepth = toNumber(metric?.average_depth_5, 0).toFixed(1);
-  const monthAverageDepth = toNumber(metric?.month_average_depth_5, 0).toFixed(1);
+  const depthPercentage = Math.round(toNumber(metric?.depth_percentage, 0));
+  const wisdomIndex = Math.round(toNumber(metric?.wisdom_index, 0));
+  const monthAverageDepth = Math.round(toNumber(metric?.month_average_depth_percentage, 0));
   return (
     <section className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <KpiInfoButton label="About the Wisdom Index">
-        Journal consistency is the percentage of the last 7 days with at least one journal entry. Depth is the average reflection quality on a 5-point scale, compared with the recent monthly baseline.
+        {t('home.wisdom.description', 'Wisdom Index is journal consistency multiplied by reflection depth. Consistency is the percentage of the last 7 days with an entry; depth is shown as a percentage where 10/10 equals 100%.')}
       </KpiInfoButton>
       <CardHeader title="Wisdom Index" />
-      <div className="mt-5 grid grid-cols-2 gap-3">
+      <div className="mt-4">
+        <SegmentedGauge value={wisdomIndex} benchmark={metric?.five_week_average} valueLabel={`${wisdomIndex}%`} t={t} />
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3">
         <div className="rounded-lg bg-slate-50 p-4 text-center">
           <div className="text-3xl font-semibold text-slate-950">{journalDayPercentage}%</div>
           <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Journal consistency</p>
           <p className="mt-3 text-xs font-semibold text-slate-600">{journalDays} of the last 7 days</p>
         </div>
         <div className="rounded-lg bg-slate-50 p-4 text-center">
-          <div className="text-3xl font-semibold text-slate-950">{averageDepth}</div>
-          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Depth / 5</p>
+          <div className="text-3xl font-semibold text-slate-950">{depthPercentage}%</div>
+          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{t('home.wisdom.depth', 'Depth')}</p>
           <p className={`mt-3 text-xs font-semibold ${depthDelta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
-            vs {monthAverageDepth} avg ({depthDelta})
+            {t('home.wisdom.depthComparison', 'vs {{average}}% avg ({{delta}})')
+              .replace('{{average}}', monthAverageDepth)
+              .replace('{{delta}}', depthDelta)}
           </p>
         </div>
       </div>
@@ -355,7 +367,7 @@ function NextTrialCard({ trial, onNavigate }) {
 }
 
 export default function Home({ apiUrl, userNumber, onNavigate }) {
-  const { timezone } = useLanguage();
+  const { timezone, t } = useLanguage();
   const [snapshot, setSnapshot] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -441,9 +453,9 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
         )}
 
         <div className="grid gap-5 xl:grid-cols-3">
-          <MtnScoreCard metric={metrics.mtn || {}} />
-          <HabitsMetricCard metric={metrics.habits || {}} />
-          <JournalMetricCard metric={metrics.journal || {}} />
+          <MtnScoreCard metric={metrics.mtn || {}} t={t} />
+          <HabitsMetricCard metric={metrics.habits || {}} t={t} />
+          <JournalMetricCard metric={metrics.journal || {}} t={t} />
         </div>
 
         <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)_minmax(320px,0.8fr)]">

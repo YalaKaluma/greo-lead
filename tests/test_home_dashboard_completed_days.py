@@ -1,6 +1,12 @@
 from datetime import date
 
-from app.services.home_dashboard_service import _completed_days, _mtn_period_stats
+from app.services.home_dashboard_service import (
+    _average_chart_value,
+    _completed_days,
+    _five_week_wisdom_average,
+    _mtn_period_stats,
+    _weekly_journal_metrics,
+)
 
 
 def test_completed_days_excludes_today_and_future_rows():
@@ -24,3 +30,24 @@ def test_mtn_period_stats_uses_last_seven_completed_days():
     assert stats["total_score"] == sum(range(21, 28))
     assert stats["average_score"] == round(sum(range(21, 28)) / 7, 2)
     assert stats["completed_tasks"] == 7
+
+
+def test_five_week_average_uses_last_35_days():
+    rows = [{"mtn_score": day} for day in range(1, 41)]
+
+    assert _average_chart_value(rows, "mtn_score") == 23.0
+
+
+def test_wisdom_index_multiplies_consistency_by_depth_percentage():
+    chart = [
+        {"entry_count": 1, "daily_average": 8},
+        {"entry_count": 1, "daily_average": 6},
+        *[{"entry_count": 0, "daily_average": 0} for _ in range(5)],
+    ]
+
+    metrics = _weekly_journal_metrics({"trend_chart": chart})
+
+    assert metrics["journal_day_percentage"] == 29
+    assert metrics["depth_percentage"] == 70
+    assert metrics["wisdom_index"] == 20
+    assert _five_week_wisdom_average(chart) == 20.0

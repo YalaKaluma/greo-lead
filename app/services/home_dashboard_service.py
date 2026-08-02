@@ -38,7 +38,7 @@ DOMAIN_LABELS = {
 }
 
 DOMAIN_ORDER = ["vision", "people", "execute", "energy", "learning"]
-HOME_DASHBOARD_SCHEMA_VERSION = 8
+HOME_DASHBOARD_SCHEMA_VERSION = 9
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
@@ -267,17 +267,38 @@ def _weekly_journal_metrics(journal: dict[str, Any]) -> dict[str, Any]:
     monthly_depth = [float(item.get("daily_average") or 0) for item in previous_month if item.get("daily_average")]
     avg_depth_10 = mean(weekly_depth) if weekly_depth else 0
     month_avg_depth_10 = mean(monthly_depth) if monthly_depth else 0
+    consistency_percentage = round((journal_days / 7) * 100)
+    depth_percentage = round(avg_depth_10 * 10)
     return {
         "entries_this_week": entries,
         "journal_days_this_week": journal_days,
-        "journal_day_percentage": round((journal_days / 7) * 100),
+        "journal_day_percentage": consistency_percentage,
         "month_average_entries_per_week": round(month_avg_entries_per_week, 1),
         "delta_entries": round(entries - month_avg_entries_per_week, 1),
         "average_depth_5": round(avg_depth_10 / 2, 1),
         "month_average_depth_5": round(month_avg_depth_10 / 2, 1),
         "delta_depth_5": round((avg_depth_10 - month_avg_depth_10) / 2, 1),
+        "average_depth_10": round(avg_depth_10, 1),
+        "depth_percentage": depth_percentage,
+        "month_average_depth_percentage": round(month_avg_depth_10 * 10),
+        "delta_depth_percentage": round((avg_depth_10 - month_avg_depth_10) * 10),
+        "wisdom_index": round((consistency_percentage * depth_percentage) / 100),
         "status": "Deep reflection" if avg_depth_10 >= 7 else "Consistent" if entries >= 3 else "Needs more depth",
     }
+
+
+def _average_chart_value(rows: list[dict[str, Any]], key: str, days: int = 35) -> float:
+    values = [_as_float(item.get(key), 0) for item in rows[-days:]]
+    return round(mean(values), 1) if values else 0
+
+
+def _five_week_wisdom_average(rows: list[dict[str, Any]]) -> float:
+    daily_scores = [
+        10 * _as_float(item.get("daily_average"), 0)
+        if int(item.get("entry_count") or 0) > 0 else 0
+        for item in rows[-35:]
+    ]
+    return round(mean(daily_scores), 1) if daily_scores else 0
 
 
 def _completed_days(rows: list[dict[str, Any]], today) -> list[dict[str, Any]]:
@@ -516,6 +537,7 @@ class HomeDashboardService:
                     "delta": _as_float((mtn_week.get("trend") or {}).get("delta_vs_30"), 0),
                     "status": (mtn_week.get("trend") or {}).get("label") or "Stable",
                     "sparkline": [item.get("rolling_average") for item in mtn_chart[-14:]],
+                    "five_week_average": _average_chart_value(mtn_chart, "mtn_score"),
                 },
                 "habits": {
                     "compliance_rate": int(habit_week.get("compliance_rate") or 0),
@@ -523,10 +545,12 @@ class HomeDashboardService:
                     "expected": int(habit_week.get("expected") or 0),
                     "delta": int(habit_week.get("compliance_rate") or 0) - int(habit_baseline.get("compliance_rate") or 0),
                     "status": (habit_week.get("trend") or {}).get("label") or "Stable",
+                    "five_week_average": _average_chart_value(habit_chart, "rolling_average"),
                 },
                 "journal": {
                     **journal_metrics,
                     "sparkline": [item.get("weekly_average") for item in journal_chart[-14:]],
+                    "five_week_average": _five_week_wisdom_average(journal_chart),
                 },
             },
             "trends": {
