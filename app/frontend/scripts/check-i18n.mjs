@@ -32,8 +32,7 @@ const intentionallySharedValues = new Set([
   'Performance',
   'Superstar',
   '+ Vision',
-  'privacy@alfredos.ai',
-  'security@alfredos.ai',
+  'alfredchiefofstaff@gmail.com',
 ]);
 const intentionallySharedUiText = new Set([
   'Alfred',

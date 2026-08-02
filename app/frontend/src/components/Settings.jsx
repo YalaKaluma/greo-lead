@@ -62,6 +62,7 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
   const [isBackfillingDepth, setIsBackfillingDepth] = useState(false);
   const [backfillResult, setBackfillResult] = useState(null);
   const [backfillError, setBackfillError] = useState(null);
+  const isIosApp = Capacitor.getPlatform() === 'ios';
 
   useEffect(() => {
     if (!userNumber) return;
@@ -76,14 +77,16 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
     const baseTabs = [
       { id: 'profile', label: 'Profile' },
       { id: 'preferences', label: 'Preferences' },
-      { id: 'notifications', label: 'Notifications' },
       { id: 'privacy', label: 'Privacy & Data' }
     ];
+    if (!isIosApp) {
+      baseTabs.splice(2, 0, { id: 'notifications', label: 'Notifications' });
+    }
     if (currentUser?.is_admin) {
       baseTabs.push({ id: 'admin', label: 'Admin' });
     }
     return baseTabs;
-  }, [currentUser]);
+  }, [currentUser, isIosApp]);
 
   const runReflectionDepthBackfill = async () => {
     if (!userNumber || isBackfillingDepth) return;

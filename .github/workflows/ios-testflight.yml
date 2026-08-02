@@ -61,6 +61,8 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Alfred" "$PLIST_PATH"
           /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string Alfred uses the microphone only when you choose to record a voice entry or meeting." "$PLIST_PATH" 2>/dev/null || \
             /usr/libexec/PlistBuddy -c "Set :NSMicrophoneUsageDescription Alfred uses the microphone only when you choose to record a voice entry or meeting." "$PLIST_PATH"
+          /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" "$PLIST_PATH" 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" "$PLIST_PATH"
 
           ICON_SET="ios/App/App/Assets.xcassets/AppIcon.appiconset"
           ICON_FILE=$(node -e "const c=require('./' + process.argv[1]); const image=c.images.find(i => i.filename); if (!image) process.exit(1); process.stdout.write(image.filename)" "$ICON_SET/Contents.json")
@@ -77,6 +79,7 @@ jobs:
             -configuration Debug \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
+            TARGETED_DEVICE_FAMILY=1 \
             CODE_SIGNING_ALLOWED=NO \
             build
 
@@ -119,6 +122,7 @@ jobs:
             PRODUCT_BUNDLE_IDENTIFIER="$IOS_BUNDLE_ID" \
             MARKETING_VERSION="$IOS_VERSION" \
             CURRENT_PROJECT_VERSION="$IOS_BUILD_NUMBER" \
+            TARGETED_DEVICE_FAMILY=1 \
             CODE_SIGN_STYLE=Automatic \
             archive
 
