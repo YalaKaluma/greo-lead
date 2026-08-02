@@ -126,7 +126,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
                 trial_days_left=user.days_left_in_trial(),
                 needs_tour=False,
                 access_token=create_session_token(user.id, user.phone_number),
-                token_type="bearer",
+                token_type="bearer",  # nosec B106 - OAuth token type, not a password
                 expires_in=60 * 60 * 24 * 30,
             )
         else:
@@ -166,7 +166,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
             trial_days_left=user.days_left_in_trial(),
             needs_tour=False,
             access_token=create_session_token(user.id, user.phone_number),
-            token_type="bearer",
+            token_type="bearer",  # nosec B106 - OAuth token type, not a password
             expires_in=60 * 60 * 24 * 30,
         )
     else:

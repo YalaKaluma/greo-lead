@@ -36,7 +36,7 @@ class DeleteAccountRequest(BaseModel):
 def _session_response(user: User) -> dict:
     return {
         "access_token": create_session_token(user.id, user.phone_number),
-        "token_type": "bearer",
+        "token_type": "bearer",  # nosec B105 - OAuth token type, not a password
         "expires_in": 60 * 60 * 24 * 30,
     }
 
