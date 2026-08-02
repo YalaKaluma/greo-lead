@@ -2,7 +2,7 @@ const SERVICE_WORKER_URL = '/sw.js';
 const NATIVE_PUSH_ENDPOINT_KEY = 'alfred_native_push_endpoint';
 
 export async function initializeNotificationRouting() {
-  if (!isNativeApp()) return;
+  if (!isNativeApp() || isNativeIosApp()) return;
 
   const { PushNotifications } = await import('@capacitor/push-notifications');
   PushNotifications.addListener('pushNotificationActionPerformed', (event) => {
@@ -11,7 +11,7 @@ export async function initializeNotificationRouting() {
 }
 
 export async function refreshNativeNotificationRegistration(apiUrl, userNumber) {
-  if (!isNativeApp() || !apiUrl || !userNumber) return null;
+  if (!isNativeApp() || isNativeIosApp() || !apiUrl || !userNumber) return null;
   if (!localStorage.getItem(NATIVE_PUSH_ENDPOINT_KEY)) return null;
 
   const { PushNotifications } = await import('@capacitor/push-notifications');
@@ -27,12 +27,13 @@ export function getNotificationSupport() {
   const hasWindow = typeof window !== 'undefined';
   const hasNavigator = typeof navigator !== 'undefined';
   const nativeApp = isNativeApp();
+  const nativeIosApp = isNativeIosApp();
   const isSecureContext = hasWindow && window.isSecureContext;
   const isLocalhost = hasWindow && ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
   const hasNotification = hasWindow && 'Notification' in window;
   const hasServiceWorker = hasNavigator && 'serviceWorker' in navigator;
   const hasPushManager = hasWindow && 'PushManager' in window;
-  const supported = nativeApp || Boolean((isSecureContext || isLocalhost) && hasNotification && hasServiceWorker && hasPushManager);
+  const supported = (nativeApp && !nativeIosApp) || Boolean(!nativeApp && (isSecureContext || isLocalhost) && hasNotification && hasServiceWorker && hasPushManager);
 
   return {
     supported,
@@ -201,7 +202,6 @@ async function enableNativeNotifications(apiUrl, userNumber, deviceLabel) {
   if (!Capacitor.isNativePlatform()) {
     throw new Error('Native notifications are only available in the installed Alfred app.');
   }
-
   const permission = await PushNotifications.requestPermissions();
   if (permission.receive !== 'granted') {
     throw new Error('Notification permission was not granted.');
@@ -316,6 +316,10 @@ function isStandalone() {
 
 function isNativeApp() {
   return typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.();
+}
+
+function isNativeIosApp() {
+  return isNativeApp() && window.Capacitor?.getPlatform?.() === 'ios';
 }
 
 function navigateFromNotificationUrl(url) {

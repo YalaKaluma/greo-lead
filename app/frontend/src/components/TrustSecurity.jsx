@@ -63,6 +63,13 @@ const TABS = [
         ]
       },
       {
+        headingKey: 'trustSecurity.privacy.children.heading',
+        paragraphs: [
+          'trustSecurity.privacy.children.p1',
+          'trustSecurity.privacy.children.p2'
+        ]
+      },
+      {
         headingKey: 'trustSecurity.privacy.rights.heading',
         paragraphs: ['trustSecurity.privacy.rights.intro'],
         bullets: [
@@ -86,6 +93,7 @@ const TABS = [
     titleKey: 'trustSecurity.tabs.terms.title',
     sections: [
       { headingKey: 'trustSecurity.terms.acceptance.heading', paragraphs: ['trustSecurity.terms.acceptance.p1'] },
+      { headingKey: 'trustSecurity.terms.eligibility.heading', paragraphs: ['trustSecurity.terms.eligibility.p1', 'trustSecurity.terms.eligibility.p2'] },
       { headingKey: 'trustSecurity.terms.intended.heading', paragraphs: ['trustSecurity.terms.intended.p1', 'trustSecurity.terms.intended.p2'] },
       {
         headingKey: 'trustSecurity.terms.responsibilities.heading',
@@ -164,6 +172,33 @@ const TABS = [
       {
         headingKey: 'trustSecurity.shared.contact.heading',
         paragraphs: ['trustSecurity.gdpr.contact.p1'],
+        contactKey: 'trustSecurity.contact.privacy'
+      }
+    ]
+  },
+  {
+    id: 'support',
+    labelKey: 'trustSecurity.tabs.support.label',
+    titleKey: 'trustSecurity.tabs.support.title',
+    sections: [
+      {
+        headingKey: 'trustSecurity.support.help.heading',
+        paragraphs: ['trustSecurity.support.help.p1'],
+        contactKey: 'trustSecurity.contact.support'
+      },
+      {
+        headingKey: 'trustSecurity.support.details.heading',
+        paragraphs: ['trustSecurity.support.details.p1'],
+        bullets: [
+          'trustSecurity.support.details.b1',
+          'trustSecurity.support.details.b2',
+          'trustSecurity.support.details.b3',
+          'trustSecurity.support.details.b4'
+        ]
+      },
+      {
+        headingKey: 'trustSecurity.support.privacy.heading',
+        paragraphs: ['trustSecurity.support.privacy.p1'],
         contactKey: 'trustSecurity.contact.privacy'
       }
     ]

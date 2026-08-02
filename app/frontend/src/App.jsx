@@ -165,10 +165,18 @@ function App() {
     return <Waitlist />;
   }
 
-  if (window.location.pathname === "/trust-security") {
+  if (["/trust-security", "/privacy"].includes(window.location.pathname)) {
     return (
       <LanguageProvider apiUrl={API_URL} userNumber={localStorage.getItem("user_number")}>
-        <TrustSecurity publicView />
+        <TrustSecurity publicView initialTab="privacy" />
+      </LanguageProvider>
+    );
+  }
+
+  if (window.location.pathname === "/support") {
+    return (
+      <LanguageProvider apiUrl={API_URL} userNumber={localStorage.getItem("user_number")}>
+        <TrustSecurity publicView initialTab="support" />
       </LanguageProvider>
     );
   }
