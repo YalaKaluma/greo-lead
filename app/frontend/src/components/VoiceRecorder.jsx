@@ -20,7 +20,7 @@ export default function VoiceRecorder({
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
   const nativePathRef = useRef(null);
-  const isNative = Capacitor.isNativePlatform();
+  const usesNativeRecorder = Capacitor.getPlatform() === 'android';
 
   useEffect(() => {
     return () => {
@@ -75,7 +75,7 @@ export default function VoiceRecorder({
       setError('');
       chunksRef.current = [];
 
-      if (isNative) {
+      if (usesNativeRecorder) {
         const result = await NativeVoiceRecorder.start({ recordingContext: 'voice_entry' });
         nativePathRef.current = result.path;
         setIsRecording(true);
@@ -126,7 +126,7 @@ export default function VoiceRecorder({
   };
 
   const stopRecording = async () => {
-    if (isNative) {
+    if (usesNativeRecorder) {
       const path = nativePathRef.current;
       nativePathRef.current = null;
       setIsRecording(false);
