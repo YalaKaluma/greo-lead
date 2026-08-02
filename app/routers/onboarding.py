@@ -21,7 +21,7 @@ from app.services.onboarding_service import (
 )
 from app.services import journey_service
 from app.routers.tasks import Task as TaskModel
-from app.utils.security import hash_password, verify_password
+from app.utils.security import create_session_token, hash_password, verify_password
 from app.services.in_app_onboarding_service import get_session, respond
 
 router = APIRouter(tags=["onboarding"])
@@ -45,6 +45,9 @@ class LoginResponse(BaseModel):
     user_name: Optional[str] = None
     trial_days_left: Optional[int] = None
     needs_tour: bool = False
+    access_token: Optional[str] = None
+    token_type: Optional[str] = None
+    expires_in: Optional[int] = None
 
 
 class InAppOnboardingResponse(BaseModel):
@@ -121,7 +124,10 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
                 user_number=user.phone_number,
                 user_name=user.name,
                 trial_days_left=user.days_left_in_trial(),
-                needs_tour=False
+                needs_tour=False,
+                access_token=create_session_token(user.id, user.phone_number),
+                token_type="bearer",
+                expires_in=60 * 60 * 24 * 30,
             )
         else:
             return LoginResponse(
@@ -158,7 +164,10 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
             user_number=user.phone_number,
             user_name=user.name,
             trial_days_left=user.days_left_in_trial(),
-            needs_tour=False
+            needs_tour=False,
+            access_token=create_session_token(user.id, user.phone_number),
+            token_type="bearer",
+            expires_in=60 * 60 * 24 * 30,
         )
     else:
         return LoginResponse(

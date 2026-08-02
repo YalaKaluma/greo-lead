@@ -3,7 +3,8 @@
   "appName": "Alfred",
   "webDir": "../../static",
   "server": {
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "iosScheme": "https"
   },
   "plugins": {
     "PushNotifications": {

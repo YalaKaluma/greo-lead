@@ -49,6 +49,7 @@ export default function Welcome({ onLogin }) {
       // Store user info and trigger login
       localStorage.setItem("user_number", data.user_number);
       localStorage.setItem("user_name", data.user_name);
+      localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("needs_tour", data.needs_tour.toString());
       
       // ✅ NOTE: Onboarding data is now processed automatically during WhatsApp onboarding

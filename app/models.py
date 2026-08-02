@@ -1328,6 +1328,8 @@ class User(Base):
     temp_password_expires = Column(DateTime, nullable=True)
     is_admin = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    account_deletion_requested_at = Column(DateTime(timezone=True), nullable=True)
+    account_deletion_scheduled_for = Column(DateTime(timezone=True), nullable=True)
     is_synthetic_user = Column(Boolean, default=False, nullable=False)
     synthetic_user_type = Column(String, nullable=True)
 

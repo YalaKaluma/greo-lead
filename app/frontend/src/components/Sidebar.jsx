@@ -169,6 +169,7 @@ export default function Sidebar({ apiUrl, userNumber, currentPage, onNavigate, i
             <button
               onClick={() => {
                 localStorage.removeItem('user_number');
+                localStorage.removeItem('access_token');
                 window.location.reload();
               }}
               className="px-3 py-3 text-left text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all duration-200"

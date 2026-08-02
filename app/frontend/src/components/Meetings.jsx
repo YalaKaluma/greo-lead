@@ -230,6 +230,7 @@ function ConsentCheck({ checked, onChange }) {
 }
 
 function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreated }) {
+  const { t } = useLanguage();
   const [consent, setConsent] = useState(false);
   const [status, setStatus] = useState('idle');
   const [seconds, setSeconds] = useState(0);
@@ -245,7 +246,9 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
   const startedAtRef = useRef(null);
-  const isNative = Capacitor.isNativePlatform();
+  const nativePlatform = Capacitor.getPlatform();
+  const usesNativeRecorder = nativePlatform === 'android';
+  const isIosApp = nativePlatform === 'ios';
 
   useEffect(() => {
     fetch(`${apiUrl}/api/meetings/context/options?user_number=${encodeURIComponent(userNumber)}`)
@@ -274,7 +277,7 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
       const draft = await draftResponse.json();
       setDraftId(draft.id);
       draftIdRef.current = draft.id;
-      if (isNative) {
+      if (usesNativeRecorder) {
         await NativeMeetingRecorder.start();
         startedAtRef.current = startedAt.getTime();
         setStatus('recording');
@@ -322,7 +325,7 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
   };
 
   const stop = async () => {
-    if (!isNative) {
+    if (!usesNativeRecorder) {
       recorderRef.current?.stop();
       return;
     }
@@ -353,7 +356,7 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
   };
 
   const pauseResume = async () => {
-    if (isNative) {
+    if (usesNativeRecorder) {
       try {
         if (status === 'recording') {
           await NativeMeetingRecorder.pause();
@@ -452,7 +455,13 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
           </>
         )}
       </div>
-      <p className="mt-7 max-w-lg text-center text-sm text-slate-400">{isNative ? 'Recording continues through screen lock and while Alfred is in the background. Android will show a persistent recording notification.' : 'Keep this browser tab active while recording. Use the Alfred Android app for lock-screen and background recording.'}</p>
+      <p className="mt-7 max-w-lg text-center text-sm text-slate-400">
+        {usesNativeRecorder
+          ? t('meetings.recording.backgroundHintAndroid')
+          : isIosApp
+            ? t('meetings.recording.foregroundHintIos')
+            : t('meetings.recording.foregroundHintWeb')}
+      </p>
       </div>
     </div>
   );

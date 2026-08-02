@@ -3,16 +3,16 @@ Auth Router - Handle user authentication
 app/routers/auth.py
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import logging
 from app.db import get_db
-from app.models import User
+from app.models import PushSubscription, User
 from app.services.audit_log_service import write_audit_log
 from app.services.onboarding_seed_service import ensure_starter_examples_seeded
-from app.utils.security import hash_password, verify_password
+from app.utils.security import create_session_token, decode_session_token, hash_password, verify_password
 
 router = APIRouter(tags=["auth"])
 logger = logging.getLogger(__name__)
@@ -26,6 +26,34 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     username: str
     password: str
+
+
+class DeleteAccountRequest(BaseModel):
+    password: str
+    confirmation: str
+
+
+def _session_response(user: User) -> dict:
+    return {
+        "access_token": create_session_token(user.id, user.phone_number),
+        "token_type": "bearer",
+        "expires_in": 60 * 60 * 24 * 30,
+    }
+
+
+def require_authenticated_user(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> User:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    payload = decode_session_token(authorization.split(" ", 1)[1].strip())
+    if not payload:
+        raise HTTPException(status_code=401, detail="Session expired or invalid")
+    user = db.query(User).filter(User.id == payload["sub"]).first()
+    if not user or not user.is_active or user.phone_number != payload.get("usr"):
+        raise HTTPException(status_code=401, detail="Account is unavailable")
+    return user
 
 
 def _find_user_by_username(db: Session, username: str):
@@ -93,7 +121,8 @@ async def login(credentials: LoginRequest, request: Request, db: Session = Depen
             "user_name": user.name,
             "is_admin": bool(getattr(user, "is_admin", False)),
             "needs_tour": False,
-            "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 21
+            "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 21,
+            **_session_response(user),
         }
 
     # Check permanent password (returning users)
@@ -116,7 +145,8 @@ async def login(credentials: LoginRequest, request: Request, db: Session = Depen
             "user_name": user.name,
             "is_admin": bool(getattr(user, "is_admin", False)),
             "needs_tour": False,
-            "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 0
+            "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 0,
+            **_session_response(user),
         }
 
     # Neither password matched
@@ -194,7 +224,52 @@ async def register(payload: RegisterRequest, request: Request, db: Session = Dep
         "user_name": user.name,
         "is_admin": bool(getattr(user, "is_admin", False)),
         "needs_tour": True,
-        "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 21
+        "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 21,
+        **_session_response(user),
+    }
+
+
+@router.post("/delete-account")
+async def delete_account(
+    payload: DeleteAccountRequest,
+    request: Request,
+    current_user: User = Depends(require_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    if payload.confirmation.strip().upper() != "DELETE":
+        raise HTTPException(status_code=400, detail="Enter DELETE to confirm account deletion")
+    if not verify_password(payload.password, current_user.password_hash):
+        raise HTTPException(status_code=403, detail="Password confirmation failed")
+
+    now = datetime.now(timezone.utc)
+    current_user.is_active = False
+    current_user.account_deletion_requested_at = now
+    current_user.account_deletion_scheduled_for = now + timedelta(days=30)
+    current_user.password_hash = None
+    current_user.temp_password = None
+    current_user.temp_password_expires = None
+    current_user.voice_reference_data_url = None
+    current_user.voice_reference_mime_type = None
+    current_user.voice_reference_consented_at = None
+
+    db.query(PushSubscription).filter(
+        PushSubscription.user_number == current_user.phone_number
+    ).update({"is_active": False}, synchronize_session=False)
+
+    write_audit_log(
+        db,
+        user_id=current_user.id,
+        event_type="account_deletion_requested",
+        object_type="user",
+        object_id=current_user.id,
+        metadata={"scheduled_for": current_user.account_deletion_scheduled_for.isoformat()},
+        request=request,
+    )
+    db.commit()
+    return {
+        "success": True,
+        "message": "Your account has been deactivated and scheduled for deletion.",
+        "scheduled_for": current_user.account_deletion_scheduled_for.isoformat(),
     }
 
 
@@ -218,28 +293,23 @@ async def logout(request: Request, user_number: str | None = None, db: Session =
 
 
 @router.get("/me")
-async def get_current_user(user_number: str, db: Session = Depends(get_db)):
+async def get_current_user(current_user: User = Depends(require_authenticated_user)):
     """
     Get current user info.
     Used by frontend to check auth status and get user details.
     """
-    user = db.query(User).filter((User.phone_number == user_number) | (User.email == user_number)).first()
-
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
     return {
         "success": True,
         "user": {
-            "name": user.name,
-            "email": user.email,
-            "profession": user.profession,
-            "phone_number": user.phone_number,
-            "is_admin": bool(getattr(user, "is_admin", False)),
-            "is_active": bool(getattr(user, "is_active", True)),
-            "subscription_status": user.subscription_status,
-            "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 0,
-            "onboarding_completed": user.onboarding_completed,
-            "tour_completed": user.tour_completed
+            "name": current_user.name,
+            "email": current_user.email,
+            "profession": current_user.profession,
+            "phone_number": current_user.phone_number,
+            "is_admin": bool(getattr(current_user, "is_admin", False)),
+            "is_active": bool(getattr(current_user, "is_active", True)),
+            "subscription_status": current_user.subscription_status,
+            "trial_days_left": current_user.days_left_in_trial() if hasattr(current_user, 'days_left_in_trial') else 0,
+            "onboarding_completed": current_user.onboarding_completed,
+            "tour_completed": current_user.tour_completed
         }
     }

@@ -56,7 +56,8 @@ required_vars = [
     "TWILIO_WHATSAPP_NUMBER",
     "MAILGUN_API_KEY",
     "MAILGUN_DOMAIN",
-    "MAILGUN_FROM"
+    "MAILGUN_FROM",
+    "APP_SESSION_SECRET"
 ]
 
 missing_vars = []

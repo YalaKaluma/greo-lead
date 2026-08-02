@@ -237,7 +237,9 @@ function MainAppShell({
 
   useEffect(() => {
     if (!userNumber) return;
-    fetch(`${API_URL}/api/auth/me?user_number=${encodeURIComponent(userNumber)}`)
+    fetch(`${API_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('access_token') || ''}` }
+    })
       .then((response) => response.ok ? response.json() : null)
       .then((data) => setOnboardingComplete(Boolean(data?.user?.onboarding_completed)))
       .catch(() => setOnboardingComplete(true));
