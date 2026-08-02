@@ -46,6 +46,18 @@ Use this before a deliberate production release, typically Sunday.
 - [ ] Confirm no dev API, dev app name, or dev package ID is present in the Play build.
 - [ ] Promote release track only after production backend smoke tests pass.
 
+## Apple App Store / TestFlight
+
+- [ ] Confirm the App Store Connect record uses bundle ID `ai.alfredos.alfred`.
+- [ ] Confirm `APP_SESSION_SECRET` is configured in the Railway environment.
+- [ ] Confirm the Railway pre-deploy Alembic migration reaches revision `20260802_0001`.
+- [ ] Confirm GitHub contains `APPLE_DEVELOPMENT_TEAM`, `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, and `APP_STORE_CONNECT_PRIVATE_KEY_B64` secrets.
+- [ ] Run the `iOS TestFlight` workflow with upload disabled and confirm the unsigned simulator build succeeds.
+- [ ] Run the workflow with upload enabled and confirm the build finishes processing in TestFlight.
+- [ ] Test login, foreground recording, microphone denial, logout, and account deletion on a physical iPhone.
+- [ ] Confirm the iOS app never claims that recording continues while locked or in the background.
+- [ ] Complete App Privacy, age rating, review credentials, screenshots, and export compliance in App Store Connect.
+
 ## Production Migration Command
 
 Preferred path: run `.github/workflows/production-db-migration.yml` from GitHub Actions with:

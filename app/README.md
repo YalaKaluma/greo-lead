@@ -52,6 +52,7 @@ Additional settings loaded by `config.py`:
 - `GMAIL_CLIENT_SECRET`
 - `GMAIL_REFRESH_TOKEN`
 - `GMAIL_SENDER_EMAIL`
+- `APP_SESSION_SECRET`, a random value of at least 32 characters used to sign mobile and web sessions
 
 Web push notifications:
 

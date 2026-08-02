@@ -24,6 +24,7 @@ const intentionallySharedValues = new Set([
   'Coaching',
   'Contact',
   'Cookies',
+  'DELETE',
   'English',
   'Français',
   'Infrastructure',

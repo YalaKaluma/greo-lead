@@ -20,7 +20,7 @@ export default function VoiceRecorder({
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
   const nativePathRef = useRef(null);
-  const isNative = Capacitor.isNativePlatform();
+  const usesNativeRecorder = Capacitor.getPlatform() === 'android';
 
   useEffect(() => {
     return () => {
@@ -75,7 +75,7 @@ export default function VoiceRecorder({
       setError('');
       chunksRef.current = [];
 
-      if (isNative) {
+      if (usesNativeRecorder) {
         const result = await NativeVoiceRecorder.start({ recordingContext: 'voice_entry' });
         nativePathRef.current = result.path;
         setIsRecording(true);
@@ -86,7 +86,12 @@ export default function VoiceRecorder({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      const recorder = new MediaRecorder(stream);
+      const preferredType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+        .find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = new MediaRecorder(
+        stream,
+        preferredType ? { mimeType: preferredType, audioBitsPerSecond: 48000 } : { audioBitsPerSecond: 48000 }
+      );
       recorderRef.current = recorder;
 
       recorder.ondataavailable = (event) => {
@@ -96,15 +101,17 @@ export default function VoiceRecorder({
       };
 
       recorder.onstop = async () => {
-        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const type = recorder.mimeType || 'audio/webm';
+        const extension = type.includes('mp4') ? 'm4a' : 'webm';
+        const audioBlob = new Blob(chunksRef.current, { type });
         stopTracks();
 
         if (audioBlob.size > 0) {
-          await transcribeAudio(audioBlob);
+          await transcribeAudio(audioBlob, `recording.${extension}`);
         }
       };
 
-      recorder.start();
+      recorder.start(1000);
       setIsRecording(true);
       onRecordingChange?.(true);
     } catch (err) {
@@ -126,7 +133,7 @@ export default function VoiceRecorder({
   };
 
   const stopRecording = async () => {
-    if (isNative) {
+    if (usesNativeRecorder) {
       const path = nativePathRef.current;
       nativePathRef.current = null;
       setIsRecording(false);

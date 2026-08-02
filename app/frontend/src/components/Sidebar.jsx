@@ -59,7 +59,10 @@ export default function Sidebar({ apiUrl, userNumber, currentPage, onNavigate, i
         ${isMobile ? 'z-40' : 'z-10'}
         w-80
       `}
-      style={{ width: '320px' }}
+      style={{
+        width: '320px',
+        paddingTop: isMobile ? 'env(safe-area-inset-top)' : undefined,
+      }}
     >
       <div className="flex flex-col h-full">
         {/* Header */}
@@ -169,6 +172,7 @@ export default function Sidebar({ apiUrl, userNumber, currentPage, onNavigate, i
             <button
               onClick={() => {
                 localStorage.removeItem('user_number');
+                localStorage.removeItem('access_token');
                 window.location.reload();
               }}
               className="px-3 py-3 text-left text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all duration-200"

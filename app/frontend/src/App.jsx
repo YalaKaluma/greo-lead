@@ -237,7 +237,9 @@ function MainAppShell({
 
   useEffect(() => {
     if (!userNumber) return;
-    fetch(`${API_URL}/api/auth/me?user_number=${encodeURIComponent(userNumber)}`)
+    fetch(`${API_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('access_token') || ''}` }
+    })
       .then((response) => response.ok ? response.json() : null)
       .then((data) => setOnboardingComplete(Boolean(data?.user?.onboarding_completed)))
       .catch(() => setOnboardingComplete(true));
@@ -309,7 +311,13 @@ function MainAppShell({
     <div className="flex h-screen bg-gray-50">
       {/* Mobile Header */}
       {isMobile && (
-        <div className="fixed top-0 left-0 right-0 h-14 bg-white border-b border-gray-200 flex items-center px-4 z-30">
+        <div
+          className="fixed top-0 left-0 right-0 h-14 bg-white border-b border-gray-200 flex items-center px-4 z-30"
+          style={{
+            boxSizing: 'content-box',
+            paddingTop: 'env(safe-area-inset-top)',
+          }}
+        >
           <button
             onClick={toggleSidebar}
             className="relative p-2 hover:bg-gray-100 rounded"
@@ -341,7 +349,12 @@ function MainAppShell({
         onClose={() => setIsSidebarOpen(false)}
       />
 
-      <main className={`flex-1 overflow-auto ${isMobile ? 'mt-14' : ''}`}>
+      <main
+        className="flex-1 overflow-auto"
+        style={{
+          marginTop: isMobile ? 'calc(3.5rem + env(safe-area-inset-top))' : undefined,
+        }}
+      >
         <PageIntroBanner
           pageId={currentPage}
           userNumber={userNumber}

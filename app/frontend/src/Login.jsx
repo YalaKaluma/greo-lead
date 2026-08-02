@@ -35,6 +35,7 @@ export default function Login({ onLogin }) {
       }
       localStorage.setItem("user_number", data.user_number);
       localStorage.setItem("user_name", data.user_name);
+      localStorage.setItem("access_token", data.access_token);
       onLogin(data.user_number);
 
     } catch (err) {

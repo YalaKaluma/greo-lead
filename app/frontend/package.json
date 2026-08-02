@@ -11,12 +11,15 @@
     "build": "vite build",
     "preview": "vite preview",
     "mobile:sync": "pnpm build && cap sync android",
+    "mobile:sync:ios": "pnpm build && cap sync ios",
     "mobile:open:android": "cap open android",
-    "mobile:run:android": "pnpm build && cap run android"
+    "mobile:run:android": "pnpm build && cap run android",
+    "mobile:open:ios": "cap open ios"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",
     "@capacitor/core": "^8.4.1",
+    "@capacitor/ios": "^8.4.1",
     "@capacitor/push-notifications": "^8.0.0",
     "axios": "^1.6.2",
     "react": "^18.2.0",

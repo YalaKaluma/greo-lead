@@ -65,7 +65,9 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
 
   useEffect(() => {
     if (!userNumber) return;
-    axios.get(`${apiUrl}/api/auth/me`, { params: { user_number: userNumber } })
+    axios.get(`${apiUrl}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('access_token') || ''}` }
+    })
       .then((response) => setCurrentUser(response.data.user))
       .catch(() => setCurrentUser(null));
   }, [apiUrl, userNumber]);
@@ -273,24 +275,9 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
           <section className="py-8">
             <div className="max-w-2xl">
               <h2 className="text-sm font-semibold text-slate-900">Privacy & Data</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                You can request deletion of your Alfred account and associated data from the public account deletion page.
-              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-500">{t('settings.privacy.description')}</p>
               <VoiceEnrollmentPanel apiUrl={apiUrl} userNumber={userNumber} />
-              <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <h3 className="text-base font-semibold text-slate-950">Account deletion</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Deletion requests are handled by email so Alfred can verify account ownership before removing account information and user-created content.
-                </p>
-                <a
-                  href="/account-deletion"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-4 inline-flex rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
-                >
-                  Open account deletion page
-                </a>
-              </div>
+              <AccountDeletionPanel apiUrl={apiUrl} t={t} />
             </div>
           </section>
         )}
@@ -299,6 +286,98 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
           <AdminUserManagement apiUrl={apiUrl} userNumber={userNumber} />
         )}
       </div>
+    </div>
+  );
+}
+
+function AccountDeletionPanel({ apiUrl, t }) {
+  const [expanded, setExpanded] = useState(false);
+  const [password, setPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState('');
+
+  const deleteAccount = async () => {
+    setWorking(true);
+    setError('');
+    try {
+      const response = await fetch(`${apiUrl}/api/auth/delete-account`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ password, confirmation })
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.detail || t('settings.privacy.delete.error'));
+      }
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('user_number');
+      localStorage.removeItem('user_name');
+      window.location.assign('/');
+    } catch (err) {
+      setError(err.message || t('settings.privacy.delete.error'));
+      setWorking(false);
+    }
+  };
+
+  return (
+    <div className="mt-5 rounded-lg border border-rose-200 bg-rose-50 p-4">
+      <h3 className="text-base font-semibold text-rose-950">{t('settings.privacy.delete.title')}</h3>
+      <p className="mt-2 text-sm leading-6 text-rose-900">{t('settings.privacy.delete.description')}</p>
+      {!expanded ? (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="mt-4 rounded-md border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-800 shadow-sm"
+        >
+          {t('settings.privacy.delete.start')}
+        </button>
+      ) : (
+        <div className="mt-4 space-y-4">
+          <label className="block text-sm font-semibold text-rose-950">
+            {t('settings.privacy.delete.passwordLabel')}
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+              className="mt-2 w-full rounded-md border border-rose-300 bg-white px-3 py-2 text-slate-950"
+            />
+          </label>
+          <label className="block text-sm font-semibold text-rose-950">
+            {t('settings.privacy.delete.confirmationLabel')}
+            <input
+              type="text"
+              value={confirmation}
+              onChange={(event) => setConfirmation(event.target.value)}
+              placeholder={t('settings.privacy.delete.confirmationPlaceholder')}
+              className="mt-2 w-full rounded-md border border-rose-300 bg-white px-3 py-2 text-slate-950"
+            />
+          </label>
+          {error && <p role="alert" className="text-sm font-medium text-rose-800">{error}</p>}
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              disabled={working || !password || confirmation.trim().toUpperCase() !== 'DELETE'}
+              onClick={deleteAccount}
+              className="rounded-md bg-rose-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {working ? t('settings.privacy.delete.working') : t('settings.privacy.delete.confirm')}
+            </button>
+            <button
+              type="button"
+              disabled={working}
+              onClick={() => { setExpanded(false); setPassword(''); setConfirmation(''); setError(''); }}
+              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+            >
+              {t('settings.privacy.delete.cancel')}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -315,7 +394,7 @@ function VoiceEnrollmentPanel({ apiUrl, userNumber }) {
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
   const startedRef = useRef(null);
-  const native = Capacitor.isNativePlatform();
+  const usesNativeRecorder = Capacitor.getPlatform() === 'android';
 
   const refresh = () => fetch(`${apiUrl}/api/meetings/voice-profile?user_number=${encodeURIComponent(userNumber)}`)
     .then((response) => response.ok ? response.json() : { enrolled: false })
@@ -353,7 +432,7 @@ function VoiceEnrollmentPanel({ apiUrl, userNumber }) {
   const startSample = async () => {
     setError(''); setMessage(''); setSeconds(0); startedRef.current = Date.now();
     try {
-      if (native) {
+      if (usesNativeRecorder) {
         await NativeMeetingRecorder.start();
       } else {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -372,7 +451,7 @@ function VoiceEnrollmentPanel({ apiUrl, userNumber }) {
     setRecording(false);
     if (duration < 2) { setError('Please record for at least 2 seconds.'); return; }
     try {
-      if (native) {
+      if (usesNativeRecorder) {
         const result = await NativeMeetingRecorder.stop();
         const response = await fetch(Capacitor.convertFileSrc(result.path));
         const blob = await response.blob();
