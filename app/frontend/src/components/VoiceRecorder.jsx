@@ -86,7 +86,12 @@ export default function VoiceRecorder({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      const recorder = new MediaRecorder(stream);
+      const preferredType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+        .find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = new MediaRecorder(
+        stream,
+        preferredType ? { mimeType: preferredType, audioBitsPerSecond: 48000 } : { audioBitsPerSecond: 48000 }
+      );
       recorderRef.current = recorder;
 
       recorder.ondataavailable = (event) => {
@@ -96,15 +101,17 @@ export default function VoiceRecorder({
       };
 
       recorder.onstop = async () => {
-        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const type = recorder.mimeType || 'audio/webm';
+        const extension = type.includes('mp4') ? 'm4a' : 'webm';
+        const audioBlob = new Blob(chunksRef.current, { type });
         stopTracks();
 
         if (audioBlob.size > 0) {
-          await transcribeAudio(audioBlob);
+          await transcribeAudio(audioBlob, `recording.${extension}`);
         }
       };
 
-      recorder.start();
+      recorder.start(1000);
       setIsRecording(true);
       onRecordingChange?.(true);
     } catch (err) {
