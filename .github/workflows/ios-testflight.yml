@@ -120,7 +120,6 @@ jobs:
             MARKETING_VERSION="$IOS_VERSION" \
             CURRENT_PROJECT_VERSION="$IOS_BUILD_NUMBER" \
             CODE_SIGN_STYLE=Automatic \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
             archive
 
       - name: Create App Store export options
