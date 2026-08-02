@@ -4,6 +4,8 @@
   "home.gauge.midpoint": "Midpoint",
   "home.gauge.centered": "centered on the gauge",
   "home.wisdom.depth": "Depth",
+  "home.wisdom.journalConsistency": "journal consistency",
+  "home.wisdom.days": "{{days}} of the last 7 days",
   "home.wisdom.description": "Wisdom Index is journal consistency multiplied by reflection depth. Consistency is the percentage of the last 7 days with an entry; depth is shown as a percentage where 10/10 equals 100%.",
   "home.wisdom.depthComparison": "vs {{average}}% avg ({{delta}})",
   "app.poweredBy": "Powered by Alfred",

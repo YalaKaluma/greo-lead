@@ -4,6 +4,8 @@
   "home.gauge.midpoint": "Point médian",
   "home.gauge.centered": "centrée sur la jauge",
   "home.wisdom.depth": "Profondeur",
+  "home.wisdom.journalConsistency": "de régularité du journal",
+  "home.wisdom.days": "{{days}} des 7 derniers jours",
   "home.wisdom.description": "L'indice de sagesse correspond à la régularité du journal multipliée par la profondeur de réflexion. La régularité est le pourcentage des 7 derniers jours avec une entrée; la profondeur est exprimée en pourcentage, où 10/10 équivaut à 100 %.",
   "home.wisdom.depthComparison": "c. moy. de {{average}} % ({{delta}})",
   "app.poweredBy": "Propulsé par Alfred",

@@ -62,8 +62,7 @@ function SegmentedGauge({ value, benchmark, valueLabel, t }) {
   const description = `${valueLabel}. ${t('home.gauge.fiveWeekAverage', 'Five-week average')}: ${numericBenchmark.toFixed(1)}`;
   return (
     <div className="w-full" role="img" aria-label={description} title={description}>
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-3xl font-semibold text-slate-950">{valueLabel}</span>
+      <div className="flex justify-end">
         <span className="text-xs font-medium text-slate-500">{t('home.gauge.midpoint', 'Midpoint')}: {numericBenchmark.toFixed(1)}</span>
       </div>
       <div className="relative mt-3 h-9 px-[3%]">
@@ -137,16 +136,16 @@ function JournalMetricCard({ metric, t }) {
       <div className="mt-4">
         <SegmentedGauge value={wisdomIndex} benchmark={metric?.five_week_average} valueLabel={`${wisdomIndex}%`} t={t} />
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-3">
-        <div className="rounded-lg bg-slate-50 p-4 text-center">
-          <div className="text-3xl font-semibold text-slate-950">{journalDayPercentage}%</div>
-          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Journal consistency</p>
-          <p className="mt-3 text-xs font-semibold text-slate-600">{journalDays} of the last 7 days</p>
+      <div className="mt-3 flex flex-wrap items-start justify-between gap-2 text-sm">
+        <div>
+          <p className="text-slate-600">{journalDayPercentage}% {t('home.wisdom.journalConsistency', 'journal consistency')}</p>
+          <p className="mt-1 text-xs font-medium text-slate-500">
+            {t('home.wisdom.days', '{{days}} of the last 7 days').replace('{{days}}', journalDays)}
+          </p>
         </div>
-        <div className="rounded-lg bg-slate-50 p-4 text-center">
-          <div className="text-3xl font-semibold text-slate-950">{depthPercentage}%</div>
-          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{t('home.wisdom.depth', 'Depth')}</p>
-          <p className={`mt-3 text-xs font-semibold ${depthDelta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
+        <div className="text-right">
+          <p className="text-slate-600">{depthPercentage}% {t('home.wisdom.depth', 'depth').toLowerCase()}</p>
+          <p className={`mt-1 text-xs font-semibold ${depthDelta.startsWith('-') ? 'text-rose-700' : 'text-emerald-700'}`}>
             {t('home.wisdom.depthComparison', 'vs {{average}}% avg ({{delta}})')
               .replace('{{average}}', monthAverageDepth)
               .replace('{{delta}}', depthDelta)}
