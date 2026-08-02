@@ -424,6 +424,7 @@ class Meeting(Base):
     consent_acknowledged_at = Column(DateTime(timezone=True), nullable=True)
     prompt_version = Column(String(40), nullable=True)
     model_version = Column(String(80), nullable=True)
+    leadership_assessment_version = Column(String(80), nullable=True, index=True)
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
@@ -434,6 +435,7 @@ class Meeting(Base):
     decisions = relationship("MeetingDecision", back_populates="meeting", cascade="all, delete-orphan")
     action_items = relationship("MeetingActionItem", back_populates="meeting", cascade="all, delete-orphan")
     leadership_observations = relationship("MeetingLeadershipObservation", back_populates="meeting", cascade="all, delete-orphan")
+    leadership_domain_assessments = relationship("MeetingLeadershipDomainAssessment", back_populates="meeting", cascade="all, delete-orphan")
     goal_links = relationship("MeetingGoalLink", back_populates="meeting", cascade="all, delete-orphan")
     project_links = relationship("MeetingProjectLink", back_populates="meeting", cascade="all, delete-orphan")
     attendees = relationship("MeetingAttendee", back_populates="meeting", cascade="all, delete-orphan")
@@ -536,7 +538,8 @@ class MeetingActionItem(Base):
     evidence_excerpt = Column(Text, nullable=True)
     transcript_segment_id = Column(Integer, ForeignKey("meeting_transcript_segments.id", ondelete="SET NULL"), nullable=True)
     created_task_id = Column(Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
-    tracking_mode = Column(String(30), nullable=True)  # my_todo, follow_up
+    tracking_mode = Column(String(30), nullable=True)  # my_todo, follow_up, clarify_owner
+    ignored_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     meeting = relationship("Meeting", back_populates="action_items")
@@ -555,6 +558,32 @@ class MeetingLeadershipObservation(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     meeting = relationship("Meeting", back_populates="leadership_observations")
+
+
+class MeetingLeadershipDomainAssessment(Base):
+    __tablename__ = "meeting_leadership_domain_assessments"
+    __table_args__ = (UniqueConstraint("meeting_id", "domain", name="uq_meeting_leadership_domain"),)
+
+    id = Column(Integer, primary_key=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True)
+    domain = Column(String(80), nullable=False)
+    score = Column(Integer, nullable=True)
+    feedback = Column(Text, nullable=False)
+    evidence_excerpt = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    meeting = relationship("Meeting", back_populates="leadership_domain_assessments")
+
+
+class LeadershipTrendsSnapshot(Base):
+    __tablename__ = "leadership_trends_snapshots"
+
+    id = Column(Integer, primary_key=True)
+    user_number = Column(String, nullable=False, unique=True, index=True)
+    period_days = Column(Integer, nullable=False, default=90)
+    result_payload = Column(JSON, nullable=False)
+    generated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
 
 class MeetingGoalLink(Base):

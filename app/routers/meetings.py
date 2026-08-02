@@ -12,12 +12,13 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
 from app.models import JourneyGoal, JourneyPerson, JourneyProject, Meeting, MeetingActionItem, MeetingAttendee, MeetingContextNote, MeetingGoalLink, MeetingParticipant, MeetingProjectLink, Task, User
-from app.services.meeting_intelligence_service import answer_meeting_question, process_meeting
+from app.services.meeting_intelligence_service import answer_meeting_question, process_meeting, reassess_meeting_leadership
+from app.services.leadership_trends_service import get_leadership_trends
 from app.services.journey_support import goal_level_variants, normalize_goal_level
 from app.services.timezone_service import get_user_timezone, today_for_timezone
 
@@ -51,7 +52,13 @@ class MeetingUpdate(BaseModel):
 
 class ActionConversion(BaseModel):
     user_number: str
-    mode: str
+    mode: str = "auto"
+
+
+class ActionItemUpdate(BaseModel):
+    user_number: str
+    description: Optional[str] = Field(default=None, min_length=1, max_length=2000)
+    ignored: Optional[bool] = None
 
 
 class MeetingLinkCreate(BaseModel):
@@ -101,6 +108,7 @@ def _query(db: Session):
         selectinload(Meeting.decisions),
         selectinload(Meeting.action_items),
         selectinload(Meeting.leadership_observations),
+        selectinload(Meeting.leadership_domain_assessments),
         selectinload(Meeting.transcript_segments),
         selectinload(Meeting.goal_links).selectinload(MeetingGoalLink.goal),
         selectinload(Meeting.project_links).selectinload(MeetingProjectLink.project),
@@ -143,11 +151,17 @@ def _deduplicated_participants(meeting: Meeting) -> list[MeetingParticipant]:
 
 def _meeting_payload(meeting: Meeting, detail: bool = False):
     participants = _deduplicated_participants(meeting)
+    is_processed = meeting.processing_status == "ready" and all(
+        action.created_task_id is not None or action.ignored_at is not None
+        for action in meeting.action_items
+    )
     payload = {
         "id": meeting.id,
         "title": meeting.title,
         "source_type": meeting.source_type,
         "processing_status": meeting.processing_status,
+        "status": "processed" if is_processed else meeting.processing_status,
+        "is_processed": is_processed,
         "processing_error": meeting.processing_error,
         "meeting_type": meeting.meeting_type,
         "started_at": meeting.started_at,
@@ -169,8 +183,9 @@ def _meeting_payload(meeting: Meeting, detail: bool = False):
             "transcript_text": meeting.transcript_text,
             "topics": [{"id": t.id, "title": t.title, "summary": t.summary} for t in sorted(meeting.topics, key=lambda item: item.sequence_number)],
             "decisions": [{"id": d.id, "description": d.description, "confidence": d.confidence, "evidence_excerpt": d.evidence_excerpt} for d in meeting.decisions],
-            "action_items": [{"id": a.id, "description": a.description, "owner_name": a.owner_name, "due_date": a.due_date, "confidence": a.confidence, "evidence_excerpt": a.evidence_excerpt, "created_task_id": a.created_task_id, "tracking_mode": a.tracking_mode} for a in meeting.action_items],
+            "action_items": [{"id": a.id, "description": a.description, "owner_name": a.owner_name, "due_date": a.due_date, "confidence": a.confidence, "evidence_excerpt": a.evidence_excerpt, "created_task_id": a.created_task_id, "tracking_mode": a.tracking_mode, "ignored": bool(a.ignored_at)} for a in meeting.action_items],
             "leadership_observations": [{"id": o.id, "category": o.category, "observation": o.observation, "confidence": o.confidence, "evidence_excerpt": o.evidence_excerpt} for o in meeting.leadership_observations],
+            "leadership_domain_assessments": [{"id": item.id, "domain": item.domain, "score": item.score, "feedback": item.feedback, "evidence_excerpt": item.evidence_excerpt} for item in meeting.leadership_domain_assessments],
             "transcript_segments": [{"id": s.id, "sequence_number": s.sequence_number, "speaker_label": s.speaker_label, "start_seconds": s.start_seconds, "end_seconds": s.end_seconds, "text": s.text} for s in sorted(meeting.transcript_segments, key=lambda item: item.sequence_number)],
             "related_goals": [{"id": link.goal.id, "title": link.goal.title or link.goal.goal_text} for link in meeting.goal_links],
             "related_projects": [{"id": link.project.id, "title": link.project.project_name} for link in meeting.project_links],
@@ -190,13 +205,25 @@ def list_meetings(
     participant_id: Optional[int] = None,
     goal_id: Optional[int] = None,
     project_id: Optional[int] = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=20),
     db: Session = Depends(get_db),
 ):
     query = _query(db).filter(Meeting.user_number == user_number)
     if search:
         pattern = f"%{search.strip()}%"
         query = query.filter(or_(Meeting.title.ilike(pattern), Meeting.one_line_summary.ilike(pattern), Meeting.transcript_text.ilike(pattern)))
-    if status:
+    if status == "processed":
+        query = query.filter(
+            Meeting.processing_status == "ready",
+            ~Meeting.action_items.any(and_(MeetingActionItem.created_task_id.is_(None), MeetingActionItem.ignored_at.is_(None))),
+        )
+    elif status == "ready":
+        query = query.filter(
+            Meeting.processing_status == "ready",
+            Meeting.action_items.any(and_(MeetingActionItem.created_task_id.is_(None), MeetingActionItem.ignored_at.is_(None))),
+        )
+    elif status:
         query = query.filter(Meeting.processing_status == status)
     if meeting_type:
         query = query.filter(Meeting.meeting_type == meeting_type)
@@ -211,8 +238,58 @@ def list_meetings(
     if project_id:
         query = query.join(MeetingProjectLink).filter(MeetingProjectLink.project_id == project_id)
     query = query.distinct()
-    meetings = query.order_by(Meeting.started_at.desc().nullslast(), Meeting.created_at.desc()).limit(250).all()
-    return [_meeting_payload(meeting) for meeting in meetings]
+    total = query.count()
+    meetings = query.order_by(Meeting.started_at.desc().nullslast(), Meeting.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    return {
+        "items": [_meeting_payload(meeting) for meeting in meetings],
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": max(1, (total + page_size - 1) // page_size),
+    }
+
+
+@router.get("/action-items/tasks")
+def list_meeting_action_items(user_number: str, db: Session = Depends(get_db)):
+    rows = db.query(MeetingActionItem, Meeting).join(Meeting).filter(
+        Meeting.user_number == user_number,
+        MeetingActionItem.created_task_id.is_(None),
+        MeetingActionItem.ignored_at.is_(None),
+    ).order_by(Meeting.started_at.desc().nullslast(), MeetingActionItem.created_at.desc()).limit(500).all()
+    return [{
+        "id": action.id,
+        "description": action.description,
+        "meeting_id": meeting.id,
+        "meeting_title": meeting.title,
+        "owner_name": action.owner_name,
+        "created_at": action.created_at,
+    } for action, meeting in rows]
+
+
+@router.get("/leadership-trends")
+def leadership_trends(user_number: str, db: Session = Depends(get_db)):
+    return get_leadership_trends(db, user_number, days=90)
+
+
+@router.post("/leadership-trends/refresh")
+def refresh_leadership_trends(user_number: str, db: Session = Depends(get_db)):
+    return get_leadership_trends(db, user_number, days=90, refresh=True)
+
+
+@router.patch("/action-items/{action_item_id}")
+def update_action_item(action_item_id: int, payload: ActionItemUpdate, db: Session = Depends(get_db)):
+    action = db.query(MeetingActionItem).join(Meeting).filter(
+        MeetingActionItem.id == action_item_id,
+        Meeting.user_number == payload.user_number,
+    ).first()
+    if not action:
+        raise HTTPException(status_code=404, detail="Action item not found.")
+    if payload.description is not None:
+        action.description = payload.description.strip()
+    if payload.ignored is not None:
+        action.ignored_at = datetime.now(timezone.utc) if payload.ignored else None
+    db.commit()
+    return {"id": action.id, "description": action.description, "ignored": bool(action.ignored_at)}
 
 
 @router.get("/{meeting_id:int}")
@@ -490,6 +567,17 @@ def retry_meeting(meeting_id: int, user_number: str, background_tasks: Backgroun
     return {"id": meeting.id, "processing_status": "queued"}
 
 
+@router.post("/{meeting_id}/leadership-assessment", status_code=202)
+def create_leadership_assessment(meeting_id: int, user_number: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found.")
+    if meeting.processing_status != "ready":
+        raise HTTPException(status_code=409, detail="The meeting must finish processing before it can be assessed.")
+    background_tasks.add_task(reassess_meeting_leadership, meeting.id)
+    return {"id": meeting.id, "assessment_status": "queued"}
+
+
 @router.post("/upload", status_code=202)
 async def upload_meeting(
     background_tasks: BackgroundTasks,
@@ -596,8 +684,8 @@ def convert_action_item(action_item_id: int, payload: ActionConversion, db: Sess
     ).first()
     if not action:
         raise HTTPException(status_code=404, detail="Action item not found.")
-    if payload.mode not in {"my_todo", "follow_up"}:
-        raise HTTPException(status_code=400, detail="Mode must be my_todo or follow_up.")
+    if payload.mode not in {"auto", "my_todo", "follow_up"}:
+        raise HTTPException(status_code=400, detail="Mode must be auto, my_todo, or follow_up.")
     today = today_for_timezone(get_user_timezone(db, payload.user_number))
     today_due = datetime.combine(today, datetime.min.time())
     goal_links = db.query(MeetingGoalLink).filter(MeetingGoalLink.meeting_id == action.meeting_id).all()
@@ -627,12 +715,32 @@ def convert_action_item(action_item_id: int, payload: ActionConversion, db: Sess
             db.commit()
             return {"task_id": existing_task.id, "already_created": True}
         action.created_task_id = None
+    owner = (action.owner_name or "").strip()
+    normalized_owner = re.sub(r"[^a-z0-9]+", " ", owner.lower()).strip()
+    unclear_owners = {"", "unclear", "unknown", "not specified", "n a", "none", "tbd"}
+    self_names = {"me", "myself", "i", "current user"}
+    user = db.query(User).filter(User.phone_number == payload.user_number).first()
+    if user and user.name:
+        self_names.add(re.sub(r"[^a-z0-9]+", " ", user.name.lower()).strip())
+    for participant in action.meeting.participants:
+        if participant.is_current_user or participant.match_status == "current_user":
+            for label in (participant.display_name, participant.speaker_label):
+                if label:
+                    self_names.add(re.sub(r"[^a-z0-9]+", " ", label.lower()).strip())
+
+    mode = payload.mode
+    if mode == "auto":
+        mode = "clarify_owner" if normalized_owner in unclear_owners else ("my_todo" if normalized_owner in self_names else "follow_up")
+
     title = action.description
     delegated_to = None
-    if payload.mode == "follow_up":
-        owner = action.owner_name or "the owner"
-        title = f"Follow up with {owner} regarding {action.description}"
+    if mode == "follow_up":
+        title = f"Follow up with {owner}: {action.description}"
         delegated_to = owner
+    elif mode == "clarify_owner":
+        title = f"Clarify ownership: {action.description}"
+    context_lines.append(f"Original action owner: {owner or 'Unclear'}")
+    enriched_notes = "\n".join(context_lines)
     task = Task(
         user_number=payload.user_number,
         title=title,
@@ -647,7 +755,7 @@ def convert_action_item(action_item_id: int, payload: ActionConversion, db: Sess
     db.add(task)
     db.flush()
     action.created_task_id = task.id
-    action.tracking_mode = payload.mode
+    action.tracking_mode = mode
     db.commit()
     return {"task_id": task.id, "already_created": False}
 

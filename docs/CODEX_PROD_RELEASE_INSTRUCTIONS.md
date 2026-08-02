@@ -76,7 +76,18 @@ alembic heads
 alembic current
 ```
 
-Production migrations are manual and deliberate. If a migration is required, run it only with the production Neon direct connection string and only after backup readiness is confirmed:
+Production migrations are manual and deliberate. If a migration is required, prefer the `Production DB Migration` GitHub Actions workflow so the production Neon direct connection string stays in GitHub Secrets.
+
+Use:
+
+- Workflow file: `.github/workflows/production-db-migration.yml`
+- Branch/ref: the PR head branch, usually `main`, before merging to `prod`
+- `confirm_backup`: `BACKUP_DONE`
+- `target_revision`: `head`
+
+Wait for the workflow to finish and confirm it reports the expected Alembic revision after migration.
+
+If the workflow is unavailable, run the migration only with the production Neon direct connection string and only after backup readiness is confirmed:
 
 ```bash
 DIRECT_DATABASE_URL="postgresql://..." alembic upgrade head
@@ -106,11 +117,15 @@ Required checks usually include:
 
 If any check fails, stop and fix or report the failure. Do not merge a failing release PR without explicit user approval.
 
-8. Merge the PR only when it is mergeable and CI is green.
+8. If the release includes Alembic migrations, run the `Production DB Migration` workflow before merging.
+
+Use the PR head branch/ref so the workflow has the migration files that are about to be released. Do not merge if the migration workflow fails or cannot be verified.
+
+9. Merge the PR only when it is mergeable, CI is green, and required production migrations are complete.
 
 Use a normal merge commit unless the user or repo policy says otherwise.
 
-9. Verify Railway production deployment.
+10. Verify Railway production deployment.
 
 Check the merge commit status. Railway should move from pending to success.
 
@@ -129,7 +144,19 @@ The response must show:
 
 If PowerShell or curl has local TLS issues, use another available HTTP client such as Node `fetch`.
 
-10. Report the result to the user.
+11. Trigger the Android AAB workflow for Play Store upload.
+
+Run the `Android AAB` GitHub Actions workflow on the `prod` branch after production health is verified.
+
+Use:
+
+- Workflow file: `.github/workflows/android-aab.yml`
+- Branch: `prod`
+- `api_url`: `https://greo-lead-production.up.railway.app`
+
+Wait for the workflow to finish. If it succeeds, report the workflow run URL and artifact name `alfred-release-aab`. If Codex cannot trigger the workflow because the available GitHub connector lacks workflow-dispatch support or the browser/CLI is not authenticated, report that clearly and ask the user to either sign in to GitHub in the browser or provide an authenticated workflow-dispatch route.
+
+12. Report the result to the user.
 
 Include:
 
@@ -137,6 +164,8 @@ Include:
 - merged production commit SHA
 - Railway deployment status
 - `/api/health` result
+- production migration workflow status if migrations were included
+- Android AAB workflow status and artifact availability
 - anything not verified, especially production migrations or authenticated smoke tests
 
 ## Smoke Test Reminder

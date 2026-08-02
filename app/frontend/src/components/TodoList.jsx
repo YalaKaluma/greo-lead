@@ -486,6 +486,7 @@ export default function TodoList({ apiUrl, userNumber }) {
         {},
         { params: { user_number: userNumber } }
       );
+      window.dispatchEvent(new Event('alfred-sidebar-counts-refresh'));
       
       // 1500ms animation before removing from UI
       setTimeout(() => {

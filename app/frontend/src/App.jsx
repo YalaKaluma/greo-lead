@@ -233,6 +233,7 @@ function MainAppShell({
   const [introCardsEnabled, setIntroCardsEnabled] = useState(false);
   const [onboardingComplete, setOnboardingComplete] = useState(null);
   const [onboardingReveal, setOnboardingReveal] = useState(null);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
 
   useEffect(() => {
     if (!userNumber) return;
@@ -311,9 +312,18 @@ function MainAppShell({
         <div className="fixed top-0 left-0 right-0 h-14 bg-white border-b border-gray-200 flex items-center px-4 z-30">
           <button
             onClick={toggleSidebar}
-            className="p-2 hover:bg-gray-100 rounded"
+            className="relative p-2 hover:bg-gray-100 rounded"
+            aria-label={unreadMessageCount > 0 ? t('nav.openMenuUnread') : t('nav.openMenu')}
           >
             ☰
+            {unreadMessageCount > 0 && (
+              <span
+                className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold leading-none text-white ring-2 ring-white"
+                aria-hidden="true"
+              >
+                {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+              </span>
+            )}
           </button>
           <h1 className="ml-4 text-lg font-semibold">
             {pageTitles[currentPage] || t('app.title')}
@@ -322,6 +332,8 @@ function MainAppShell({
       )}
 
       <Sidebar
+        apiUrl={API_URL}
+        userNumber={userNumber}
         currentPage={currentPage}
         onNavigate={handleNavigate}
         isOpen={isSidebarOpen}
@@ -390,6 +402,7 @@ function MainAppShell({
         currentPage={currentPage}
         showLauncher={!isMobile || isSidebarOpen}
         preferredLanguage={language}
+        onUnreadCountChange={setUnreadMessageCount}
       />
 
       {onboardingComplete === false && (

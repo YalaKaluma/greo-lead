@@ -38,7 +38,7 @@ DOMAIN_LABELS = {
 }
 
 DOMAIN_ORDER = ["vision", "people", "execute", "energy", "learning"]
-HOME_DASHBOARD_SCHEMA_VERSION = 7
+HOME_DASHBOARD_SCHEMA_VERSION = 8
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
@@ -280,6 +280,24 @@ def _weekly_journal_metrics(journal: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _completed_days(rows: list[dict[str, Any]], today) -> list[dict[str, Any]]:
+    """Keep only fully elapsed local calendar days."""
+    today_key = today.isoformat()
+    return [row for row in rows if str(row.get("date") or "") < today_key]
+
+
+def _mtn_period_stats(trend_chart: list[dict[str, Any]], days: int) -> dict[str, Any]:
+    window = trend_chart[-days:]
+    total_score = round(sum(_as_float(item.get("mtn_score"), 0) for item in window), 2)
+    completed_tasks = sum(int(item.get("completed_tasks") or 0) for item in window)
+    return {
+        "days": days,
+        "total_score": total_score,
+        "average_score": round(total_score / days, 2),
+        "completed_tasks": completed_tasks,
+    }
+
+
 def _goal_health_color(review: dict[str, Any]) -> str:
     health = review.get("health_scores") or review.get("goal_health") or {}
     color = str(health.get("overall_goal_health") or "").strip().lower()
@@ -406,6 +424,10 @@ class HomeDashboardService:
         habits = self.db.query(Habit).filter(Habit.user_number == user_number, Habit.is_active == True).all()
         habit_trends = get_habit_trends(user_number, self.db, timezone_name)
         journal = get_reflection_depth_trends(user_number, self.db, include_starter_examples=False)
+        mtn_chart = _completed_days(mtn.get("trend_chart") or [], today)
+        habit_chart = _completed_days(habit_trends.get("trend_chart") or [], today)
+        journal_chart = _completed_days(journal.get("trend_chart") or [], today)
+        energy_chart = _completed_days(habit_trends.get("energy_trend") or [], today)
         readiness = get_current_belt_status(self.db, user_number, load_journey_trials_config())
         assessment = (
             self.db.query(BeltAssessment)
@@ -431,10 +453,16 @@ class HomeDashboardService:
             .all()
         )
 
-        mtn_week = (mtn.get("summary") or {}).get("last_7_days") or {}
+        mtn_week = _mtn_period_stats(mtn_chart, 7)
+        mtn_month = _mtn_period_stats(mtn_chart, 30)
+        mtn_delta = mtn_week["average_score"] - mtn_month["average_score"]
+        mtn_week["trend"] = {
+            "label": "Improving" if mtn_delta >= 1 else "Declining" if mtn_delta <= -1 else "Stable",
+            "delta_vs_30": round(mtn_delta, 2),
+        }
         habit_week = ((habit_trends.get("summary") or {}).get("last_7_days") or {})
         habit_baseline = ((habit_trends.get("summary") or {}).get("last_90_days") or {})
-        journal_metrics = _weekly_journal_metrics(journal)
+        journal_metrics = _weekly_journal_metrics({**journal, "trend_chart": journal_chart})
         wheel_segments = _wheel_segments(assessment)
         vision_goals = [
             goal for goal in user_goals
@@ -487,7 +515,7 @@ class HomeDashboardService:
                     "average_tasks_per_day": round(int(mtn_week.get("completed_tasks") or 0) / 7, 1),
                     "delta": _as_float((mtn_week.get("trend") or {}).get("delta_vs_30"), 0),
                     "status": (mtn_week.get("trend") or {}).get("label") or "Stable",
-                    "sparkline": [item.get("rolling_average") for item in (mtn.get("trend_chart") or [])[-14:]],
+                    "sparkline": [item.get("rolling_average") for item in mtn_chart[-14:]],
                 },
                 "habits": {
                     "compliance_rate": int(habit_week.get("compliance_rate") or 0),
@@ -498,14 +526,14 @@ class HomeDashboardService:
                 },
                 "journal": {
                     **journal_metrics,
-                    "sparkline": [item.get("weekly_average") for item in (journal.get("trend_chart") or [])[-14:]],
+                    "sparkline": [item.get("weekly_average") for item in journal_chart[-14:]],
                 },
             },
             "trends": {
-                "mtn": mtn.get("trend_chart") or [],
-                "habits": habit_trends.get("trend_chart") or [],
-                "journal": journal.get("trend_chart") or [],
-                "energy": habit_trends.get("energy_trend") or [],
+                "mtn": mtn_chart,
+                "habits": habit_chart,
+                "journal": journal_chart,
+                "energy": energy_chart,
             },
             "top_tasks": _rank_top_tasks(tasks, scores_by_task, goals_by_id, today),
             "procrastinated_tasks": _rank_procrastinated_tasks(tasks, scores_by_task, goals_by_id),

@@ -454,6 +454,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
         {},
         { params: { user_number: userNumber } }
       );
+      window.dispatchEvent(new Event('alfred-sidebar-counts-refresh'));
       setTrends(null);
       await fetchHabits();
       if (activeTab === 'trends') {
@@ -473,6 +474,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
         { date, status },
         { params: { user_number: userNumber } }
       );
+      window.dispatchEvent(new Event('alfred-sidebar-counts-refresh'));
       
       // Refresh history
       await fetchHabitHistory(habitId);

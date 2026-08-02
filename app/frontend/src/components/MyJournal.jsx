@@ -67,6 +67,17 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
+  // Grow the journal input with its content, then scroll once it reaches a
+  // comfortable maximum height so the composer never takes over the screen.
+  useLayoutEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+
+    input.style.height = 'auto';
+    input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+    input.style.overflowY = input.scrollHeight > 160 ? 'auto' : 'hidden';
+  }, [inputMessage]);
+
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
@@ -311,6 +322,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
         assistantMessage
       ]);
       setTrends(null);
+      window.dispatchEvent(new Event('alfred-sidebar-counts-refresh'));
 
       setActiveSession(null);
       setCurrentStage(null);
@@ -675,29 +687,32 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
 
       {/* Input Area */}
       {activeTab === 'journal' && (
-      <div className="border-t border-gray-200 bg-white px-4 py-4 md:px-10">
-        <form onSubmit={sendMessage} className="flex gap-3">
-          <input
+      <div className="shrink-0 border-t border-gray-200 bg-white px-4 py-4 md:px-10">
+        <form onSubmit={sendMessage} className="flex w-full min-w-0 items-end gap-2 md:gap-3">
+          <textarea
             ref={inputRef}
-            type="text"
+            rows={1}
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             placeholder={activeSession ? t('coaching.sharePlaceholder') : JOURNAL_EMPTY_PROMPT}
             disabled={isLoading}
-            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+            className="min-h-12 min-w-0 flex-1 resize-none overflow-x-hidden rounded-lg border border-gray-300 px-4 py-3 leading-6 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100"
+            style={{ maxHeight: '160px' }}
           />
 
-          <VoiceRecorder
-            apiUrl={apiUrl}
-            disabled={isLoading}
-            onTranscript={(text) => setInputMessage(text)}
-            onRecordingChange={setIsVoiceRecording}
-          />
+          <div className="shrink-0">
+            <VoiceRecorder
+              apiUrl={apiUrl}
+              disabled={isLoading}
+              onTranscript={(text) => setInputMessage(text)}
+              onRecordingChange={setIsVoiceRecording}
+            />
+          </div>
 
           <button
             type="submit"
             disabled={!inputMessage.trim() || isLoading}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
+            className="shrink-0 rounded-lg bg-blue-600 px-4 py-3 font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 md:px-6"
           >
             {t('chat.send')}
           </button>

@@ -49,6 +49,63 @@ function Evidence({ children }) {
   return <blockquote className="mt-2 border-l-2 border-slate-300 pl-3 text-sm italic text-slate-600">“{children}”</blockquote>;
 }
 
+function LeadershipFeedback({ feedback, fallback }) {
+  const text = feedback || fallback;
+  const labels = ['Demonstrated', 'Growth edge', 'Next meeting'];
+  const matches = [...text.matchAll(/(?:^|\n|\s)(Demonstrated|Growth edge|Next meeting):\s*/gi)];
+
+  if (matches.length !== labels.length) {
+    return <p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-700">{text}</p>;
+  }
+
+  const sections = matches.map((match, index) => ({
+    label: match[1],
+    text: text.slice(match.index + match[0].length, matches[index + 1]?.index ?? text.length).trim()
+  }));
+
+  return <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-700">
+    {sections.map((section) => <li key={section.label} className="flex gap-2">
+      <span aria-hidden="true" className="mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />
+      <span><strong className="font-semibold text-slate-900">{section.label}:</strong> {section.text}</span>
+    </li>)}
+  </ul>;
+}
+
+const LEADERSHIP_DOMAIN_ORDER = ['Vision', 'People', 'Prioritize & Execute', 'Time & Energy', 'Learning & Development'];
+const SCORE_COLORS = { 1: '#dc2626', 2: '#f97316', 3: '#facc15', 4: '#6ee7b7', 5: '#16a34a' };
+
+function LeadershipDomainWheel({ assessments = [] }) {
+  const { t } = useLanguage();
+  const byDomain = Object.fromEntries(assessments.map((item) => [item.domain, item]));
+  const polar = (angle, radius) => ({ x: 180 + radius * Math.cos((angle - 90) * Math.PI / 180), y: 180 + radius * Math.sin((angle - 90) * Math.PI / 180) });
+  const segmentPath = (index) => {
+    const start = index * 72;
+    const end = start + 72;
+    const outerStart = polar(start, 150); const outerEnd = polar(end, 150);
+    const innerEnd = polar(end, 58); const innerStart = polar(start, 58);
+    return `M ${outerStart.x} ${outerStart.y} A 150 150 0 0 1 ${outerEnd.x} ${outerEnd.y} L ${innerEnd.x} ${innerEnd.y} A 58 58 0 0 0 ${innerStart.x} ${innerStart.y} Z`;
+  };
+  return <div className="space-y-8">
+    <div>
+      <svg viewBox="0 0 360 360" className="mx-auto w-full max-w-[390px]" role="img" aria-label={t('meetings.leadership.wheelAria')}>
+        {LEADERSHIP_DOMAIN_ORDER.map((domain, index) => {
+          const item = byDomain[domain];
+          const label = polar(index * 72 + 36, 108);
+          const words = t(`meetings.leadership.domain.${domain}`).split('|');
+          return <g key={domain}><path d={segmentPath(index)} fill={SCORE_COLORS[item?.score] || '#e2e8f0'} stroke="white" strokeWidth="3" />
+            <text x={label.x} y={label.y - ((words.length - 1) * 8)} textAnchor="middle" className="fill-slate-900 text-[11px] font-semibold">{words.map((word, line) => <tspan key={word} x={label.x} dy={line ? 15 : 0}>{word}</tspan>)}</text>
+          </g>;
+        })}
+        <circle cx="180" cy="180" r="53" fill="#020617" />
+        <text x="180" y="174" textAnchor="middle" className="fill-white text-[15px] font-semibold">{t('meetings.leadership.hub')}</text>
+        <text x="180" y="194" textAnchor="middle" className="fill-amber-300 text-[11px]">{t('meetings.leadership.hubFeedback')}</text>
+      </svg>
+      <div className="mt-2 flex justify-center gap-3 text-xs text-slate-600">{[1, 2, 3, 4, 5].map((score) => <span key={score} className="flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: SCORE_COLORS[score] }} />{score}</span>)}</div>
+    </div>
+    <div className="space-y-3">{LEADERSHIP_DOMAIN_ORDER.map((domain) => { const item = byDomain[domain]; return <div key={domain} className="rounded-xl border border-slate-200 bg-slate-50 p-5"><div className="flex items-center justify-between gap-4"><h3 className="font-semibold text-slate-950">{t(`meetings.leadership.domain.${domain}`).replace('|', ' ')}</h3><span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${item?.score ? 'text-slate-950' : 'bg-slate-200 text-slate-600'}`} style={item?.score ? { backgroundColor: SCORE_COLORS[item.score] } : undefined}>{item?.score ? `${item.score}/5` : t('meetings.leadership.notAssessed')}</span></div><LeadershipFeedback feedback={item?.feedback} fallback={t('meetings.leadership.emptyDomain')} /><Evidence>{item?.evidence_excerpt}</Evidence></div>; })}</div>
+  </div>;
+}
+
 export function AddMeetingModal({ onClose, onCreated, apiUrl, userNumber, projectId = null }) {
   const [mode, setMode] = useState(null);
   const [title, setTitle] = useState('');
@@ -440,12 +497,14 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
   const { t } = useLanguage();
   const [transcriptSearch, setTranscriptSearch] = useState('');
   const [busyAction, setBusyAction] = useState(null);
+  const [actionError, setActionError] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [meetingQuestion, setMeetingQuestion] = useState('');
   const [meetingChat, setMeetingChat] = useState([]);
   const [askingAlfred, setAskingAlfred] = useState(false);
   const [meetingChatError, setMeetingChatError] = useState('');
+  const [assessingLeadership, setAssessingLeadership] = useState(false);
   const [contextOptions, setContextOptions] = useState({ current_user: { title: 'Me' }, people: [], goals: [], projects: [] });
   const transcript = meeting.transcript_text || meeting.user_notes || '';
   const visibleTranscript = useMemo(() => {
@@ -479,13 +538,38 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
     onChanged(meeting.id);
   };
 
-  const makeTask = async (actionId, mode) => {
+  const makeTask = async (actionId) => {
     setBusyAction(actionId);
-    await fetch(`${apiUrl}/api/meetings/action-items/${actionId}/task`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, mode })
-    });
-    setBusyAction(null);
-    onChanged(meeting.id);
+    setActionError('');
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/action-items/${actionId}/task`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, mode: 'auto' })
+      });
+      if (!response.ok) throw new Error('Could not add this action to your to-do list.');
+      window.dispatchEvent(new Event('alfred-sidebar-counts-refresh'));
+      onChanged(meeting.id);
+    } catch (error) {
+      setActionError(error.message);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const ignoreAction = async (actionId) => {
+    setBusyAction(actionId);
+    setActionError('');
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/action-items/${actionId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, ignored: true })
+      });
+      if (!response.ok) throw new Error('Could not ignore this action item.');
+      window.dispatchEvent(new Event('alfred-sidebar-counts-refresh'));
+      onChanged(meeting.id);
+    } catch (error) {
+      setActionError(error.message);
+    } finally {
+      setBusyAction(null);
+    }
   };
 
   const askAlfred = async (event) => {
@@ -509,6 +593,22 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
     } finally {
       setAskingAlfred(false);
     }
+  };
+
+  const generateLeadershipAssessment = async () => {
+    setAssessingLeadership(true);
+    const response = await fetch(`${apiUrl}/api/meetings/${meeting.id}/leadership-assessment?user_number=${encodeURIComponent(userNumber)}`, { method: 'POST' });
+    if (!response.ok) {
+      setAssessingLeadership(false);
+      window.alert((await response.json()).detail || 'Could not generate the leadership assessment.');
+      return;
+    }
+    let checks = 0;
+    const poll = window.setInterval(() => {
+      onChanged(meeting.id);
+      checks += 1;
+      if (checks >= 8) { window.clearInterval(poll); setAssessingLeadership(false); }
+    }, 4000);
   };
 
   const deleteMeeting = async () => {
@@ -541,10 +641,12 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
       <div className="mt-5 rounded-2xl bg-slate-900 p-7 text-white">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div><p className="text-sm text-slate-400">{formatDate(meeting.started_at)} · {formatDuration(meeting.duration_seconds)}</p><h1 className="mt-2 text-3xl font-semibold">{meeting.title}</h1></div>
-          <span className="rounded-full bg-white/10 px-3 py-1 text-sm">{STATUS_LABELS[meeting.processing_status] || meeting.processing_status}</span>
+          <span className="rounded-full bg-white/10 px-3 py-1 text-sm">{meeting.status === 'processed' ? 'Processed' : meeting.processing_status === 'ready' ? 'Ready to process' : STATUS_LABELS[meeting.processing_status] || meeting.processing_status}</span>
         </div>
         {meeting.one_line_summary && <p className="mt-5 max-w-4xl text-lg text-slate-200">{meeting.one_line_summary}</p>}
       </div>
+
+      {actionError && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{actionError}</p>}
 
       {meeting.processing_status !== 'ready' && (
         <div className={`mt-6 rounded-xl p-5 ${meeting.processing_status === 'failed' ? 'bg-red-50 text-red-800' : 'bg-blue-50 text-blue-800'}`}>
@@ -557,8 +659,11 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
           <Section title="Discussion Topics"><div className="grid gap-3 sm:grid-cols-2">{meeting.topics.map((topic) => <div key={topic.id} className="rounded-lg bg-slate-50 p-4"><h3 className="font-semibold">{topic.title}</h3><p className="mt-1 text-sm text-slate-600">{topic.summary}</p></div>)}</div></Section>
           <Section title="Executive Summary"><div className="whitespace-pre-line text-slate-700">{meeting.executive_summary || 'No summary available.'}</div></Section>
           <Section title={`Decisions (${meeting.decisions.length})`}>{meeting.decisions.length ? <div className="space-y-4">{meeting.decisions.map((decision) => <div key={decision.id}><div className="flex justify-between gap-3"><p className="font-medium text-slate-900">{decision.description}</p><Confidence value={decision.confidence} /></div><Evidence>{decision.evidence_excerpt}</Evidence></div>)}</div> : <p className="text-slate-500">No explicit decisions detected.</p>}</Section>
-          <Section title={`Action Items (${meeting.action_items.length})`}>{meeting.action_items.length ? <div className="space-y-4">{meeting.action_items.map((action) => <div key={action.id} className="rounded-xl border border-slate-200 p-4"><div className="flex justify-between gap-3"><div><p className="font-medium">{action.description}</p><p className="mt-1 text-sm text-slate-500">Owner: {action.owner_name || 'Unclear'}{action.due_date ? ` · Due ${action.due_date}` : ''}</p></div><Confidence value={action.confidence} /></div><Evidence>{action.evidence_excerpt}</Evidence>{action.created_task_id ? <div className="mt-3 flex items-center gap-3"><span className="text-sm font-medium text-green-700">Added to tasks</span><button disabled={busyAction === action.id} onClick={() => makeTask(action.id, action.tracking_mode || 'my_todo')} className="text-sm font-semibold text-blue-600 hover:underline">Move to Today</button></div> : <div className="mt-3 flex flex-wrap gap-2"><button disabled={busyAction === action.id} onClick={() => makeTask(action.id, 'my_todo')} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Add to My Todo</button><button disabled={busyAction === action.id} onClick={() => makeTask(action.id, 'follow_up')} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">Track Someone Else</button></div>}</div>)}</div> : <p className="text-slate-500">No action items detected.</p>}</Section>
-          <Section title="Leadership Reflection" privateLabel>{meeting.leadership_observations.length ? <div className="space-y-4">{meeting.leadership_observations.map((item) => <div key={item.id}><p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{item.category}</p><p className="mt-1 text-slate-800">{item.observation}</p><Evidence>{item.evidence_excerpt}</Evidence></div>)}</div> : <p className="text-slate-500">No evidence-backed leadership observations were generated.</p>}</Section>
+          <Section title={`Action Items (${meeting.action_items.length})`}>{meeting.action_items.length ? <div className="space-y-4">{meeting.action_items.map((action) => <div key={action.id} className="rounded-xl border border-slate-200 p-4"><div className="flex justify-between gap-3"><div><p className="font-medium">{action.description}</p><p className="mt-1 text-sm text-slate-500">Owner: {action.owner_name || 'Unclear'}{action.due_date ? ` · Due ${action.due_date}` : ''}</p></div><Confidence value={action.confidence} /></div><Evidence>{action.evidence_excerpt}</Evidence>{action.created_task_id ? <div className="mt-3 flex items-center gap-3"><span className="text-sm font-medium text-green-700">Added to tasks</span><button disabled={busyAction === action.id} onClick={() => makeTask(action.id)} className="text-sm font-semibold text-blue-600 hover:underline">Move to Today</button></div> : action.ignored ? <p className="mt-3 text-sm font-medium text-slate-500">Ignored</p> : <div className="mt-3 flex flex-wrap gap-2"><button disabled={busyAction === action.id} onClick={() => makeTask(action.id)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Add to My Todo</button><button disabled={busyAction === action.id} onClick={() => ignoreAction(action.id)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800">Ignore</button></div>}</div>)}</div> : <p className="text-slate-500">No action items detected.</p>}</Section>
+          <Section title={t('meetings.leadership.title')} privateLabel><LeadershipDomainWheel assessments={meeting.leadership_domain_assessments || []} />
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4"><p className="text-sm text-slate-500">{t('meetings.leadership.disclaimer')}</p><button onClick={generateLeadershipAssessment} disabled={assessingLeadership} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{assessingLeadership ? t('meetings.leadership.assessing') : meeting.leadership_domain_assessments?.length ? t('meetings.leadership.reassess') : t('meetings.leadership.assess')}</button></div>
+            {meeting.leadership_observations.length > 0 && <details className="mt-5 border-t border-slate-200 pt-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">{t('meetings.leadership.additional')}</summary><div className="mt-4 space-y-4">{meeting.leadership_observations.map((item) => <div key={item.id}><p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{item.category}</p><p className="mt-1 text-slate-800">{item.observation}</p><Evidence>{item.evidence_excerpt}</Evidence></div>)}</div></details>}
+          </Section>
           {meeting.context_notes?.length > 0 && <Section title="Your Context Notes"><div className="space-y-3">{meeting.context_notes.map((note) => <div key={note.id} className="rounded-lg bg-amber-50 px-4 py-3"><span className="mr-3 font-mono text-xs text-amber-700">{formatTimer(note.elapsed_seconds)}</span><span className="text-slate-800">{note.note_text}</span></div>)}</div></Section>}
           <Section title="Transcript"><input value={transcriptSearch} onChange={(event) => setTranscriptSearch(event.target.value)} placeholder="Search this transcript" className="mb-4 w-full rounded-lg border border-slate-300 px-3 py-2" /><div className="max-h-[32rem] overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-700">{visibleTranscript || 'No matching transcript text.'}</div></Section>
         </div>
@@ -588,7 +693,80 @@ function Section({ title, children, privateLabel = false }) {
   return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-semibold text-slate-950">{title}</h2>{privateLabel && <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">Private</span>}</div>{children}</section>;
 }
 
+function MeetingTaskCard({ task, busy, onAdd, onIgnore, onRename }) {
+  const { t } = useLanguage();
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(task.description);
+  const [swipe, setSwipe] = useState(0);
+  const touchStart = useRef(null);
+  const finishEdit = async () => {
+    const next = title.trim();
+    if (next && next !== task.description) await onRename(task, next);
+    if (!next) setTitle(task.description);
+    setEditing(false);
+  };
+  const finishSwipe = () => {
+    if (swipe >= 90) onIgnore(task);
+    if (swipe <= -90) onAdd(task);
+    touchStart.current = null;
+    setSwipe(0);
+  };
+  return <div className="relative overflow-hidden rounded-lg">
+    <div className="absolute inset-y-0 left-0 flex w-32 items-center bg-slate-700 pl-4 text-xs font-semibold text-white sm:hidden">{t('meetings.tasks.ignore')}</div>
+    <div className="absolute inset-y-0 right-0 flex w-32 items-center justify-end bg-blue-600 pr-4 text-xs font-semibold text-white sm:hidden">{t('meetings.tasks.addToList')}</div>
+    <div onTouchStart={(event) => { touchStart.current = event.touches[0].clientX; }} onTouchMove={(event) => { if (touchStart.current != null) setSwipe(Math.max(-120, Math.min(120, event.touches[0].clientX - touchStart.current))); }} onTouchEnd={finishSwipe} style={{ transform: `translateX(${swipe}px)` }} className="relative rounded-lg border-2 border-slate-200 bg-white px-4 py-3 transition-transform hover:border-slate-300">
+      <div className="flex items-start gap-3">
+        <button type="button" disabled={busy} onClick={() => onAdd(task)} className="mt-0.5 hidden h-5 w-5 flex-none items-center justify-center rounded-full border-2 border-slate-300 text-xs text-transparent hover:border-blue-600 hover:text-blue-600 sm:flex" aria-label={`${t('meetings.tasks.addToList')}: ${task.description}`}>✓</button>
+        <div className="min-w-0 flex-1">
+          {editing ? <input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} onBlur={finishEdit} onKeyDown={(event) => { if (event.key === 'Enter') finishEdit(); if (event.key === 'Escape') { setTitle(task.description); setEditing(false); } }} className="w-full rounded border border-blue-400 px-2 py-1 font-medium text-slate-900 outline-none ring-2 ring-blue-100" /> : <button type="button" onClick={() => setEditing(true)} className="block w-full text-left font-medium text-slate-900 hover:text-blue-700">{task.description}</button>}
+          <p className="mt-1 truncate text-sm text-blue-600" title={task.meeting_title}>{task.meeting_title}</p>
+        </div>
+        <div className="hidden flex-none gap-2 sm:flex">
+          <button type="button" disabled={busy} onClick={() => onAdd(task)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{t('meetings.tasks.addToList')}</button>
+          <button type="button" disabled={busy} onClick={() => onIgnore(task)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50">{t('meetings.tasks.ignore')}</button>
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+function MeetingTasks({ apiUrl, userNumber }) {
+  const { t } = useLanguage();
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${apiUrl}/api/meetings/action-items/tasks?user_number=${encodeURIComponent(userNumber)}`)
+      .then((response) => { if (!response.ok) throw new Error(t('meetings.tasks.loadError')); return response.json(); })
+      .then((items) => { if (!cancelled) { setTasks(items); setError(''); } })
+      .catch((err) => { if (!cancelled) setError(err.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [apiUrl, userNumber, t]);
+  const addToList = async (task) => {
+    setBusyId(task.id);
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/action-items/${task.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, mode: 'my_todo' }) });
+      if (!response.ok) throw new Error(t('meetings.tasks.addError'));
+      setTasks((items) => items.filter((item) => item.id !== task.id));
+    } catch (err) { setError(err.message); } finally { setBusyId(null); }
+  };
+  const updateTask = async (task, changes) => {
+    setBusyId(task.id);
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/action-items/${task.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, ...changes }) });
+      if (!response.ok) throw new Error(t('meetings.tasks.updateError'));
+      setTasks((items) => changes.ignored ? items.filter((item) => item.id !== task.id) : items.map((item) => item.id === task.id ? { ...item, description: changes.description } : item));
+    } catch (err) { setError(err.message); } finally { setBusyId(null); }
+  };
+  if (loading) return <p className="mt-10 text-center text-slate-500">{t('meetings.tasks.loading')}</p>;
+  return <div className="mt-6">{error && <p className="mb-4 rounded-lg bg-red-50 p-4 text-red-700">{error}</p>}{tasks.length === 0 ? <div className="rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center"><h2 className="text-xl font-semibold text-slate-900">{t('meetings.tasks.emptyTitle')}</h2><p className="mt-2 text-slate-600">{t('meetings.tasks.emptyBody')}</p></div> : <div className="space-y-2">{tasks.map((task) => <MeetingTaskCard key={task.id} task={task} busy={busyId === task.id} onAdd={addToList} onIgnore={(item) => updateTask(item, { ignored: true })} onRename={(item, description) => updateTask(item, { description })} />)}</div>}<p className="mt-4 text-center text-xs text-slate-500 sm:hidden">{t('meetings.tasks.swipeHint')}</p></div>;
+}
+
 export default function Meetings({ apiUrl, userNumber }) {
+  const { t } = useLanguage();
   const [meetings, setMeetings] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -597,15 +775,26 @@ export default function Meetings({ apiUrl, userNumber }) {
   const [status, setStatus] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState(null);
+  const [activeTab, setActiveTab] = useState('meetings');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, total_pages: 1 });
 
   const loadMeetings = async () => {
     try {
       const params = new URLSearchParams({ user_number: userNumber });
+      params.set('page', String(page));
+      params.set('page_size', '20');
       if (search.trim()) params.set('search', search.trim());
       if (status) params.set('status', status);
       const response = await fetch(`${apiUrl}/api/meetings?${params}`);
       if (!response.ok) throw new Error('Could not load meetings.');
-      setMeetings(await response.json());
+      const data = await response.json();
+      if (data.items.length === 0 && page > data.total_pages) {
+        setPage(data.total_pages);
+        return;
+      }
+      setMeetings(data.items);
+      setPagination({ total: data.total, total_pages: data.total_pages });
       setError('');
     } catch (err) { setError(err.message); } finally { setLoading(false); }
   };
@@ -627,7 +816,8 @@ export default function Meetings({ apiUrl, userNumber }) {
     else loadMeetings();
   };
 
-  useEffect(() => { const delay = window.setTimeout(loadMeetings, 250); return () => window.clearTimeout(delay); }, [search, status, userNumber]);
+  useEffect(() => { setPage(1); }, [search, status, userNumber]);
+  useEffect(() => { const delay = window.setTimeout(loadMeetings, 250); return () => window.clearTimeout(delay); }, [search, status, userNumber, page, activeTab]);
   useEffect(() => {
     const hasProcessing = meetings.some((meeting) => ['queued', 'transcribing', 'analyzing'].includes(meeting.processing_status));
     if (!hasProcessing && !selected) return undefined;
@@ -639,14 +829,17 @@ export default function Meetings({ apiUrl, userNumber }) {
 
   return (
     <div className="mx-auto max-w-7xl p-5 lg:p-10">
-      <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-wider text-blue-600">Executive Memory</p><h1 className="mt-1 text-3xl font-semibold text-slate-950">Meetings</h1><p className="mt-2 text-slate-600">Every conversation, decision, and commitment—remembered.</p></div><button onClick={() => setShowAdd(true)} className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-blue-700">Add Meeting</button></div>
-      <div className="mt-7 flex flex-wrap gap-3 rounded-xl border border-slate-200 bg-white p-4"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search meetings and transcripts" className="min-w-[240px] flex-1 rounded-lg border border-slate-300 px-3 py-2" /><select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2"><option value="">All statuses</option><option value="ready">Ready</option><option value="queued">Queued</option><option value="transcribing">Transcribing</option><option value="analyzing">Analyzing</option><option value="failed">Needs attention</option></select></div>
+      <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-wider text-blue-600">Executive Memory</p><h1 className="mt-1 text-3xl font-semibold text-slate-950">Meetings</h1><p className="mt-2 text-slate-600">Every conversation, decision, and commitment—remembered.</p></div>{activeTab === 'meetings' && <button onClick={() => setShowAdd(true)} className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-blue-700">Add Meeting</button>}</div>
+      <div className="mt-7 border-b border-slate-200"><div className="flex gap-6">{[['meetings', t('meetings.tabs.meetings')], ['tasks', t('meetings.tabs.tasks')]].map(([id, label]) => <button key={id} type="button" onClick={() => setActiveTab(id)} className={`relative px-2 pb-3 font-medium transition-colors ${activeTab === id ? 'text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}>{label}{activeTab === id && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />}</button>)}</div></div>
+      {activeTab === 'tasks' ? <MeetingTasks apiUrl={apiUrl} userNumber={userNumber} /> : <>
+      <div className="mt-6 flex flex-wrap gap-3 rounded-xl border border-slate-200 bg-white p-4"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search meetings and transcripts" className="min-w-[240px] flex-1 rounded-lg border border-slate-300 px-3 py-2" /><select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2"><option value="">All statuses</option><option value="processed">Processed</option><option value="ready">Ready to process</option><option value="queued">Queued</option><option value="transcribing">Transcribing</option><option value="analyzing">Analyzing</option><option value="failed">Needs attention</option></select></div>
       {error && <p className="mt-5 rounded-lg bg-red-50 p-4 text-red-700">{error}</p>}
       {loading ? <p className="mt-10 text-center text-slate-500">Loading meetings…</p> : meetings.length === 0 ? <div className="mt-10 rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center"><h2 className="text-xl font-semibold">Alfred is ready for your first meeting</h2><p className="mt-2 text-slate-600">Record a conversation, upload audio, or paste your notes.</p><button onClick={() => setShowAdd(true)} className="mt-5 rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white">Add your first meeting</button></div> : (
-        <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="hidden grid-cols-[2fr_1fr_1fr_100px_130px_110px] gap-4 border-b bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid"><span>Meeting</span><span>Date</span><span>Participants</span><span>Items</span><span>Status</span><span>Actions</span></div>{meetings.map((meeting) => <div key={meeting.id} role="button" tabIndex={0} onClick={() => loadDetail(meeting.id)} onKeyDown={(event) => { if (event.key === 'Enter') loadDetail(meeting.id); }} className="flex w-full cursor-pointer items-center gap-3 border-b border-slate-100 p-3 text-left hover:bg-slate-50 md:grid md:grid-cols-[2fr_1fr_1fr_100px_130px_110px] md:p-5"><div className="min-w-0 flex-1"><p className="truncate font-semibold text-slate-900">{meeting.title}</p><p className="mt-1 hidden line-clamp-2 text-sm text-slate-500 md:block">{meeting.one_line_summary || 'Alfred is preparing this meeting…'}</p></div><p className="flex-none text-xs text-slate-600 md:text-sm">{formatDate(meeting.started_at)}</p><p className="hidden truncate text-sm text-slate-600 sm:block md:block">{meeting.participants.map((p) => p.display_name).join(', ') || '—'}</p><p className="hidden text-sm text-slate-600 md:block">{meeting.action_item_count} actions<br />{meeting.decision_count} decisions</p><span className={`hidden w-fit rounded-full px-3 py-1 text-xs font-semibold md:block ${meeting.processing_status === 'ready' ? 'bg-green-100 text-green-800' : meeting.processing_status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>{STATUS_LABELS[meeting.processing_status] || meeting.processing_status}</span><div className="hidden gap-3 text-sm font-semibold md:flex"><button onClick={(event) => { event.stopPropagation(); editFromList(meeting.id); }} className="text-blue-600 hover:underline">Edit</button><button onClick={(event) => { event.stopPropagation(); deleteFromList(meeting); }} className="text-red-600 hover:underline">Delete</button></div></div>)}</div>
+        <><div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="hidden grid-cols-[2fr_1fr_1fr_100px_130px_110px] gap-4 border-b bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid"><span>Meeting</span><span>Date</span><span>Participants</span><span>Items</span><span>Status</span><span>Actions</span></div>{meetings.map((meeting) => <div key={meeting.id} role="button" tabIndex={0} onClick={() => loadDetail(meeting.id)} onKeyDown={(event) => { if (event.key === 'Enter') loadDetail(meeting.id); }} className="flex w-full cursor-pointer items-center gap-3 border-b border-slate-100 p-3 text-left hover:bg-slate-50 md:grid md:grid-cols-[2fr_1fr_1fr_100px_130px_110px] md:p-5"><div className="min-w-0 flex-1"><p className="truncate font-semibold text-slate-900">{meeting.title}</p><p className="mt-1 hidden line-clamp-2 text-sm text-slate-500 md:block">{meeting.one_line_summary || 'Alfred is preparing this meeting…'}</p></div><p className="flex-none text-xs text-slate-600 md:text-sm">{formatDate(meeting.started_at)}</p><p className="hidden truncate text-sm text-slate-600 sm:block md:block">{meeting.participants.map((p) => p.display_name).join(', ') || '—'}</p><p className="hidden text-sm text-slate-600 md:block">{meeting.action_item_count} actions<br />{meeting.decision_count} decisions</p><span className={`hidden w-fit rounded-full px-3 py-1 text-xs font-semibold md:block ${meeting.status === 'processed' ? 'bg-emerald-100 text-emerald-800' : meeting.processing_status === 'ready' ? 'bg-amber-100 text-amber-800' : meeting.processing_status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>{meeting.status === 'processed' ? 'Processed' : meeting.processing_status === 'ready' ? 'Ready to process' : STATUS_LABELS[meeting.processing_status] || meeting.processing_status}</span><div className="hidden gap-3 text-sm font-semibold md:flex"><button onClick={(event) => { event.stopPropagation(); editFromList(meeting.id); }} className="text-blue-600 hover:underline">Edit</button><button onClick={(event) => { event.stopPropagation(); deleteFromList(meeting); }} className="text-red-600 hover:underline">Delete</button></div></div>)}</div><div className="mt-4 flex items-center justify-between gap-4"><p className="text-sm text-slate-500">{pagination.total} meeting{pagination.total === 1 ? '' : 's'} · Page {page} of {pagination.total_pages}</p><div className="flex gap-2"><button type="button" disabled={page === 1} onClick={() => setPage((value) => value - 1)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Previous</button><button type="button" disabled={page >= pagination.total_pages} onClick={() => setPage((value) => value + 1)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Next</button></div></div></>
       )}
       {showAdd && <AddMeetingModal apiUrl={apiUrl} userNumber={userNumber} onClose={() => setShowAdd(false)} onCreated={({ id }) => { setShowAdd(false); loadMeetings(); loadDetail(id); }} />}
       {editingMeeting && <EditMeetingModal meeting={editingMeeting} apiUrl={apiUrl} userNumber={userNumber} onClose={() => setEditingMeeting(null)} onSaved={() => { setEditingMeeting(null); loadMeetings(); }} />}
+      </>}
     </div>
   );
 }
