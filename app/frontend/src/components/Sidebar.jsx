@@ -59,7 +59,10 @@ export default function Sidebar({ apiUrl, userNumber, currentPage, onNavigate, i
         ${isMobile ? 'z-40' : 'z-10'}
         w-80
       `}
-      style={{ width: '320px' }}
+      style={{
+        width: '320px',
+        paddingTop: isMobile ? 'env(safe-area-inset-top)' : undefined,
+      }}
     >
       <div className="flex flex-col h-full">
         {/* Header */}
