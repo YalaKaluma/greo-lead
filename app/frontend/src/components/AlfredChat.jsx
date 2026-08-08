@@ -344,7 +344,7 @@ export default function AlfredChat({ apiUrl, userNumber, currentPage, showLaunch
         </div>
       </div>
 
-      {showLauncher && (
+      {showLauncher && !isOpen && (
         <button
           onClick={() => setIsOpen((open) => !open)}
           className="fixed bottom-8 left-[232px] z-50 flex h-16 w-16 items-center justify-center rounded-full border-2 border-amber-300 bg-slate-950 p-1 shadow-xl transition-transform hover:scale-105"

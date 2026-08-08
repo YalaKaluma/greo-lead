@@ -144,7 +144,7 @@ def _rank_top_tasks(
             urgent,
             aligned,
             priority_order.get((task.priority or "").lower(), 0),
-            -(due_day.toordinal() if due_day else 999999),
+            due_day.toordinal() if due_day else 0,
         )
 
     today_tasks = [task for task in tasks if (_task_due_day(task) and _task_due_day(task) <= today)]
