@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +17,7 @@ import threading
 from app.email_poller import run_email_loop
 from app.services.admin_bootstrap import ensure_admin_schema_and_seed
 from app.security_middleware import RateLimitMiddleware, SecurityHeadersMiddleware
+from app.security_dependencies import require_authenticated_identity
 from app.services.operations_director.health_events import record_exception, record_health_event
 
 # Configure logging with timestamp
@@ -298,39 +299,41 @@ def _record_system_health_event(
 # --------------------------------------
 logger.info("🔌 Registering API routers...")
 routers_to_register = [
-    (journal.router, "/api/journal", "Journal"),
-    (auth.router, "/api/auth", "Auth"),
-    (onboarding.router, "/api/onboarding", "Onboarding"),
-    (tasks.router, "/api/tasks", "Tasks"),
-    (nudge.router, "/api", "Nudge"),
-    (journey.router, "/api/journey", "Journey"),
-    (messages.router, "/api", "Messages"),
-    (waitlist.router, "/api", "Waitlist"),
-    (habits.router, "/api/habits", "Habits"),
-    (chat.router, "/api", "Chat"),
-    (settings.router, "/api", "Settings"),
-    (notifications.router, "/api", "Notifications"),
-    (admin.router, "/api/admin", "Admin"),
-    (admin_operations.router, "/api/admin", "Admin-Operations"),
-    (admin_cto.router, "/api/admin", "Admin-CTO"),
-    (audio.router, "/api/audio", "Audio"),
-    (meetings.router, "/api/meetings", "Meetings"),
-    (projects.router, "/api/projects", "Projects"),
-    (message_feedback.router, "/api", "Message-Feedback"),
-    (message_signals.router, "/api/message-signals", "Message-Signals"),
-    (usage.router, "/api", "Usage"),
-    (opportunities.router, "/api/opportunities", "Opportunities"),
-    (priority.router, "/api/priority", "Priority"),
-    (home.router, "/api/home", "Home"),
-    (leadership_coaching_router.router, "/api/leadership-coaching", "Leadership-Coaching"),
+    (journal.router, "/api/journal", "Journal", "authenticated"),
+    (auth.router, "/api/auth", "Auth", "mixed"),
+    (onboarding.public_router, "/api/onboarding", "Onboarding-Public", "public"),
+    (onboarding.router, "/api/onboarding", "Onboarding", "authenticated"),
+    (tasks.router, "/api/tasks", "Tasks", "authenticated"),
+    (nudge.router, "/api", "Nudge", "scheduler"),
+    (journey.router, "/api/journey", "Journey", "authenticated"),
+    (messages.router, "/api", "Messages", "authenticated"),
+    (waitlist.router, "/api", "Waitlist", "public"),
+    (habits.router, "/api/habits", "Habits", "authenticated"),
+    (chat.router, "/api", "Chat", "authenticated"),
+    (settings.router, "/api", "Settings", "authenticated"),
+    (notifications.router, "/api", "Notifications", "authenticated"),
+    (admin.router, "/api/admin", "Admin", "admin"),
+    (admin_operations.router, "/api/admin", "Admin-Operations", "admin"),
+    (admin_cto.router, "/api/admin", "Admin-CTO", "admin"),
+    (audio.router, "/api/audio", "Audio", "authenticated"),
+    (meetings.router, "/api/meetings", "Meetings", "authenticated"),
+    (projects.router, "/api/projects", "Projects", "authenticated"),
+    (message_feedback.router, "/api", "Message-Feedback", "authenticated"),
+    (message_signals.router, "/api/message-signals", "Message-Signals", "authenticated"),
+    (usage.router, "/api", "Usage", "authenticated"),
+    (opportunities.router, "/api/opportunities", "Opportunities", "authenticated"),
+    (priority.router, "/api/priority", "Priority", "authenticated"),
+    (home.router, "/api/home", "Home", "authenticated"),
+    (leadership_coaching_router.router, "/api/leadership-coaching", "Leadership-Coaching", "authenticated"),
 ]
 
 
 
-for router, prefix, tag in routers_to_register:
+for router, prefix, tag, access_class in routers_to_register:
     try:
-        app.include_router(router, prefix=prefix, tags=[tag])
-        logger.info(f"  ✓ {tag} router registered at {prefix}")
+        dependencies = [Depends(require_authenticated_identity)] if access_class == "authenticated" else None
+        app.include_router(router, prefix=prefix, tags=[tag], dependencies=dependencies)
+        logger.info(f"  ✓ {tag} router registered at {prefix} ({access_class})")
     except Exception as e:
         logger.error(f"  ✗ Failed to register {tag} router: {e}")
 

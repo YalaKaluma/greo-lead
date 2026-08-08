@@ -274,18 +274,21 @@ async def delete_account(
 
 
 @router.post("/logout")
-async def logout(request: Request, user_number: str | None = None, db: Session = Depends(get_db)):
+async def logout(
+    request: Request,
+    current_user: User = Depends(require_authenticated_user),
+    db: Session = Depends(get_db),
+):
     """
     Logout endpoint - just returns success since we're using simple auth.
     In production, this would invalidate session tokens.
     """
-    user = _find_user_by_username(db, user_number.strip()) if user_number else None
     write_audit_log(
         db,
-        user_id=user.id if user else None,
+        user_id=current_user.id,
         event_type="user_logout",
         object_type="user",
-        object_id=user.id if user else None,
+        object_id=current_user.id,
         metadata={"status": "logged_out"},
         request=request,
     )

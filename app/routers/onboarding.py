@@ -25,6 +25,7 @@ from app.utils.security import create_session_token, hash_password, verify_passw
 from app.services.in_app_onboarding_service import get_session, respond
 
 router = APIRouter(tags=["onboarding"])
+public_router = APIRouter(tags=["onboarding"])
 
 
 def _find_user_by_number_or_email(db: Session, user_number: str) -> Optional[User]:
@@ -92,7 +93,7 @@ class EmailVerifyRequest(BaseModel):
 
 # ============== AUTHENTICATION ENDPOINTS ==============
 
-@router.post("/login", response_model=LoginResponse)
+@public_router.post("/login", response_model=LoginResponse)
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
     """
     Login endpoint for first-time access via temp password.
@@ -176,7 +177,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         )
 
 
-@router.post("/set-permanent-password")
+@public_router.post("/set-permanent-password")
 async def set_permanent_password(
         user_id: int,
         new_password: str,

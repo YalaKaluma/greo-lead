@@ -16,6 +16,8 @@ from sqlalchemy.orm import Session, selectinload
 from app.db import get_db
 from app.models import JourneyProject, Meeting, MeetingProjectLink, ProjectDocument
 from app.services.project_intelligence_service import process_project_document
+from app.routers.auth import require_authenticated_user
+from app.security_dependencies import ensure_user_identity
 
 
 router = APIRouter()
@@ -108,7 +110,8 @@ def update_project(project_id: int, payload: ProjectUpdate, user_number: str, db
 
 
 @router.post("/{project_id}/documents", status_code=201)
-async def upload_document(project_id: int, background_tasks: BackgroundTasks, user_number: str = Form(...), document_type: Optional[str] = Form(None), file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_document(project_id: int, background_tasks: BackgroundTasks, user_number: str = Form(...), document_type: Optional[str] = Form(None), file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+    ensure_user_identity(current_user, user_number)
     project = _project_or_404(db, project_id, user_number)
     safe_name = re.sub(r"[^A-Za-z0-9._ -]", "_", file.filename or "project-document")[:300]
     user_dir = STORAGE_ROOT / re.sub(r"[^A-Za-z0-9_-]", "_", user_number)[:100] / str(project.id)

@@ -5,12 +5,52 @@ from __future__ import annotations
 import hmac
 import os
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import User
 from app.routers.auth import require_authenticated_user
+
+
+def _user_identifiers(user: User) -> set[str]:
+    return {
+        str(value).strip().casefold()
+        for value in (user.id, user.phone_number, user.email)
+        if value is not None and str(value).strip()
+    }
+
+
+def ensure_user_identity(user: User, claimed_identity: str | int) -> None:
+    if str(claimed_identity).strip().casefold() not in _user_identifiers(user):
+        raise HTTPException(status_code=403, detail="Request identity does not match authenticated user")
+
+
+async def require_authenticated_identity(
+    request: Request,
+    user: User = Depends(require_authenticated_user),
+) -> User:
+    """Reject caller-controlled identities that do not match the signed-in user."""
+
+    allowed = _user_identifiers(user)
+    claimed: list[str] = []
+    for key in ("user_number", "user_id"):
+        claimed.extend(request.query_params.getlist(key))
+
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if content_type == "application/json":
+        try:
+            payload = await request.json()
+        except (ValueError, UnicodeDecodeError):
+            payload = None
+        if isinstance(payload, dict):
+            for key in ("user_number", "user_id"):
+                if payload.get(key) is not None:
+                    claimed.append(str(payload[key]))
+
+    if any(value.strip().casefold() not in allowed for value in claimed if value.strip()):
+        raise HTTPException(status_code=403, detail="Request identity does not match authenticated user")
+    return user
 
 
 def require_scheduler_or_admin(

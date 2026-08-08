@@ -23,6 +23,8 @@ from app.services.journey_support import goal_level_variants, normalize_goal_lev
 from app.services.timezone_service import get_user_timezone, today_for_timezone
 from app.services.priority_service import PriorityService
 from app.services.priority_llm_service import PriorityLLMService
+from app.routers.auth import require_authenticated_user
+from app.security_dependencies import ensure_user_identity
 
 router = APIRouter()
 ALLOWED_AUDIO_TYPES = {"audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a", "audio/x-m4a", "audio/webm", "video/webm"}
@@ -509,7 +511,9 @@ async def enroll_voice_profile(
     duration_seconds: float = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_authenticated_user),
 ):
+    ensure_user_identity(current_user, user_number)
     if not consent_acknowledged:
         raise HTTPException(status_code=400, detail="Voice-reference consent is required.")
     if duration_seconds < 2 or duration_seconds > 10:
@@ -684,7 +688,9 @@ async def upload_meeting(
     project_id: Optional[int] = Form(None),
     meeting_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_authenticated_user),
 ):
+    ensure_user_identity(current_user, user_number)
     project = None
     if project_id is not None:
         project = db.query(JourneyProject).filter(JourneyProject.id == project_id, JourneyProject.user_number == user_number).first()

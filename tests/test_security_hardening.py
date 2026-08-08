@@ -5,7 +5,9 @@ import sys
 import asyncio
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 from sqlalchemy import create_engine, text
 
 from app.security_middleware import RateLimitMiddleware, RateLimitRule, SecurityHeadersMiddleware
@@ -258,3 +260,73 @@ def test_scheduler_dependency_accepts_dedicated_secret(monkeypatch):
         scheduler_secret=secret,
         db=EmptyDb(),
     ) is None
+
+
+def _request_with_query(query: str) -> Request:
+    return Request({
+        "type": "http",
+        "method": "GET",
+        "scheme": "https",
+        "server": ("alfred.example.com", 443),
+        "path": "/api/tasks",
+        "raw_path": b"/api/tasks",
+        "query_string": query.encode("ascii"),
+        "headers": [],
+        "client": ("127.0.0.1", 1234),
+    })
+
+
+def test_authenticated_identity_rejects_cross_user_query():
+    from app.models import User
+    from app.security_dependencies import require_authenticated_identity
+
+    user = User(id=1, phone_number="user-a", email="a@example.com", is_active=True)
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(require_authenticated_identity(_request_with_query("user_number=user-b"), user=user))
+    assert exc_info.value.status_code == 403
+
+    assert asyncio.run(
+        require_authenticated_identity(_request_with_query("user_number=user-a"), user=user)
+    ) is user
+
+
+def _dependency_names(route: APIRoute) -> set[str]:
+    names: set[str] = set()
+    pending = list(route.dependant.dependencies)
+    while pending:
+        dependency = pending.pop()
+        call = getattr(dependency, "call", None)
+        if call is not None:
+            names.add(getattr(call, "__name__", str(call)))
+        pending.extend(dependency.dependencies)
+    return names
+
+
+def test_every_api_route_has_an_explicit_access_boundary():
+    from app.main import app
+
+    public_paths = {
+        "/api/health",
+        "/api/waitlist",
+        "/api/auth/login",
+        "/api/auth/register",
+        "/api/onboarding/login",
+        "/api/onboarding/set-permanent-password",
+        "/api/nudge/health",
+    }
+    accepted_dependencies = {
+        "require_authenticated_identity",
+        "require_authenticated_user",
+        "require_admin",
+        "require_scheduler_or_admin",
+    }
+    unclassified = []
+    for route in app.routes:
+        if not isinstance(route, APIRoute) or not route.path.startswith("/api/"):
+            continue
+        if route.path in public_paths:
+            continue
+        if not (_dependency_names(route) & accepted_dependencies):
+            unclassified.append(f"{','.join(sorted(route.methods))} {route.path}")
+
+    assert unclassified == []

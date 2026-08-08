@@ -12,20 +12,6 @@ import {
   updateNotificationPreferences
 } from '../services/notifications';
 
-// Admin identity is established by the signed session token. Keep this scoped
-// to Alfred's admin API so bearer credentials are never attached to unrelated
-// axios requests.
-axios.interceptors.request.use((config) => {
-  if (String(config.url || '').includes('/api/admin/')) {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      config.headers = config.headers || {};
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-  }
-  return config;
-});
-
 const TIMEZONE_OPTIONS = [
   { value: 'America/New_York', label: 'Eastern Time - New York' },
   { value: 'America/Chicago', label: 'Central Time - Chicago' },
