@@ -15,7 +15,6 @@ env:
   OPENAI_API_KEY: ci-placeholder
   DEFAULT_USER_NUMBER: ci-user
   APP_SESSION_SECRET: ci-session-secret-at-least-32-characters-long
-  ALFRED_SCHEDULER_SECRET: ci-scheduler-secret-at-least-32-characters
   PUBLIC_APP_URL: https://ci.example.com
 
 jobs:
