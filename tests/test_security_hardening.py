@@ -79,12 +79,48 @@ def test_rate_limited_endpoint_returns_429_after_excessive_requests():
 
 
 def test_user_cannot_read_other_users_journal_entry():
+    from app.models import User
     from app.routers.journal import get_entry
 
     with pytest.raises(HTTPException) as exc_info:
-        get_entry(entry_id=100, user_id=1, db=EmptyDb())
+        get_entry(entry_id=100, user_id=1, db=EmptyDb(), current_user=User(id=1, phone_number="user-a"))
 
     assert exc_info.value.status_code == 404
+
+
+def test_journal_object_lookup_uses_authenticated_owner_id():
+    from sqlalchemy.dialects.postgresql import JSONB
+    from sqlalchemy.ext.compiler import compiles
+    from sqlalchemy.orm import sessionmaker
+    from app.models import JournalEntry, User
+    from app.routers.journal import get_entry
+
+    @compiles(JSONB, "sqlite")
+    def _compile_jsonb_for_sqlite(_type, _compiler, **_kwargs):
+        return "JSON"
+
+    engine = create_engine("sqlite:///:memory:")
+    User.__table__.create(engine)
+    JournalEntry.__table__.create(engine)
+    session = sessionmaker(bind=engine)()
+    try:
+        session.add_all([
+            User(id=1, phone_number="user-a", is_active=True),
+            User(id=2, phone_number="user-b", is_active=True),
+            JournalEntry(id=100, user_id=2, text="private user-b entry"),
+        ])
+        session.commit()
+
+        with pytest.raises(HTTPException) as exc_info:
+            get_entry(
+                entry_id=100,
+                user_id=2,
+                db=session,
+                current_user=session.get(User, 1),
+            )
+        assert exc_info.value.status_code == 404
+    finally:
+        session.close()
 
 
 def test_user_cannot_update_other_users_task():
@@ -159,13 +195,13 @@ class AuditCaptureDb:
 
 
 def test_audit_log_created_when_journal_entry_is_deleted():
-    from app.models import AuditLog, JournalEntry
+    from app.models import AuditLog, JournalEntry, User
     from app.routers.journal import delete_entry
 
     private_text = "full private journal entry should never appear in audit metadata"
     db = AuditCaptureDb(JournalEntry(id=123, user_id=7, text=private_text))
 
-    response = delete_entry(entry_id=123, user_id=7, db=db)
+    response = delete_entry(entry_id=123, user_id=7, db=db, current_user=User(id=7, phone_number="user-a"))
 
     audit_logs = [item for item in db.added if isinstance(item, AuditLog)]
     assert response == {"status": "deleted"}
@@ -176,13 +212,13 @@ def test_audit_log_created_when_journal_entry_is_deleted():
 
 
 def test_audit_log_does_not_contain_private_journal_content():
-    from app.models import AuditLog, JournalEntry
+    from app.models import AuditLog, JournalEntry, User
     from app.routers.journal import delete_entry
 
     private_text = "this private journal sentence must not be copied"
     db = AuditCaptureDb(JournalEntry(id=124, user_id=7, text=private_text))
 
-    delete_entry(entry_id=124, user_id=7, db=db)
+    delete_entry(entry_id=124, user_id=7, db=db, current_user=User(id=7, phone_number="user-a"))
 
     audit_log = next(item for item in db.added if isinstance(item, AuditLog))
     assert private_text not in str(audit_log.metadata_json)
