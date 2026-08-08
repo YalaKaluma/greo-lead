@@ -70,11 +70,12 @@ def _decode_token_part(value: str) -> bytes:
     return base64.urlsafe_b64decode(f"{value}{padding}".encode("ascii"))
 
 
-def create_session_token(user_id: int, user_number: str) -> str:
+def create_session_token(user_id: int, user_number: str, session_version: int = 0) -> str:
     now = int(time.time())
     payload = {
         "sub": int(user_id),
         "usr": user_number,
+        "ver": int(session_version),
         "iat": now,
         "exp": now + SESSION_TOKEN_TTL_SECONDS,
         "nonce": secrets.token_urlsafe(12),

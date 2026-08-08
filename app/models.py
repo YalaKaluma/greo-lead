@@ -1336,6 +1336,7 @@ class User(Base):
     password_hash = Column(String, nullable=True)  # Hashed password
     temp_password = Column(String, nullable=True)  # Hashed one-time password for first login
     temp_password_expires = Column(DateTime, nullable=True)
+    session_version = Column(Integer, default=0, nullable=False)
     is_admin = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     account_deletion_requested_at = Column(DateTime(timezone=True), nullable=True)

@@ -35,7 +35,7 @@ class DeleteAccountRequest(BaseModel):
 
 def _session_response(user: User) -> dict:
     return {
-        "access_token": create_session_token(user.id, user.phone_number),
+        "access_token": create_session_token(user.id, user.phone_number, user.session_version),
         "token_type": "bearer",  # nosec B105 - OAuth token type, not a password
         "expires_in": 60 * 60 * 24 * 30,
     }
@@ -51,7 +51,12 @@ def require_authenticated_user(
     if not payload:
         raise HTTPException(status_code=401, detail="Session expired or invalid")
     user = db.query(User).filter(User.id == payload["sub"]).first()
-    if not user or not user.is_active or user.phone_number != payload.get("usr"):
+    if (
+        not user
+        or not user.is_active
+        or user.phone_number != payload.get("usr")
+        or int(user.session_version or 0) != int(payload.get("ver", 0))
+    ):
         raise HTTPException(status_code=401, detail="Account is unavailable")
     return user
 
@@ -248,6 +253,7 @@ async def delete_account(
     current_user.password_hash = None
     current_user.temp_password = None
     current_user.temp_password_expires = None
+    current_user.session_version = int(current_user.session_version or 0) + 1
     current_user.voice_reference_data_url = None
     current_user.voice_reference_mime_type = None
     current_user.voice_reference_consented_at = None
@@ -279,10 +285,8 @@ async def logout(
     current_user: User = Depends(require_authenticated_user),
     db: Session = Depends(get_db),
 ):
-    """
-    Logout endpoint - just returns success since we're using simple auth.
-    In production, this would invalidate session tokens.
-    """
+    """Invalidate all existing sessions for the authenticated account."""
+    current_user.session_version = int(current_user.session_version or 0) + 1
     write_audit_log(
         db,
         user_id=current_user.id,
@@ -292,6 +296,7 @@ async def logout(
         metadata={"status": "logged_out"},
         request=request,
     )
+    db.commit()
     return {"success": True, "message": "Logged out successfully"}
 
 

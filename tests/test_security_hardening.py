@@ -366,3 +366,35 @@ def test_every_api_route_has_an_explicit_access_boundary():
             unclassified.append(f"{','.join(sorted(route.methods))} {route.path}")
 
     assert unclassified == []
+
+
+class SingleUserDb:
+    def __init__(self, user):
+        self.user = user
+
+    def query(self, _model):
+        return self
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def first(self):
+        return self.user
+
+
+def test_session_version_revokes_previously_issued_token(monkeypatch):
+    from app.models import User
+    from app.routers.auth import require_authenticated_user
+    from app.utils.security import create_session_token
+
+    monkeypatch.setenv("APP_SESSION_SECRET", "test-session-secret-that-is-long-enough-123")
+    user = User(id=11, phone_number="user-a", is_active=True, session_version=0)
+    token = create_session_token(user.id, user.phone_number, user.session_version)
+    authorization = f"Bearer {token}"
+
+    assert require_authenticated_user(authorization=authorization, db=SingleUserDb(user)) is user
+
+    user.session_version += 1
+    with pytest.raises(HTTPException) as exc_info:
+        require_authenticated_user(authorization=authorization, db=SingleUserDb(user))
+    assert exc_info.value.status_code == 401

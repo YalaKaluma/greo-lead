@@ -388,6 +388,7 @@ def _set_new_temp_password(user: User) -> str:
     temporary_password = generate_temporary_password()
     user.temp_password = hash_password(temporary_password)
     user.temp_password_expires = datetime.utcnow() + timedelta(hours=24)
+    user.session_version = int(user.session_version or 0) + 1
     return temporary_password
 
 
@@ -565,6 +566,7 @@ def deactivate_user(
         raise HTTPException(status_code=400, detail="You cannot deactivate the last remaining admin")
 
     target.is_active = False
+    target.session_version = int(target.session_version or 0) + 1
     _log_admin_action(db, admin_user, "deactivated_user", target)
     db.commit()
     db.refresh(target)
