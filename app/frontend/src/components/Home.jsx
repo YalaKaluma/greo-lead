@@ -486,10 +486,7 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
         </div>
 
         <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)_minmax(320px,0.8fr)]">
-          <div className="space-y-5">
-            <CombinedTrendChart trends={payload.trends || {}} />
-            <AlfredOperatingComment commentary={payload.operating_commentary} t={t} />
-          </div>
+          <CombinedTrendChart trends={payload.trends || {}} />
           <TaskStack title={t('home.topTasks.title', "Today's Top Tasks")} eyebrow={t('home.topTasks.eyebrow', 'Execution focus')} tasks={payload.top_tasks || []} emptyText={t('home.topTasks.empty', 'No open tasks are due today.')} onToggle={handleTaskToggle} timezone={timezone} />
           <section className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <KpiInfoButton label="About recommended MTN actions">
@@ -517,6 +514,10 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
               })}
             </div>
           </section>
+        </div>
+
+        <div className="mt-5">
+          <AlfredOperatingComment commentary={payload.operating_commentary} t={t} />
         </div>
 
         <div className="mt-5">

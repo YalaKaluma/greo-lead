@@ -301,8 +301,11 @@ def prepare_meeting_action_items(payload: ActionConversion, db: Session = Depend
         title=action.description,
         notes=f"Meeting: {action.meeting.title}\nOwner: {action.owner_name or 'Unclear'}",
         due_date=datetime.combine(action.due_date or today_for_timezone(get_user_timezone(db, payload.user_number)), datetime.min.time()),
-        priority="Medium",
+        priority=action.priority or "Medium",
         status="open",
+        goal_id=action.goal_id,
+        delegated_to=action.delegated_to or action.owner_name,
+        created_at=action.created_at or datetime.now(timezone.utc),
     ) for action in actions]
     result = PriorityLLMService().score_tasks(temporary_tasks, context)
     score_by_action_id = {-int(item["task_id"]): item for item in result["scores"]}

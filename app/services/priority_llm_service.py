@@ -241,7 +241,7 @@ Evaluate each task independently and return absolute MTN scores in JSON format a
             task_str += f"  Linked Goal: {'Goal #' + str(task.goal_id) if task.goal_id else 'None'}\n"
             task_str += f"  Times Postponed: {task.times_postponed or 0}\n"
             task_str += f"  Delegated To: {task.delegated_to or 'Self'}\n"
-            task_str += f"  Created: {task.created_at.strftime('%Y-%m-%d')}\n"
+            task_str += f"  Created: {task.created_at.strftime('%Y-%m-%d') if task.created_at else 'Unknown'}\n"
             task_str += f"  In Current Top 10: {'Yes' if task.in_top10 else 'No'}\n"
             task_str += "\n"
             
