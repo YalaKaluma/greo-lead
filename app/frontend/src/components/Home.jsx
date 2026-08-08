@@ -311,12 +311,23 @@ function GoalProgressReviewTable({ reviews, onNavigate, t }) {
 }
 
 function AlfredOperatingComment({ commentary, t }) {
+  const [isExpanded, setIsExpanded] = useState(true);
   if (!commentary) return null;
   return (
-    <section className="mt-5 rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-white p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">{t('home.alfredComment.eyebrow', "Alfred's perspective")}</p>
-      <h2 className="mt-1 text-lg font-semibold text-slate-950">{t('home.alfredComment.title', 'Your operating system today')}</h2>
-      <p className="mt-3 max-w-5xl text-sm leading-6 text-slate-700">{commentary}</p>
+    <section className="rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-white p-5 shadow-sm">
+      <button
+        type="button"
+        onClick={() => setIsExpanded((current) => !current)}
+        className="flex w-full items-center justify-between gap-4 text-left"
+        aria-expanded={isExpanded}
+        aria-label={isExpanded
+          ? t('home.alfredComment.collapse', "Collapse Alfred's perspective")
+          : t('home.alfredComment.expand', "Expand Alfred's perspective")}
+      >
+        <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">{t('home.alfredComment.eyebrow', "Alfred's perspective")}</p>
+        <span className={`text-blue-700 transition-transform ${isExpanded ? 'rotate-180' : ''}`} aria-hidden="true">⌄</span>
+      </button>
+      {isExpanded && <p className="mt-3 text-sm leading-6 text-slate-700">{commentary}</p>}
     </section>
   );
 }
@@ -474,20 +485,21 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
           <JournalMetricCard metric={metrics.journal || {}} t={t} />
         </div>
 
-        <AlfredOperatingComment commentary={payload.operating_commentary} t={t} />
-
         <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)_minmax(320px,0.8fr)]">
-          <CombinedTrendChart trends={payload.trends || {}} />
+          <div className="space-y-5">
+            <CombinedTrendChart trends={payload.trends || {}} />
+            <AlfredOperatingComment commentary={payload.operating_commentary} t={t} />
+          </div>
           <TaskStack title={t('home.topTasks.title', "Today's Top Tasks")} eyebrow={t('home.topTasks.eyebrow', 'Execution focus')} tasks={payload.top_tasks || []} emptyText={t('home.topTasks.empty', 'No open tasks are due today.')} onToggle={handleTaskToggle} timezone={timezone} />
           <section className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <KpiInfoButton label="About recommended MTN actions">
               Suggested actions are drawn from Alfred opportunity signals and ranked by their expected move-the-needle value.
             </KpiInfoButton>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recommended MTN actions</p>
-            <h2 className="mt-1 text-lg font-semibold text-slate-950">Move the needle next</h2>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('home.recommendations.eyebrow', 'Recommended MTN actions')}</p>
+            <h2 className="mt-1 text-lg font-semibold text-slate-950">{t('home.recommendations.title', 'Move the needle next')}</h2>
             <div className="mt-4 space-y-3">
               {(payload.recommendations || []).length === 0 ? (
-                <div className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600">Alfred will recommend actions once enough context exists.</div>
+                <div className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600">{t('home.recommendations.empty', 'Alfred could not generate recommendations right now. Refresh to try again.')}</div>
               ) : payload.recommendations.map((item) => {
                 const state = opportunityActions[item.id];
                 return (

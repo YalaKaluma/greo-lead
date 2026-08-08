@@ -610,11 +610,15 @@
   "home.goals.open": "Open Goals",
   "home.goals.empty": "Add goals and refresh the Progress Review page to see project status here.",
   "home.alfredComment.eyebrow": "Alfred's perspective",
-  "home.alfredComment.title": "Your operating system today",
+  "home.alfredComment.collapse": "Collapse Alfred's perspective",
+  "home.alfredComment.expand": "Expand Alfred's perspective",
+  "home.recommendations.eyebrow": "Recommended MTN actions",
+  "home.recommendations.title": "Move the needle next",
+  "home.recommendations.empty": "Alfred could not generate recommendations right now. Refresh to try again.",
   "home.topTasks.title": "Today's Top Tasks",
   "home.topTasks.eyebrow": "Execution focus",
   "home.topTasks.empty": "No open tasks are due today.",
-  "habits.showUnscheduled": "Show {{count}} not scheduled today",
+  "habits.showUnscheduled": "Show not scheduled today",
   "habits.hideUnscheduled": "Hide habits not scheduled today",
   "habits.notScheduledToday": "Not scheduled today"
 }

@@ -546,37 +546,50 @@ export default function MyHabits({ apiUrl, userNumber }) {
       </div>
 
       <div className="mb-6 border-b border-slate-200">
-        <div className="flex flex-wrap gap-6">
-        <button
-          type="button"
-          onClick={() => setActiveTab('habits')}
-          className={`relative px-2 pb-3 font-medium transition-colors ${
-            activeTab === 'habits'
-              ? 'text-blue-600'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Habits
-          {activeTab === 'habits' && (
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-          )}
-        </button>
-        {showHabitTrends && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('trends')}
-            className={`relative px-2 pb-3 font-medium transition-colors ${
-              activeTab === 'trends'
-                ? 'text-blue-600'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Trends & Coaching
-            {activeTab === 'trends' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+          <div className="flex flex-wrap gap-6">
+            <button
+              type="button"
+              onClick={() => setActiveTab('habits')}
+              className={`relative px-2 pb-3 font-medium transition-colors ${
+                activeTab === 'habits'
+                  ? 'text-blue-600'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Habits
+              {activeTab === 'habits' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+              )}
+            </button>
+            {showHabitTrends && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('trends')}
+                className={`relative px-2 pb-3 font-medium transition-colors ${
+                  activeTab === 'trends'
+                    ? 'text-blue-600'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Trends & Coaching
+                {activeTab === 'trends' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+                )}
+              </button>
             )}
-          </button>
-        )}
+          </div>
+          {activeTab === 'habits' && unscheduledHabits.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowUnscheduledHabits(current => !current)}
+              className="mb-2 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:border-blue-300 hover:text-blue-700"
+              aria-expanded={showUnscheduledHabits}
+            >
+              <span aria-hidden="true">{showUnscheduledHabits ? '−' : '+'}</span>
+              {t(showUnscheduledHabits ? 'habits.hideUnscheduled' : 'habits.showUnscheduled')}
+            </button>
+          )}
         </div>
       </div>
 
@@ -607,17 +620,6 @@ export default function MyHabits({ apiUrl, userNumber }) {
         <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {reorderError}
         </div>
-      )}
-      {unscheduledHabits.length > 0 && (
-        <button
-          type="button"
-          onClick={() => setShowUnscheduledHabits(current => !current)}
-          className="mb-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:border-blue-300 hover:text-blue-700"
-          aria-expanded={showUnscheduledHabits}
-        >
-          <span aria-hidden="true">{showUnscheduledHabits ? '−' : '+'}</span>
-          {t(showUnscheduledHabits ? 'habits.hideUnscheduled' : 'habits.showUnscheduled', { count: unscheduledHabits.length })}
-        </button>
       )}
       <DragDropContext onDragEnd={handleDragEnd}>
         <Droppable droppableId="habits">

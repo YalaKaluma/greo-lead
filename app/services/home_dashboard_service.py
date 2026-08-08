@@ -45,7 +45,7 @@ DOMAIN_LABELS = {
 }
 
 DOMAIN_ORDER = ["vision", "people", "execute", "energy", "learning"]
-HOME_DASHBOARD_SCHEMA_VERSION = 10
+HOME_DASHBOARD_SCHEMA_VERSION = 11
 logger = logging.getLogger(__name__)
 
 
@@ -532,7 +532,7 @@ class HomeDashboardService:
             .order_by(desc(JourneyBeltTrial.started_at))
             .all()
         )
-        opportunities = (
+        opportunity_query = (
             self.db.query(OpportunitySuggestion)
             .join(User, OpportunitySuggestion.user_id == User.id)
             .filter(
@@ -542,8 +542,14 @@ class HomeDashboardService:
             )
             .order_by(desc(OpportunitySuggestion.mtn_score), desc(OpportunitySuggestion.created_at))
             .limit(3)
-            .all()
         )
+        opportunities = opportunity_query.all()
+        if not opportunities:
+            try:
+                self.refresh_daily_recommendations(user_number)
+                opportunities = opportunity_query.all()
+            except Exception as exc:
+                logger.warning("Failed to generate Home recommendations for %s: %s", user_number, exc)
 
         mtn_week = _mtn_period_stats(mtn_chart, 7)
         mtn_month = _mtn_period_stats(mtn_chart, 30)

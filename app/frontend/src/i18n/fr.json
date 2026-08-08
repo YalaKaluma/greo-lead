@@ -610,11 +610,15 @@
   "home.goals.open": "Ouvrir les objectifs",
   "home.goals.empty": "Ajoutez des objectifs et actualisez la page de suivi pour afficher leur statut ici.",
   "home.alfredComment.eyebrow": "Le point de vue d’Alfred",
-  "home.alfredComment.title": "Votre système d’exploitation aujourd’hui",
+  "home.alfredComment.collapse": "Réduire le point de vue d’Alfred",
+  "home.alfredComment.expand": "Développer le point de vue d’Alfred",
+  "home.recommendations.eyebrow": "Actions MTN recommandées",
+  "home.recommendations.title": "Faire avancer l’essentiel",
+  "home.recommendations.empty": "Alfred n’a pas pu générer de recommandations pour le moment. Actualisez la page pour réessayer.",
   "home.topTasks.title": "Priorités du jour",
   "home.topTasks.eyebrow": "Priorité d’exécution",
   "home.topTasks.empty": "Aucune tâche ouverte n’est prévue aujourd’hui.",
-  "habits.showUnscheduled": "Afficher les {{count}} habitudes non prévues aujourd’hui",
+  "habits.showUnscheduled": "Afficher les habitudes non prévues aujourd’hui",
   "habits.hideUnscheduled": "Masquer les habitudes non prévues aujourd’hui",
   "habits.notScheduledToday": "Non prévue aujourd’hui"
 }

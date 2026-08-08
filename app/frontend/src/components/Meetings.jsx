@@ -774,12 +774,25 @@ function MeetingTasks({ apiUrl, userNumber }) {
     let cancelled = false;
     const load = async () => {
       try {
-        const prepared = await fetch(`${apiUrl}/api/meetings/action-items/tasks/prepare`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, mode: 'auto' }) });
-        if (!prepared.ok) throw new Error(t('meetings.tasks.loadError'));
         const response = await fetch(`${apiUrl}/api/meetings/action-items/tasks?user_number=${encodeURIComponent(userNumber)}`);
         if (!response.ok) throw new Error(t('meetings.tasks.loadError'));
         const items = await response.json();
-        if (!cancelled) { setTasks(items); setError(''); }
+        if (!cancelled) { setTasks(items); setError(''); setLoading(false); }
+
+        // MTN scoring enriches meeting tasks, but it must not prevent extracted
+        // commitments from loading when the scoring service is unavailable.
+        try {
+          const prepared = await fetch(`${apiUrl}/api/meetings/action-items/tasks/prepare`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, mode: 'auto' }) });
+          if (prepared.ok) {
+            const refreshed = await fetch(`${apiUrl}/api/meetings/action-items/tasks?user_number=${encodeURIComponent(userNumber)}`);
+            if (refreshed.ok) {
+              const refreshedItems = await refreshed.json();
+              if (!cancelled) setTasks(refreshedItems);
+            }
+          }
+        } catch (scoringError) {
+          console.warn('Meeting task scoring is temporarily unavailable.', scoringError);
+        }
       } catch (err) { if (!cancelled) setError(err.message); }
       finally { if (!cancelled) setLoading(false); }
     };
