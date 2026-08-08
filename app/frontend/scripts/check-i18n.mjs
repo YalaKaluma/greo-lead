@@ -36,7 +36,6 @@ const intentionallySharedValues = new Set([
 ]);
 const intentionallySharedUiText = new Set([
   'Alfred',
-  'Mailgun',
   'OpenAI',
 ]);
 

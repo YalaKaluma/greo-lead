@@ -23,7 +23,7 @@ This folder contains the FastAPI backend for Alfred / Leadership OS.
 On startup the backend:
 
 - Loads `.env` through `app/config.py`.
-- Verifies the presence of required database, OpenAI, Twilio, Mailgun, and default-user settings.
+- Verifies the presence of required database, OpenAI, authentication, scheduler, public-URL, and default-user settings.
 - Creates/verifies SQLAlchemy tables with `Base.metadata.create_all`.
 - Ensures admin schema and seed data are present through `ensure_admin_schema_and_seed`.
 - Registers API routers under `/api/...`.
@@ -38,12 +38,9 @@ Core required values checked by `main.py`:
 - `DATABASE_URL`
 - `OPENAI_API_KEY`
 - `DEFAULT_USER_NUMBER`
-- `TWILIO_SID`
-- `TWILIO_AUTH_TOKEN`
-- `TWILIO_WHATSAPP_NUMBER`
-- `MAILGUN_API_KEY`
-- `MAILGUN_DOMAIN`
-- `MAILGUN_FROM`
+- `APP_SESSION_SECRET`
+- `ALFRED_SCHEDULER_SECRET`
+- `PUBLIC_APP_URL`
 
 Additional settings loaded by `config.py`:
 
@@ -90,7 +87,7 @@ GitHub issue creation from Operations Director and CTO Director findings:
 
 Alfred combines:
 
-- Conversational coaching through WhatsApp, email, and in-app chat.
+- Conversational coaching through in-app chat.
 - A React executive operating system UI.
 - Journey 2.0 domains, subdomains, belts, trials, readiness assessment, and behavioral evidence.
 - Vision/Pillar/Outcome goals, transformation roadmap waves, goal progress reviews, and AI-assisted opportunity suggestions.

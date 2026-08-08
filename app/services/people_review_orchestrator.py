@@ -45,7 +45,7 @@ def handle_people_review_session(
     print(f"\n{'='*60}")
     print(f"👥 PEOPLE REVIEW SESSION")
     print(f"Phase: {phase}")
-    print(f"Message: {user_message[:100]}...")
+    print(f"Message received; length={len(user_message or '')}")
     print(f"{'='*60}")
     
     # Check for cancel

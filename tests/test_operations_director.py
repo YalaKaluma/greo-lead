@@ -6,7 +6,7 @@ import pytest
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
 from app.models import OperationsIssueDraft, SystemHealthEvent, User
-from app.routers.admin import _get_admin_user
+from app.routers.admin import require_admin
 from app.routers.admin_operations import (
     _build_executive_summary,
     _draft_to_dict,
@@ -288,7 +288,7 @@ def test_admin_permission_required_for_operations_tools():
     non_admin = User(id=1, email="user@example.com", is_admin=False, is_active=True, created_at=datetime.utcnow())
 
     with pytest.raises(Exception) as exc_info:
-        _get_admin_user("user@example.com", AdminFakeDb(non_admin))
+        require_admin(non_admin)
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Admin access required"

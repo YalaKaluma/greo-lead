@@ -53,7 +53,7 @@ def normalize_category(category: str | None, source: str | None = None, status_c
     text = f"{category or ''} {source or ''}".lower()
     if any(term in text for term in ("cron", "nudge", "job", "scheduled")):
         return "cron_failure"
-    if any(term in text for term in ("openai", "twilio", "mailgun", "gmail", "github", "external")):
+    if any(term in text for term in ("openai", "gmail", "github", "external")):
         return "external_service_failure"
     if any(term in text for term in ("database", "db", "sqlalchemy", "psycopg", "migration", "schema")):
         return "database_failure"

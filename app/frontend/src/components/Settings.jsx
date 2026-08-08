@@ -12,6 +12,20 @@ import {
   updateNotificationPreferences
 } from '../services/notifications';
 
+// Admin identity is established by the signed session token. Keep this scoped
+// to Alfred's admin API so bearer credentials are never attached to unrelated
+// axios requests.
+axios.interceptors.request.use((config) => {
+  if (String(config.url || '').includes('/api/admin/')) {
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  }
+  return config;
+});
+
 const TIMEZONE_OPTIONS = [
   { value: 'America/New_York', label: 'Eastern Time - New York' },
   { value: 'America/Chicago', label: 'Central Time - Chicago' },
@@ -2107,7 +2121,6 @@ function AdminSystemHealthPanel({ apiUrl, userNumber }) {
           <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900">Service Readiness</div>
           <div className="space-y-3 px-4 py-4 text-sm text-slate-700">
             <div className="flex justify-between"><span>OpenAI</span><span className="font-semibold">{environment.openai_configured ? 'Configured' : 'Missing'}</span></div>
-            <div className="flex justify-between"><span>Mailgun</span><span className="font-semibold">{environment.mailgun_configured ? 'Configured' : 'Missing'}</span></div>
             <div className="flex justify-between"><span>Gmail Token</span><span className="font-semibold">{environment.gmail_token_present ? 'Present' : 'Not set'}</span></div>
           </div>
         </div>

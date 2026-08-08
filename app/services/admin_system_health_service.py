@@ -223,7 +223,6 @@ class AdminSystemHealthService:
         database = self._database_status()
         environment = {
             "openai_configured": bool(os.getenv("OPENAI_API_KEY")),
-            "mailgun_configured": bool(os.getenv("MAILGUN_API_KEY") and os.getenv("MAILGUN_DOMAIN") and os.getenv("MAILGUN_FROM")),
             "gmail_token_present": bool(os.getenv("GMAIL_TOKEN_JSON")),
         }
         summary = self.get_log_summary()

@@ -27,12 +27,6 @@ jobs:
       SKIP_STARTUP_TASKS: "1"
       OPENAI_API_KEY: ci-placeholder
       DEFAULT_USER_NUMBER: ci-user
-      TWILIO_SID: ci-placeholder
-      TWILIO_AUTH_TOKEN: ci-placeholder
-      TWILIO_WHATSAPP_NUMBER: ci-placeholder
-      MAILGUN_API_KEY: ci-placeholder
-      MAILGUN_DOMAIN: ci.example
-      MAILGUN_FROM: ci@example.com
 
     steps:
       - name: Check backup confirmation

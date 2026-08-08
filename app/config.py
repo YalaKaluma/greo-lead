@@ -12,16 +12,6 @@ DATABASE_URL = os.getenv("DATABASE_URL") or DIRECT_DATABASE_URL
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 
-# Twilio
-TWILIO_SID = os.getenv("TWILIO_SID")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
-
-# Mailgun
-MAILGUN_API_KEY = os.getenv("MAILGUN_API_KEY")
-MAILGUN_DOMAIN = os.getenv("MAILGUN_DOMAIN")
-MAILGUN_FROM = os.getenv("MAILGUN_FROM")
-
 # Web push notifications
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
@@ -34,6 +24,13 @@ FIREBASE_SERVICE_ACCOUNT_B64 = os.getenv("FIREBASE_SERVICE_ACCOUNT_B64")
 
 # Signed application sessions. Use a random value of at least 32 characters.
 APP_SESSION_SECRET = os.getenv("APP_SESSION_SECRET")
+
+# Dedicated credential for Railway cron jobs and other non-user automation.
+ALFRED_SCHEDULER_SECRET = os.getenv("ALFRED_SCHEDULER_SECRET")
+
+# Canonical public origin used when validating provider signatures behind a
+# reverse proxy. Example: https://alfred.example.com (no trailing slash).
+PUBLIC_APP_URL = os.getenv("PUBLIC_APP_URL") or os.getenv("APP_URL")
 
 # User
 DEFAULT_USER_NUMBER = os.getenv("DEFAULT_USER_NUMBER")

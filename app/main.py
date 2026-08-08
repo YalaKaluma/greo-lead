@@ -10,7 +10,7 @@ import time
 from urllib.parse import parse_qsl, urlencode
 from datetime import datetime
 from app.db import Base, engine, SessionLocal
-from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits, waitlist, onboarding, chat, priority, leadership_coaching_router, audio, meetings, projects, message_feedback, opportunities, message_signals, settings, admin, admin_operations, admin_cto, usage, home, notifications
+from app.routers import journal, tasks, nudge, journey, messages, habits, waitlist, onboarding, chat, priority, leadership_coaching_router, audio, meetings, projects, message_feedback, opportunities, message_signals, settings, admin, admin_operations, admin_cto, usage, home, notifications
 from app.routers import auth
 from sqlalchemy import text
 import threading
@@ -51,13 +51,9 @@ required_vars = [
     "DATABASE_URL",
     "OPENAI_API_KEY",
     "DEFAULT_USER_NUMBER",
-    "TWILIO_SID",
-    "TWILIO_AUTH_TOKEN",
-    "TWILIO_WHATSAPP_NUMBER",
-    "MAILGUN_API_KEY",
-    "MAILGUN_DOMAIN",
-    "MAILGUN_FROM",
-    "APP_SESSION_SECRET"
+    "APP_SESSION_SECRET",
+    "ALFRED_SCHEDULER_SECRET",
+    "PUBLIC_APP_URL",
 ]
 
 missing_vars = []
@@ -224,7 +220,7 @@ def _classify_exception_event(path: str, exc: Exception) -> str:
         return "database_failure"
     if "openai" in combined:
         return "openai_failure"
-    if "gmail" in combined or "mailgun" in combined or "email" in combined:
+    if "gmail" in combined or "email" in combined:
         return "email_failure"
     return "api_error"
 
@@ -305,8 +301,6 @@ routers_to_register = [
     (journal.router, "/api/journal", "Journal"),
     (auth.router, "/api/auth", "Auth"),
     (onboarding.router, "/api/onboarding", "Onboarding"),
-    (webhook.router, "/api", "Webhook"),
-    (webhook_brain.router, "/api/brain", "Webhook-Brain"),
     (tasks.router, "/api/tasks", "Tasks"),
     (nudge.router, "/api", "Nudge"),
     (journey.router, "/api/journey", "Journey"),
@@ -379,8 +373,6 @@ def health():
         "database_test": db_test,
         "environment": {
             "has_openai_key": bool(os.getenv("OPENAI_API_KEY")),
-            "has_twilio_config": bool(os.getenv("TWILIO_SID")),
-            "has_mailgun_config": bool(os.getenv("MAILGUN_API_KEY")),
         }
     }
 
@@ -508,8 +500,6 @@ logger.info("   • Health:      /api/health")
 logger.info("   • API Docs:    /docs")
 logger.info("   • Tasks:       /api/tasks")
 logger.info("   • Journey:     /api/journey")
-logger.info("   • Webhook:     /api/webhook")
-logger.info("   • Email:       /api/email/webhook")
 logger.info("=" * 70)
 logger.info("🎯 Ready to serve requests!")
 logger.info("=" * 70)

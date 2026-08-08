@@ -17,12 +17,9 @@ jobs:
       SKIP_STARTUP_TASKS: "1"
       OPENAI_API_KEY: ci-placeholder
       DEFAULT_USER_NUMBER: ci-user
-      TWILIO_SID: ci-placeholder
-      TWILIO_AUTH_TOKEN: ci-placeholder
-      TWILIO_WHATSAPP_NUMBER: ci-placeholder
-      MAILGUN_API_KEY: ci-placeholder
-      MAILGUN_DOMAIN: ci.example
-      MAILGUN_FROM: ci@example.com
+      APP_SESSION_SECRET: ci-session-secret-at-least-32-characters-long
+      ALFRED_SCHEDULER_SECRET: ci-scheduler-secret-at-least-32-characters
+      PUBLIC_APP_URL: https://ci.example.com
 
     steps:
       - name: Check out repository

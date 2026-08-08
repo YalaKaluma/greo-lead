@@ -2,7 +2,7 @@
 Nudge Router - Proactive Check-ins and Reflections
 
 This module handles scheduled nudges (morning, evening, weekly, Sunday review)
-sent to users via WhatsApp. All nudges use FULL context for personalization:
+delivered through the in-app inbox and push notifications. All nudges use FULL context for personalization:
 - Journey context (strengths, goals, projects, etc.)
 - Conversation history (last 8 messages for continuity)
 - Task context (today's tasks and priorities)
@@ -21,8 +21,6 @@ Key Features:
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from twilio.rest import Client
-from twilio.base.exceptions import TwilioRestException
 from openai import OpenAI, OpenAIError
 import logging
 import os
@@ -55,10 +53,8 @@ from app.services.operations_director.health_events import (
     record_external_service_failure_with_new_session,
     record_job_failure,
 )
+from app.security_dependencies import require_scheduler_or_admin
 from app.config import (
-    TWILIO_SID,
-    TWILIO_AUTH_TOKEN,
-    TWILIO_WHATSAPP_NUMBER,
     OPENAI_API_KEY,
     OPENAI_MODEL,
     DEFAULT_USER_NUMBER,
@@ -75,16 +71,6 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - [%(funcName)s] %(message)s'
 )
-
-# Initialize clients with validation
-try:
-    if not TWILIO_SID or not TWILIO_AUTH_TOKEN:
-        raise ValueError("Twilio credentials not configured")
-    twilio_client = Client(TWILIO_SID, TWILIO_AUTH_TOKEN)
-    logger.info("✅ Twilio client initialized successfully")
-except Exception as e:
-    logger.error(f"❌ Failed to initialize Twilio client: {e}")
-    twilio_client = None
 
 try:
     if not OPENAI_API_KEY:
@@ -351,7 +337,7 @@ def build_task_context(db: Session, user_number: str) -> str:
 
     Args:
         db: Database session
-        user_number: User's WhatsApp number
+        user_number: User identifier
 
     Returns:
         Formatted task context string
@@ -432,7 +418,7 @@ def build_habit_context(db: Session, user_number: str) -> str:
 
     Args:
         db: Database session
-        user_number: User's WhatsApp number
+        user_number: User identifier
 
     Returns:
         Formatted habit context string
@@ -472,7 +458,7 @@ def build_full_context(db: Session, user_number: str, include_history: bool = Fa
 
     Args:
         db: Database session
-        user_number: User's WhatsApp number
+        user_number: User identifier
         include_history: Whether to include conversation history (default: False for nudges)
 
     Returns:
@@ -630,7 +616,7 @@ def validate_user_number(user_number: Optional[str]) -> str:
     Validate and normalize user number.
 
     Args:
-        user_number: WhatsApp number in format 'whatsapp:+1234567890' or None
+        user_number: User identifier or None
 
     Returns:
         Validated user number
@@ -734,83 +720,13 @@ def generate_ai_message(
             raise HTTPException(status_code=500, detail=f"Unexpected AI error: {str(e)}")
 
 
-def send_whatsapp_message(text: str, user_number: str, nudge_type: str) -> bool:
-    """
-    Send WhatsApp message with retry logic.
-
-    Args:
-        text: Message content
-        user_number: Recipient WhatsApp number
-        nudge_type: Type of nudge for logging
-
-    Returns:
-        True if successful
-
-    Raises:
-        HTTPException: If sending fails after retries
-    """
-    if not twilio_client:
-        logger.error("Twilio client not initialized")
-        raise HTTPException(
-            status_code=503,
-            detail="WhatsApp service unavailable - Twilio client not configured"
-        )
-
-    if not TWILIO_WHATSAPP_NUMBER:
-        logger.error("TWILIO_WHATSAPP_NUMBER not configured")
-        raise HTTPException(
-            status_code=503,
-            detail="WhatsApp service unavailable - sender number not configured"
-        )
-
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            logger.debug(f"WhatsApp send attempt {attempt + 1}/{max_retries} to {user_number}")
-
-            message = twilio_client.messages.create(
-                body=text,
-                from_=TWILIO_WHATSAPP_NUMBER,
-                to=user_number,
-            )
-
-            logger.info(f"✅ WhatsApp {nudge_type} sent successfully to {user_number} (SID: {message.sid})")
-            return True
-
-        except TwilioRestException as e:
-            logger.warning(f"Twilio API error on attempt {attempt + 1}: {e.code} - {e.msg}")
-            record_external_service_failure_with_new_session(
-                service_name="Twilio",
-                operation=f"{nudge_type}_whatsapp_send",
-                error=e,
-                retry_status=f"attempt {attempt + 1}/{max_retries}",
-            )
-            if attempt == max_retries - 1:
-                logger.error(f"❌ All Twilio retry attempts failed for {nudge_type}")
-                raise HTTPException(
-                    status_code=503,
-                    detail=f"WhatsApp service error after {max_retries} attempts: {e.msg}"
-                )
-        except Exception as e:
-            logger.exception(f"Unexpected error sending WhatsApp: {e}")
-            record_external_service_failure_with_new_session(
-                service_name="Twilio",
-                operation=f"{nudge_type}_whatsapp_send",
-                error=e,
-                retry_status="unexpected_error",
-            )
-            raise HTTPException(status_code=500, detail=f"Unexpected WhatsApp error: {str(e)}")
-
-    return False
-
-
 def save_message_safe(db: Session, user_number: str, text: str) -> None:
     """
     Save message to database with error handling (non-blocking).
 
     Args:
         db: Database session
-        user_number: User's WhatsApp number
+        user_number: User identifier
         text: Message content
     """
     try:
@@ -986,7 +902,7 @@ def send_nudge_for_user(
     Logs every nudge to Excel for feedback and prompt tuning.
 
     Args:
-        user_number: User's WhatsApp number
+        user_number: User identifier
         nudge_type: Type of nudge (morning/evening/weekly/sunday_review)
         db: Database session
 
@@ -1079,15 +995,7 @@ def send_nudge_for_user(
         if nudge_type == "sunday_review":
             message_text = add_sunday_refresh_notice(message_text, sunday_refresh_result)
 
-        # Send via WhatsApp
-        #Temporarly disabled
-#        send_whatsapp_message(message_text, user_number, nudge_type)
-
-        # Save in Journal
-
-
-        # Save to database (non-blocking)
-        #save_message_safe(db, user_number, message_text)
+        # Save to the in-app inbox and notify registered devices.
         save_message(
             db,
             sender="assistant",
@@ -1319,7 +1227,8 @@ def get_requested_nudge_user_number(
 @router.get("/nudge/morning")
 def morning_nudge(
         request: Request,
-        user_number: Optional[str] = Query(None, description="WhatsApp number (e.g., 'whatsapp:+1234567890')"),
+        user_number: Optional[str] = Query(None, description="User identifier (legacy phone-based identifiers are supported)"),
+        _authorized=Depends(require_scheduler_or_admin),
         db: Session = Depends(get_db)
 ):
     """
@@ -1349,7 +1258,8 @@ def morning_nudge(
 @router.get("/nudge/evening")
 def evening_nudge(
         request: Request,
-        user_number: Optional[str] = Query(None, description="WhatsApp number"),
+        user_number: Optional[str] = Query(None, description="User identifier"),
+        _authorized=Depends(require_scheduler_or_admin),
         db: Session = Depends(get_db)
 ):
     """
@@ -1379,7 +1289,8 @@ def evening_nudge(
 @router.get("/nudge/weekly")
 def weekly_nudge(
         request: Request,
-        user_number: Optional[str] = Query(None, description="WhatsApp number"),
+        user_number: Optional[str] = Query(None, description="User identifier"),
+        _authorized=Depends(require_scheduler_or_admin),
         db: Session = Depends(get_db)
 ):
     """
@@ -1409,7 +1320,8 @@ def weekly_nudge(
 @router.get("/nudge/sunday_review")
 def sunday_review_nudge(
         request: Request,
-        user_number: Optional[str] = Query(None, description="WhatsApp number"),
+        user_number: Optional[str] = Query(None, description="User identifier"),
+        _authorized=Depends(require_scheduler_or_admin),
         db: Session = Depends(get_db)
 ):
     """
@@ -1437,7 +1349,10 @@ def sunday_review_nudge(
 
 
 @router.get("/nudge/cto_weekend_review")
-def cto_weekend_review(db: Session = Depends(get_db)):
+def cto_weekend_review(
+        _authorized=Depends(require_scheduler_or_admin),
+        db: Session = Depends(get_db),
+):
     """
     Run Alfred CTO Director's weekend architecture and release-readiness review.
 
@@ -1452,7 +1367,10 @@ def cto_weekend_review(db: Session = Depends(get_db)):
 # -------------------------------------------------
 
 @router.get("/nudge/morning/batch")
-def morning_nudge_batch(db: Session = Depends(get_db)):
+def morning_nudge_batch(
+        _authorized=Depends(require_scheduler_or_admin),
+        db: Session = Depends(get_db),
+):
     """Send morning nudge to ALL active users."""
     nudge_type = "morning"
     start_time = datetime.utcnow()
@@ -1480,7 +1398,10 @@ def morning_nudge_batch(db: Session = Depends(get_db)):
 
 
 @router.get("/nudge/evening/batch")
-def evening_nudge_batch(db: Session = Depends(get_db)):
+def evening_nudge_batch(
+        _authorized=Depends(require_scheduler_or_admin),
+        db: Session = Depends(get_db),
+):
     """Send evening nudge to ALL active users."""
     nudge_type = "evening"
     start_time = datetime.utcnow()
@@ -1508,7 +1429,10 @@ def evening_nudge_batch(db: Session = Depends(get_db)):
 
 
 @router.get("/nudge/weekly/batch")
-def weekly_batch(db: Session = Depends(get_db)):
+def weekly_batch(
+        _authorized=Depends(require_scheduler_or_admin),
+        db: Session = Depends(get_db),
+):
     """Send Friday coaching nudge to ALL active users."""
     nudge_type = "weekly"
     start_time = datetime.utcnow()
@@ -1536,7 +1460,10 @@ def weekly_batch(db: Session = Depends(get_db)):
 
 
 @router.get("/nudge/sunday_review/batch")
-def sunday_review_batch(db: Session = Depends(get_db)):
+def sunday_review_batch(
+        _authorized=Depends(require_scheduler_or_admin),
+        db: Session = Depends(get_db),
+):
     """Send Sunday goal review nudge to ALL active users."""
     nudge_type = "sunday_review"
     start_time = datetime.utcnow()
@@ -1568,7 +1495,7 @@ def sunday_review_batch(db: Session = Depends(get_db)):
 # -------------------------------------------------
 
 @router.get("/nudge/reload_config")
-def reload_config():
+def reload_config(_authorized=Depends(require_scheduler_or_admin)):
     """
     Reload nudge prompts from YAML file.
     Use this to apply prompt changes without restarting the app.
@@ -1587,7 +1514,7 @@ def reload_config():
 
 
 @router.get("/nudge/download_log")
-def download_nudge_log():
+def download_nudge_log(_authorized=Depends(require_scheduler_or_admin)):
     """
     Download the nudge feedback log Excel file.
 
@@ -1608,7 +1535,7 @@ def download_nudge_log():
 
 
 @router.get("/nudge/log_summary")
-def get_log_summary():
+def get_log_summary(_authorized=Depends(require_scheduler_or_admin)):
     """
     Get a text summary of logged nudges.
     Shows stats and ratings if available.
@@ -1666,7 +1593,6 @@ def health_check(db: Session = Depends(get_db)):
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
         "services": {
-            "twilio": "configured" if twilio_client else "not_configured",
             "openai": "configured" if openai_client else "not_configured",
             "default_user": "configured" if DEFAULT_USER_NUMBER else "not_configured",
         },

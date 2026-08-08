@@ -378,7 +378,7 @@ def _handle_planning(
         db.add(task)
         db.commit()
         task_created = True
-        print(f"✅ Auto-created leadership experiment task: {task_title}")
+        print("✅ Auto-created leadership experiment task")
     except Exception as e:
         print(f"⚠️ Could not auto-create task: {e}")
     

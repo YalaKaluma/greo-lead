@@ -23,7 +23,7 @@ class OnboardingConversation:
         msg_lower = message.lower().strip()
         # Use startswith to match only at beginning, avoiding "restarted" matching "start"
         result = any(msg_lower.startswith(trigger) for trigger in OnboardingConversation.TRIGGER_PHRASES)
-        print(f"🔍 DEBUG [is_onboarding_trigger]: message='{message}' → result={result}")
+        print(f"🔍 DEBUG [is_onboarding_trigger]: message_present={bool(message)} result={result}")
         return result
 
     @staticmethod
@@ -60,8 +60,8 @@ class OnboardingConversation:
         print(f"\n🔍 DEBUG [process_onboarding_message]:")
         print(f"   User ID: {user.id}")
         print(f"   Current step: {step}")
-        print(f"   Message: '{message}'")
-        print(f"   Current onboarding_data: {user.onboarding_data}")
+        print(f"   Message length: {len(message or '')}")
+        print(f"   Onboarding data present: {bool(user.onboarding_data)}")
 
         # INITIAL: User just said "Hey Alfred"
         if step == 'INITIAL':
@@ -76,7 +76,7 @@ class OnboardingConversation:
         # NAME: Collecting name
         elif step == 'NAME':
             name = OnboardingConversation._extract_name(message)
-            print(f"📝 DEBUG [NAME]: Extracted name='{name}'")
+            print(f"📝 DEBUG [NAME]: Extracted name present={bool(name)}")
 
             if name:
                 user.name = name
@@ -89,8 +89,7 @@ class OnboardingConversation:
                 db.commit()
                 db.refresh(user)  # ← ADDED: Verify commit worked
 
-                print(f"✅ DEBUG [NAME]: Saved name='{name}', moved to PROFESSION")
-                print(f"   onboarding_data after refresh: {user.onboarding_data}")
+                print("✅ DEBUG [NAME]: Saved name, moved to PROFESSION")
                 return OnboardingConversation._ask_profession(name)
             else:
                 print(f"❌ DEBUG [NAME]: Could not extract name from message")
@@ -99,7 +98,7 @@ class OnboardingConversation:
         # PROFESSION: Collecting profession/role
         elif step == 'PROFESSION':
             profession = message.strip()
-            print(f"📝 DEBUG [PROFESSION]: Saving profession='{profession}'")
+            print(f"📝 DEBUG [PROFESSION]: Saving profession length={len(profession)}")
 
             user.profession = profession
             user.onboarding_step = 'GOAL'
@@ -111,13 +110,12 @@ class OnboardingConversation:
             db.refresh(user)  # ← ADDED: Verify commit worked
 
             print(f"✅ DEBUG [PROFESSION]: Saved, moved to GOAL")
-            print(f"   onboarding_data after refresh: {user.onboarding_data}")
             return OnboardingConversation._ask_goal(user.name, profession)
 
         # GOAL: Collecting first goal
         elif step == 'GOAL':
             goal = message.strip()
-            print(f"📝 DEBUG [GOAL]: Saving goal='{goal}'")
+            print(f"📝 DEBUG [GOAL]: Saving goal length={len(goal)}")
 
             user.onboarding_step = 'GOAL_WHY'
             data = user.onboarding_data or {}
@@ -128,7 +126,6 @@ class OnboardingConversation:
             db.refresh(user)  # ← ADDED: Verify commit worked
 
             print(f"✅ DEBUG [GOAL]: Saved, moved to GOAL_WHY")
-            print(f"   onboarding_data after refresh: {user.onboarding_data}")
             return OnboardingConversation._ask_goal_why(goal)
 
         # GOAL_WHY: Collecting goal motivation (optional, can skip)
@@ -143,7 +140,7 @@ class OnboardingConversation:
                 return OnboardingConversation._ask_tasks(user.name)
             else:
                 why = message.strip()
-                print(f"📝 DEBUG [GOAL_WHY]: Saving why='{why}'")
+                print(f"📝 DEBUG [GOAL_WHY]: Saving response length={len(why)}")
 
                 data = user.onboarding_data or {}
                 data['goal_why'] = why
@@ -154,14 +151,12 @@ class OnboardingConversation:
                 db.refresh(user)  # ← ADDED: Verify commit worked
 
                 print(f"✅ DEBUG [GOAL_WHY]: Saved, moved to TASKS")
-                print(f"   onboarding_data after refresh: {user.onboarding_data}")
                 return OnboardingConversation._ask_tasks(user.name)
 
         # TASKS: Collecting initial tasks
         elif step == 'TASKS':
             tasks_text = message.strip()
             print(f"📝 DEBUG [TASKS]: Saving tasks_raw (length={len(tasks_text)} chars)")
-            print(f"   tasks_raw preview: '{tasks_text[:100]}...'")
 
             data = user.onboarding_data or {}
             data['tasks_raw'] = tasks_text
@@ -172,14 +167,13 @@ class OnboardingConversation:
             db.refresh(user)  # ← ADDED: Verify commit worked
 
             print(f"✅ DEBUG [TASKS]: Saved, moved to QUICK_WIN")
-            print(f"   onboarding_data after refresh: {user.onboarding_data}")
             print(f"   onboarding_data keys: {list((user.onboarding_data or {}).keys())}")
             return OnboardingConversation._ask_quick_win()
 
         # QUICK_WIN: Identifying first task to tackle
         elif step == 'QUICK_WIN':
             quick_win = message.strip()
-            print(f"📝 DEBUG [QUICK_WIN]: Saving quick_win='{quick_win}'")
+            print(f"📝 DEBUG [QUICK_WIN]: Saving response length={len(quick_win)}")
 
             data = user.onboarding_data or {}
             data['quick_win'] = quick_win
@@ -190,7 +184,6 @@ class OnboardingConversation:
             db.refresh(user)  # ← ADDED: Verify commit worked
 
             print(f"✅ DEBUG [QUICK_WIN]: Saved, moved to APP_LINK_SENT")
-            print(f"   onboarding_data after refresh: {user.onboarding_data}")
             print(f"   FINAL onboarding_data keys: {list((user.onboarding_data or {}).keys())}")
 
             # ✅ NEW: Process onboarding data immediately into tasks and goals
@@ -201,7 +194,7 @@ class OnboardingConversation:
             temp_password = user.generate_temp_password()
             db.commit()
             db.refresh(user)  # ← ADDED: Verify password was saved
-            print(f"🔑 DEBUG [QUICK_WIN]: Generated temp_password='{temp_password}'")
+            print("🔑 DEBUG [QUICK_WIN]: Generated one-time temporary password")
 
             return OnboardingConversation._send_app_link(user.name, user.id, temp_password)
 
@@ -283,12 +276,12 @@ See you inside."""
     def _extract_name(message: str) -> Optional[str]:
         """Extract name from message."""
         message = message.strip()
-        print(f"🔍 DEBUG [_extract_name]: Parsing '{message}'")
+        print(f"🔍 DEBUG [_extract_name]: Parsing message length={len(message or '')}")
 
         # Direct name (no prefixes)
         if len(message.split()) <= 3 and not any(word in message.lower() for word in ['is', 'am', 'call']):
             result = message.title()
-            print(f"✅ DEBUG [_extract_name]: Direct name → '{result}'")
+            print("✅ DEBUG [_extract_name]: Direct name extracted")
             return result
 
         # "My name is John" or "I'm John"
@@ -301,13 +294,13 @@ See you inside."""
             match = re.search(pattern, message, re.IGNORECASE)
             if match:
                 result = match.group(1).strip().title()
-                print(f"✅ DEBUG [_extract_name]: Pattern match → '{result}'")
+                print("✅ DEBUG [_extract_name]: Pattern match extracted")
                 return result
 
         # Fallback
         if len(message.split()) <= 3:
             result = message.title()
-            print(f"⚠️ DEBUG [_extract_name]: Fallback → '{result}'")
+            print("⚠️ DEBUG [_extract_name]: Fallback name extracted")
             return result
 
         print(f"❌ DEBUG [_extract_name]: Could not extract name")
@@ -348,7 +341,7 @@ See you inside."""
             goal_text = data['first_goal']
             why = data.get('goal_why', '')
 
-            print(f"🎯 DEBUG [process_data]: Creating goal: '{goal_text}'")
+            print(f"🎯 DEBUG [process_data]: Creating goal length={len(goal_text)}")
             try:
                 goal = journey_service.add_goal(
                     db,
@@ -366,7 +359,7 @@ See you inside."""
             tasks_text = data['tasks_raw']
             quick_win = data.get('quick_win', '')
 
-            print(f"📝 DEBUG [process_data]: Extracting tasks from: '{tasks_text[:50]}...'")
+            print(f"📝 DEBUG [process_data]: Extracting tasks from input length={len(tasks_text)}")
             tasks = extract_tasks_from_onboarding(tasks_text)
             print(f"✅ DEBUG [process_data]: Extracted {len(tasks)} tasks")
 
@@ -387,9 +380,9 @@ See you inside."""
                         notes=f"Added during onboarding" + (f" - Quick win!" if is_quick_win else "")
                     )
                     db.add(task)
-                    print(f"  ✓ Task queued: '{task_text}' (priority: {task.priority}, due: {today})")
+                    print(f"  ✓ Task queued (priority: {task.priority}, due: {today})")
                 except Exception as e:
-                    print(f"  ✗ Failed to create task '{task_text}': {e}")
+                    print(f"  ✗ Failed to create task: {type(e).__name__}")
 
             db.commit()
             print(f"✅ DEBUG [process_data]: All tasks committed to database!")

@@ -22,3 +22,8 @@ build/
 *.jks
 *.keystore
 .android-signing/
+
+# Local infrastructure credential exports must never enter Git.
+app/Railway Token.txt
+*credentials*.json
+*service-account*.json

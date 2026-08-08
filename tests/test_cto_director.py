@@ -6,7 +6,7 @@ import pytest
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
 from app.models import CtoFinding, CtoReview, User
-from app.routers.admin import _get_admin_user
+from app.routers.admin import require_admin
 from app.routers.admin_cto import _build_executive_summary, create_issue_from_cto_finding
 from app.routers.nudge import run_cto_weekend_review
 from app.services.cto_director import reviewer as cto_reviewer
@@ -261,7 +261,7 @@ def test_admin_permission_required_for_cto_tools():
     db.user = User(id=1, email="user@example.com", is_admin=False, is_active=True, created_at=datetime.utcnow())
 
     with pytest.raises(Exception) as exc_info:
-        _get_admin_user("user@example.com", db)
+        require_admin(db.user)
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Admin access required"

@@ -5,12 +5,13 @@ import threading
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.routers.auth import require_authenticated_user
 from app.models import (
     AdminAuditLog,
     AuditLog,
@@ -190,24 +191,12 @@ def _display_priority_feedback(decision: TaskPriorityDecision, task: Task | None
     }
 
 
-def _get_admin_user(user_number: str, db: Session) -> User:
-    user = db.query(User).filter(
-        (User.phone_number == user_number) | (User.email == user_number)
-    ).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-    if not getattr(user, "is_active", True):
-        raise HTTPException(status_code=403, detail="Inactive users cannot use admin tools")
+def require_admin(
+    user: User = Depends(require_authenticated_user),
+) -> User:
     if not getattr(user, "is_admin", False):
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
-
-
-def require_admin(
-    admin_user_number: str = Query(..., alias="user_number"),
-    db: Session = Depends(get_db),
-) -> User:
-    return _get_admin_user(admin_user_number, db)
 
 
 def _assessable_meetings_query(db: Session):

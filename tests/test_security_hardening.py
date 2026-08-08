@@ -2,11 +2,23 @@ import pytest
 import os
 import subprocess
 import sys
+import asyncio
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 
 from app.security_middleware import RateLimitMiddleware, RateLimitRule, SecurityHeadersMiddleware
+
+
+def test_retired_provider_webhooks_are_not_registered():
+    repository_root = Path(__file__).resolve().parents[1]
+    main_source = (repository_root / "app" / "main.py").read_text(encoding="utf-8")
+
+    assert not (repository_root / "app" / "routers" / "webhook.py").exists()
+    assert not (repository_root / "app" / "routers" / "webhook_brain.py").exists()
+    assert '"/api/webhook"' not in main_source
+    assert '"/api/email/webhook"' not in main_source
 
 
 class EmptyQuery:
@@ -203,3 +215,46 @@ def test_db_health_check_prints_counts_without_sensitive_content(tmp_path):
     assert "journal_entries: 1" in result.stdout
     assert "status: ok" in result.stdout
     assert sensitive_text not in result.stdout
+
+
+def test_admin_dependency_uses_authenticated_user_role_not_query_identity():
+    from app.models import User
+    from app.routers.admin import require_admin
+
+    admin = User(id=1, phone_number="admin@example.com", is_active=True, is_admin=True)
+    ordinary_user = User(id=2, phone_number="admin@example.com", is_active=True, is_admin=False)
+
+    assert require_admin(user=admin) is admin
+    with pytest.raises(HTTPException) as exc_info:
+        require_admin(user=ordinary_user)
+    assert exc_info.value.status_code == 403
+
+
+def test_legacy_password_replacement_endpoint_is_disabled():
+    from app.routers.onboarding import set_permanent_password
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(set_permanent_password(user_id=42, new_password="replacement", db=EmptyDb()))
+
+    assert exc_info.value.status_code == 410
+
+
+def test_scheduler_dependency_rejects_missing_credentials(monkeypatch):
+    from app.security_dependencies import require_scheduler_or_admin
+
+    monkeypatch.setenv("ALFRED_SCHEDULER_SECRET", "s" * 32)
+    with pytest.raises(HTTPException) as exc_info:
+        require_scheduler_or_admin(authorization=None, scheduler_secret=None, db=EmptyDb())
+    assert exc_info.value.status_code == 401
+
+
+def test_scheduler_dependency_accepts_dedicated_secret(monkeypatch):
+    from app.security_dependencies import require_scheduler_or_admin
+
+    secret = "s" * 32
+    monkeypatch.setenv("ALFRED_SCHEDULER_SECRET", secret)
+    assert require_scheduler_or_admin(
+        authorization=None,
+        scheduler_secret=secret,
+        db=EmptyDb(),
+    ) is None

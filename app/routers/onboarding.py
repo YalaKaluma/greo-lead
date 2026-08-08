@@ -150,7 +150,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         )
 
     # Verify temp password
-    if verify_password(request.password, user.temp_password) or user.temp_password.upper() == request.password.upper():
+    if verify_password(request.password, user.temp_password):
         # Update last active
         user.last_login_at = datetime.utcnow()
         user.last_active_at = user.last_login_at
@@ -182,20 +182,11 @@ async def set_permanent_password(
         new_password: str,
         db: Session = Depends(get_db)
 ):
-    """
-    Allow user to set a permanent password after first login.
-    TODO: Implement proper password hashing with bcrypt.
-    """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    user.password_hash = hash_password(new_password)
-    user.temp_password = None  # Clear temp password
-    user.temp_password_expires = None
-    db.commit()
-
-    return {"success": True, "message": "Password set successfully"}
+    del user_id, new_password, db
+    raise HTTPException(
+        status_code=410,
+        detail="This legacy password endpoint has been disabled. Sign in and use account settings.",
+    )
 
 
 # ============== TOUR ENDPOINTS ==============
@@ -339,7 +330,7 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
     if not user.onboarding_data:
         print(f"❌ DEBUG: onboarding_data is EMPTY or None!")
         print(f"   Type: {type(user.onboarding_data)}")
-        print(f"   Value: {user.onboarding_data}")
+        print(f"   Value present: {bool(user.onboarding_data)}")
         raise HTTPException(
             status_code=404,
             detail="No onboarding data found. User may not have completed WhatsApp onboarding."
@@ -366,8 +357,8 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
             why = data.get('goal_why', '')
 
             print(f"📝 DEBUG: Found goal data:")
-            print(f"   goal_text: '{goal_text}'")
-            print(f"   why: '{why}'")
+            print(f"   goal_text length: {len(goal_text or '')}")
+            print(f"   why length: {len(why or '')}")
 
             try:
                 goal = journey_service.add_goal(
@@ -379,7 +370,6 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
                 )
                 print(f"✅ DEBUG: Goal added successfully!")
                 print(f"   Goal ID: {goal.id}")
-                print(f"   Goal text: {goal.goal_text}")
                 results['goal_added'] = True
             except Exception as e:
                 error_msg = f"Failed to add goal: {str(e)}"
@@ -400,15 +390,12 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
 
             print(f"📝 DEBUG: Found task data:")
             print(f"   tasks_raw length: {len(tasks_text)} chars")
-            print(f"   tasks_raw preview: '{tasks_text[:100]}...'")
-            print(f"   quick_win: '{quick_win}'")
+            print(f"   quick_win present: {bool(quick_win)}")
 
             try:
                 # Extract individual tasks
                 tasks = extract_tasks_from_onboarding(tasks_text)
-                print(f"✅ DEBUG: Extracted {len(tasks)} tasks:")
-                for i, task in enumerate(tasks, 1):
-                    print(f"   {i}. '{task}'")
+                print(f"✅ DEBUG: Extracted {len(tasks)} tasks")
 
                 # Create task objects
                 tasks_created = 0
@@ -428,7 +415,6 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
                         tasks_created += 1
 
                         print(f"✅ DEBUG: Task queued for creation:")
-                        print(f"   Title: '{task_text}'")
                         print(f"   Priority: {task.priority}")
                         print(f"   Quick win: {is_quick_win}")
                     except Exception as e:
@@ -506,7 +492,7 @@ async def debug_user_data(user_number: str, db: Session = Depends(get_db)):
 
     print(f"✅ DEBUG: User found - id={user.id}")
     print(f"   onboarding_data type: {type(user.onboarding_data)}")
-    print(f"   onboarding_data value: {user.onboarding_data}")
+    print(f"   onboarding_data present: {bool(user.onboarding_data)}")
 
     result = {
         "user_id": user.id,
