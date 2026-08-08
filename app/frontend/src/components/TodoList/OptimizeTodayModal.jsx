@@ -24,7 +24,7 @@ export default function OptimizeTodayModal({
     .sort((left, right) => {
       if (left.score === null && right.score !== null) return 1;
       if (left.score !== null && right.score === null) return -1;
-      if (left.score !== right.score) return (left.score ?? 0) - (right.score ?? 0);
+      if (left.score !== right.score) return (right.score ?? 0) - (left.score ?? 0);
       return right.index - left.index;
     }), [tasks, todayKey, getTaskScore, isSelectedDay]);
 
@@ -35,10 +35,10 @@ export default function OptimizeTodayModal({
   const requiredMoves = Math.max(candidates.length - 10, 0);
   const moves = decisions.filter(decision => decision.action === 'move');
   const completions = decisions.filter(decision => decision.action === 'complete');
+  const keptToday = decisions.filter(decision => decision.action === 'keep').length;
   const decidedIds = new Set(decisions.map(decision => decision.task.id));
   const current = candidates.find(candidate => !decidedIds.has(candidate.task.id));
   const removedFromToday = moves.length + completions.length;
-  const projectedTodayCount = candidates.length - removedFromToday;
   const reviewReady = removedFromToday >= requiredMoves || !current;
 
   const projectedTasks = tasks.map(task => {
@@ -123,7 +123,9 @@ export default function OptimizeTodayModal({
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 id="optimize-today-title" className="text-lg font-semibold text-slate-900">{isSelectedDay ? t('optimizeDay.title', 'Optimize selected day') : t('optimizeToday.title', 'Optimize Today')}</h2>
-              <p className="mt-1 text-sm text-slate-600">{projectedTodayCount} {isSelectedDay ? t('optimizeDay.tasksRemain', 'tasks projected to remain on the selected day') : t('optimizeToday.tasksRemain', 'tasks projected to remain today')} · {t('optimizeToday.target', 'target')}: 10</p>
+              <p className="mt-1 text-sm text-slate-600">
+                {decisions.length}/{tasks.length} {t('optimizeToday.prioritizedProgress', 'tasks prioritized')} · {keptToday} {isSelectedDay ? t('optimizeDay.approvedForSelected', 'approved for the selected day') : t('optimizeToday.approvedForToday', 'approved for today')}
+              </p>
             </div>
             <button type="button" onClick={onCancel} disabled={loading} className="text-xl text-slate-400 hover:text-slate-700" aria-label={t('common.close', 'Close')}>×</button>
           </div>
@@ -195,12 +197,13 @@ export default function OptimizeTodayModal({
                   </div>
                 </div>
               ) : (
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" disabled={loading} onClick={markDone} className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">{t('optimizeToday.markDone', 'Mark as done')}</button>
+                  <button type="button" disabled={loading} onClick={keepToday} className="rounded border border-slate-300 px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50">{isSelectedDay ? t('optimizeDay.keepSelected', 'Keep on selected day') : t('optimizeToday.keepToday', 'Keep today')}</button>
+                  <button type="button" disabled={loading} onClick={() => evaluateMove('tomorrow')} className="rounded border border-slate-200 px-3 py-2 text-left text-sm font-medium hover:bg-slate-50 disabled:opacity-50">{t('calendar.tomorrow', 'Tomorrow')}</button>
                   <button type="button" disabled={loading} onClick={() => evaluateMove('later_this_week')} className="rounded border border-slate-200 px-3 py-2 text-left text-sm font-medium hover:bg-slate-50 disabled:opacity-50">{t('calendar.laterThisWeek', 'Later this week')}</button>
                   <button type="button" disabled={loading} onClick={() => evaluateMove('next_week')} className="rounded border border-slate-200 px-3 py-2 text-left text-sm font-medium hover:bg-slate-50 disabled:opacity-50">{t('calendar.nextWeek', 'Next week')}</button>
                   <button type="button" disabled={loading} onClick={() => setShowDueDate(true)} className="rounded border border-slate-200 px-3 py-2 text-left text-sm font-medium hover:bg-slate-50 disabled:opacity-50">{t('optimizeToday.chooseExactDate', 'Choose exact date')}</button>
-                  <button type="button" disabled={loading} onClick={keepToday} className="rounded border border-slate-300 px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50">{isSelectedDay ? t('optimizeDay.keepSelected', 'Keep on selected day') : t('optimizeToday.keepToday', 'Keep today')}</button>
-                  <button type="button" disabled={loading} onClick={markDone} className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50">{t('optimizeToday.markDone', 'Mark as done')}</button>
                 </div>
               )}
             </div>

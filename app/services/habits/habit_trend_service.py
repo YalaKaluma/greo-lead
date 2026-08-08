@@ -19,7 +19,17 @@ def calculate_streak(completions: list[HabitCompletion], frequency: str, today: 
     if not done_dates:
         return 0
 
-    current_date = today if today in done_dates else today - timedelta(days=1)
+    current_date = today
+    if frequency == "weekdays":
+        while current_date.weekday() >= 5:
+            current_date -= timedelta(days=1)
+
+    if current_date not in done_dates:
+        current_date -= timedelta(days=1)
+        if frequency == "weekdays":
+            while current_date.weekday() >= 5:
+                current_date -= timedelta(days=1)
+
     if current_date not in done_dates:
         return 0
 

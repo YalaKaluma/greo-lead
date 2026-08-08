@@ -127,6 +127,7 @@ class TaskResponse(BaseModel):
     top10_position: Optional[int] = None
     last_prioritized_at: Optional[datetime] = None
     mtn_score_today: Optional[float] = None
+    mtn_score_id_today: Optional[int] = None
     mtn_rank_today: Optional[int] = None
     mtn_recommended_today: Optional[bool] = False
     mtn_reason_today: Optional[str] = None
@@ -329,6 +330,7 @@ def attach_today_mtn_metadata(db: Session, user_number: str, tasks: List[Task]) 
                 continue
 
             task.mtn_score_today = float(score.top10_likelihood)
+            task.mtn_score_id_today = score.id
             task.mtn_rank_today = rank_by_task_id.get(task.id)
             task.mtn_recommended_today = bool(task.mtn_rank_today and task.mtn_rank_today <= 3)
             task.mtn_reason_today = score.primary_reason

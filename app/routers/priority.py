@@ -14,7 +14,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel, Field
-import json
 
 from app.db import get_db
 from app.services.priority_service import PriorityService
@@ -78,12 +77,14 @@ class UserDecisionRequest(BaseModel):
 
 class PriorityFeedbackRequest(BaseModel):
     """Request to record MTN tag feedback."""
-    recommendation_id: int
+    recommendation_id: Optional[int] = None
+    score_id: Optional[int] = None
     task_id: int
     user_number: str
     rating: int = Field(..., ge=1, le=5, description="User feedback rating from 1 to 5 stars")
     tag: str = Field(..., description="MTN label shown to the user")
     feedback: Optional[str] = Field(None, description="Optional user explanation")
+    adjusted_score: float = Field(..., ge=0, le=1, description="User-selected absolute MTN score")
 
 
 class ApplyChangesRequest(BaseModel):
@@ -320,39 +321,53 @@ def record_priority_feedback(
     priority_service = PriorityService(db)
 
     try:
-        from app.models import TaskPriorityRecommendation, TaskPriorityScore
+        from app.models import TaskMtnFeedback, TaskPriorityRecommendation, TaskPriorityScore
 
-        recommendation = db.query(TaskPriorityRecommendation).get(request.recommendation_id)
-        if not recommendation:
-            raise HTTPException(status_code=404, detail="Recommendation not found")
-
-        task_score = db.query(TaskPriorityScore).filter(
-            TaskPriorityScore.context_id == recommendation.context_id,
-            TaskPriorityScore.task_id == request.task_id
-        ).first()
+        task_score = None
+        if request.score_id:
+            task_score = db.query(TaskPriorityScore).filter(
+                TaskPriorityScore.id == request.score_id,
+                TaskPriorityScore.task_id == request.task_id,
+                TaskPriorityScore.user_number == request.user_number,
+            ).first()
+        elif request.recommendation_id:
+            recommendation = db.query(TaskPriorityRecommendation).get(request.recommendation_id)
+            if recommendation:
+                task_score = db.query(TaskPriorityScore).filter(
+                    TaskPriorityScore.context_id == recommendation.context_id,
+                    TaskPriorityScore.task_id == request.task_id
+                ).first()
         if not task_score:
-            raise HTTPException(status_code=404, detail="Task not in this prioritization run")
+            task_score = db.query(TaskPriorityScore).filter(
+                TaskPriorityScore.task_id == request.task_id,
+                TaskPriorityScore.user_number == request.user_number,
+            ).order_by(TaskPriorityScore.scored_at.desc()).first()
+        if not task_score:
+            raise HTTPException(status_code=404, detail="No MTN score found for this task")
 
-        feedback_payload = {
-            "source": "mtn_tag_feedback",
-            "rating": request.rating,
-            "tag": request.tag,
-            "feedback": request.feedback
-        }
+        task = db.query(Task).filter(Task.id == request.task_id, Task.user_number == request.user_number).first()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
 
-        decision = priority_service.record_user_decision(
-            recommendation_id=request.recommendation_id,
+        correction = TaskMtnFeedback(
+            score_id=task_score.id,
             task_id=request.task_id,
             user_number=request.user_number,
-            action_recommended="unknown",
-            llm_score=float(task_score.top10_likelihood),
-            llm_reason=task_score.primary_reason,
-            user_action="skip",
-            user_reason=json.dumps(feedback_payload)
+            original_score=float(task_score.top10_likelihood),
+            adjusted_score=request.adjusted_score,
+            selected_tag=request.tag,
+            rating=request.rating,
+            feedback=request.feedback,
         )
+        db.add(correction)
+        task_score.top10_likelihood = request.adjusted_score
+        task.move_the_needle_score = request.adjusted_score
+        db.commit()
+        db.refresh(correction)
 
         return {
-            "feedback_id": decision.id,
+            "feedback_id": correction.id,
+            "adjusted_score": request.adjusted_score,
             "message": "MTN feedback recorded successfully"
         }
 

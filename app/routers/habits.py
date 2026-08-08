@@ -105,11 +105,20 @@ def calculate_streak(completions: list, frequency: str, today: date) -> int:
 
     streak = 0
 
-    # Start from today or yesterday
-    current_date = today if today in dates else (
-        today - timedelta(days=1) if (today - timedelta(days=1)) in dates else None)
+    # Start from today, or from the most recent scheduled day. This keeps a
+    # Friday streak alive through the weekend and until Monday is completed.
+    current_date = today
+    if frequency == 'weekdays':
+        while current_date.weekday() in [5, 6]:
+            current_date -= timedelta(days=1)
 
-    if current_date is None:
+    if current_date not in dates:
+        current_date -= timedelta(days=1)
+        if frequency == 'weekdays':
+            while current_date.weekday() in [5, 6]:
+                current_date -= timedelta(days=1)
+
+    if current_date not in dates:
         return 0
 
     # Count consecutive days

@@ -222,6 +222,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
   const [editingHabit, setEditingHabit] = useState(null);
   const [habitHistory, setHabitHistory] = useState([]);
   const [reorderError, setReorderError] = useState('');
+  const [showUnscheduledHabits, setShowUnscheduledHabits] = useState(false);
 
   const [form, setForm] = useState({
     title: '',
@@ -239,9 +240,7 @@ export default function MyHabits({ apiUrl, userNumber }) {
         params: { user_number: userNumber }
       });
       if (Array.isArray(res.data)) {
-        // Filter based on weekday/weekend
-        const filtered = res.data.filter(habit => shouldShowHabit(habit, timezone));
-        setHabits(filtered);
+        setHabits(res.data);
       }
     } catch (err) {
       console.error('Error fetching habits:', err);
@@ -493,19 +492,24 @@ export default function MyHabits({ apiUrl, userNumber }) {
   const handleDragEnd = async (result) => {
     if (!result.destination || result.source.index === result.destination.index) return;
 
+    const displayed = habits.filter(habit => shouldShowHabit(habit, timezone) || showUnscheduledHabits);
     const previousHabits = habits;
-    const updated = [...habits];
+    const updated = [...displayed];
     const [moved] = updated.splice(result.source.index, 1);
     if (!moved) return;
     updated.splice(result.destination.index, 0, moved);
 
-    setHabits(updated);
+    const reorderedIds = updated.map(habit => habit.id);
+    let reorderedIndex = 0;
+    setHabits(habits.map(habit => (
+      reorderedIds.includes(habit.id) ? updated[reorderedIndex++] : habit
+    )));
     setReorderError('');
 
     try {
       await axios.post(
         `${apiUrl}/api/habits/reorder`,
-        { ordered_habit_ids: updated.map(habit => habit.id) },
+        { ordered_habit_ids: reorderedIds },
         { params: { user_number: userNumber } }
       );
     } catch (err) {
@@ -518,6 +522,10 @@ export default function MyHabits({ apiUrl, userNumber }) {
   /* =========================================================
      RENDER
      ========================================================= */
+
+  const scheduledHabits = habits.filter(habit => shouldShowHabit(habit, timezone));
+  const unscheduledHabits = habits.filter(habit => !shouldShowHabit(habit, timezone));
+  const displayedHabits = showUnscheduledHabits ? habits : scheduledHabits;
 
   return (
     <div className="max-w-7xl mx-auto p-4 lg:p-6">
@@ -600,6 +608,17 @@ export default function MyHabits({ apiUrl, userNumber }) {
           {reorderError}
         </div>
       )}
+      {unscheduledHabits.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowUnscheduledHabits(current => !current)}
+          className="mb-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:border-blue-300 hover:text-blue-700"
+          aria-expanded={showUnscheduledHabits}
+        >
+          <span aria-hidden="true">{showUnscheduledHabits ? '−' : '+'}</span>
+          {t(showUnscheduledHabits ? 'habits.hideUnscheduled' : 'habits.showUnscheduled', { count: unscheduledHabits.length })}
+        </button>
+      )}
       <DragDropContext onDragEnd={handleDragEnd}>
         <Droppable droppableId="habits">
           {(dropProvided) => (
@@ -608,9 +627,10 @@ export default function MyHabits({ apiUrl, userNumber }) {
         {...dropProvided.droppableProps}
         className="space-y-3"
       >
-        {habits.map((h, index) => {
+        {displayedHabits.map((h, index) => {
           const todayStatus = h.today_status || 'pending';
           const isStarterExample = Boolean(h.is_starter_example);
+          const isUnscheduledToday = !shouldShowHabit(h, timezone);
           
           return (
             <Draggable key={h.id} draggableId={String(h.id)} index={index}>
@@ -621,6 +641,8 @@ export default function MyHabits({ apiUrl, userNumber }) {
               className={`flex items-center justify-between border rounded-lg px-4 py-3 transition-shadow ${
                 isStarterExample
                   ? 'border-slate-200 bg-slate-100 opacity-50 grayscale'
+                  : isUnscheduledToday
+                  ? 'border-dashed border-slate-200 bg-slate-50'
                   : snapshot.isDragging
                   ? 'border-blue-300 bg-white shadow-lg'
                   : 'bg-white hover:shadow-sm'
@@ -640,7 +662,10 @@ export default function MyHabits({ apiUrl, userNumber }) {
                 {/* TOGGLE (3-state) - Larger click area */}
                 <button
                   onClick={(e) => toggleToday(h.id, e)}
-                  className="text-2xl hover:scale-110 transition-transform"
+                  disabled={isUnscheduledToday}
+                  aria-label={isUnscheduledToday ? t('habits.notScheduledToday') : undefined}
+                  title={isUnscheduledToday ? t('habits.notScheduledToday') : undefined}
+                  className={`text-2xl transition-transform ${isUnscheduledToday ? 'cursor-not-allowed opacity-30' : 'hover:scale-110'}`}
                 >
                   {getStatusIcon(todayStatus)}
                 </button>
@@ -661,6 +686,11 @@ export default function MyHabits({ apiUrl, userNumber }) {
                     {h.frequency === 'weekdays' && (
                       <span className="ml-2 text-xs text-slate-500 font-normal">
                         (weekdays only)
+                      </span>
+                    )}
+                    {isUnscheduledToday && (
+                      <span className="ml-2 text-xs font-normal text-slate-400">
+                        {t('habits.notScheduledToday')}
                       </span>
                     )}
                     {isStarterExample && (

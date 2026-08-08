@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { useLanguage } from '../i18n/LanguageContext';
+import { getLongTermGoals } from '../utils/taskHelpers';
 
 const NativeMeetingRecorder = registerPlugin('MeetingRecorder');
 
@@ -702,35 +703,46 @@ function Section({ title, children, privateLabel = false }) {
   return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-semibold text-slate-950">{title}</h2>{privateLabel && <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">Private</span>}</div>{children}</section>;
 }
 
-function MeetingTaskCard({ task, busy, onAdd, onIgnore, onRename }) {
+function MeetingTaskModal({ task, goals, saving, onSave, onClose }) {
   const { t } = useLanguage();
-  const [editing, setEditing] = useState(false);
-  const [title, setTitle] = useState(task.description);
+  const [form, setForm] = useState({
+    description: task.description,
+    due_date: task.due_date || '',
+    priority: String(task.priority || 'Medium').toLowerCase(),
+    goal_id: task.goal_id || '',
+    delegated_to: task.delegated_to || '',
+    notes: task.notes || '',
+  });
+  const submit = (event) => {
+    event.preventDefault();
+    if (!form.description.trim()) return;
+    onSave({ ...form, description: form.description.trim(), due_date: form.due_date || null, goal_id: form.goal_id ? Number(form.goal_id) : null });
+  };
+  return <><div className="fixed inset-0 z-40 bg-slate-950/50" onClick={onClose} /><div className="fixed inset-0 z-50 flex items-center justify-center p-4"><form onSubmit={submit} className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-2xl"><div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4"><h2 className="text-xl font-semibold text-slate-900">{t('meetings.tasks.editTitle')}</h2><button type="button" onClick={onClose} className="text-2xl leading-none text-slate-400 hover:text-slate-600" aria-label={t('meetings.tasks.closeEditor')}>×</button></div><div className="space-y-4 p-6"><label className="block text-sm font-medium text-slate-700">{t('meetings.tasks.taskTitle')}<input autoFocus value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500" /></label><label className="block text-sm font-medium text-slate-700">{t('meetings.tasks.dueDate')}<input type="date" value={form.due_date} onChange={(event) => setForm({ ...form, due_date: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 focus:ring-2 focus:ring-blue-500" /></label><label className="block text-sm font-medium text-slate-700">{t('meetings.tasks.priority')}<select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"><option value="high">{t('meetings.tasks.priorityHigh')}</option><option value="medium">{t('meetings.tasks.priorityMedium')}</option><option value="low">{t('meetings.tasks.priorityLow')}</option></select></label><label className="block text-sm font-medium text-slate-700">{t('meetings.tasks.goal')}<select value={form.goal_id} onChange={(event) => setForm({ ...form, goal_id: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"><option value="">{t('meetings.tasks.noGoal')}</option>{goals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title || goal.goal_text}</option>)}</select></label><label className="block text-sm font-medium text-slate-700">{t('meetings.tasks.delegate')}<input value={form.delegated_to} onChange={(event) => setForm({ ...form, delegated_to: event.target.value })} placeholder={t('meetings.tasks.noDelegate')} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" /></label><label className="block text-sm font-medium text-slate-700">{t('meetings.tasks.notes')}<textarea rows={4} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder={t('meetings.tasks.notesPlaceholder')} className="mt-1 w-full resize-none rounded-lg border border-slate-300 px-3 py-2" /></label></div><div className="sticky bottom-0 flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4"><button type="button" onClick={onClose} className="rounded-lg border border-slate-300 bg-white px-4 py-2 font-medium text-slate-700">{t('meetings.tasks.cancel')}</button><button type="submit" disabled={saving || !form.description.trim()} className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{saving ? t('meetings.tasks.saving') : t('meetings.tasks.saveChanges')}</button></div></form></div></>;
+}
+
+function MeetingTaskCard({ task, busy, onAdd, onComplete, onIgnore, onEdit }) {
+  const { t } = useLanguage();
   const [swipe, setSwipe] = useState(0);
   const touchStart = useRef(null);
-  const finishEdit = async () => {
-    const next = title.trim();
-    if (next && next !== task.description) await onRename(task, next);
-    if (!next) setTitle(task.description);
-    setEditing(false);
-  };
   const finishSwipe = () => {
     if (swipe >= 90) onIgnore(task);
-    if (swipe <= -90) onAdd(task);
+    if (swipe <= -90) onComplete(task);
     touchStart.current = null;
     setSwipe(0);
   };
   return <div className="relative overflow-hidden rounded-lg">
     <div className="absolute inset-y-0 left-0 flex w-32 items-center bg-slate-700 pl-4 text-xs font-semibold text-white sm:hidden">{t('meetings.tasks.ignore')}</div>
-    <div className="absolute inset-y-0 right-0 flex w-32 items-center justify-end bg-blue-600 pr-4 text-xs font-semibold text-white sm:hidden">{t('meetings.tasks.addToList')}</div>
+    <div className="absolute inset-y-0 right-0 flex w-32 items-center justify-end bg-emerald-600 pr-4 text-xs font-semibold text-white sm:hidden">{t('meetings.tasks.markDone')}</div>
     <div onTouchStart={(event) => { touchStart.current = event.touches[0].clientX; }} onTouchMove={(event) => { if (touchStart.current != null) setSwipe(Math.max(-120, Math.min(120, event.touches[0].clientX - touchStart.current))); }} onTouchEnd={finishSwipe} style={{ transform: `translateX(${swipe}px)` }} className="relative rounded-lg border-2 border-slate-200 bg-white px-4 py-3 transition-transform hover:border-slate-300">
       <div className="flex items-start gap-3">
-        <button type="button" disabled={busy} onClick={() => onAdd(task)} className="mt-0.5 hidden h-5 w-5 flex-none items-center justify-center rounded-full border-2 border-slate-300 text-xs text-transparent hover:border-blue-600 hover:text-blue-600 sm:flex" aria-label={`${t('meetings.tasks.addToList')}: ${task.description}`}>✓</button>
+        <button type="button" disabled={busy} onClick={() => onComplete(task)} className="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-full border-2 border-slate-300 text-xs text-transparent hover:border-emerald-600 hover:bg-emerald-50 hover:text-emerald-700" aria-label={`${t('meetings.tasks.markDone')}: ${task.description}`}>✓</button>
         <div className="min-w-0 flex-1">
-          {editing ? <input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} onBlur={finishEdit} onKeyDown={(event) => { if (event.key === 'Enter') finishEdit(); if (event.key === 'Escape') { setTitle(task.description); setEditing(false); } }} className="w-full rounded border border-blue-400 px-2 py-1 font-medium text-slate-900 outline-none ring-2 ring-blue-100" /> : <button type="button" onClick={() => setEditing(true)} className="block w-full text-left font-medium text-slate-900 hover:text-blue-700">{task.description}</button>}
+          <button type="button" onClick={() => onEdit(task)} className="block w-full text-left font-medium text-slate-900 hover:text-blue-700">{task.description}</button>
           <p className="mt-1 truncate text-sm text-blue-600" title={task.meeting_title}>{task.meeting_title}</p>
         </div>
-        <div className="hidden flex-none gap-2 sm:flex">
+        <span className="flex-none rounded-full bg-violet-50 px-2.5 py-1 text-xs font-bold text-violet-700" title={t('meetings.tasks.mtnScore')}>{task.mtn_score == null ? t('meetings.tasks.mtnPending') : `${Number(task.mtn_score).toFixed(1)} MTN`}</span>
+        <div className="flex flex-none gap-2">
           <button type="button" disabled={busy} onClick={() => onAdd(task)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{t('meetings.tasks.addToList')}</button>
           <button type="button" disabled={busy} onClick={() => onIgnore(task)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50">{t('meetings.tasks.ignore')}</button>
         </div>
@@ -745,13 +757,33 @@ function MeetingTasks({ apiUrl, userNumber }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
+  const [filtersCollapsed, setFiltersCollapsed] = useState(true);
+  const [selectedMeeting, setSelectedMeeting] = useState('');
+  const [sortDirection, setSortDirection] = useState('desc');
+  const [editingTask, setEditingTask] = useState(null);
+  const [goals, setGoals] = useState([]);
   useEffect(() => {
     let cancelled = false;
-    fetch(`${apiUrl}/api/meetings/action-items/tasks?user_number=${encodeURIComponent(userNumber)}`)
-      .then((response) => { if (!response.ok) throw new Error(t('meetings.tasks.loadError')); return response.json(); })
-      .then((items) => { if (!cancelled) { setTasks(items); setError(''); } })
-      .catch((err) => { if (!cancelled) setError(err.message); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+    fetch(`${apiUrl}/api/journey/goals?user_number=${encodeURIComponent(userNumber)}`)
+      .then((response) => response.ok ? response.json() : [])
+      .then((items) => { if (!cancelled) setGoals(Array.isArray(items) ? items : []); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [apiUrl, userNumber]);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const prepared = await fetch(`${apiUrl}/api/meetings/action-items/tasks/prepare`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, mode: 'auto' }) });
+        if (!prepared.ok) throw new Error(t('meetings.tasks.loadError'));
+        const response = await fetch(`${apiUrl}/api/meetings/action-items/tasks?user_number=${encodeURIComponent(userNumber)}`);
+        if (!response.ok) throw new Error(t('meetings.tasks.loadError'));
+        const items = await response.json();
+        if (!cancelled) { setTasks(items); setError(''); }
+      } catch (err) { if (!cancelled) setError(err.message); }
+      finally { if (!cancelled) setLoading(false); }
+    };
+    load();
     return () => { cancelled = true; };
   }, [apiUrl, userNumber, t]);
   const addToList = async (task) => {
@@ -760,6 +792,16 @@ function MeetingTasks({ apiUrl, userNumber }) {
       const response = await fetch(`${apiUrl}/api/meetings/action-items/${task.id}/task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, mode: 'my_todo' }) });
       if (!response.ok) throw new Error(t('meetings.tasks.addError'));
       setTasks((items) => items.filter((item) => item.id !== task.id));
+      window.dispatchEvent(new Event('alfred-sidebar-counts-refresh'));
+    } catch (err) { setError(err.message); } finally { setBusyId(null); }
+  };
+  const completeTask = async (task) => {
+    setBusyId(task.id);
+    try {
+      const completed = await fetch(`${apiUrl}/api/meetings/action-items/${task.id}/complete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, mode: 'my_todo' }) });
+      if (!completed.ok) throw new Error(t('meetings.tasks.completeError'));
+      setTasks((items) => items.filter((item) => item.id !== task.id));
+      window.dispatchEvent(new Event('alfred-sidebar-counts-refresh'));
     } catch (err) { setError(err.message); } finally { setBusyId(null); }
   };
   const updateTask = async (task, changes) => {
@@ -767,11 +809,26 @@ function MeetingTasks({ apiUrl, userNumber }) {
     try {
       const response = await fetch(`${apiUrl}/api/meetings/action-items/${task.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, ...changes }) });
       if (!response.ok) throw new Error(t('meetings.tasks.updateError'));
-      setTasks((items) => changes.ignored ? items.filter((item) => item.id !== task.id) : items.map((item) => item.id === task.id ? { ...item, description: changes.description } : item));
-    } catch (err) { setError(err.message); } finally { setBusyId(null); }
+      const updated = await response.json();
+      setTasks((items) => changes.ignored ? items.filter((item) => item.id !== task.id) : items.map((item) => item.id === task.id ? { ...item, ...updated } : item));
+      if (!changes.ignored) {
+        const rescored = await fetch(`${apiUrl}/api/meetings/action-items/tasks/prepare`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, mode: 'auto' }) });
+        if (rescored.ok) {
+          const refreshed = await fetch(`${apiUrl}/api/meetings/action-items/tasks?user_number=${encodeURIComponent(userNumber)}`);
+          if (refreshed.ok) setTasks(await refreshed.json());
+        }
+      }
+      return true;
+    } catch (err) { setError(err.message); return false; } finally { setBusyId(null); }
   };
+  const meetingOptions = useMemo(() => Array.from(new Map(tasks.map((task) => [task.meeting_id, task.meeting_title])).entries()).sort((a, b) => String(a[1]).localeCompare(String(b[1]))), [tasks]);
+  const visibleTasks = useMemo(() => tasks.filter((task) => !selectedMeeting || String(task.meeting_id) === selectedMeeting).sort((a, b) => {
+    const scoreA = a.mtn_score == null ? -1 : Number(a.mtn_score);
+    const scoreB = b.mtn_score == null ? -1 : Number(b.mtn_score);
+    return sortDirection === 'desc' ? scoreB - scoreA : scoreA - scoreB;
+  }), [tasks, selectedMeeting, sortDirection]);
   if (loading) return <p className="mt-10 text-center text-slate-500">{t('meetings.tasks.loading')}</p>;
-  return <div className="mt-6">{error && <p className="mb-4 rounded-lg bg-red-50 p-4 text-red-700">{error}</p>}{tasks.length === 0 ? <div className="rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center"><h2 className="text-xl font-semibold text-slate-900">{t('meetings.tasks.emptyTitle')}</h2><p className="mt-2 text-slate-600">{t('meetings.tasks.emptyBody')}</p></div> : <div className="space-y-2">{tasks.map((task) => <MeetingTaskCard key={task.id} task={task} busy={busyId === task.id} onAdd={addToList} onIgnore={(item) => updateTask(item, { ignored: true })} onRename={(item, description) => updateTask(item, { description })} />)}</div>}<p className="mt-4 text-center text-xs text-slate-500 sm:hidden">{t('meetings.tasks.swipeHint')}</p></div>;
+  return <div className="mt-6">{error && <p className="mb-4 rounded-lg bg-red-50 p-4 text-red-700">{error}</p>}<div className="mb-6 rounded-lg border border-slate-200 bg-white"><button type="button" onClick={() => setFiltersCollapsed((value) => !value)} className="flex w-full items-center justify-between rounded-lg px-4 py-3 text-slate-700 hover:bg-slate-50" aria-expanded={!filtersCollapsed}><span className="font-semibold">{t('meetings.tasks.filters')}</span><span aria-hidden="true">{filtersCollapsed ? '⌄' : '⌃'}</span></button>{!filtersCollapsed && <div className="grid gap-4 border-t border-slate-200 p-4 sm:grid-cols-2"><label className="text-xs font-medium text-slate-600">{t('meetings.tasks.meetingFilter')}<select value={selectedMeeting} onChange={(event) => setSelectedMeeting(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">{t('meetings.tasks.allMeetings')}</option>{meetingOptions.map(([id, title]) => <option key={id} value={id}>{title}</option>)}</select></label><label className="text-xs font-medium text-slate-600">{t('meetings.tasks.sortBy')}<select value={sortDirection} onChange={(event) => setSortDirection(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="desc">{t('meetings.tasks.mtnHighFirst')}</option><option value="asc">{t('meetings.tasks.mtnLowFirst')}</option></select></label></div>}</div>{tasks.length === 0 ? <div className="rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center"><h2 className="text-xl font-semibold text-slate-900">{t('meetings.tasks.emptyTitle')}</h2><p className="mt-2 text-slate-600">{t('meetings.tasks.emptyBody')}</p></div> : visibleTasks.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-600">{t('meetings.tasks.noFilterResults')}</div> : <div className="space-y-2">{visibleTasks.map((task) => <MeetingTaskCard key={task.id} task={task} busy={busyId === task.id} onAdd={addToList} onComplete={completeTask} onIgnore={(item) => updateTask(item, { ignored: true })} onEdit={setEditingTask} />)}</div>}<p className="mt-4 text-center text-xs text-slate-500 sm:hidden">{t('meetings.tasks.swipeHint')}</p>{editingTask && <MeetingTaskModal task={editingTask} goals={getLongTermGoals(goals)} saving={busyId === editingTask.id} onClose={() => setEditingTask(null)} onSave={async (changes) => { if (await updateTask(editingTask, changes)) setEditingTask(null); }} />}</div>;
 }
 
 export default function Meetings({ apiUrl, userNumber }) {

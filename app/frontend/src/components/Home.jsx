@@ -239,8 +239,9 @@ function CombinedTrendChart({ trends }) {
   );
 }
 
-function GoalProgressReviewTable({ reviews, onNavigate }) {
+function GoalProgressReviewTable({ reviews, onNavigate, t }) {
   const items = reviews || [];
+  const [expanded, setExpanded] = useState(false);
   return (
     <section className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <KpiInfoButton label="About goal progress reviews">
@@ -251,14 +252,19 @@ function GoalProgressReviewTable({ reviews, onNavigate }) {
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Project status</p>
           <h2 className="mt-1 text-lg font-semibold text-slate-950">Goal progress reviews</h2>
         </div>
-        <button onClick={() => onNavigate('my-goals')} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">
-          Open Goals
-        </button>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} aria-controls="home-goal-progress-content" className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">
+            {expanded ? t('home.goals.collapse', 'Hide status') : t('home.goals.expand', 'View status')}
+          </button>
+          <button onClick={() => onNavigate('my-goals')} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">
+            {t('home.goals.open', 'Open Goals')}
+          </button>
+        </div>
       </div>
 
-      {items.length === 0 ? (
+      {expanded && <div id="home-goal-progress-content">{items.length === 0 ? (
         <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-600">
-          Add goals and refresh the Progress Review page to see project status here.
+          {t('home.goals.empty', 'Add goals and refresh the Progress Review page to see project status here.')}
         </div>
       ) : (
         <div className="mt-4 hidden overflow-x-auto rounded-lg border border-slate-200 lg:block">
@@ -299,7 +305,18 @@ function GoalProgressReviewTable({ reviews, onNavigate }) {
             })}
           </div>
         </div>
-      )}
+      )}</div>}
+    </section>
+  );
+}
+
+function AlfredOperatingComment({ commentary, t }) {
+  if (!commentary) return null;
+  return (
+    <section className="mt-5 rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-white p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">{t('home.alfredComment.eyebrow', "Alfred's perspective")}</p>
+      <h2 className="mt-1 text-lg font-semibold text-slate-950">{t('home.alfredComment.title', 'Your operating system today')}</h2>
+      <p className="mt-3 max-w-5xl text-sm leading-6 text-slate-700">{commentary}</p>
     </section>
   );
 }
@@ -457,9 +474,11 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
           <JournalMetricCard metric={metrics.journal || {}} t={t} />
         </div>
 
+        <AlfredOperatingComment commentary={payload.operating_commentary} t={t} />
+
         <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)_minmax(320px,0.8fr)]">
           <CombinedTrendChart trends={payload.trends || {}} />
-          <TaskStack title="Top Tasks" eyebrow="Execution focus" tasks={payload.top_tasks || []} emptyText="Add tasks to give Alfred an execution focus." onToggle={handleTaskToggle} timezone={timezone} />
+          <TaskStack title={t('home.topTasks.title', "Today's Top Tasks")} eyebrow={t('home.topTasks.eyebrow', 'Execution focus')} tasks={payload.top_tasks || []} emptyText={t('home.topTasks.empty', 'No open tasks are due today.')} onToggle={handleTaskToggle} timezone={timezone} />
           <section className="relative rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <KpiInfoButton label="About recommended MTN actions">
               Suggested actions are drawn from Alfred opportunity signals and ranked by their expected move-the-needle value.
@@ -489,7 +508,7 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
         </div>
 
         <div className="mt-5">
-          <GoalProgressReviewTable reviews={payload.goal_progress_reviews || []} onNavigate={onNavigate} />
+          <GoalProgressReviewTable reviews={payload.goal_progress_reviews || []} onNavigate={onNavigate} t={t} />
         </div>
 
         <div className="mt-5">

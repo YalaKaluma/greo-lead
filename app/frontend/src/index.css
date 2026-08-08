@@ -3,6 +3,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Capacitor supplies --safe-area-inset-* when Android WebView's env() values
+   are unavailable. Browser values remain zero unless a real safe area exists. */
+:root {
+  --alfred-safe-area-top: max(var(--safe-area-inset-top, 0px), env(safe-area-inset-top, 0px));
+  --alfred-safe-area-bottom: max(var(--safe-area-inset-bottom, 0px), env(safe-area-inset-bottom, 0px));
+}
+
 /* Custom global styles */
 * {
   margin: 0;

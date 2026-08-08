@@ -48,6 +48,7 @@ from app.models import (
     User,
 )
 from app.services.habit_coaching_service import refresh_habit_coaching_review
+from app.services.habits.habit_trend_service import calculate_streak as calculate_habit_streak
 from app.services.notifications import send_notification
 from app.services.vision_progress_review_service import VisionProgressReviewService
 from app.services.operations_director.health_events import (
@@ -340,22 +341,8 @@ def add_sunday_refresh_notice(message_text: str, refresh_result: Optional[Dict])
 # -------------------------------------------------
 
 def compute_streak(habit: Habit, today: date) -> int:
-    """Computes consecutive daily streak up to yesterday or today."""
-    dates = sorted([c.date for c in habit.completions], reverse=True)
-    if not dates:
-        return 0
-
-    streak = 0
-    current_day = today
-
-    for d in dates:
-        if d == current_day or d == current_day - timedelta(days=1):
-            streak += 1
-            current_day = d - timedelta(days=1)
-        else:
-            break
-
-    return streak
+    """Compute a streak using the habit's scheduled frequency."""
+    return calculate_habit_streak(habit.completions, habit.frequency, today)
 
 
 def build_task_context(db: Session, user_number: str) -> str:
@@ -1044,7 +1031,9 @@ def send_nudge_for_user(
             move_the_needle_context = briefing_service.generate_move_the_needle_context(user_number)
             try:
                 from app.services.home_dashboard_service import HomeDashboardService
-                HomeDashboardService(db).refresh(user_number, source="morning_nudge")
+                home_service = HomeDashboardService(db)
+                home_service.refresh_daily_recommendations(user_number)
+                home_service.refresh(user_number, source="morning_nudge")
             except Exception as exc:
                 db.rollback()
                 logger.warning("Failed to refresh Home dashboard snapshot for %s during morning nudge: %s", user_number, exc)

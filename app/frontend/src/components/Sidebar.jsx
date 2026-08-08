@@ -61,7 +61,8 @@ export default function Sidebar({ apiUrl, userNumber, currentPage, onNavigate, i
       `}
       style={{
         width: '320px',
-        paddingTop: isMobile ? 'env(safe-area-inset-top)' : undefined,
+        paddingTop: isMobile ? 'var(--alfred-safe-area-top)' : undefined,
+        paddingBottom: isMobile ? 'var(--alfred-safe-area-bottom)' : undefined,
       }}
     >
       <div className="flex flex-col h-full">

@@ -245,7 +245,15 @@ function TaskCard({
       mtnRating,
       mtnFeedback.trim() || null,
       activeMtnTag,
-      priorityScore.recommendation_id
+      priorityScore.recommendation_id,
+      priorityScore.score_id,
+      ({
+        '1. Transformation': 0.925,
+        '2. Strategic': 0.775,
+        '3. Important': 0.6,
+        '4. Maintenance': 0.4,
+        '5. Low Leverage': 0.15,
+      })[activeMtnTag]
     );
     setMtnSaving(false);
 

@@ -11,7 +11,7 @@ const buildTasks = (count = 12) => Array.from({ length: count }, (_, index) => (
 }));
 
 describe('OptimizeTodayModal', () => {
-  it('starts with the lowest-MTN task and supports keeping it today', () => {
+  it('starts with the highest-MTN task and supports keeping it today', () => {
     render(
       <OptimizeTodayModal
         tasks={buildTasks()}
@@ -25,9 +25,10 @@ describe('OptimizeTodayModal', () => {
       />
     );
 
-    expect(screen.getByText('Task 1')).toBeInTheDocument();
+    expect(screen.getByText('Task 12')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Keep today' }));
-    expect(screen.getByText('Task 2')).toBeInTheDocument();
+    expect(screen.getByText('1/12 tasks prioritized · 1 approved for today')).toBeInTheDocument();
+    expect(screen.getByText('Task 11')).toBeInTheDocument();
   });
 
   it('applies an accepted movement immediately', async () => {
@@ -69,7 +70,7 @@ describe('OptimizeTodayModal', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Mark as done' }));
     expect(await screen.findByText('Marked as done')).toBeInTheDocument();
-    expect(onMarkDone).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }));
+    expect(onMarkDone).toHaveBeenCalledWith(expect.objectContaining({ id: 11 }));
   });
 
   it('honors an exact due date without applying a capacity limit', async () => {

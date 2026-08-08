@@ -323,7 +323,7 @@ function MainAppShell({
           className="fixed top-0 left-0 right-0 h-14 bg-white border-b border-gray-200 flex items-center px-4 z-30"
           style={{
             boxSizing: 'content-box',
-            paddingTop: 'env(safe-area-inset-top)',
+            paddingTop: 'var(--alfred-safe-area-top)',
           }}
         >
           <button
@@ -360,7 +360,8 @@ function MainAppShell({
       <main
         className="flex-1 overflow-auto"
         style={{
-          marginTop: isMobile ? 'calc(3.5rem + env(safe-area-inset-top))' : undefined,
+          marginTop: isMobile ? 'calc(3.5rem + var(--alfred-safe-area-top))' : undefined,
+          paddingBottom: 'var(--alfred-safe-area-bottom)',
         }}
       >
         <PageIntroBanner

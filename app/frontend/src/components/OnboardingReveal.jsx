@@ -24,7 +24,10 @@ export default function OnboardingReveal({ result, userNumber, onNavigate, onFin
   const body = index === 3
     ? `Welcome to the Leadership Dojo. Your wheel, exercises, and belt journey are ready for you. ${dojoFocus} Start with the early trials, gather evidence through real action, and unlock deeper leadership assessments as you progress.`
     : defaultBody;
-  return <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[65] p-4 md:p-6">
+  return <div
+    className="pointer-events-none fixed inset-x-0 bottom-0 z-[65] p-4 md:p-6"
+    style={{ paddingBottom: 'calc(1rem + var(--alfred-safe-area-bottom))' }}
+  >
     <section className="pointer-events-auto mx-auto max-w-3xl rounded-2xl border border-amber-200 bg-slate-950 p-5 text-white shadow-2xl md:p-6">
       <div className="flex items-start gap-4"><img src="/alfred-logo.png" alt="Alfred" className="h-11 w-11 rounded-full border border-amber-300 object-cover" />
         <div className="min-w-0 flex-1"><p className="text-xs font-semibold uppercase tracking-wider text-amber-300">{index + 1} of {STEPS.length}</p><h2 className="mt-1 text-xl font-semibold">{title}</h2><p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-200">{body}</p>

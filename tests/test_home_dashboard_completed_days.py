@@ -1,12 +1,31 @@
 from datetime import date
+from types import SimpleNamespace
 
 from app.services.home_dashboard_service import (
     _average_chart_value,
     _completed_days,
     _five_week_wisdom_average,
     _mtn_period_stats,
+    _rank_top_tasks,
     _weekly_journal_metrics,
 )
+
+
+def test_top_tasks_excludes_future_and_undated_tasks():
+    def task(task_id, due_date):
+        return SimpleNamespace(
+            id=task_id, title=f"Task {task_id}", due_date=due_date, priority="High",
+            goal_id=None, move_the_needle_score=8, times_postponed=0, project=None,
+        )
+
+    tasks = [
+        task(1, date(2026, 8, 7)),
+        task(2, date(2026, 8, 8)),
+        task(3, date(2026, 8, 9)),
+        task(4, None),
+    ]
+
+    assert [item["id"] for item in _rank_top_tasks(tasks, {}, {}, date(2026, 8, 8))] == [2, 1]
 
 
 def test_completed_days_excludes_today_and_future_rows():

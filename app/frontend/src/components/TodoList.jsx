@@ -743,10 +743,12 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
   }, [priorityMode, priorityRecommendation, tasks]);
 
-  const handleMtnFeedback = async (taskId, rating, feedback, tag, recommendationId) => {
-    const result = await submitMtnFeedback(taskId, rating, feedback, tag, recommendationId);
+  const handleMtnFeedback = async (taskId, rating, feedback, tag, recommendationId, scoreId, adjustedScore) => {
+    const result = await submitMtnFeedback(taskId, rating, feedback, tag, recommendationId, scoreId, adjustedScore);
     if (!result.success) {
       alert(result.error);
+    } else {
+      await fetchTasks({ skipMtnBackfill: true });
     }
     return result;
   };
@@ -990,7 +992,11 @@ export default function TodoList({ apiUrl, userNumber }) {
       )}
 
       {listUndoMove && (
-        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-3 text-sm text-white shadow-xl" role="status">
+        <div
+          className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-3 text-sm text-white shadow-xl"
+          style={{ bottom: 'calc(1.25rem + var(--alfred-safe-area-bottom))' }}
+          role="status"
+        >
           <span>{t('calendar.movedTo', 'Task moved to')} {formatShortDate(listUndoMove.targetDate)}</span>
           <button
             type="button"

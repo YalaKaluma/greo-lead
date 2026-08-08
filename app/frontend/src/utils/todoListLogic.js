@@ -7,6 +7,7 @@ export const getStoredTaskScore = (task) => {
   if (Number.isNaN(numericScore)) return null;
 
   return {
+    score_id: task.mtn_score_id_today ?? null,
     task_id: task.id,
     title: task.title,
     score: numericScore > 1 ? numericScore / 10 : numericScore,

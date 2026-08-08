@@ -532,18 +532,28 @@ class MeetingActionItem(Base):
     id = Column(Integer, primary_key=True)
     meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True)
     description = Column(Text, nullable=False)
+    notes = Column(Text, nullable=True)
     owner_name = Column(String(200), nullable=True)
     due_date = Column(Date, nullable=True)
+    priority = Column(String(20), nullable=True)
+    delegated_to = Column(String(200), nullable=True)
+    goal_id = Column(Integer, ForeignKey("journey_goals.id", ondelete="SET NULL"), nullable=True, index=True)
+    goal_override_set = Column(Boolean, nullable=False, default=False)
     confidence = Column(Float, nullable=True)
     evidence_excerpt = Column(Text, nullable=True)
     transcript_segment_id = Column(Integer, ForeignKey("meeting_transcript_segments.id", ondelete="SET NULL"), nullable=True)
     created_task_id = Column(Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
     tracking_mode = Column(String(30), nullable=True)  # my_todo, follow_up, clarify_owner
     ignored_at = Column(DateTime(timezone=True), nullable=True)
+    mtn_score = Column(DECIMAL, nullable=True)
+    mtn_reason = Column(Text, nullable=True)
+    mtn_risk_if_ignored = Column(Text, nullable=True)
+    mtn_scored_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     meeting = relationship("Meeting", back_populates="action_items")
     created_task = relationship("Task")
+    goal = relationship("JourneyGoal")
 
 
 class MeetingLeadershipObservation(Base):
@@ -1563,6 +1573,23 @@ class TaskPriorityScore(Base):
     scored_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     llm_model = Column(String)  # e.g., "gpt-4o"
     llm_tokens_used = Column(Integer)
+
+
+class TaskMtnFeedback(Base):
+    """User correction to an independently calculated task MTN score."""
+    __tablename__ = "task_mtn_feedback"
+
+    id = Column(Integer, primary_key=True)
+    score_id = Column(Integer, ForeignKey("task_priority_scores.id", ondelete="CASCADE"), nullable=False, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_number = Column(String, nullable=False, index=True)
+    original_score = Column(DECIMAL(3, 2), nullable=False)
+    adjusted_score = Column(DECIMAL(3, 2), nullable=False)
+    selected_tag = Column(String, nullable=False)
+    rating = Column(Integer, nullable=False)
+    feedback = Column(Text)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    task = relationship("Task")
 
 
 class TaskPriorityRecommendation(Base):
