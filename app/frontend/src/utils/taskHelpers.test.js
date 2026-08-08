@@ -76,8 +76,8 @@ describe('taskHelpers MTN labels', () => {
     expect(getMtnLabel(0.9)).toBe('1. Transformation');
     expect(getMtnLabel(0.7)).toBe('2. Strategic');
     expect(getMtnLabel(0.5)).toBe('3. Important');
-    expect(getMtnLabel(0.3)).toBe('4. Maintenance');
-    expect(getMtnLabel(0.1)).toBe('5. Low Leverage');
+    expect(getMtnLabel(0.3)).toBe('4. Tactical');
+    expect(getMtnLabel(0.1)).toBe('5. Operational');
     expect(getMtnLabel('not-a-score')).toBe('');
   });
 });

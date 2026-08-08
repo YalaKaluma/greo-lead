@@ -139,8 +139,8 @@ ABSOLUTE SCORE ANCHORS:
 - 0.85-1.00 Transformation: materially changes an important outcome or creates exceptional leverage
 - 0.70-0.84 Strategic: directly advances a key goal or unblocks high-value work
 - 0.50-0.69 Important: meaningful progress with limited strategic leverage
-- 0.30-0.49 Maintenance: necessary operational work that preserves current performance
-- 0.00-0.29 Low Leverage: weak alignment, deferrable, delegable, or unclear value
+- 0.30-0.49 Tactical: necessary near-term execution that supports current priorities
+- 0.00-0.29 Operational: routine, deferrable, delegable, or weakly aligned work
 
 RULES:
 - top10_likelihood is the task's absolute MTN score from 0.00 to 1.00. The field name is retained for API compatibility.

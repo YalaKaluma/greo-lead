@@ -314,7 +314,7 @@ function AlfredOperatingComment({ commentary, t }) {
   const [isExpanded, setIsExpanded] = useState(true);
   if (!commentary) return null;
   return (
-    <section className="rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-white p-5 shadow-sm">
+    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <button
         type="button"
         onClick={() => setIsExpanded((current) => !current)}

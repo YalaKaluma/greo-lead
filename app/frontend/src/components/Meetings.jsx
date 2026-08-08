@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { useLanguage } from '../i18n/LanguageContext';
-import { getLongTermGoals } from '../utils/taskHelpers';
+import { getLongTermGoals, getMtnLabel, getMtnStyle } from '../utils/taskHelpers';
 
 const NativeMeetingRecorder = registerPlugin('MeetingRecorder');
 
@@ -725,9 +725,10 @@ function MeetingTaskCard({ task, busy, onAdd, onComplete, onIgnore, onEdit }) {
   const { t } = useLanguage();
   const [swipe, setSwipe] = useState(0);
   const touchStart = useRef(null);
-  const mtnScore = task.mtn_score == null
+  const normalizedMtnScore = task.mtn_score == null
     ? null
-    : Math.min(10, Math.max(0, Number(task.mtn_score) <= 1 ? Number(task.mtn_score) * 10 : Number(task.mtn_score)));
+    : Math.min(1, Math.max(0, Number(task.mtn_score) > 1 ? Number(task.mtn_score) / 10 : Number(task.mtn_score)));
+  const mtnLabel = normalizedMtnScore == null ? '' : getMtnLabel(normalizedMtnScore);
   const finishSwipe = () => {
     if (swipe >= 90) onIgnore(task);
     if (swipe <= -90) onComplete(task);
@@ -744,7 +745,7 @@ function MeetingTaskCard({ task, busy, onAdd, onComplete, onIgnore, onEdit }) {
           <button type="button" onClick={() => onEdit(task)} className="block w-full text-left font-medium text-slate-900 hover:text-blue-700">{task.description}</button>
           <p className="mt-1 truncate text-sm text-blue-600" title={task.meeting_title}>{task.meeting_title}</p>
         </div>
-        <span className="flex-none rounded-full bg-violet-50 px-2.5 py-1 text-xs font-bold text-violet-700" title={t('meetings.tasks.mtnScore')}>{mtnScore == null ? t('meetings.tasks.mtnPending') : `MTN ${mtnScore.toFixed(1)}`}</span>
+        <span className={`flex-none rounded border px-2.5 py-1 text-xs font-medium ${mtnLabel ? getMtnStyle(mtnLabel) : 'border-violet-100 bg-violet-50 text-violet-700'}`} title={t('meetings.tasks.mtnScore')}>{mtnLabel || t('meetings.tasks.mtnPending')}</span>
         <div className="flex flex-none gap-2">
           <button type="button" disabled={busy} onClick={() => onAdd(task)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{t('meetings.tasks.addToList')}</button>
           <button type="button" disabled={busy} onClick={() => onIgnore(task)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50">{t('meetings.tasks.ignore')}</button>
