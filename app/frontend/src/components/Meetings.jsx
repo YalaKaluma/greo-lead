@@ -725,20 +725,25 @@ function MeetingTaskCard({ task, busy, onAdd, onComplete, onIgnore, onEdit }) {
   const { t } = useLanguage();
   const [swipe, setSwipe] = useState(0);
   const touchStart = useRef(null);
+  const currentSwipe = useRef(0);
   const normalizedMtnScore = task.mtn_score == null
     ? null
     : Math.min(1, Math.max(0, Number(task.mtn_score) > 1 ? Number(task.mtn_score) / 10 : Number(task.mtn_score)));
   const mtnLabel = normalizedMtnScore == null ? '' : getMtnLabel(normalizedMtnScore);
-  const finishSwipe = () => {
-    if (swipe >= 90) onIgnore(task);
-    if (swipe <= -90) onComplete(task);
+  const resetSwipe = () => {
     touchStart.current = null;
+    currentSwipe.current = 0;
     setSwipe(0);
   };
+  const finishSwipe = () => {
+    if (!busy && currentSwipe.current >= 90) onAdd(task);
+    if (!busy && currentSwipe.current <= -90) onIgnore(task);
+    resetSwipe();
+  };
   return <div className="relative overflow-hidden rounded-lg">
-    <div className="absolute inset-y-0 left-0 flex w-32 items-center bg-slate-700 pl-4 text-xs font-semibold text-white sm:hidden">{t('meetings.tasks.ignore')}</div>
-    <div className="absolute inset-y-0 right-0 flex w-32 items-center justify-end bg-emerald-600 pr-4 text-xs font-semibold text-white sm:hidden">{t('meetings.tasks.markDone')}</div>
-    <div onTouchStart={(event) => { touchStart.current = event.touches[0].clientX; }} onTouchMove={(event) => { if (touchStart.current != null) setSwipe(Math.max(-120, Math.min(120, event.touches[0].clientX - touchStart.current))); }} onTouchEnd={finishSwipe} style={{ transform: `translateX(${swipe}px)` }} className="relative rounded-lg border-2 border-slate-200 bg-white px-4 py-3 transition-transform hover:border-slate-300">
+    <div className="absolute inset-y-0 left-0 flex w-32 items-center bg-blue-600 pl-4 text-xs font-semibold text-white sm:hidden">{t('meetings.tasks.addToList')}</div>
+    <div className="absolute inset-y-0 right-0 flex w-32 items-center justify-end bg-slate-700 pr-4 text-xs font-semibold text-white sm:hidden">{t('meetings.tasks.ignore')}</div>
+    <div onTouchStart={(event) => { touchStart.current = event.touches[0].clientX; currentSwipe.current = 0; }} onTouchMove={(event) => { if (touchStart.current != null) { const distance = Math.max(-120, Math.min(120, event.touches[0].clientX - touchStart.current)); currentSwipe.current = distance; setSwipe(distance); } }} onTouchEnd={finishSwipe} onTouchCancel={resetSwipe} style={{ transform: `translateX(${swipe}px)`, touchAction: 'pan-y' }} className="relative rounded-lg border-2 border-slate-200 bg-white px-4 py-3 transition-transform hover:border-slate-300">
       <div className="flex items-start gap-3">
         <button type="button" disabled={busy} onClick={() => onComplete(task)} className="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded-full border-2 border-slate-300 text-xs text-transparent hover:border-emerald-600 hover:bg-emerald-50 hover:text-emerald-700" aria-label={`${t('meetings.tasks.markDone')}: ${task.description}`}>✓</button>
         <div className="min-w-0 flex-1">
@@ -746,7 +751,7 @@ function MeetingTaskCard({ task, busy, onAdd, onComplete, onIgnore, onEdit }) {
           <p className="mt-1 truncate text-sm text-blue-600" title={task.meeting_title}>{task.meeting_title}</p>
         </div>
         <span className={`flex-none rounded border px-2.5 py-1 text-xs font-medium ${mtnLabel ? getMtnStyle(mtnLabel) : 'border-violet-100 bg-violet-50 text-violet-700'}`} title={t('meetings.tasks.mtnScore')}>{mtnLabel || t('meetings.tasks.mtnPending')}</span>
-        <div className="flex flex-none gap-2">
+        <div className="hidden flex-none gap-2 sm:flex">
           <button type="button" disabled={busy} onClick={() => onAdd(task)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{t('meetings.tasks.addToList')}</button>
           <button type="button" disabled={busy} onClick={() => onIgnore(task)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50">{t('meetings.tasks.ignore')}</button>
         </div>

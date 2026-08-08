@@ -504,7 +504,7 @@
   "meetings.tasks.loading": "Loading meeting tasks…",
   "meetings.tasks.emptyTitle": "You’re all caught up",
   "meetings.tasks.emptyBody": "New commitments collected from your meetings will appear here.",
-  "meetings.tasks.swipeHint": "Swipe right to ignore · Swipe left to mark done",
+  "meetings.tasks.swipeHint": "Swipe left to ignore · Swipe right to add to list · Tap the circle to mark done",
   "meetings.tasks.loadError": "Could not load meeting tasks.",
   "meetings.tasks.addError": "Could not add this task to your to-do list.",
   "meetings.tasks.updateError": "Could not update this meeting task.",

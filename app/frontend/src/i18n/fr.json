@@ -504,7 +504,7 @@
   "meetings.tasks.loading": "Chargement des tâches de réunion…",
   "meetings.tasks.emptyTitle": "Tout est à jour",
   "meetings.tasks.emptyBody": "Les nouveaux engagements recueillis pendant vos réunions apparaîtront ici.",
-  "meetings.tasks.swipeHint": "Balayez vers la droite pour ignorer · vers la gauche pour marquer comme terminée",
+  "meetings.tasks.swipeHint": "Balayez vers la gauche pour ignorer · vers la droite pour ajouter à la liste · touchez le cercle pour terminer",
   "meetings.tasks.loadError": "Impossible de charger les tâches de réunion.",
   "meetings.tasks.addError": "Impossible d’ajouter cette tâche à votre liste.",
   "meetings.tasks.updateError": "Impossible de mettre à jour cette tâche de réunion.",
