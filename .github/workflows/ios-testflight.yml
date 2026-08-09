@@ -17,6 +17,9 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+
 jobs:
   build-ios:
     name: Build iOS release
@@ -39,20 +42,22 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: app/frontend
-        run: npm install
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
 
       - name: Build web bundle
         working-directory: app/frontend
-        run: npm run build
+        run: pnpm build
 
       - name: Generate and sync the Capacitor iOS project
         working-directory: app/frontend
         run: |
           node -e "const fs=require('fs'); const path='capacitor.config.json'; const config=JSON.parse(fs.readFileSync(path)); config.appId=process.env.IOS_BUNDLE_ID; fs.writeFileSync(path, JSON.stringify(config, null, 2) + '\n')"
           if [ ! -d ios/App ]; then
-            npx cap add ios
+            pnpm exec cap add ios
           fi
-          npx cap sync ios
+          pnpm exec cap sync ios
 
       - name: Configure the iOS application
         working-directory: app/frontend

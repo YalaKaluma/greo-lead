@@ -15,6 +15,9 @@ on:
       - "app/frontend/**"
       - "static/**"
 
+permissions:
+  contents: read
+
 jobs:
   build-android-apk:
     name: Build debug APK
@@ -33,15 +36,17 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: app/frontend
-        run: npm install
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
 
       - name: Build web bundle
         working-directory: app/frontend
-        run: npm run build
+        run: pnpm build
 
       - name: Sync Capacitor Android project
         working-directory: app/frontend
-        run: npx cap sync android
+        run: pnpm exec cap sync android
 
       - name: Add Firebase Android config
         working-directory: app/frontend/android/app

@@ -560,6 +560,32 @@ def test_project_processing_errors_are_sanitized_before_persistence():
     assert "logger.exception" not in source
 
 
+def test_container_build_is_reproducible_and_runs_as_non_root():
+    repository_root = Path(__file__).resolve().parents[1]
+    dockerfile = (repository_root / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "pnpm install --frozen-lockfile" in dockerfile
+    assert "curl -fsSL" not in dockerfile
+    assert "USER alfred" in dockerfile
+    assert "--no-install-recommends" in dockerfile
+    assert "python:3.11-slim@sha256:" in dockerfile
+
+
+def test_ci_uses_locked_frontend_dependencies_and_read_only_permissions():
+    workflows = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+    violations = []
+    for workflow in workflows.glob("*.yml"):
+        source = workflow.read_text(encoding="utf-8")
+        if "setup-node" in source and "pnpm install --frozen-lockfile" not in source:
+            violations.append(f"{workflow.name}: unlocked frontend install")
+        if "run: npm install" in source or "\n          npm install" in source or "npx " in source:
+            violations.append(f"{workflow.name}: mutable npm execution")
+        if "permissions:\n  contents: read" not in source:
+            violations.append(f"{workflow.name}: missing read-only permissions")
+
+    assert violations == []
+
+
 class SingleUserDb:
     def __init__(self, user):
         self.user = user
