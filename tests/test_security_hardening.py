@@ -527,6 +527,39 @@ def test_high_risk_private_content_is_not_printed_to_application_logs():
     assert "traceback.format_exc()" not in tasks_source
 
 
+def test_document_archive_expansion_limit_blocks_zip_bombs(tmp_path, monkeypatch):
+    import zipfile
+    from app.services import project_intelligence_service
+
+    document = tmp_path / "oversized.docx"
+    with zipfile.ZipFile(document, "w") as archive:
+        archive.writestr("word/document.xml", "<document>" + ("x" * 200) + "</document>")
+
+    monkeypatch.setattr(project_intelligence_service, "MAX_ARCHIVE_UNCOMPRESSED_BYTES", 100)
+    with pytest.raises(RuntimeError, match="processing limit"):
+        project_intelligence_service.extract_document_text(str(document), document.name)
+
+
+def test_upload_endpoints_enforce_bounded_reads_and_file_type_checks():
+    repository_root = Path(__file__).resolve().parents[1]
+    audio_source = (repository_root / "app" / "routers" / "audio.py").read_text(encoding="utf-8")
+    project_source = (repository_root / "app" / "routers" / "projects.py").read_text(encoding="utf-8")
+    meeting_source = (repository_root / "app" / "routers" / "meetings.py").read_text(encoding="utf-8")
+
+    assert "MAX_TRANSCRIPTION_BYTES + 1" in audio_source
+    assert "ALLOWED_DOCUMENT_SUFFIXES" in project_source
+    assert "MAX_FILE_BYTES" in project_source
+    assert "MAX_AUDIO_BYTES" in meeting_source
+
+
+def test_project_processing_errors_are_sanitized_before_persistence():
+    repository_root = Path(__file__).resolve().parents[1]
+    source = (repository_root / "app" / "services" / "project_intelligence_service.py").read_text(encoding="utf-8")
+
+    assert "document.processing_error = str(exc)" not in source
+    assert "logger.exception" not in source
+
+
 class SingleUserDb:
     def __init__(self, user):
         self.user = user

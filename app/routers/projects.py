@@ -24,6 +24,7 @@ from app.utils.safe_storage import stored_path_within_root
 router = APIRouter()
 STORAGE_ROOT = Path(os.getenv("PROJECT_STORAGE_DIR") or Path(tempfile.gettempdir()) / "alfred-projects")
 MAX_FILE_BYTES = int(os.getenv("PROJECT_MAX_FILE_BYTES", str(50 * 1024 * 1024)))
+ALLOWED_DOCUMENT_SUFFIXES = {".pdf", ".pptx", ".docx", ".txt", ".md", ".csv"}
 
 
 class ProjectCreate(BaseModel):
@@ -120,17 +121,27 @@ async def upload_document(project_id: int, background_tasks: BackgroundTasks, us
     user_number = authenticated_user_identifier(current_user)
     project = _project_or_404(db, project_id, user_number)
     safe_name = re.sub(r"[^A-Za-z0-9._ -]", "_", file.filename or "project-document")[:300]
+    suffix = Path(safe_name).suffix.lower()
+    if suffix not in ALLOWED_DOCUMENT_SUFFIXES:
+        raise HTTPException(status_code=415, detail="Upload a PDF, PPTX, DOCX, TXT, MD, or CSV document.")
     user_dir = STORAGE_ROOT / re.sub(r"[^A-Za-z0-9_-]", "_", user_number)[:100] / str(project.id)
     user_dir.mkdir(parents=True, exist_ok=True)
     path = user_dir / f"{uuid.uuid4().hex}-{safe_name}"
     size = 0
+    first_bytes = b""
     try:
         with path.open("wb") as output:
             while chunk := await file.read(1024 * 1024):
+                if not first_bytes:
+                    first_bytes = chunk[:8]
                 size += len(chunk)
                 if size > MAX_FILE_BYTES:
                     raise HTTPException(status_code=413, detail="Project file exceeds the 50 MB limit.")
                 output.write(chunk)
+        if suffix == ".pdf" and not first_bytes.startswith(b"%PDF-"):
+            raise HTTPException(status_code=415, detail="The uploaded file is not a valid PDF.")
+        if suffix in {".pptx", ".docx"} and not first_bytes.startswith(b"PK"):
+            raise HTTPException(status_code=415, detail="The uploaded Office document is invalid.")
     except Exception:
         path.unlink(missing_ok=True)
         raise

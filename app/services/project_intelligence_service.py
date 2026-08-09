@@ -20,6 +20,10 @@ from app.models import JourneyProject, ProjectDocument
 logger = logging.getLogger(__name__)
 MODEL = os.getenv("PROJECT_INTELLIGENCE_MODEL", "gpt-4o-mini")
 MAX_CONTEXT_CHARACTERS = int(os.getenv("PROJECT_DOCUMENT_CONTEXT_CHARACTERS", "120000"))
+MAX_EXTRACTED_CHARACTERS = int(os.getenv("PROJECT_DOCUMENT_EXTRACTED_CHARACTERS", "2000000"))
+MAX_ARCHIVE_ENTRIES = 1000
+MAX_ARCHIVE_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
+MAX_PDF_PAGES = 500
 
 
 def _xml_text(data: bytes) -> str:
@@ -37,20 +41,45 @@ def _xml_text(data: bytes) -> str:
 def extract_document_text(path: str, filename: str) -> str:
     suffix = Path(filename).suffix.lower()
     if suffix in {".txt", ".md", ".csv"}:
-        return Path(path).read_text(encoding="utf-8", errors="replace")
+        with Path(path).open("rb") as source:
+            return source.read(MAX_EXTRACTED_CHARACTERS * 4 + 1).decode("utf-8", errors="replace")[:MAX_EXTRACTED_CHARACTERS]
     if suffix in {".pptx", ".docx"}:
         prefix = "ppt/slides/slide" if suffix == ".pptx" else "word/document.xml"
         with zipfile.ZipFile(path) as archive:
+            entries = archive.infolist()
+            if len(entries) > MAX_ARCHIVE_ENTRIES:
+                raise RuntimeError("Document archive contains too many entries.")
+            if sum(entry.file_size for entry in entries) > MAX_ARCHIVE_UNCOMPRESSED_BYTES:
+                raise RuntimeError("Document archive expands beyond the processing limit.")
             names = [name for name in archive.namelist() if name.startswith(prefix) and name.endswith(".xml")]
             if suffix == ".pptx":
                 names.sort(key=lambda name: int(re.search(r"slide(\d+)\.xml$", name).group(1)))
-            return "\n\n".join(_xml_text(archive.read(name)) for name in names)
+            extracted = []
+            character_count = 0
+            for name in names:
+                value = _xml_text(archive.read(name))
+                extracted.append(value)
+                character_count += len(value)
+                if character_count >= MAX_EXTRACTED_CHARACTERS:
+                    break
+            return "\n\n".join(extracted)[:MAX_EXTRACTED_CHARACTERS]
     if suffix == ".pdf":
         try:
             from pypdf import PdfReader
         except ImportError as exc:
             raise RuntimeError("PDF extraction is not available on this deployment. Upload a PPTX, DOCX, or text file.") from exc
-        return "\n\n".join(page.extract_text() or "" for page in PdfReader(path).pages)
+        reader = PdfReader(path)
+        if len(reader.pages) > MAX_PDF_PAGES:
+            raise RuntimeError("PDF has too many pages to process safely.")
+        extracted = []
+        character_count = 0
+        for page in reader.pages:
+            value = page.extract_text() or ""
+            extracted.append(value)
+            character_count += len(value)
+            if character_count >= MAX_EXTRACTED_CHARACTERS:
+                break
+        return "\n\n".join(extracted)[:MAX_EXTRACTED_CHARACTERS]
     raise RuntimeError("Unsupported project document. Upload PPTX, DOCX, PDF, TXT, MD, or CSV.")
 
 
@@ -135,12 +164,12 @@ def process_project_document(document_id: int) -> None:
         db.commit()
     except Exception as exc:
         db.rollback()
-        logger.exception("Project document processing failed for document_id=%s", document_id)
+        logger.error("Project document processing failed document_id=%s error_type=%s", document_id, type(exc).__name__)
         if document:
             document = db.query(ProjectDocument).filter(ProjectDocument.id == document_id).first()
             if document:
                 document.processing_status = "failed"
-                document.processing_error = str(exc)[:2000]
+                document.processing_error = "Document processing failed. Verify the file format and try again."
                 db.commit()
     finally:
         db.close()
