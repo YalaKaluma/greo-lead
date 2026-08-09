@@ -1,4 +1,5 @@
 import pytest
+import ast
 import os
 import subprocess
 import sys
@@ -298,18 +299,35 @@ def test_scheduler_dependency_accepts_dedicated_secret(monkeypatch):
     ) is None
 
 
-def _request_with_query(query: str) -> Request:
-    return Request({
+def _identity_request(
+    *,
+    query: str = "",
+    path_params: dict | None = None,
+    headers: list[tuple[bytes, bytes]] | None = None,
+    body: bytes = b"",
+) -> Request:
+    scope = {
         "type": "http",
-        "method": "GET",
+        "method": "POST" if body else "GET",
         "scheme": "https",
         "server": ("alfred.example.com", 443),
         "path": "/api/tasks",
         "raw_path": b"/api/tasks",
         "query_string": query.encode("ascii"),
-        "headers": [],
+        "headers": headers or [],
         "client": ("127.0.0.1", 1234),
-    })
+        "path_params": path_params or {},
+    }
+
+    async def receive():
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    return Request(scope, receive)
+
+
+def _request_with_query(query: str) -> Request:
+    """Compatibility helper for authentication tests that only need a basic request."""
+    return _identity_request(query=query)
 
 
 def test_authenticated_identity_rejects_cross_user_query():
@@ -318,12 +336,49 @@ def test_authenticated_identity_rejects_cross_user_query():
 
     user = User(id=1, phone_number="user-a", email="a@example.com", is_active=True)
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(require_authenticated_identity(_request_with_query("user_number=user-b"), user=user))
+        asyncio.run(require_authenticated_identity(_identity_request(query="user_number=user-b"), user=user))
     assert exc_info.value.status_code == 403
 
     assert asyncio.run(
-        require_authenticated_identity(_request_with_query("user_number=user-a"), user=user)
+        require_authenticated_identity(_identity_request(query="user_number=user-a"), user=user)
     ) is user
+
+
+@pytest.mark.parametrize(
+    "identity_request",
+    [
+        _identity_request(path_params={"user_id": "2"}),
+        _identity_request(headers=[(b"x-user-number", b"user-b")]),
+        _identity_request(headers=[(b"x-user-id", b"2")]),
+        _identity_request(query="user_number="),
+        _identity_request(
+            headers=[(b"content-type", b"application/json")],
+            body=b'{"user_number":"user-b"}',
+        ),
+    ],
+    ids=["path-user-id", "user-number-header", "user-id-header", "empty-query-identity", "json-user-number"],
+)
+def test_authenticated_identity_rejects_cross_user_claims_from_every_supported_location(identity_request):
+    from app.models import User
+    from app.security_dependencies import require_authenticated_identity
+
+    user = User(id=1, phone_number="user-a", email="a@example.com", is_active=True)
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(require_authenticated_identity(identity_request, user=user))
+    assert exc_info.value.status_code == 403
+
+
+def test_authenticated_identity_accepts_matching_path_and_header_claims():
+    from app.models import User
+    from app.security_dependencies import require_authenticated_identity
+
+    user = User(id=1, phone_number="user-a", email="a@example.com", is_active=True)
+    request = _identity_request(
+        path_params={"user_id": "1"},
+        headers=[(b"x-user-number", b"user-a")],
+    )
+
+    assert asyncio.run(require_authenticated_identity(request, user=user)) is user
 
 
 def _dependency_names(route: APIRoute) -> set[str]:
@@ -368,6 +423,35 @@ def test_every_api_route_has_an_explicit_access_boundary():
             unclassified.append(f"{','.join(sorted(route.methods))} {route.path}")
 
     assert unclassified == []
+
+
+def test_form_identity_fields_have_explicit_authenticated_owner_checks():
+    """Multipart bodies bypass the JSON guard, so form identities need local checks."""
+
+    routers_dir = Path(__file__).resolve().parents[1] / "app" / "routers"
+    missing_checks = []
+    for source_path in routers_dir.glob("*.py"):
+        tree = ast.parse(source_path.read_text(encoding="utf-8-sig"), filename=str(source_path))
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            identity_form_argument = False
+            for argument, default in zip(node.args.args[-len(node.args.defaults):], node.args.defaults):
+                if argument.arg not in {"user_number", "user_id"}:
+                    continue
+                if isinstance(default, ast.Call) and getattr(default.func, "id", None) == "Form":
+                    identity_form_argument = True
+            if not identity_form_argument:
+                continue
+            has_owner_check = any(
+                isinstance(child, ast.Call)
+                and getattr(child.func, "id", None) == "ensure_user_identity"
+                for child in ast.walk(node)
+            )
+            if not has_owner_check:
+                missing_checks.append(f"{source_path.name}:{node.name}")
+
+    assert missing_checks == []
 
 
 class SingleUserDb:

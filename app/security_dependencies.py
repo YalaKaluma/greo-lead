@@ -40,6 +40,17 @@ async def require_authenticated_identity(
     for key in ("user_number", "user_id"):
         claimed.extend(request.query_params.getlist(key))
 
+        path_value = request.path_params.get(key)
+        if path_value is not None:
+            claimed.append(str(path_value))
+
+    # Some legacy clients supplied identity in headers. Treat those values as
+    # untrusted claims too; authentication always comes from the bearer token.
+    for header_name in ("x-user-number", "x-user-id"):
+        header_value = request.headers.get(header_name)
+        if header_value is not None:
+            claimed.append(header_value)
+
     content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
     if content_type == "application/json":
         try:
@@ -51,7 +62,7 @@ async def require_authenticated_identity(
                 if payload.get(key) is not None:
                     claimed.append(str(payload[key]))
 
-    if any(value.strip().casefold() not in allowed for value in claimed if value.strip()):
+    if any(not value.strip() or value.strip().casefold() not in allowed for value in claimed):
         raise HTTPException(status_code=403, detail="Request identity does not match authenticated user")
     return user
 
