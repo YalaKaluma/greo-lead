@@ -11,6 +11,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
 from app.utils.session_cookie import SESSION_COOKIE_NAME
+from app.utils.security import decode_session_token
 
 
 SECURITY_HEADERS = {
@@ -180,15 +181,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return None
 
     def _rate_limit_key(self, request: Request, rule: RateLimitRule) -> str:
-        path = request.url.path
         client_ip = request.client.host if request.client else "unknown"
         if rule == self.auth_limit:
             identity = client_ip
+            scope = "auth"
         else:
-            identity = (
-                request.query_params.get("user_number")
-                or request.query_params.get("user_id")
-                or request.headers.get("X-User-Number")
-                or client_ip
-            )
-        return f"{path}:{identity}:{rule.requests}:{rule.window_seconds}"
+            authorization = request.headers.get("authorization", "")
+            token = request.cookies.get(SESSION_COOKIE_NAME)
+            if authorization.lower().startswith("bearer "):
+                token = authorization.split(" ", 1)[1].strip()
+            payload = decode_session_token(token) if token else None
+            identity = f"user:{payload['sub']}" if payload else f"ip:{client_ip}"
+            scope = "ai" if rule == self.ai_limit else "general"
+        return f"{scope}:{identity}:{rule.requests}:{rule.window_seconds}"

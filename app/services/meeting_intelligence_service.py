@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.config import OPENAI_API_KEY
 from app.db import SessionLocal
 from app.services.meeting_task_extraction_service import extract_action_items
+from app.utils.ai_safety import UNTRUSTED_CONTEXT_POLICY, parse_bounded_json_object, wrap_untrusted_context
 from app.models import (
     BeltAssessment,
     JournalEntry,
@@ -431,7 +432,8 @@ def analyze_transcript(
                     "only return an ID present in the supplied candidate catalog. Always generate a concise, "
                     "specific meeting title that names the main subject or outcome of the conversation. The title "
                     "must stand on its own in a meeting history; never return a filename, 'Meeting notes', "
-                    "'Recorded meeting', 'Meeting in progress', or 'Untitled meeting'."
+                    "'Recorded meeting', 'Meeting in progress', or 'Untitled meeting'. "
+                    + UNTRUSTED_CONTEXT_POLICY
                 ),
             },
             {
@@ -456,14 +458,17 @@ def analyze_transcript(
                     "contain only distinct speakers that actually appear in the transcript.\n\n"
                     "Suggest people, goals, and projects only when there is meaningful evidence. Prefer no link "
                     "over a weak link. Use confidence of at least 0.75 only for strong matches.\n\n"
-                    f"USER-SUPPLIED MEETING CONTEXT (treat as context, not spoken transcript):\n{supplied_context or 'none'}\n\n"
-                    f"AVAILABLE LINK TARGETS:\n{matching_context or 'none'}\n\n"
-                    f"TRANSCRIPT OR NOTES:\n{transcript[:120000]}"
+                    + wrap_untrusted_context("meeting_context", supplied_context or "none", 8000)
+                    + "\n\n"
+                    + wrap_untrusted_context("link_target_catalog", matching_context or "none", 20000)
+                    + "\n\n"
+                    + wrap_untrusted_context("transcript", transcript, 120000)
                 ),
             },
         ],
+        max_tokens=3500,
     )
-    return json.loads(response.choices[0].message.content)
+    return parse_bounded_json_object(response.choices[0].message.content, max_characters=120_000)
 
 
 def analyze_leadership_feedback(
@@ -484,7 +489,8 @@ def analyze_leadership_feedback(
                     "speaker. Ground every behavioral claim in meeting evidence. Explicitly connect useful "
                     "feedback to the leader's wheel, trials, goals, and recent journal patterns. Never quote "
                     "private journal, assessment, or trial text; paraphrase the relevant pattern. Distinguish "
-                    "observation from inference and do not manufacture criticism."
+                    "observation from inference and do not manufacture criticism. "
+                    + UNTRUSTED_CONTEXT_POLICY
                 ),
             },
             {
@@ -520,14 +526,17 @@ def analyze_leadership_feedback(
                     "What you did well; What could have been stronger; Connection to your leadership context; "
                     "A missed leadership opportunity; and a concrete next-meeting experiment. Explain why each "
                     "point matters for this leader now. Make recommendations behaviorally specific.\n\n"
-                    f"MEETING ANALYSIS:\n{json.dumps(analysis, default=str)[:20000]}\n\n"
-                    f"PRIVATE LEADERSHIP CONTEXT (paraphrase, never quote):\n{leadership_context or 'none'}\n\n"
-                    f"TRANSCRIPT:\n{transcript[:120000]}"
+                    + wrap_untrusted_context("meeting_analysis", json.dumps(analysis, default=str), 20000)
+                    + "\n\n"
+                    + wrap_untrusted_context("private_leadership_context", leadership_context or "none", 30000)
+                    + "\n\n"
+                    + wrap_untrusted_context("transcript", transcript, 120000)
                 ),
             },
         ],
+        max_tokens=4000,
     )
-    result = json.loads(response.choices[0].message.content)
+    result = parse_bounded_json_object(response.choices[0].message.content, max_characters=140_000)
     expected_domains = [
         "Vision",
         "People",
@@ -563,7 +572,8 @@ def analyze_leadership_feedback(
                         "You are Alfred, a rigorous executive coach completing an omitted portion of a meeting "
                         "assessment. Focus only on the identified user's speaker. Infer leadership behavior from "
                         "how the leader listens, frames, questions, decides, manages the conversation, and learns; "
-                        "a domain does not need to be named explicitly. Ground every score in transcript evidence."
+                        "a domain does not need to be named explicitly. Ground every score in transcript evidence. "
+                        + UNTRUSTED_CONTEXT_POLICY
                     ),
                 },
                 {
@@ -578,13 +588,17 @@ def analyze_leadership_feedback(
                         "4 strong and intentional; 5 exceptional and catalytic. Feedback must use: "
                         "'Demonstrated: ...\nGrowth edge: ...\nNext meeting: ...'. Include one strongest transcript "
                         "excerpt for each domain.\n\n"
-                        f"MEETING ANALYSIS:\n{json.dumps(analysis, default=str)[:20000]}\n\n"
-                        f"TRANSCRIPT:\n{transcript[:120000]}"
+                        + wrap_untrusted_context("meeting_analysis", json.dumps(analysis, default=str), 20000)
+                        + "\n\n"
+                        + wrap_untrusted_context("transcript", transcript, 120000)
                     ),
                 },
             ],
+            max_tokens=2200,
         )
-        completion_result = json.loads(completion.choices[0].message.content)
+        completion_result = parse_bounded_json_object(
+            completion.choices[0].message.content, max_characters=80_000
+        )
         assessments.extend(
             item for item in (completion_result.get("domain_assessments") or [])
             if isinstance(item, dict) and item.get("domain") in retry_domains
@@ -676,16 +690,20 @@ def answer_meeting_question(meeting_context: dict, question: str, history: list[
                 "content": (
                     "You answer questions about one meeting using only the supplied meeting record. Be concise "
                     "but useful. Separate explicit facts from reasonable inference, cite speaker names and "
-                    "timestamps when available, and say when the meeting does not contain the answer."
+                    "timestamps when available, and say when the meeting does not contain the answer. "
+                    + UNTRUSTED_CONTEXT_POLICY
                 ),
             },
             {
                 "role": "user",
-                "content": "MEETING RECORD:\n" + json.dumps(meeting_context, default=str)[:120000],
+                "content": wrap_untrusted_context(
+                    "meeting_record", json.dumps(meeting_context, default=str), 120000
+                ),
             },
             *safe_history,
             {"role": "user", "content": question[:4000]},
         ],
+        max_tokens=800,
     )
     return (response.choices[0].message.content or "").strip()
 
