@@ -7,6 +7,7 @@ Onboarding Service - Executive Onboarding Flow
 from sqlalchemy.orm import Session
 from app.models import User, OnboardingStep, EmailVerification
 from app.services.onboarding_seed_service import ensure_starter_examples_seeded
+from app.utils.security import hash_password, verify_password
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
 import re
@@ -397,10 +398,18 @@ class EmailVerificationService:
     def create_verification(db: Session, user_id: int, email: str) -> str:
         """Create a verification code and send to user's email. Returns the verification code."""
         code = EmailVerification.generate_code()
+        db.query(EmailVerification).filter(
+            EmailVerification.user_id == user_id,
+            EmailVerification.verified == False,
+        ).update(
+            {"verified": True, "verified_at": datetime.utcnow()},
+            synchronize_session=False,
+        )
         verification = EmailVerification(
             user_id=user_id,
             email=email,
-            verification_code=code,
+            verification_code=hash_password(code),
+            attempt_count=0,
             expires_at=datetime.utcnow() + timedelta(minutes=15)
         )
         db.add(verification)
@@ -410,17 +419,27 @@ class EmailVerificationService:
     @staticmethod
     def verify_code(db: Session, user_id: int, code: str) -> Tuple[bool, str]:
         """Verify the code sent via WhatsApp matches the one sent to email. Returns: (success, message)"""
+        normalized_code = (code or "").strip()
         verification = db.query(EmailVerification).filter(
             EmailVerification.user_id == user_id,
-            EmailVerification.verification_code == code,
             EmailVerification.verified == False
-        ).order_by(EmailVerification.created_at.desc()).first()
+        ).order_by(EmailVerification.created_at.desc()).with_for_update().first()
 
         if not verification:
             return False, "Invalid verification code. Please check and try again."
 
         if not verification.is_valid():
             return False, "This code has expired. Please request a new one by sending another email."
+
+        if len(normalized_code) != 6 or not normalized_code.isdigit() or not verify_password(
+            normalized_code,
+            verification.verification_code,
+        ):
+            verification.attempt_count = int(verification.attempt_count or 0) + 1
+            db.commit()
+            if verification.attempt_count >= 5:
+                return False, "Too many incorrect attempts. Please request a new verification code."
+            return False, "Invalid verification code. Please check and try again."
 
         verification.verified = True
         verification.verified_at = datetime.utcnow()

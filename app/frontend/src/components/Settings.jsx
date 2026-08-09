@@ -57,7 +57,9 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
     saveError
   } = useLanguage();
 
-  const [activeTab, setActiveTab] = useState('profile');
+  const [activeTab, setActiveTab] = useState(
+    localStorage.getItem('must_change_password') === 'true' ? 'privacy' : 'profile'
+  );
   const [currentUser, setCurrentUser] = useState(null);
   const [isBackfillingDepth, setIsBackfillingDepth] = useState(false);
   const [backfillResult, setBackfillResult] = useState(null);
@@ -279,6 +281,7 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
             <div className="max-w-2xl">
               <h2 className="text-sm font-semibold text-slate-900">Privacy & Data</h2>
               <p className="mt-2 text-sm leading-6 text-slate-500">{t('settings.privacy.description')}</p>
+              <PasswordChangePanel apiUrl={apiUrl} t={t} />
               <VoiceEnrollmentPanel apiUrl={apiUrl} userNumber={userNumber} />
               <AccountDeletionPanel apiUrl={apiUrl} t={t} />
             </div>
@@ -288,6 +291,68 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
         {activeTab === 'admin' && currentUser?.is_admin && (
           <AdminUserManagement apiUrl={apiUrl} userNumber={userNumber} />
         )}
+      </div>
+    </div>
+  );
+}
+
+function PasswordChangePanel({ apiUrl, t }) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState('');
+
+  const changePassword = async () => {
+    setError('');
+    if (newPassword.length < 12) {
+      setError(t('settings.privacy.password.minimum'));
+      return;
+    }
+    if (newPassword !== confirmation) {
+      setError(t('settings.privacy.password.mismatch'));
+      return;
+    }
+    setWorking(true);
+    try {
+      const response = await fetch(`${apiUrl}/api/auth/change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+      });
+      if (!response.ok) throw new Error(t('settings.privacy.password.error'));
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('user_number');
+      localStorage.removeItem('user_name');
+      localStorage.removeItem('must_change_password');
+      window.location.assign('/');
+    } catch (err) {
+      setError(err.message || t('settings.privacy.password.error'));
+      setWorking(false);
+    }
+  };
+
+  return (
+    <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+      <h3 className="text-base font-semibold text-slate-950">{t('settings.privacy.password.title')}</h3>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{t('settings.privacy.password.description')}</p>
+      <div className="mt-4 space-y-4">
+        <label className="block text-sm font-semibold text-slate-900">
+          {t('settings.privacy.password.current')}
+          <input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2" />
+        </label>
+        <label className="block text-sm font-semibold text-slate-900">
+          {t('settings.privacy.password.new')}
+          <input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" minLength={12} maxLength={128} className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2" />
+        </label>
+        <label className="block text-sm font-semibold text-slate-900">
+          {t('settings.privacy.password.confirmation')}
+          <input type="password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="new-password" minLength={12} maxLength={128} className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2" />
+        </label>
+        {error && <p role="alert" className="text-sm font-medium text-rose-700">{error}</p>}
+        <button type="button" disabled={working || !currentPassword || !newPassword || !confirmation} onClick={changePassword} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">
+          {working ? t('settings.privacy.password.working') : t('settings.privacy.password.submit')}
+        </button>
       </div>
     </div>
   );
@@ -319,6 +384,7 @@ function AccountDeletionPanel({ apiUrl, t }) {
       localStorage.removeItem('access_token');
       localStorage.removeItem('user_number');
       localStorage.removeItem('user_name');
+      localStorage.removeItem('must_change_password');
       window.location.assign('/');
     } catch (err) {
       setError(err.message || t('settings.privacy.delete.error'));

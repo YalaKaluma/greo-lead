@@ -119,7 +119,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return response
 
     def _rule_for_path(self, path: str) -> RateLimitRule | None:
-        if path in {"/api/auth/login", "/api/auth/register"} or "password-reset" in path:
+        if path in {
+            "/api/auth/login",
+            "/api/auth/register",
+            "/api/auth/change-password",
+            "/api/onboarding/login",
+            "/api/onboarding/verify-email",
+            "/api/auth/password-recovery/request",
+            "/api/auth/password-recovery/reset",
+        } or "reset-password" in path or "send-invitation" in path:
             return self.auth_limit
         if any(marker in path for marker in (
             "/chat",

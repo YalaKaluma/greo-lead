@@ -346,6 +346,8 @@ def test_every_api_route_has_an_explicit_access_boundary():
         "/api/waitlist",
         "/api/auth/login",
         "/api/auth/register",
+        "/api/auth/password-recovery/request",
+        "/api/auth/password-recovery/reset",
         "/api/onboarding/login",
         "/api/onboarding/set-permanent-password",
         "/api/nudge/health",
@@ -398,3 +400,297 @@ def test_session_version_revokes_previously_issued_token(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         require_authenticated_user(authorization=authorization, db=SingleUserDb(user))
     assert exc_info.value.status_code == 401
+
+
+def test_password_policy_rejects_short_and_common_passwords():
+    from app.utils.password_policy import password_policy_error
+
+    assert password_policy_error("short") is not None
+    assert password_policy_error("password1234") is not None
+    assert password_policy_error("correct horse battery staple") is None
+
+
+class AuditWriteDb:
+    def __init__(self):
+        self.added = []
+        self.commits = 0
+
+    def add(self, item):
+        self.added.append(item)
+
+    def commit(self):
+        self.commits += 1
+
+
+def test_authenticated_password_change_clears_temp_password_and_revokes_sessions(monkeypatch):
+    from app.models import User
+    from app.routers.auth import ChangePasswordRequest, change_password
+    from app.utils.security import hash_password, verify_password
+
+    monkeypatch.setenv("APP_SESSION_SECRET", "test-session-secret-that-is-long-enough-123")
+    user = User(
+        id=21,
+        phone_number="user-a",
+        is_active=True,
+        session_version=4,
+        temp_password=hash_password("TemporaryPass123!"),
+    )
+    db = AuditWriteDb()
+    response = asyncio.run(change_password(
+        payload=ChangePasswordRequest(
+            current_password="TemporaryPass123!",
+            new_password="A much better password 2026!",
+        ),
+        request=_request_with_query(""),
+        current_user=user,
+        db=db,
+    ))
+
+    assert response["success"] is True
+    assert user.temp_password is None
+    assert user.temp_password_expires is None
+    assert user.session_version == 5
+    assert verify_password("A much better password 2026!", user.password_hash)
+    assert db.commits == 1
+
+
+class VerificationDb:
+    def __init__(self, verification):
+        self.verification = verification
+        self.commits = 0
+
+    def query(self, _model):
+        return self
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def order_by(self, *_args, **_kwargs):
+        return self
+
+    def with_for_update(self):
+        return self
+
+    def first(self):
+        return self.verification
+
+    def commit(self):
+        self.commits += 1
+
+
+def test_email_verification_locks_after_five_wrong_codes():
+    from datetime import datetime, timedelta
+    from app.models import EmailVerification
+    from app.services.onboarding_service import EmailVerificationService
+    from app.utils.security import hash_password
+
+    verification = EmailVerification(
+        user_id=1,
+        email="user@example.com",
+        verification_code=hash_password("123456"),
+        verified=False,
+        attempt_count=0,
+        expires_at=datetime.utcnow() + timedelta(minutes=15),
+    )
+    db = VerificationDb(verification)
+    for attempt in range(5):
+        success, message = EmailVerificationService.verify_code(db, 1, "000000")
+        assert success is False
+        if attempt == 4:
+            assert "Too many" in message
+
+    assert verification.attempt_count == 5
+    assert verification.is_valid() is False
+    assert db.commits == 5
+
+
+class LoginDb:
+    def __init__(self, user):
+        self.user = user
+        self.added = []
+        self.commits = 0
+
+    def query(self, _model):
+        return self
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def first(self):
+        return self.user
+
+    def add(self, item):
+        self.added.append(item)
+
+    def commit(self):
+        self.commits += 1
+
+
+def test_temporary_password_can_create_only_one_session(monkeypatch):
+    from datetime import datetime, timedelta
+    from app.models import User
+    from app.routers.auth import LoginRequest, login
+    from app.utils.security import hash_password
+
+    monkeypatch.setenv("APP_SESSION_SECRET", "test-session-secret-that-is-long-enough-123")
+    user = User(
+        id=31,
+        phone_number="user-a",
+        is_active=True,
+        session_version=0,
+        temp_password=hash_password("TemporaryPass123!"),
+        temp_password_expires=datetime.utcnow() + timedelta(hours=1),
+        temp_password_consumed_at=None,
+    )
+    db = LoginDb(user)
+    credentials = LoginRequest(username="user-a", password="TemporaryPass123!")
+
+    first = asyncio.run(login(credentials=credentials, request=_request_with_query(""), db=db))
+    second = asyncio.run(login(credentials=credentials, request=_request_with_query(""), db=db))
+
+    assert first["success"] is True
+    assert first["must_change_password"] is True
+    assert user.temp_password_consumed_at is not None
+    assert second == {"success": False, "message": "Invalid credentials"}
+
+
+def test_new_registration_requires_valid_email():
+    from pydantic import ValidationError
+    from app.routers.auth import RegisterRequest
+
+    with pytest.raises(ValidationError):
+        RegisterRequest(username="not-an-email", password="A sufficiently long password")
+    valid = RegisterRequest(username="new.user@example.com", password="A sufficiently long password")
+    assert str(valid.username) == "new.user@example.com"
+
+
+class MissingRecoveryUserDb:
+    def query(self, _model):
+        return self
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def first(self):
+        return None
+
+
+def test_password_recovery_request_does_not_disclose_missing_account():
+    from fastapi import BackgroundTasks
+    from app.routers.auth import PasswordRecoveryRequest, PASSWORD_RECOVERY_RESPONSE, request_password_recovery
+
+    response = asyncio.run(request_password_recovery(
+        payload=PasswordRecoveryRequest(email="missing@example.com"),
+        request=_request_with_query(""),
+        background_tasks=BackgroundTasks(),
+        db=MissingRecoveryUserDb(),
+    ))
+    assert response == PASSWORD_RECOVERY_RESPONSE
+
+
+class PasswordResetDb:
+    def __init__(self, reset_token, user):
+        self.reset_token = reset_token
+        self.user = user
+        self.current_model = None
+        self.added = []
+        self.commits = 0
+
+    def query(self, model):
+        self.current_model = model
+        return self
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def with_for_update(self):
+        return self
+
+    def first(self):
+        from datetime import datetime, timezone
+        from app.models import PasswordResetToken
+        if self.current_model is PasswordResetToken:
+            if self.reset_token.consumed_at is not None or self.reset_token.expires_at <= datetime.now(timezone.utc):
+                return None
+            return self.reset_token
+        return self.user
+
+    def update(self, values, synchronize_session=False):
+        del synchronize_session
+        if "consumed_at" in values:
+            self.reset_token.consumed_at = values["consumed_at"]
+        return 1
+
+    def add(self, item):
+        self.added.append(item)
+
+    def commit(self):
+        self.commits += 1
+
+
+def test_password_reset_token_is_single_use_and_revokes_sessions():
+    from datetime import datetime, timedelta, timezone
+    from app.models import PasswordResetToken, User
+    from app.routers.auth import PasswordResetRequest, reset_password_with_token
+    from app.utils.security import hash_password_reset_token, verify_password
+
+    raw_token = "r" * 43
+    user = User(id=41, phone_number="user-a", email="a@example.com", is_active=True, session_version=2)
+    reset_token = PasswordResetToken(
+        id=1,
+        user_id=user.id,
+        token_hash=hash_password_reset_token(raw_token),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
+    )
+    db = PasswordResetDb(reset_token, user)
+    response = asyncio.run(reset_password_with_token(
+        payload=PasswordResetRequest(token=raw_token, new_password="A recovered password 2026!"),
+        request=_request_with_query(""),
+        db=db,
+    ))
+
+    assert response["success"] is True
+    assert reset_token.consumed_at is not None
+    assert user.session_version == 3
+    assert verify_password("A recovered password 2026!", user.password_hash)
+
+    with pytest.raises(HTTPException) as replay_error:
+        asyncio.run(reset_password_with_token(
+            payload=PasswordResetRequest(token=raw_token, new_password="Another recovered password 2026!"),
+            request=_request_with_query(""),
+            db=db,
+        ))
+    assert replay_error.value.status_code == 400
+
+
+def test_expired_password_reset_token_is_rejected():
+    from datetime import datetime, timedelta, timezone
+    from app.models import PasswordResetToken, User
+    from app.routers.auth import PasswordResetRequest, reset_password_with_token
+    from app.utils.security import hash_password_reset_token
+
+    raw_token = "e" * 43
+    user = User(id=42, phone_number="user-b", email="b@example.com", is_active=True, session_version=0)
+    reset_token = PasswordResetToken(
+        id=2,
+        user_id=user.id,
+        token_hash=hash_password_reset_token(raw_token),
+        expires_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(reset_password_with_token(
+            payload=PasswordResetRequest(token=raw_token, new_password="A recovered password 2026!"),
+            request=_request_with_query(""),
+            db=PasswordResetDb(reset_token, user),
+        ))
+    assert exc_info.value.status_code == 400
+
+
+def test_password_reset_token_is_only_stored_as_a_hash():
+    from app.utils.security import generate_password_reset_token, hash_password_reset_token
+
+    raw_token, stored_hash = generate_password_reset_token()
+
+    assert raw_token != stored_hash
+    assert len(stored_hash) == 64
+    assert hash_password_reset_token(raw_token) == stored_hash

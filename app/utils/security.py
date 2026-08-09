@@ -102,3 +102,12 @@ def decode_session_token(token: str) -> dict | None:
         return payload
     except (ValueError, TypeError, json.JSONDecodeError, RuntimeError):
         return None
+
+
+def generate_password_reset_token() -> tuple[str, str]:
+    raw_token = secrets.token_urlsafe(32)
+    return raw_token, hash_password_reset_token(raw_token)
+
+
+def hash_password_reset_token(raw_token: str) -> str:
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()

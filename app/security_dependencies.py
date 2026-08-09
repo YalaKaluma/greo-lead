@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import User
-from app.routers.auth import require_authenticated_user
+from app.routers.auth import require_authenticated_user, user_requires_password_change
 
 
 def _user_identifiers(user: User) -> set[str]:
@@ -31,6 +31,9 @@ async def require_authenticated_identity(
     user: User = Depends(require_authenticated_user),
 ) -> User:
     """Reject caller-controlled identities that do not match the signed-in user."""
+
+    if user_requires_password_change(user):
+        raise HTTPException(status_code=403, detail="Password change required")
 
     allowed = _user_identifiers(user)
     claimed: list[str] = []
@@ -67,6 +70,8 @@ def require_scheduler_or_admin(
 
     if authorization:
         user = require_authenticated_user(authorization=authorization, db=db)
+        if user_requires_password_change(user):
+            raise HTTPException(status_code=403, detail="Password change required")
         if getattr(user, "is_admin", False):
             return user
         raise HTTPException(status_code=403, detail="Administrator access required")

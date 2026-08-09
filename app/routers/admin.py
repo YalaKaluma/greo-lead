@@ -11,7 +11,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.routers.auth import require_authenticated_user
+from app.routers.auth import require_authenticated_user, user_requires_password_change
 from app.models import (
     AdminAuditLog,
     AuditLog,
@@ -194,6 +194,8 @@ def _display_priority_feedback(decision: TaskPriorityDecision, task: Task | None
 def require_admin(
     user: User = Depends(require_authenticated_user),
 ) -> User:
+    if user_requires_password_change(user):
+        raise HTTPException(status_code=403, detail="Password change required")
     if not getattr(user, "is_admin", False):
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
@@ -388,6 +390,7 @@ def _set_new_temp_password(user: User) -> str:
     temporary_password = generate_temporary_password()
     user.temp_password = hash_password(temporary_password)
     user.temp_password_expires = datetime.utcnow() + timedelta(hours=24)
+    user.temp_password_consumed_at = None
     user.session_version = int(user.session_version or 0) + 1
     return temporary_password
 

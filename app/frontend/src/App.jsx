@@ -21,6 +21,7 @@ import { useEffect, useRef, useState } from "react";
 import Login from "./Login";
 import Welcome from "./Welcome";
 import Waitlist from "./Waitlist";
+import PasswordRecovery from "./PasswordRecovery";
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { API_URL } from './config';
 import { initializeNotificationRouting, refreshNativeNotificationRegistration } from './services/notifications';
@@ -148,14 +149,16 @@ function App() {
     setIsSidebarOpen(!isSidebarOpen);
   };
 
-  const handleLogin = (userNumber, requiresTour = false) => {
+  const handleLogin = (userNumber, requiresTour = false, mustChangePassword = false) => {
     localStorage.setItem("user_number", userNumber);
     localStorage.removeItem("needs_tour");
     setUserNumber(userNumber);
     setIsLoggedIn(true);
     
     // First-time users start on the default page without an automatic tour.
-    if (requiresTour) {
+    if (mustChangePassword) {
+      setCurrentPage('settings');
+    } else if (requiresTour) {
       setCurrentPage(NEW_USER_DEFAULT_PAGE);
     }
   };
@@ -163,6 +166,14 @@ function App() {
   // Waitlist page
   if (window.location.pathname === "/waitlist") {
     return <Waitlist />;
+  }
+
+  if (window.location.pathname === "/reset-password") {
+    return (
+      <LanguageProvider apiUrl={API_URL} userNumber={null}>
+        <PasswordRecovery />
+      </LanguageProvider>
+    );
   }
 
   if (["/trust-security", "/privacy"].includes(window.location.pathname)) {
@@ -204,11 +215,13 @@ function App() {
   // 🔒 AUTH GATE (existing users)
   if (!isLoggedIn) {
     return (
-      <Login
-        onLogin={(userNumber) => {
-          handleLogin(userNumber, false);
-        }}
-      />
+      <LanguageProvider apiUrl={API_URL} userNumber={null}>
+        <Login
+          onLogin={(userNumber, mustChangePassword) => {
+            handleLogin(userNumber, false, mustChangePassword);
+          }}
+        />
+      </LanguageProvider>
     );
   }
 

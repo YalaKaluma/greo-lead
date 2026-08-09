@@ -4,6 +4,8 @@ import { API_BASE_URL } from './config.js';
 const PUBLIC_API_PATHS = new Set([
   '/api/auth/login',
   '/api/auth/register',
+  '/api/auth/password-recovery/request',
+  '/api/auth/password-recovery/reset',
   '/api/health',
   '/api/onboarding/login',
   '/api/waitlist',
