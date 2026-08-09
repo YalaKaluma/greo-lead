@@ -3,7 +3,7 @@ Auth Router - Handle user authentication
 app/routers/auth.py
 """
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Header, HTTPException, Request, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr, Field
@@ -23,6 +23,7 @@ from app.utils.security import (
     verify_password,
 )
 from app.utils.password_policy import password_policy_error
+from app.utils.session_cookie import SESSION_COOKIE_NAME, clear_session_cookie, set_session_cookie
 
 router = APIRouter(tags=["auth"])
 logger = logging.getLogger(__name__)
@@ -58,9 +59,11 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
-def _session_response(user: User) -> dict:
+def _session_response(user: User, response: Response) -> dict:
+    token = create_session_token(user.id, user.phone_number, user.session_version)
+    set_session_cookie(response, token)
     return {
-        "access_token": create_session_token(user.id, user.phone_number, user.session_version),
+        "access_token": token,
         "token_type": "bearer",  # nosec B105 - OAuth token type, not a password
         "expires_in": 60 * 60 * 24 * 30,
     }
@@ -72,11 +75,15 @@ def user_requires_password_change(user: User) -> bool:
 
 def require_authenticated_user(
     authorization: str | None = Header(default=None),
+    session_cookie: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
     db: Session = Depends(get_db),
 ) -> User:
-    if not authorization or not authorization.lower().startswith("bearer "):
+    token = session_cookie
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+    if not token or not isinstance(token, str):
         raise HTTPException(status_code=401, detail="Authentication required")
-    payload = decode_session_token(authorization.split(" ", 1)[1].strip())
+    payload = decode_session_token(token)
     if not payload:
         raise HTTPException(status_code=401, detail="Session expired or invalid")
     user = db.query(User).filter(User.id == payload["sub"]).first()
@@ -100,7 +107,7 @@ def _find_user_by_username(db: Session, username: str):
 
 
 @router.post("/login")
-async def login(credentials: LoginRequest, request: Request, db: Session = Depends(get_db)):
+async def login(credentials: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     """
     Login endpoint - handles both temporary passwords and permanent passwords.
     """
@@ -167,7 +174,7 @@ async def login(credentials: LoginRequest, request: Request, db: Session = Depen
             "needs_tour": False,
             "must_change_password": True,  # nosec B105 - Boolean session state, not a password value.
             "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 21,
-            **_session_response(user),
+            **_session_response(user, response),
         }
 
     # Check permanent password (returning users)
@@ -192,7 +199,7 @@ async def login(credentials: LoginRequest, request: Request, db: Session = Depen
             "needs_tour": False,
             "must_change_password": False,  # nosec B105 - Boolean session state, not a password value.
             "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 0,
-            **_session_response(user),
+            **_session_response(user, response),
         }
 
     # Neither password matched
@@ -212,7 +219,7 @@ async def login(credentials: LoginRequest, request: Request, db: Session = Depen
 
 
 @router.post("/register")
-async def register(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)):
+async def register(payload: RegisterRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     """
     Create a self-serve account from the login page.
     """
@@ -272,7 +279,7 @@ async def register(payload: RegisterRequest, request: Request, db: Session = Dep
         "is_admin": bool(getattr(user, "is_admin", False)),
         "needs_tour": True,
         "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 21,
-        **_session_response(user),
+        **_session_response(user, response),
     }
 
 
@@ -466,6 +473,7 @@ async def delete_account(
 @router.post("/logout")
 async def logout(
     request: Request,
+    response: Response,
     current_user: User = Depends(require_authenticated_user),
     db: Session = Depends(get_db),
 ):
@@ -481,6 +489,7 @@ async def logout(
         request=request,
     )
     db.commit()
+    clear_session_cookie(response)
     return {"success": True, "message": "Logged out successfully"}
 
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { API_URL } from './config';
 import { useLanguage } from './i18n/LanguageContext';
+import { clearSessionCredentials } from './sessionCredentials';
 
 export default function PasswordRecovery() {
   const { t } = useLanguage();
@@ -36,7 +37,7 @@ export default function PasswordRecovery() {
       if (!response.ok) throw new Error(t(token ? 'recovery.invalidToken' : 'recovery.requestError'));
       setMessage(t(token ? 'recovery.resetSuccess' : 'recovery.requestSuccess'));
       if (token) {
-        localStorage.removeItem('access_token');
+        clearSessionCredentials();
         localStorage.removeItem('user_number');
         localStorage.removeItem('user_name');
         localStorage.removeItem('must_change_password');

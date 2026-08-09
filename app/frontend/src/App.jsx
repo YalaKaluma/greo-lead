@@ -25,6 +25,7 @@ import PasswordRecovery from "./PasswordRecovery";
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { API_URL } from './config';
 import { initializeNotificationRouting, refreshNativeNotificationRegistration } from './services/notifications';
+import { clearSessionCredentials } from './sessionCredentials';
 
 const HOME_PAGE = 'home';
 const TRUST_SECURITY_PAGE = 'trust-security';
@@ -47,6 +48,7 @@ const VALID_PAGE_IDS = new Set([
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
   const [userNumber, setUserNumber] = useState(null);
   const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -56,11 +58,29 @@ function App() {
   // 🔍 Check login on app load
   useEffect(() => {
     const storedUser = localStorage.getItem("user_number");
-    
-    if (storedUser) {
-      setUserNumber(storedUser);
-      setIsLoggedIn(true);
+
+    if (!storedUser) {
+      clearSessionCredentials();
+      setAuthChecked(true);
+      return;
     }
+
+    fetch(`${API_URL}/api/auth/me`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Unauthenticated');
+        const data = await response.json();
+        const authenticatedUser = data?.user?.phone_number || storedUser;
+        localStorage.setItem("user_number", authenticatedUser);
+        setUserNumber(authenticatedUser);
+        setIsLoggedIn(true);
+      })
+      .catch(() => {
+        clearSessionCredentials();
+        localStorage.removeItem("user_number");
+        localStorage.removeItem("user_name");
+        localStorage.removeItem("must_change_password");
+      })
+      .finally(() => setAuthChecked(true));
   }, []);
 
   useEffect(() => {
@@ -154,6 +174,7 @@ function App() {
     localStorage.removeItem("needs_tour");
     setUserNumber(userNumber);
     setIsLoggedIn(true);
+    setAuthChecked(true);
     
     // First-time users start on the default page without an automatic tour.
     if (mustChangePassword) {
@@ -207,6 +228,8 @@ function App() {
   const params = new URLSearchParams(window.location.search);
   const userParam = params.get('user');
   const isNumericUser = userParam && !isNaN(parseInt(userParam));
+
+  if (!authChecked && !isNumericUser) return null;
   
   if (isNumericUser && !isLoggedIn) {
     return <Welcome onLogin={handleLogin} />;
@@ -258,9 +281,7 @@ function MainAppShell({
 
   useEffect(() => {
     if (!userNumber) return;
-    fetch(`${API_URL}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('access_token') || ''}` }
-    })
+    fetch(`${API_URL}/api/auth/me`)
       .then((response) => response.ok ? response.json() : null)
       .then((data) => setOnboardingComplete(Boolean(data?.user?.onboarding_completed)))
       .catch(() => setOnboardingComplete(true));

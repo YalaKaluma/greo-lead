@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { useLanguage } from '../i18n/LanguageContext';
+import { clearSessionCredentials } from '../sessionCredentials';
 import {
   disableNotifications,
   enableNotifications,
@@ -68,9 +69,7 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
 
   useEffect(() => {
     if (!userNumber) return;
-    axios.get(`${apiUrl}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('access_token') || ''}` }
-    })
+    axios.get(`${apiUrl}/api/auth/me`)
       .then((response) => setCurrentUser(response.data.user))
       .catch(() => setCurrentUser(null));
   }, [apiUrl, userNumber]);
@@ -321,7 +320,7 @@ function PasswordChangePanel({ apiUrl, t }) {
         body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
       });
       if (!response.ok) throw new Error(t('settings.privacy.password.error'));
-      localStorage.removeItem('access_token');
+      clearSessionCredentials();
       localStorage.removeItem('user_number');
       localStorage.removeItem('user_name');
       localStorage.removeItem('must_change_password');
@@ -371,17 +370,14 @@ function AccountDeletionPanel({ apiUrl, t }) {
     try {
       const response = await fetch(`${apiUrl}/api/auth/delete-account`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token') || ''}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password, confirmation })
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload.detail || t('settings.privacy.delete.error'));
       }
-      localStorage.removeItem('access_token');
+      clearSessionCredentials();
       localStorage.removeItem('user_number');
       localStorage.removeItem('user_name');
       localStorage.removeItem('must_change_password');

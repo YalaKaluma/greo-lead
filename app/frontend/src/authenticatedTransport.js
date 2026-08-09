@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { API_BASE_URL } from './config.js';
+import { getSessionToken } from './sessionCredentials.js';
 
 const PUBLIC_API_PATHS = new Set([
   '/api/auth/login',
@@ -27,15 +28,23 @@ function requestUrl(input, baseURL) {
   }
 }
 
-function bearerTokenFor(input, baseURL) {
+function trustedApiRequest(input, baseURL) {
   const url = requestUrl(input, baseURL);
-  if (!url || !TRUSTED_API_ORIGINS.has(url.origin)) return null;
+  if (!url || !TRUSTED_API_ORIGINS.has(url.origin)) return false;
   const path = url.pathname.replace(/\/$/, '') || '/';
-  if (!path.startsWith('/api/') || PUBLIC_API_PATHS.has(path)) return null;
-  return localStorage.getItem('access_token');
+  return path.startsWith('/api/');
+}
+
+function bearerTokenFor(input, baseURL) {
+  if (!trustedApiRequest(input, baseURL)) return null;
+  const url = requestUrl(input, baseURL);
+  const path = url.pathname.replace(/\/$/, '') || '/';
+  if (PUBLIC_API_PATHS.has(path)) return null;
+  return getSessionToken();
 }
 
 axios.interceptors.request.use((config) => {
+  if (trustedApiRequest(config.url, config.baseURL)) config.withCredentials = true;
   const token = bearerTokenFor(config.url, config.baseURL);
   if (token) {
     config.headers = config.headers || {};
@@ -46,10 +55,11 @@ axios.interceptors.request.use((config) => {
 
 const nativeFetch = window.fetch.bind(window);
 window.fetch = (input, init = {}) => {
+  const trusted = trustedApiRequest(input);
   const token = bearerTokenFor(input);
-  if (!token) return nativeFetch(input, init);
+  if (!trusted) return nativeFetch(input, init);
 
   const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
-  if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
-  return nativeFetch(input, { ...init, headers });
+  if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
+  return nativeFetch(input, { ...init, headers, credentials: 'include' });
 };

@@ -598,6 +598,70 @@ def test_ci_uses_locked_frontend_dependencies_and_read_only_permissions():
     assert violations == []
 
 
+def test_browser_sessions_use_httponly_cookie_and_not_local_storage(monkeypatch):
+    from fastapi import Response
+    from app.utils import session_cookie
+
+    monkeypatch.setattr(session_cookie, "PUBLIC_APP_URL", "https://alfred.example.com")
+    response = Response()
+    session_cookie.set_session_cookie(response, "signed-session-token")
+    cookie = response.headers["set-cookie"]
+
+    assert "alfred_session=" in cookie
+    assert "HttpOnly" in cookie
+    assert "Secure" in cookie
+    assert "SameSite=lax" in cookie
+
+    frontend = Path(__file__).resolve().parents[1] / "app" / "frontend" / "src"
+    for source_file in frontend.rglob("*"):
+        if source_file.suffix not in {".js", ".jsx"}:
+            continue
+        source = source_file.read_text(encoding="utf-8")
+        assert "localStorage.setItem('access_token'" not in source
+        assert 'localStorage.setItem("access_token"' not in source
+        assert "localStorage.getItem('access_token'" not in source
+        assert 'localStorage.getItem("access_token"' not in source
+
+
+def test_client_credentials_are_not_backed_up_and_cors_is_not_wildcarded():
+    repository_root = Path(__file__).resolve().parents[1]
+    manifest = (
+        repository_root / "app" / "frontend" / "android" / "app" / "src" / "main" / "AndroidManifest.xml"
+    ).read_text(encoding="utf-8")
+    main_source = (repository_root / "app" / "main.py").read_text(encoding="utf-8")
+    transport = (
+        repository_root / "app" / "frontend" / "src" / "authenticatedTransport.js"
+    ).read_text(encoding="utf-8")
+
+    assert 'android:allowBackup="false"' in manifest
+    assert 'allow_origins=["*"]' not in main_source
+    assert "credentials: 'include'" in transport
+    assert "getSessionToken" in transport
+
+
+def test_cookie_authenticated_writes_require_trusted_origin(monkeypatch):
+    from app.security_middleware import CsrfProtectionMiddleware
+    from app.utils.session_cookie import SESSION_COOKIE_NAME
+
+    monkeypatch.setenv("PUBLIC_APP_URL", "https://alfred.example.com")
+    test_app = FastAPI()
+    test_app.add_middleware(CsrfProtectionMiddleware)
+
+    @test_app.post("/write")
+    async def write():
+        return {"ok": True}
+
+    client = TestClient(test_app)
+    client.cookies.set(SESSION_COOKIE_NAME, "signed-session-token")
+    assert client.post("/write").status_code == 403
+    assert client.post(
+        "/write", headers={"Origin": "https://alfred.example.com"}
+    ).status_code == 200
+    assert client.post(
+        "/write", headers={"Authorization": "Bearer signed-session-token"}
+    ).status_code == 200
+
+
 class SingleUserDb:
     def __init__(self, user):
         self.user = user
@@ -623,6 +687,12 @@ def test_session_version_revokes_previously_issued_token(monkeypatch):
     authorization = f"Bearer {token}"
 
     assert require_authenticated_user(authorization=authorization, db=SingleUserDb(user)) is user
+
+    assert require_authenticated_user(
+        authorization=None,
+        session_cookie=token,
+        db=SingleUserDb(user),
+    ) is user
 
     user.session_version += 1
     with pytest.raises(HTTPException) as exc_info:
@@ -756,6 +826,7 @@ class LoginDb:
 
 def test_temporary_password_can_create_only_one_session(monkeypatch):
     from datetime import datetime, timedelta
+    from fastapi import Response
     from app.models import User
     from app.routers.auth import LoginRequest, login
     from app.utils.security import hash_password
@@ -773,11 +844,17 @@ def test_temporary_password_can_create_only_one_session(monkeypatch):
     db = LoginDb(user)
     credentials = LoginRequest(username="user-a", password="TemporaryPass123!")
 
-    first = asyncio.run(login(credentials=credentials, request=_request_with_query(""), db=db))
-    second = asyncio.run(login(credentials=credentials, request=_request_with_query(""), db=db))
+    first_response = Response()
+    first = asyncio.run(
+        login(credentials=credentials, request=_request_with_query(""), response=first_response, db=db)
+    )
+    second = asyncio.run(
+        login(credentials=credentials, request=_request_with_query(""), response=Response(), db=db)
+    )
 
     assert first["success"] is True
     assert first["must_change_password"] is True
+    assert "alfred_session=" in first_response.headers["set-cookie"]
     assert user.temp_password_consumed_at is not None
     assert second == {"success": False, "message": "Invalid credentials"}
 

@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import os
 import time
+from urllib.parse import urlsplit
 from collections import defaultdict, deque
 from dataclasses import dataclass
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
+
+from app.utils.session_cookie import SESSION_COOKIE_NAME
 
 
 SECURITY_HEADERS = {
@@ -68,6 +71,36 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         return apply_security_headers(response)
+
+
+def trusted_application_origins() -> set[str]:
+    origins = {
+        "http://localhost",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "capacitor://localhost",
+        "ionic://localhost",
+    }
+    public_app_url = os.getenv("PUBLIC_APP_URL") or os.getenv("APP_URL")
+    if public_app_url:
+        parsed = urlsplit(public_app_url)
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            origins.add(f"{parsed.scheme}://{parsed.netloc}")
+    return origins
+
+
+class CsrfProtectionMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        unsafe_method = request.method.upper() not in {"GET", "HEAD", "OPTIONS"}
+        cookie_authenticated = bool(request.cookies.get(SESSION_COOKIE_NAME))
+        bearer_authenticated = request.headers.get("authorization", "").lower().startswith("bearer ")
+        if unsafe_method and cookie_authenticated and not bearer_authenticated:
+            origin = request.headers.get("origin", "").rstrip("/")
+            if origin not in trusted_application_origins():
+                return apply_security_headers(
+                    JSONResponse({"detail": "Untrusted request origin"}, status_code=403)
+                )
+        return await call_next(request)
 
 
 @dataclass(frozen=True)

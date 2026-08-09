@@ -5,12 +5,13 @@ from __future__ import annotations
 import hmac
 import os
 
-from fastapi import Depends, Header, HTTPException, Request
+from fastapi import Cookie, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import User
 from app.routers.auth import require_authenticated_user, user_requires_password_change
+from app.utils.session_cookie import SESSION_COOKIE_NAME
 
 
 def _user_identifiers(user: User) -> set[str]:
@@ -86,6 +87,7 @@ async def require_authenticated_identity(
 
 def require_scheduler_or_admin(
     authorization: str | None = Header(default=None),
+    session_cookie: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
     scheduler_secret: str | None = Header(default=None, alias="X-Alfred-Scheduler-Secret"),
     db: Session = Depends(get_db),
 ) -> User | None:
@@ -96,8 +98,12 @@ def require_scheduler_or_admin(
     if expected and len(expected) >= 32 and supplied and hmac.compare_digest(supplied, expected):
         return None
 
-    if authorization:
-        user = require_authenticated_user(authorization=authorization, db=db)
+    if authorization or (session_cookie and isinstance(session_cookie, str)):
+        user = require_authenticated_user(
+            authorization=authorization,
+            session_cookie=session_cookie,
+            db=db,
+        )
         if user_requires_password_change(user):
             raise HTTPException(status_code=403, detail="Password change required")
         if getattr(user, "is_admin", False):

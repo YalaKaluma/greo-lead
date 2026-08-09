@@ -4,7 +4,7 @@ Onboarding Router - API endpoints for user onboarding, authentication, and tour
 ✅ ENHANCED with comprehensive logging and error handling for debugging
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from typing import Optional
@@ -22,6 +22,7 @@ from app.services.onboarding_service import (
 from app.services import journey_service
 from app.routers.tasks import Task as TaskModel
 from app.utils.security import create_session_token, hash_password, verify_password
+from app.utils.session_cookie import set_session_cookie
 from app.services.in_app_onboarding_service import get_session, respond
 
 router = APIRouter(tags=["onboarding"])
@@ -95,7 +96,7 @@ class EmailVerifyRequest(BaseModel):
 # ============== AUTHENTICATION ENDPOINTS ==============
 
 @public_router.post("/login", response_model=LoginResponse)
-async def login(request: LoginRequest, db: Session = Depends(get_db)):
+async def login(request: LoginRequest, response: Response, db: Session = Depends(get_db)):
     """
     Login endpoint for first-time access via temp password.
     After successful login, users enter the app directly.
@@ -120,6 +121,8 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
             user.last_login_at = datetime.utcnow()
             user.last_active_at = user.last_login_at
             db.commit()
+            access_token = create_session_token(user.id, user.phone_number, user.session_version)
+            set_session_cookie(response, access_token)
             return LoginResponse(
                 success=True,
                 message="Welcome back!",
@@ -128,7 +131,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
                 trial_days_left=user.days_left_in_trial(),
                 needs_tour=False,
                 must_change_password=False,
-                access_token=create_session_token(user.id, user.phone_number, user.session_version),
+                access_token=access_token,
                 token_type="bearer",  # nosec B106 - OAuth token type, not a password
                 expires_in=60 * 60 * 24 * 30,
             )
@@ -140,6 +143,8 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
 
     # First-time login with temp password
     if not user.temp_password:
+        access_token = create_session_token(user.id, user.phone_number, user.session_version)
+        set_session_cookie(response, access_token)
         return LoginResponse(
             success=False,
             message="No temporary password set. Please contact support."
@@ -176,7 +181,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
             trial_days_left=user.days_left_in_trial(),
             needs_tour=False,
             must_change_password=True,
-            access_token=create_session_token(user.id, user.phone_number, user.session_version),
+            access_token=access_token,
             token_type="bearer",  # nosec B106 - OAuth token type, not a password
             expires_in=60 * 60 * 24 * 30,
         )

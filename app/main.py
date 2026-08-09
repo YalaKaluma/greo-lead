@@ -16,7 +16,12 @@ from sqlalchemy import text
 import threading
 from app.email_poller import run_email_loop
 from app.services.admin_bootstrap import ensure_admin_schema_and_seed
-from app.security_middleware import RateLimitMiddleware, SecurityHeadersMiddleware
+from app.security_middleware import (
+    CsrfProtectionMiddleware,
+    RateLimitMiddleware,
+    SecurityHeadersMiddleware,
+    trusted_application_origins,
+)
 from app.security_dependencies import require_authenticated_identity
 from app.services.operations_director.health_events import record_exception, record_health_event
 
@@ -106,18 +111,19 @@ logger.info("✓ FastAPI app created")
 logger.info("🌐 Configuring CORS middleware...")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=sorted(trusted_application_origins()),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Alfred-Scheduler-Secret"],
 )
-logger.info("✓ CORS middleware configured (allowing all origins)")
+logger.info("✓ CORS middleware configured for trusted application origins")
 
 
 # --------------------------------------
 # Security headers and rate limiting
 # --------------------------------------
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(CsrfProtectionMiddleware)
 app.add_middleware(RateLimitMiddleware)
 logger.info("✓ Security headers and rate limiting configured")
 

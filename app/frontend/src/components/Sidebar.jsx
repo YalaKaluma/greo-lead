@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useLanguage } from '../i18n/LanguageContext';
+import { clearSessionCredentials } from '../sessionCredentials';
 
 export default function Sidebar({ apiUrl, userNumber, currentPage, onNavigate, isOpen, isMobile, onClose }) {
 
@@ -200,9 +201,10 @@ export default function Sidebar({ apiUrl, userNumber, currentPage, onNavigate, i
         {/* Logout stays visible while leaving room for the Alfred launcher. */}
         <div className="shrink-0 border-t border-slate-800 p-4 pr-24">
           <button
-            onClick={() => {
+            onClick={async () => {
+              await fetch(`${apiUrl}/api/auth/logout`, { method: 'POST' }).catch(() => null);
+              clearSessionCredentials();
               localStorage.removeItem('user_number');
-              localStorage.removeItem('access_token');
               window.location.reload();
             }}
             className="w-full rounded-lg px-4 py-3 text-left text-slate-400 transition-all duration-200 hover:bg-slate-800 hover:text-white"

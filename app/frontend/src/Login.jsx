@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { API_URL } from "./config";
 import { useLanguage } from './i18n/LanguageContext';
+import { storeSessionToken } from './sessionCredentials';
 
 export default function Login({ onLogin }) {
   const { t } = useLanguage();
@@ -37,7 +38,7 @@ export default function Login({ onLogin }) {
       }
       localStorage.setItem("user_number", data.user_number);
       localStorage.setItem("user_name", data.user_name);
-      localStorage.setItem("access_token", data.access_token);
+      storeSessionToken(data.access_token);
       if (data.must_change_password) localStorage.setItem("must_change_password", "true");
       else localStorage.removeItem("must_change_password");
       onLogin(data.user_number, Boolean(data.must_change_password));
