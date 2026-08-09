@@ -1085,3 +1085,62 @@ def test_password_reset_token_is_only_stored_as_a_hash():
     assert raw_token != stored_hash
     assert len(stored_hash) == 64
     assert hash_password_reset_token(raw_token) == stored_hash
+
+
+def test_server_errors_are_sanitized_before_reaching_clients():
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+    from app.main import sanitized_http_exception_handler
+
+    request = _request_with_query("")
+    secret = "postgresql://admin:secret@private-host/customer-data"
+    response = asyncio.run(
+        sanitized_http_exception_handler(
+            request,
+            StarletteHTTPException(status_code=500, detail=secret),
+        )
+    )
+
+    assert response.status_code == 500
+    assert secret.encode() not in response.body
+    assert b"private-host" not in response.body
+
+
+def test_validation_errors_do_not_echo_rejected_input():
+    from fastapi.exceptions import RequestValidationError
+    from app.main import validation_exception_handler
+
+    secret = "a-user-supplied-secret"
+    error = RequestValidationError([
+        {
+            "type": "string_too_short",
+            "loc": ("body", "password"),
+            "msg": "String should have at least 12 characters",
+            "input": secret,
+            "ctx": {"min_length": 12},
+        }
+    ])
+    response = asyncio.run(validation_exception_handler(_request_with_query(""), error))
+
+    assert response.status_code == 422
+    assert secret.encode() not in response.body
+
+
+def test_public_health_does_not_disclose_deployment_or_provider_configuration(monkeypatch):
+    from app import main
+
+    class HealthyConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, _query):
+            return None
+
+    monkeypatch.setattr(main.engine, "connect", lambda: HealthyConnection())
+    response = main.health()
+
+    assert response.status_code == 200
+    assert b"deployment" not in response.body
+    assert b"has_openai_key" not in response.body

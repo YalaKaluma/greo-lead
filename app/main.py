@@ -1,4 +1,6 @@
 from fastapi import Depends, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -90,7 +92,7 @@ try:
     logger.info(f"  Database engine: {engine.url.drivername}")
     logger.info(f"  Database host: {engine.url.host}")
 except Exception as e:
-    logger.error(f"✗ Database initialization failed: {e}")
+    logger.error("Database initialization failed error_type=%s", type(e).__name__)
     logger.error("  This may cause API endpoints to fail!")
 
 # --------------------------------------
@@ -103,6 +105,35 @@ app = FastAPI(
     description="AI-powered Chief of Staff for busy executives",
     redirect_slashes=True  # ← ADDED: Handle both /api/tasks and /api/tasks/
 )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def sanitized_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Never expose implementation errors from server-side failures."""
+
+    if exc.status_code >= 500:
+        logger.error(
+            "Request failed method=%s path=%s status=%s error_type=%s",
+            request.method,
+            request.url.path,
+            exc.status_code,
+            type(exc).__name__,
+        )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": "The request could not be completed."},
+        )
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_request: Request, exc: RequestValidationError):
+    # Values rejected by validation may contain credentials or private content.
+    errors = [
+        {key: value for key, value in error.items() if key not in {"input", "ctx"}}
+        for error in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": errors})
 logger.info("✓ FastAPI app created")
 
 # --------------------------------------
@@ -162,7 +193,7 @@ def _request_log_target(request: Request) -> str:
 async def log_requests(request: Request, call_next):
     start = time.perf_counter()
     log_target = _request_log_target(request)
-    logger.info(f"📥 {request.method} {log_target}")
+    logger.info("Request started method=%s target=%s", request.method, log_target)
     try:
         response = await call_next(request)
     except Exception as exc:
@@ -175,14 +206,24 @@ async def log_requests(request: Request, call_next):
             method=request.method,
             status_code=500,
             response_time_ms=elapsed_ms,
-            message=str(exc),
+            message=type(exc).__name__,
             exc=exc,
         )
-        logger.exception(f"📤 {request.method} {log_target} → 500")
+        logger.error(
+            "Request raised an exception method=%s path=%s error_type=%s",
+            request.method,
+            request.url.path,
+            type(exc).__name__,
+        )
         raise
 
     elapsed_ms = round((time.perf_counter() - start) * 1000)
-    logger.info(f"📤 {request.method} {log_target} → {response.status_code}")
+    logger.info(
+        "Request completed method=%s target=%s status=%s",
+        request.method,
+        log_target,
+        response.status_code,
+    )
     if _should_record_system_health_event(request.url.path, response.status_code, elapsed_ms):
         _record_system_health_event(
             event_type=_classify_response_event(request.url.path, response.status_code, elapsed_ms),
@@ -298,7 +339,10 @@ def _record_system_health_event(
             if db:
                 db.close()
     except Exception as exc:
-        logger.warning(f"Could not record system health event: {exc}")
+        logger.warning(
+            "Could not record system health event error_type=%s",
+            type(exc).__name__,
+        )
 
 # --------------------------------------
 # Include API routers
@@ -341,7 +385,7 @@ for router, prefix, tag, access_class in routers_to_register:
         app.include_router(router, prefix=prefix, tags=[tag], dependencies=dependencies)
         logger.info(f"  ✓ {tag} router registered at {prefix} ({access_class})")
     except Exception as e:
-        logger.error(f"  ✗ Failed to register {tag} router: {e}")
+        logger.error("Failed to register router tag=%s error_type=%s", tag, type(e).__name__)
 
 logger.info("✓ All API routers registered")
 
@@ -363,30 +407,21 @@ def health():
             conn.execute(text("SELECT 1"))
         db_status = "connected"
         db_test = "✓"
-    except Exception as e:
+    except Exception:
         db_status = "error"
-        db_test = f"✗ {str(e)[:50]}"
+        db_test = "failed"
 
     response = {
-        "status": "ok",
+        "status": "ok" if db_status == "connected" else "error",
         "service": "Leadership OS",
         "version": "3.0",
-        "deployment": {
-            "commit": os.getenv("RAILWAY_GIT_COMMIT_SHA") or os.getenv("GIT_COMMIT_SHA") or "unknown",
-            "service": os.getenv("RAILWAY_SERVICE_NAME") or "unknown",
-            "environment": os.getenv("RAILWAY_ENVIRONMENT_NAME") or "unknown",
-            "deployment_id": os.getenv("RAILWAY_DEPLOYMENT_ID") or "unknown",
-        },
         "timestamp": datetime.now().isoformat(),
         "database": db_status,
         "database_test": db_test,
-        "environment": {
-            "has_openai_key": bool(os.getenv("OPENAI_API_KEY")),
-        }
     }
 
     logger.info(f"🏥 Health check called - Status: {response['status']}, DB: {db_status}")
-    return response
+    return JSONResponse(status_code=200 if db_status == "connected" else 503, content=response)
 
 
 logger.info("✓ Health check endpoints configured")
@@ -414,7 +449,7 @@ if static_path.exists():
             logger.warning("  ⚠️  index.html NOT found!")
 
     except Exception as e:
-        logger.error(f"  ✗ Could not list static directory: {e}")
+        logger.error("Could not inspect static directory error_type=%s", type(e).__name__)
 
     # Mount assets
     assets_path = static_path / "assets"
