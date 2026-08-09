@@ -165,7 +165,7 @@ async def login(credentials: LoginRequest, request: Request, db: Session = Depen
             "user_name": user.name,
             "is_admin": bool(getattr(user, "is_admin", False)),
             "needs_tour": False,
-            "must_change_password": True,
+            "must_change_password": True,  # nosec B105 - Boolean session state, not a password value.
             "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 21,
             **_session_response(user),
         }
@@ -190,7 +190,7 @@ async def login(credentials: LoginRequest, request: Request, db: Session = Depen
             "user_name": user.name,
             "is_admin": bool(getattr(user, "is_admin", False)),
             "needs_tour": False,
-            "must_change_password": False,
+            "must_change_password": False,  # nosec B105 - Boolean session state, not a password value.
             "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 0,
             **_session_response(user),
         }
