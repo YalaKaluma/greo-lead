@@ -571,6 +571,18 @@ def test_container_build_is_reproducible_and_runs_as_non_root():
     assert "python:3.11-slim@sha256:" in dockerfile
 
 
+def test_frontend_manifest_and_lockfile_pin_mobile_dependencies():
+    frontend = Path(__file__).resolve().parents[1] / "app" / "frontend"
+    manifest = (frontend / "package.json").read_text(encoding="utf-8")
+    lockfile = (frontend / "pnpm-lock.yaml").read_text(encoding="utf-8")
+
+    assert '"packageManager": "pnpm@10.34.5"' in manifest
+    assert "'@capacitor/ios':\n        specifier: ^8.4.1" in lockfile
+    assert "'@capacitor/push-notifications':\n        specifier: ^8.0.0" in lockfile
+    assert "'@capacitor/ios@8.4.1':" in lockfile
+    assert "'@capacitor/push-notifications@8.1.2':" in lockfile
+
+
 def test_ci_uses_locked_frontend_dependencies_and_read_only_permissions():
     workflows = Path(__file__).resolve().parents[1] / ".github" / "workflows"
     violations = []
