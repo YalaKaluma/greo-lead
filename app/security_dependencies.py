@@ -26,6 +26,23 @@ def ensure_user_identity(user: User, claimed_identity: str | int) -> None:
         raise HTTPException(status_code=403, detail="Request identity does not match authenticated user")
 
 
+def authenticated_user_identifier(user: User) -> str:
+    """Return the canonical identifier used by legacy user-owned data tables."""
+
+    identifier = (user.phone_number or user.email or "").strip()
+    if not identifier:
+        raise HTTPException(status_code=403, detail="Authenticated user has no data identifier")
+    return identifier
+
+
+def require_authenticated_user_identifier(
+    user: User = Depends(require_authenticated_user),
+) -> str:
+    """FastAPI dependency for handlers backed by legacy user-number columns."""
+
+    return authenticated_user_identifier(user)
+
+
 async def require_authenticated_identity(
     request: Request,
     user: User = Depends(require_authenticated_user),

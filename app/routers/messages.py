@@ -32,7 +32,7 @@ class MessageResponse(BaseModel):
 
 @router.get("/messages", response_model=list[MessageResponse])
 def get_messages(
-        user_number: str,
+        user_number: Optional[str] = None,
         limit: Optional[int] = 1000,
         conversation_type: Optional[str] = None,
         db: Session = Depends(get_db),

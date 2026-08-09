@@ -1,5 +1,6 @@
 import pytest
 import ast
+import inspect
 import os
 import subprocess
 import sys
@@ -452,6 +453,40 @@ def test_form_identity_fields_have_explicit_authenticated_owner_checks():
                 missing_checks.append(f"{source_path.name}:{node.name}")
 
     assert missing_checks == []
+
+
+def test_migrated_resource_handlers_derive_query_identity_from_authentication():
+    from fastapi.params import Depends as DependsParameter
+    from app.routers import journey_goals, meetings, tasks
+    from app.security_dependencies import require_authenticated_user_identifier
+
+    violations = []
+    for module in (journey_goals, meetings, tasks):
+        for route in module.router.routes:
+            handler = route.endpoint
+            name = handler.__name__
+            parameter = inspect.signature(handler).parameters.get("user_number")
+            if parameter is None:
+                continue
+            default = parameter.default
+            if isinstance(default, DependsParameter):
+                if default.dependency is not require_authenticated_user_identifier:
+                    violations.append(f"{module.__name__}.{name}")
+                continue
+            # Multipart uploads retain a form field for browser compatibility;
+            # the separate form-inventory test requires an explicit owner check.
+            if default.__class__.__name__ != "Form":
+                violations.append(f"{module.__name__}.{name}")
+
+    assert violations == []
+
+
+def test_canonical_legacy_data_identifier_comes_from_authenticated_user():
+    from app.models import User
+    from app.security_dependencies import authenticated_user_identifier
+
+    user = User(id=1, phone_number="user-a", email="ignored@example.com", is_active=True)
+    assert authenticated_user_identifier(user) == "user-a"
 
 
 class SingleUserDb:

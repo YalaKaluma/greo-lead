@@ -13,7 +13,7 @@ router = APIRouter(prefix="/journal", tags=["journal"])
 # CREATE A JOURNAL ENTRY
 # ----------------------------
 @router.post("/")
-def create_entry(user_id: int, text: str, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+def create_entry(text: str, user_id: int | None = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
     entry = JournalEntry(user_id=current_user.id, text=text)
     db.add(entry)
     db.commit()
@@ -55,7 +55,7 @@ def create_entry(user_id: int, text: str, db: Session = Depends(get_db), current
 # ----------------------------
 
 @router.get("/")
-def list_entries(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+def list_entries(user_id: int | None = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
     entries = (
         db.query(JournalEntry)
         .filter(JournalEntry.user_id == current_user.id)
@@ -65,7 +65,7 @@ def list_entries(user_id: int, db: Session = Depends(get_db), current_user: User
 
 
 @router.get("/trends")
-def get_trends(user_number: str, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+def get_trends(user_number: str | None = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
     return get_reflection_depth_trends(current_user.phone_number, db)
 
 # ----------------------------
@@ -76,7 +76,7 @@ def get_trends(user_number: str, db: Session = Depends(get_db), current_user: Us
 # GET ONE ENTRY
 # ----------------------------
 @router.get("/{entry_id}")
-def get_entry(entry_id: int, user_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+def get_entry(entry_id: int, user_id: int | None = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
     entry = (
         db.query(JournalEntry)
         .filter(
@@ -96,7 +96,7 @@ def get_entry(entry_id: int, user_id: int, db: Session = Depends(get_db), curren
 # ----------------------------
 
 @router.put("/{entry_id}")
-def update_entry(entry_id: int, user_id: int, text: str, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+def update_entry(entry_id: int, text: str, user_id: int | None = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
     entry = (
         db.query(JournalEntry)
         .filter(
@@ -122,7 +122,7 @@ def update_entry(entry_id: int, user_id: int, text: str, db: Session = Depends(g
 # DELETE ENTRY
 # ----------------------------
 @router.delete("/{entry_id}")
-def delete_entry(entry_id: int, user_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+def delete_entry(entry_id: int, user_id: int | None = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
     entry = (
         db.query(JournalEntry)
         .filter(

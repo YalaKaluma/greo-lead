@@ -17,7 +17,7 @@ from app.db import get_db
 from app.models import JourneyProject, Meeting, MeetingProjectLink, ProjectDocument, User
 from app.services.project_intelligence_service import process_project_document
 from app.routers.auth import require_authenticated_user
-from app.security_dependencies import ensure_user_identity
+from app.security_dependencies import authenticated_user_identifier, ensure_user_identity
 
 
 router = APIRouter()
@@ -74,13 +74,15 @@ def _payload(project: JourneyProject, meetings: Optional[list[Meeting]] = None):
 
 
 @router.get("")
-def list_projects(user_number: str, db: Session = Depends(get_db)):
+def list_projects(user_number: Optional[str] = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+    user_number = authenticated_user_identifier(current_user)
     projects = db.query(JourneyProject).options(selectinload(JourneyProject.documents)).filter(JourneyProject.user_number == user_number).order_by(JourneyProject.updated_at.desc()).all()
     return [_payload(project) for project in projects]
 
 
 @router.post("", status_code=201)
-def create_project(payload: ProjectCreate, user_number: str, db: Session = Depends(get_db)):
+def create_project(payload: ProjectCreate, user_number: Optional[str] = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+    user_number = authenticated_user_identifier(current_user)
     project = JourneyProject(user_number=user_number, goal=payload.objective, **payload.model_dump())
     db.add(project)
     db.commit()
@@ -90,14 +92,16 @@ def create_project(payload: ProjectCreate, user_number: str, db: Session = Depen
 
 
 @router.get("/{project_id}")
-def get_project(project_id: int, user_number: str, db: Session = Depends(get_db)):
+def get_project(project_id: int, user_number: Optional[str] = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+    user_number = authenticated_user_identifier(current_user)
     project = _project_or_404(db, project_id, user_number)
     meetings = db.query(Meeting).options(selectinload(Meeting.participants)).join(MeetingProjectLink).filter(MeetingProjectLink.project_id == project.id, Meeting.user_number == user_number).order_by(Meeting.started_at.desc().nullslast(), Meeting.created_at.desc()).all()
     return _payload(project, meetings)
 
 
 @router.patch("/{project_id}")
-def update_project(project_id: int, payload: ProjectUpdate, user_number: str, db: Session = Depends(get_db)):
+def update_project(project_id: int, payload: ProjectUpdate, user_number: Optional[str] = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+    user_number = authenticated_user_identifier(current_user)
     project = _project_or_404(db, project_id, user_number)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(project, field, value)
@@ -112,6 +116,7 @@ def update_project(project_id: int, payload: ProjectUpdate, user_number: str, db
 @router.post("/{project_id}/documents", status_code=201)
 async def upload_document(project_id: int, background_tasks: BackgroundTasks, user_number: str = Form(...), document_type: Optional[str] = Form(None), file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
     ensure_user_identity(current_user, user_number)
+    user_number = authenticated_user_identifier(current_user)
     project = _project_or_404(db, project_id, user_number)
     safe_name = re.sub(r"[^A-Za-z0-9._ -]", "_", file.filename or "project-document")[:300]
     user_dir = STORAGE_ROOT / re.sub(r"[^A-Za-z0-9_-]", "_", user_number)[:100] / str(project.id)
@@ -137,7 +142,8 @@ async def upload_document(project_id: int, background_tasks: BackgroundTasks, us
 
 
 @router.post("/{project_id}/documents/{document_id}/retry", status_code=202)
-def retry_document(project_id: int, document_id: int, user_number: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def retry_document(project_id: int, document_id: int, background_tasks: BackgroundTasks, user_number: Optional[str] = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+    user_number = authenticated_user_identifier(current_user)
     document = db.query(ProjectDocument).filter(ProjectDocument.id == document_id, ProjectDocument.project_id == project_id, ProjectDocument.user_number == user_number).first()
     if not document:
         raise HTTPException(status_code=404, detail="Project document not found.")
@@ -149,7 +155,8 @@ def retry_document(project_id: int, document_id: int, user_number: str, backgrou
 
 
 @router.get("/{project_id}/documents/{document_id}")
-def download_document(project_id: int, document_id: int, user_number: str, db: Session = Depends(get_db)):
+def download_document(project_id: int, document_id: int, user_number: Optional[str] = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+    user_number = authenticated_user_identifier(current_user)
     document = db.query(ProjectDocument).filter(ProjectDocument.id == document_id, ProjectDocument.project_id == project_id, ProjectDocument.user_number == user_number).first()
     if not document or not Path(document.storage_key).is_file():
         raise HTTPException(status_code=404, detail="Project document not found.")

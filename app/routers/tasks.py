@@ -12,6 +12,7 @@ from app.services.timezone_service import get_user_timezone, today_for_timezone
 from app.services.task_mtn_trend_service import get_task_mtn_history, get_task_mtn_trends
 from app.services.onboarding_seed_service import ensure_starter_tasks_visible_today
 from app.services.audit_log_service import user_id_for_identifier, write_audit_log
+from app.security_dependencies import require_authenticated_user_identifier
 
 router = APIRouter()
 
@@ -344,7 +345,7 @@ def attach_today_mtn_metadata(db: Session, user_number: str, tasks: List[Task]) 
 @router.get("", response_model=list[TaskResponse])
 @router.get("/", response_model=list[TaskResponse])
 def get_tasks(
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         filter_type: str = "all",
         project: Optional[str] = None,
         delegated_to: Optional[str] = None,
@@ -455,7 +456,7 @@ def get_tasks(
 
 
 @router.get("/filters")
-def get_filters(user_number: str, db: Session = Depends(get_db)):
+def get_filters(user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db)):
     """
     Get unique project names and delegates for filtering
     Returns: {"projects": [...], "delegates": [...]}
@@ -472,7 +473,7 @@ def get_filters(user_number: str, db: Session = Depends(get_db)):
 
 
 @router.get("/mtn-trends")
-def get_mtn_trends(user_number: str, db: Session = Depends(get_db)):
+def get_mtn_trends(user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db)):
     """Get completed-task MTN score totals for the last 90 days."""
 
     return get_task_mtn_trends(user_number, db, get_user_timezone(db, user_number))
@@ -480,9 +481,9 @@ def get_mtn_trends(user_number: str, db: Session = Depends(get_db)):
 
 @router.get("/mtn-history")
 def get_mtn_history(
-    user_number: str,
     start_date: date,
     end_date: date,
+    user_number: str = Depends(require_authenticated_user_identifier),
     db: Session = Depends(get_db),
 ):
     if end_date < start_date:
@@ -502,8 +503,8 @@ def get_mtn_history(
 
 @router.post("/", response_model=TaskResponse)
 def create_task(
-        user_number: str,
         task: TaskCreate,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """
@@ -547,8 +548,8 @@ def create_task(
 @router.put("/{task_id}", response_model=TaskResponse)
 def update_task(
         task_id: int,
-        user_number: str,
         updates: TaskUpdate,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """
@@ -627,13 +628,14 @@ def update_task(
 @router.post("/reorder")
 def reorder_tasks(
         request: TaskReorderRequest,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """
     Persist the user's current task order.
     """
     tasks = db.query(Task).filter(
-        Task.user_number == request.user_number,
+        Task.user_number == user_number,
         Task.id.in_(request.ordered_task_ids)
     ).all()
 
@@ -659,7 +661,7 @@ def reorder_tasks(
 
 @router.post("/reorder/reset")
 def reset_task_order(
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """
@@ -682,8 +684,8 @@ def reset_task_order(
 
 @router.post("/bulk-defer-non-top-10")
 def bulk_defer_non_top_10(
-        user_number: str,
         request: BulkDeferNonTop10Request,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """
@@ -729,8 +731,8 @@ def bulk_defer_non_top_10(
 @router.post("/{task_id}/follow-up", response_model=TaskFollowUpResponse)
 def create_follow_up_task(
         task_id: int,
-        user_number: str,
         request: TaskFollowUpRequest,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """
@@ -794,7 +796,7 @@ def create_follow_up_task(
 @router.patch("/{task_id}/toggle", response_model=TaskResponse)
 def toggle_task(
         task_id: int,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """
@@ -833,7 +835,7 @@ def toggle_task(
 @router.delete("/{task_id}")
 def delete_task(
         task_id: int,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """
