@@ -6,6 +6,7 @@ from typing import Optional
 from app.db import get_db
 from app.models import User
 from app.services.opportunity import accept_opportunity, decline_opportunity, get_best_opportunities
+from app.utils.safe_errors import internal_error
 
 router = APIRouter()
 
@@ -51,7 +52,7 @@ def generate_opportunities(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate opportunities: {str(e)}")
+        raise internal_error("opportunity_generate", e, "Failed to generate opportunities.")
 
 
 @router.post("/{opportunity_id}/accept")
@@ -65,10 +66,10 @@ def accept_suggestion(
         return accept_opportunity(db, user_id, opportunity_id)
     except HTTPException:
         raise
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to accept opportunity: {str(e)}")
+        raise internal_error("opportunity_accept", e, "Failed to accept opportunity.")
 
 
 @router.post("/{opportunity_id}/decline")
@@ -82,7 +83,7 @@ def decline_suggestion(
         return decline_opportunity(db, user_id, opportunity_id, request.reason)
     except HTTPException:
         raise
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to decline opportunity: {str(e)}")
+        raise internal_error("opportunity_decline", e, "Failed to decline opportunity.")

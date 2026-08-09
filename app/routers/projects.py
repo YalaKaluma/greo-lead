@@ -18,6 +18,7 @@ from app.models import JourneyProject, Meeting, MeetingProjectLink, ProjectDocum
 from app.services.project_intelligence_service import process_project_document
 from app.routers.auth import require_authenticated_user
 from app.security_dependencies import authenticated_user_identifier, ensure_user_identity
+from app.utils.safe_storage import stored_path_within_root
 
 
 router = APIRouter()
@@ -158,6 +159,12 @@ def retry_document(project_id: int, document_id: int, background_tasks: Backgrou
 def download_document(project_id: int, document_id: int, user_number: Optional[str] = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
     user_number = authenticated_user_identifier(current_user)
     document = db.query(ProjectDocument).filter(ProjectDocument.id == document_id, ProjectDocument.project_id == project_id, ProjectDocument.user_number == user_number).first()
-    if not document or not Path(document.storage_key).is_file():
+    stored_path = stored_path_within_root(document.storage_key, STORAGE_ROOT) if document else None
+    if not document or not stored_path or not stored_path.is_file():
         raise HTTPException(status_code=404, detail="Project document not found.")
-    return FileResponse(document.storage_key, media_type=document.content_type, filename=document.filename)
+    return FileResponse(
+        stored_path,
+        media_type=document.content_type,
+        filename=document.filename,
+        headers={"Cache-Control": "private, no-store"},
+    )

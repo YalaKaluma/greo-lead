@@ -324,13 +324,12 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
 
     print(f"\n{'=' * 60}")
     print(f"🎯 DEBUG [process-onboarding-data]: ENDPOINT CALLED")
-    print(f"   user_number: {user_number}")
     print(f"{'=' * 60}")
 
     # Get user
     user = _find_user_by_number_or_email(db, user_number)
     if not user:
-        print(f"❌ DEBUG: User not found for phone_number={user_number}")
+        print("DEBUG: Authenticated user not found")
         raise HTTPException(status_code=404, detail="User not found")
 
     print(f"✅ DEBUG: User found - id={user.id}, name={user.name}")
@@ -350,7 +349,7 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
     data = user.onboarding_data
     print(f"✅ DEBUG: onboarding_data found:")
     print(f"   Keys: {list(data.keys())}")
-    print(f"   Data: {data}")
+    print("   Onboarding data content omitted from logs")
 
     results = {
         "success": False,
@@ -493,7 +492,7 @@ async def debug_user_data(user_number: str, db: Session = Depends(get_db)):
 
     Example: GET /api/onboarding/debug/user-data?user_number=whatsapp:+14709150111
     """
-    print(f"\n🔍 DEBUG ENDPOINT: Checking user data for {user_number}")
+    print("DEBUG ENDPOINT: Checking authenticated user data")
 
     user = _find_user_by_number_or_email(db, user_number)
 
@@ -519,5 +518,5 @@ async def debug_user_data(user_number: str, db: Session = Depends(get_db)):
         "temp_password": user.temp_password,  # To verify password was saved
     }
 
-    print(f"   Returning: {result}")
+    print("   Returning onboarding diagnostics")
     return result

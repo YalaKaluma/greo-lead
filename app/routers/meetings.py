@@ -25,6 +25,7 @@ from app.services.priority_service import PriorityService
 from app.services.priority_llm_service import PriorityLLMService
 from app.routers.auth import require_authenticated_user
 from app.security_dependencies import authenticated_user_identifier, ensure_user_identity, require_authenticated_user_identifier
+from app.utils.safe_storage import stored_path_within_root
 
 router = APIRouter()
 ALLOWED_AUDIO_TYPES = {"audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a", "audio/x-m4a", "audio/webm", "video/webm"}
@@ -759,9 +760,15 @@ async def upload_meeting(
 @router.get("/{meeting_id}/recording")
 def get_recording(meeting_id: int, user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db)):
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
-    if not meeting or not meeting.recording_storage_key or not Path(meeting.recording_storage_key).is_file():
+    stored_path = stored_path_within_root(meeting.recording_storage_key, STORAGE_ROOT) if meeting and meeting.recording_storage_key else None
+    if not meeting or not stored_path or not stored_path.is_file():
         raise HTTPException(status_code=404, detail="Recording not found.")
-    return FileResponse(meeting.recording_storage_key, media_type=meeting.recording_content_type, filename=meeting.recording_filename)
+    return FileResponse(
+        stored_path,
+        media_type=meeting.recording_content_type,
+        filename=meeting.recording_filename,
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 @router.delete("/{meeting_id}/recording", status_code=204)
@@ -769,8 +776,9 @@ def delete_recording(meeting_id: int, user_number: str = Depends(require_authent
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found.")
-    if meeting.recording_storage_key:
-        Path(meeting.recording_storage_key).unlink(missing_ok=True)
+    stored_path = stored_path_within_root(meeting.recording_storage_key, STORAGE_ROOT) if meeting.recording_storage_key else None
+    if stored_path:
+        stored_path.unlink(missing_ok=True)
     meeting.recording_storage_key = None
     meeting.recording_filename = None
     meeting.recording_content_type = None
@@ -927,7 +935,8 @@ def delete_meeting(meeting_id: int, user_number: str = Depends(require_authentic
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found.")
-    if meeting.recording_storage_key:
-        Path(meeting.recording_storage_key).unlink(missing_ok=True)
+    stored_path = stored_path_within_root(meeting.recording_storage_key, STORAGE_ROOT) if meeting.recording_storage_key else None
+    if stored_path:
+        stored_path.unlink(missing_ok=True)
     db.delete(meeting)
     db.commit()

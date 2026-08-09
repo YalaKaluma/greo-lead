@@ -1,0 +1,24 @@
+"""Privacy-preserving helpers for unexpected API failures."""
+
+from __future__ import annotations
+
+import logging
+import uuid
+
+from fastapi import HTTPException
+
+
+logger = logging.getLogger("app.security.errors")
+
+
+def internal_error(context: str, error: Exception, public_detail: str) -> HTTPException:
+    """Log only an incident reference and exception type, never exception text."""
+
+    incident_id = uuid.uuid4().hex[:12]
+    logger.error(
+        "Internal operation failed context=%s incident_id=%s error_type=%s",
+        context,
+        incident_id,
+        type(error).__name__,
+    )
+    return HTTPException(status_code=500, detail=f"{public_detail} Reference: {incident_id}")

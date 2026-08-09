@@ -360,7 +360,7 @@ def get_tasks(
     goal_id: filter by goal ID
     """
     try:
-        print(f"[TASKS API] Fetching tasks for user: {user_number}")
+        print("[TASKS API] Fetching authenticated user's tasks")
         print(
             f"[TASKS API] Filters - type: {filter_type}, project: {project}, delegate: {delegated_to}, goal_id: {goal_id}")
         repaired_count = ensure_starter_tasks_visible_today(db, user_number)
@@ -446,13 +446,8 @@ def get_tasks(
         return sorted_tasks
 
     except Exception as e:
-        print(f"[TASKS API ERROR] Exception occurred: {type(e).__name__}: {str(e)}")
-        import traceback
-        print(f"[TASKS API ERROR] Traceback:\n{traceback.format_exc()}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error fetching tasks: {str(e)}"
-        )
+        from app.utils.safe_errors import internal_error
+        raise internal_error("task_list", e, "Unable to fetch tasks.")
 
 
 @router.get("/filters")

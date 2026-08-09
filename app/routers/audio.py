@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.services.audio_service import synthesize_speech, transcribe_audio
+from app.utils.safe_errors import internal_error
 
 router = APIRouter()
 
@@ -22,11 +23,7 @@ async def transcribe(file: UploadFile = File(...)):
         transcript = await transcribe_audio(file)
         return {"transcript": transcript}
     except Exception as e:
-        print(f"Audio transcription error: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Transcription failed: {str(e)}",
-        )
+        raise internal_error("audio_transcription", e, "Transcription failed.")
 
 
 @router.post("/speech")
@@ -46,8 +43,4 @@ async def speech(request: SpeechRequest):
             headers={"Cache-Control": "no-store"},
         )
     except Exception as e:
-        print(f"Audio speech generation error: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Speech generation failed: {str(e)}",
-        )
+        raise internal_error("speech_generation", e, "Speech generation failed.")

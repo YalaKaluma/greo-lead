@@ -489,6 +489,44 @@ def test_canonical_legacy_data_identifier_comes_from_authenticated_user():
     assert authenticated_user_identifier(user) == "user-a"
 
 
+def test_internal_error_does_not_expose_exception_text(caplog):
+    from app.utils.safe_errors import internal_error
+
+    secret = "postgresql://private-user:private-password@private-host/database"
+    error = internal_error("security_test", RuntimeError(secret), "Operation failed.")
+
+    assert error.status_code == 500
+    assert secret not in error.detail
+    assert secret not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+def test_persisted_upload_paths_cannot_escape_storage_root(tmp_path):
+    from app.utils.safe_storage import stored_path_within_root
+
+    storage_root = tmp_path / "uploads"
+    storage_root.mkdir()
+    owned_file = storage_root / "owned.txt"
+    owned_file.write_text("private", encoding="utf-8")
+    outside_file = tmp_path / "outside.txt"
+    outside_file.write_text("other", encoding="utf-8")
+
+    assert stored_path_within_root(str(owned_file), storage_root) == owned_file.resolve()
+    assert stored_path_within_root(str(outside_file), storage_root) is None
+    assert stored_path_within_root(str(storage_root / ".." / "outside.txt"), storage_root) is None
+
+
+def test_high_risk_private_content_is_not_printed_to_application_logs():
+    repository_root = Path(__file__).resolve().parents[1]
+    chat_source = (repository_root / "app" / "routers" / "chat.py").read_text(encoding="utf-8")
+    onboarding_source = (repository_root / "app" / "routers" / "onboarding.py").read_text(encoding="utf-8")
+    tasks_source = (repository_root / "app" / "routers" / "tasks.py").read_text(encoding="utf-8")
+
+    assert "Alfred Response: {reply}" not in chat_source
+    assert 'print(f"   Data: {data}")' not in onboarding_source
+    assert "traceback.format_exc()" not in tasks_source
+
+
 class SingleUserDb:
     def __init__(self, user):
         self.user = user

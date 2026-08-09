@@ -79,7 +79,6 @@ async def send_chat_message(
     """
 
     print(f"\n🔵 WEB CHAT MESSAGE RECEIVED:")
-    print(f"   User: {chat_msg.user_number}")
     print(f"   Message received; length={len(chat_msg.message or '')}")
 
     # Get user to check onboarding status
@@ -122,7 +121,6 @@ async def send_chat_message(
         conversation_type=conversation_type,
     )
 
-    print(f"   Alfred Response: {reply}")
     print(f"🔵 WEB CHAT MESSAGE COMPLETE\n")
 
     # Check if this triggers any tour actions (for onboarding)
