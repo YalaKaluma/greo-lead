@@ -333,7 +333,6 @@ async def request_password_recovery(
         metadata={"delivery": "email_queued"},
         request=request,
     )
-    db.commit()
     background_tasks.add_task(_deliver_password_recovery_email, user.email, reset_url, user.id)
 
     return PASSWORD_RECOVERY_RESPONSE
@@ -382,7 +381,6 @@ async def reset_password_with_token(
         metadata={"method": "email_recovery"},
         request=request,
     )
-    db.commit()
     return {"success": True, "message": "Password reset complete. Sign in with your new password."}
 
 
@@ -416,7 +414,6 @@ async def change_password(
         metadata={"method": "authenticated_change"},
         request=request,
     )
-    db.commit()
     return {"success": True, "message": "Password changed. Sign in again."}
 
 

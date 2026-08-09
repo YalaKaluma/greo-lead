@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
-from app.models import JourneyProject, Meeting, MeetingProjectLink, ProjectDocument
+from app.models import JourneyProject, Meeting, MeetingProjectLink, ProjectDocument, User
 from app.services.project_intelligence_service import process_project_document
 from app.routers.auth import require_authenticated_user
 from app.security_dependencies import ensure_user_identity
