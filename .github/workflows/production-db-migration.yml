@@ -2,9 +2,6 @@ name: Production DB Migration
 
 on:
   workflow_dispatch:
-
-permissions:
-  contents: read
     inputs:
       confirm_backup:
         description: "Type BACKUP_DONE to confirm the Neon production backup is complete"
@@ -13,6 +10,9 @@ permissions:
         description: "Alembic target revision"
         required: true
         default: "head"
+
+permissions:
+  contents: read
 
 concurrency:
   group: production-db-migration
