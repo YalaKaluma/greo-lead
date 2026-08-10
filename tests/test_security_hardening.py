@@ -520,6 +520,39 @@ def test_sensitive_surfaces_remain_registered_as_authenticated():
         assert registration in main_source
 
 
+def test_notifications_and_opportunities_derive_ownership_from_session():
+    from app.routers.notifications import (
+        PreferencesRequest,
+        SubscribeRequest,
+        TestNotificationRequest,
+        UnsubscribeRequest,
+    )
+    from app.routers.opportunities import (
+        AcceptOpportunityRequest,
+        DeclineOpportunityRequest,
+        GenerateOpportunitiesRequest,
+    )
+
+    request_models = (
+        PreferencesRequest,
+        SubscribeRequest,
+        TestNotificationRequest,
+        UnsubscribeRequest,
+        AcceptOpportunityRequest,
+        DeclineOpportunityRequest,
+        GenerateOpportunitiesRequest,
+    )
+    for request_model in request_models:
+        assert "user_number" not in request_model.model_fields
+
+    notifications_source = Path("app/routers/notifications.py").read_text(encoding="utf-8")
+    opportunities_source = Path("app/routers/opportunities.py").read_text(encoding="utf-8")
+    assert "Depends(require_authenticated_user_identifier)" in notifications_source
+    assert "current_user.id" in opportunities_source
+    assert "request.user_number" not in notifications_source
+    assert "request.user_number" not in opportunities_source
+
+
 def _dependency_names(route: APIRoute) -> set[str]:
     names: set[str] = set()
     pending = list(route.dependant.dependencies)

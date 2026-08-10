@@ -159,9 +159,7 @@ export default function GoalProgressReview({ apiUrl, userNumber, expandedGoalId 
   const acceptRecommendation = async (recommendationId) => {
     setRecommendationActions(prev => ({ ...prev, [recommendationId]: 'working' }));
     try {
-      await axios.post(`${apiUrl}/api/opportunities/${recommendationId}/accept`, {
-        user_number: userNumber
-      });
+      await axios.post(`${apiUrl}/api/opportunities/${recommendationId}/accept`, {});
       setRecommendationActions(prev => ({ ...prev, [recommendationId]: 'accepted' }));
       await loadReview();
     } catch (err) {
