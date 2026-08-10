@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import User
+from app.security_dependencies import require_authenticated_user_identifier
 from app.services.notifications import (
     NotificationPayload,
     NotificationService,
@@ -26,7 +27,6 @@ class PushKeysRequest(BaseModel):
 
 
 class SubscribeRequest(BaseModel):
-    user_number: str
     endpoint: str
     keys: PushKeysRequest
     browser: str | None = None
@@ -35,20 +35,17 @@ class SubscribeRequest(BaseModel):
 
 
 class UnsubscribeRequest(BaseModel):
-    user_number: str
     endpoint: str | None = None
     subscription_id: int | None = None
 
 
 class PreferencesRequest(BaseModel):
-    user_number: str
     notifications_enabled: bool | None = None
     notification_types_enabled: dict[str, bool] | None = None
     timezone: str | None = None
 
 
 class TestNotificationRequest(BaseModel):
-    user_number: str
     title: str = Field(default="Alfred notifications are ready", max_length=220)
     body: str = Field(default="This is a test notification from Alfred.")
     url: str | None = "/settings"
@@ -65,10 +62,14 @@ def _require_user(db: Session, user_number: str) -> User:
 
 
 @router.post("/subscribe")
-def subscribe(request: SubscribeRequest, db: Session = Depends(get_db)):
-    _require_user(db, request.user_number)
+def subscribe(
+    request: SubscribeRequest,
+    db: Session = Depends(get_db),
+    user_number: str = Depends(require_authenticated_user_identifier),
+):
+    _require_user(db, user_number)
     subscription = NotificationService(db).save_subscription(
-        request.user_number,
+        user_number,
         PushSubscriptionPayload(
             endpoint=request.endpoint,
             keys=PushSubscriptionKeys(p256dh=request.keys.p256dh, auth=request.keys.auth),
@@ -84,10 +85,14 @@ def subscribe(request: SubscribeRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/unsubscribe")
-def unsubscribe(request: UnsubscribeRequest, db: Session = Depends(get_db)):
-    _require_user(db, request.user_number)
+def unsubscribe(
+    request: UnsubscribeRequest,
+    db: Session = Depends(get_db),
+    user_number: str = Depends(require_authenticated_user_identifier),
+):
+    _require_user(db, user_number)
     deactivated_count = NotificationService(db).unsubscribe(
-        request.user_number,
+        user_number,
         endpoint=request.endpoint,
         subscription_id=request.subscription_id,
     )
@@ -98,16 +103,23 @@ def unsubscribe(request: UnsubscribeRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/status")
-def status(user_number: str, db: Session = Depends(get_db)):
+def status(
+    db: Session = Depends(get_db),
+    user_number: str = Depends(require_authenticated_user_identifier),
+):
     _require_user(db, user_number)
     return NotificationService(db).status(user_number)
 
 
 @router.put("/preferences")
-def update_preferences(request: PreferencesRequest, db: Session = Depends(get_db)):
-    _require_user(db, request.user_number)
+def update_preferences(
+    request: PreferencesRequest,
+    db: Session = Depends(get_db),
+    user_number: str = Depends(require_authenticated_user_identifier),
+):
+    _require_user(db, user_number)
     preferences = NotificationService(db).update_preferences(
-        request.user_number,
+        user_number,
         notifications_enabled=request.notifications_enabled,
         notification_types_enabled=request.notification_types_enabled,
         timezone=request.timezone,
@@ -119,11 +131,15 @@ def update_preferences(request: PreferencesRequest, db: Session = Depends(get_db
 
 
 @router.post("/test")
-def send_test_notification(request: TestNotificationRequest, db: Session = Depends(get_db)):
-    _require_user(db, request.user_number)
+def send_test_notification(
+    request: TestNotificationRequest,
+    db: Session = Depends(get_db),
+    user_number: str = Depends(require_authenticated_user_identifier),
+):
+    _require_user(db, user_number)
     result = NotificationService(db).send(
         NotificationPayload(
-            user_number=request.user_number,
+            user_number=user_number,
             title=request.title,
             body=request.body,
             url=request.url,

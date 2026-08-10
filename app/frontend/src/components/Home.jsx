@@ -434,7 +434,6 @@ export default function Home({ apiUrl, userNumber, onNavigate }) {
     setOpportunityActions((prev) => ({ ...prev, [opportunityId]: 'working' }));
     try {
       await axios.post(`${apiUrl}/api/opportunities/${opportunityId}/${action === 'accept' ? 'accept' : 'decline'}`, {
-        user_number: userNumber,
         reason: action === 'decline' ? 'Dismissed from Home' : undefined,
       });
       setOpportunityActions((prev) => ({ ...prev, [opportunityId]: action === 'accept' ? 'accepted' : 'dismissed' }));
