@@ -24,8 +24,14 @@ On startup the backend:
 
 - Loads `.env` through `app/config.py`.
 - Verifies the presence of required database, OpenAI, authentication, scheduler, public-URL, and default-user settings.
-- Creates/verifies SQLAlchemy tables with `Base.metadata.create_all`.
-- Ensures admin schema and seed data are present through `ensure_admin_schema_and_seed`.
+- Treats Alembic as the only deployed schema owner. Railway runs `alembic upgrade head`
+  once as its pre-deploy command; the application process never creates or alters tables.
+- Refuses to start when the database is unavailable or `alembic_version` is not the
+  repository head. The original `20260609_0001` revision is a baseline for the
+  historical schema, so a completely new database must first restore the reviewed
+  baseline from `db_migrations/` before running the Alembic chain.
+- Administrator creation is an explicit operational action; application startup does
+  not automatically promote the first registered user.
 - Registers API routers under `/api/...`.
 - Serves built frontend assets from repository-level `static/` when present.
 - Starts `app.email_poller.run_email_loop` in a daemon thread.

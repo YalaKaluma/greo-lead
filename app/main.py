@@ -11,13 +11,12 @@ import os
 import time
 from urllib.parse import parse_qsl, urlencode
 from datetime import datetime
-from app.db import Base, engine, SessionLocal
+from app.db import engine, SessionLocal
 from app.routers import journal, tasks, nudge, journey, messages, habits, waitlist, onboarding, chat, priority, leadership_coaching_router, audio, meetings, projects, message_feedback, opportunities, message_signals, settings, admin, admin_operations, admin_cto, usage, home, notifications
 from app.routers import auth
 from sqlalchemy import text
 import threading
 from app.email_poller import run_email_loop
-from app.services.admin_bootstrap import ensure_admin_schema_and_seed
 from app.security_middleware import (
     CsrfProtectionMiddleware,
     RateLimitMiddleware,
@@ -26,6 +25,7 @@ from app.security_middleware import (
 )
 from app.security_dependencies import require_authenticated_identity
 from app.services.operations_director.health_events import record_exception, record_health_event
+from app.utils.schema_readiness import verify_database_schema
 
 # Configure logging with timestamp
 logging.basicConfig(
@@ -77,23 +77,6 @@ if missing_vars:
     logger.warning(f"⚠️  Missing {len(missing_vars)} environment variable(s): {', '.join(missing_vars)}")
 else:
     logger.info("✓ All required environment variables are set")
-
-# --------------------------------------
-# Database Initialization
-# --------------------------------------
-logger.info("💾 Initializing Database...")
-try:
-    if os.getenv("SKIP_DB_INIT", "").lower() in {"1", "true", "yes"}:
-        logger.info("Database initialization skipped by SKIP_DB_INIT")
-    else:
-        Base.metadata.create_all(bind=engine)
-        ensure_admin_schema_and_seed()
-    logger.info("✓ Database tables created/verified successfully")
-    logger.info(f"  Database engine: {engine.url.drivername}")
-    logger.info(f"  Database host: {engine.url.host}")
-except Exception as e:
-    logger.error("Database initialization failed error_type=%s", type(e).__name__)
-    logger.error("  This may cause API endpoints to fail!")
 
 # --------------------------------------
 # Initialize App
@@ -526,6 +509,8 @@ else:
 
 @app.on_event("startup")
 def start_email():
+    revision = verify_database_schema(engine)
+    logger.info("Database readiness verified revision=%s", revision)
     if os.getenv("SKIP_STARTUP_TASKS", "").lower() in {"1", "true", "yes"}:
         logger.info("Startup background tasks skipped by SKIP_STARTUP_TASKS")
         return

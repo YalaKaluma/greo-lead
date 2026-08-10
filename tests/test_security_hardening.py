@@ -1144,3 +1144,54 @@ def test_public_health_does_not_disclose_deployment_or_provider_configuration(mo
     assert response.status_code == 200
     assert b"deployment" not in response.body
     assert b"has_openai_key" not in response.body
+
+
+def test_application_startup_does_not_mutate_database_schema():
+    main_source = Path("app/main.py").read_text(encoding="utf-8")
+    docker_source = Path("Dockerfile").read_text(encoding="utf-8")
+    procfile_source = Path("Procfile").read_text(encoding="utf-8")
+
+    assert "Base.metadata.create_all" not in main_source
+    assert "ensure_admin_schema_and_seed" not in main_source
+    assert "verify_database_schema(engine)" in main_source
+    assert "alembic upgrade" not in docker_source
+    assert "alembic upgrade" not in procfile_source
+
+
+def test_database_readiness_requires_exact_alembic_head(monkeypatch):
+    from app.utils import schema_readiness
+
+    class Result:
+        def __init__(self, value):
+            self.value = value
+
+        def scalar_one_or_none(self):
+            return self.value
+
+    class Connection:
+        def __init__(self, revision):
+            self.revision = revision
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, query):
+            if "alembic_version" in str(query):
+                return Result(self.revision)
+            return Result(1)
+
+    class Engine:
+        def __init__(self, revision):
+            self.revision = revision
+
+        def connect(self):
+            return Connection(self.revision)
+
+    monkeypatch.setattr(schema_readiness, "expected_schema_revision", lambda _path: "required-head")
+
+    assert schema_readiness.verify_database_schema(Engine("required-head")) == "required-head"
+    with pytest.raises(RuntimeError, match="required Alembic revision"):
+        schema_readiness.verify_database_schema(Engine("stale-head"))
