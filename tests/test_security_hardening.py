@@ -1270,6 +1270,17 @@ def test_static_catch_all_rejects_paths_outside_static_root():
     assert "file_path.is_relative_to(static_root)" in source
 
 
+def test_temporary_onboarding_diagnostics_are_not_exposed():
+    from app import main
+
+    route_paths = {getattr(route, "path", None) for route in main.app.routes}
+    onboarding_source = Path("app/routers/onboarding.py").read_text(encoding="utf-8")
+
+    assert "/api/onboarding/debug/user-data" not in route_paths
+    assert '@router.get("/debug/user-data")' not in onboarding_source
+    assert '"temp_password": user.temp_password' not in onboarding_source
+
+
 def test_failure_logging_and_client_errors_do_not_persist_exception_text(caplog):
     import logging
     import re
