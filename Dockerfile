@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim AS frontend-builder
+FROM node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS frontend-builder
 
 WORKDIR /app/frontend
 RUN corepack enable
@@ -22,7 +22,7 @@ RUN apt-get update && \
 
 WORKDIR /app
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
 COPY --chown=alfred:alfred app/ ./app
 COPY --chown=alfred:alfred alembic.ini ./alembic.ini

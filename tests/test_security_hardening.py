@@ -1213,3 +1213,31 @@ def test_public_api_documentation_is_disabled_by_default(monkeypatch):
     assert 'docs_url="/docs" if os.getenv("ENABLE_API_DOCS"' in main_source
     assert "redoc_url=None" in main_source
     assert 'openapi_url="/openapi.json" if os.getenv("ENABLE_API_DOCS"' in main_source
+
+
+def test_supply_chain_inputs_are_immutable_and_hash_locked():
+    import re
+    import subprocess
+
+    workflows = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in Path(".github/workflows").glob("*.yml")
+    )
+    dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
+    production_lock = Path("requirements.txt").read_text(encoding="utf-8")
+
+    assert not re.search(r"uses:\s+[^\s#]+@(v\d+|main|master)(?:\s|$)", workflows)
+    assert "pip install -r requirements" not in workflows
+    assert "pip install --require-hashes" in workflows
+    assert "pip install --no-cache-dir --require-hashes" in dockerfile
+    assert "FROM node:20-bookworm-slim@sha256:" in dockerfile
+    assert "FROM python:3.11-slim@sha256:" in dockerfile
+    assert "--hash=sha256:" in production_lock
+
+    tracked_venv = subprocess.run(
+        ["git", "ls-files", "venv"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert tracked_venv.stdout.strip() == ""
