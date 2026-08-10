@@ -54,6 +54,7 @@ from app.services.operations_director.health_events import (
     record_job_failure,
 )
 from app.security_dependencies import require_scheduler_or_admin
+from app.routers.admin import require_admin
 from app.utils.safe_errors import internal_error, log_failure
 from app.config import (
     OPENAI_API_KEY,
@@ -1480,7 +1481,7 @@ def sunday_review_batch(
 # -------------------------------------------------
 
 @router.get("/nudge/reload_config")
-def reload_config(_authorized=Depends(require_scheduler_or_admin)):
+def reload_config(_authorized=Depends(require_admin)):
     """
     Reload nudge prompts from YAML file.
     Use this to apply prompt changes without restarting the app.
@@ -1498,7 +1499,7 @@ def reload_config(_authorized=Depends(require_scheduler_or_admin)):
 
 
 @router.get("/nudge/download_log")
-def download_nudge_log(_authorized=Depends(require_scheduler_or_admin)):
+def download_nudge_log(_authorized=Depends(require_admin)):
     """
     Download the nudge feedback log Excel file.
 
@@ -1519,7 +1520,7 @@ def download_nudge_log(_authorized=Depends(require_scheduler_or_admin)):
 
 
 @router.get("/nudge/log_summary")
-def get_log_summary(_authorized=Depends(require_scheduler_or_admin)):
+def get_log_summary(_authorized=Depends(require_admin)):
     """
     Get a text summary of logged nudges.
     Shows stats and ratings if available.
@@ -1559,7 +1560,10 @@ Download: /api/nudge/download_log"""
 
 
 @router.get("/nudge/health")
-def health_check(db: Session = Depends(get_db)):
+def health_check(
+        db: Session = Depends(get_db),
+        _authorized=Depends(require_admin),
+):
     """
     Health check endpoint for monitoring service status.
     """

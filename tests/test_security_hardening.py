@@ -386,6 +386,18 @@ def test_scheduler_dependency_accepts_dedicated_secret(monkeypatch):
     ) is None
 
 
+def test_scheduler_secret_cannot_access_nudge_administration():
+    source = Path("app/routers/nudge.py").read_text(encoding="utf-8")
+
+    for function_name in (
+        "reload_config",
+        "download_nudge_log",
+        "get_log_summary",
+    ):
+        assert f"def {function_name}(_authorized=Depends(require_admin))" in source
+    assert "def health_check(\n        db: Session = Depends(get_db),\n        _authorized=Depends(require_admin)," in source
+
+
 def _identity_request(
     *,
     query: str = "",
@@ -492,7 +504,6 @@ def test_every_api_route_has_an_explicit_access_boundary():
         "/api/auth/password-recovery/reset",
         "/api/onboarding/login",
         "/api/onboarding/set-permanent-password",
-        "/api/nudge/health",
     }
     accepted_dependencies = {
         "require_authenticated_identity",
