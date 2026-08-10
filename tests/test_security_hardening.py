@@ -809,6 +809,21 @@ def test_client_credentials_are_not_backed_up_and_cors_is_not_wildcarded():
     assert "getSessionToken" in transport
 
 
+def test_android_webview_origin_is_trusted():
+    import json
+
+    from app.security_middleware import trusted_application_origins
+
+    repository_root = Path(__file__).resolve().parents[1]
+    capacitor_config = json.loads(
+        (repository_root / "app" / "frontend" / "capacitor.config.json").read_text(encoding="utf-8")
+    )
+    android_origin = f"{capacitor_config['server']['androidScheme']}://localhost"
+
+    assert android_origin == "https://localhost"
+    assert android_origin in trusted_application_origins()
+
+
 def test_cookie_authenticated_writes_require_trusted_origin(monkeypatch):
     from app.security_middleware import CsrfProtectionMiddleware
     from app.utils.session_cookie import SESSION_COOKIE_NAME
