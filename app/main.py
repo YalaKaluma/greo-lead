@@ -86,6 +86,9 @@ app = FastAPI(
     title="Leadership OS API",
     version="3.0",
     description="AI-powered Chief of Staff for busy executives",
+    docs_url="/docs" if os.getenv("ENABLE_API_DOCS", "").lower() in {"1", "true", "yes"} else None,
+    redoc_url=None,
+    openapi_url="/openapi.json" if os.getenv("ENABLE_API_DOCS", "").lower() in {"1", "true", "yes"} else None,
     redirect_slashes=True  # ← ADDED: Handle both /api/tasks and /api/tasks/
 )
 
@@ -526,7 +529,6 @@ logger.info("=" * 70)
 logger.info("📍 Available endpoints:")
 logger.info("   • Root:        / (serves React app)")
 logger.info("   • Health:      /api/health")
-logger.info("   • API Docs:    /docs")
 logger.info("   • Tasks:       /api/tasks")
 logger.info("   • Journey:     /api/journey")
 logger.info("=" * 70)

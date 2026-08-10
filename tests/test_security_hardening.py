@@ -1195,3 +1195,21 @@ def test_database_readiness_requires_exact_alembic_head(monkeypatch):
     assert schema_readiness.verify_database_schema(Engine("required-head")) == "required-head"
     with pytest.raises(RuntimeError, match="required Alembic revision"):
         schema_readiness.verify_database_schema(Engine("stale-head"))
+
+
+def test_android_does_not_expose_external_storage_through_file_provider():
+    manifest = Path("app/frontend/android/app/src/main/AndroidManifest.xml").read_text(encoding="utf-8")
+    file_paths = Path("app/frontend/android/app/src/main/res/xml/file_paths.xml")
+
+    assert "android:allowBackup=\"false\"" in manifest
+    assert "androidx.core.content.FileProvider" not in manifest
+    assert not file_paths.exists()
+
+
+def test_public_api_documentation_is_disabled_by_default(monkeypatch):
+    monkeypatch.delenv("ENABLE_API_DOCS", raising=False)
+    main_source = Path("app/main.py").read_text(encoding="utf-8")
+
+    assert 'docs_url="/docs" if os.getenv("ENABLE_API_DOCS"' in main_source
+    assert "redoc_url=None" in main_source
+    assert 'openapi_url="/openapi.json" if os.getenv("ENABLE_API_DOCS"' in main_source
