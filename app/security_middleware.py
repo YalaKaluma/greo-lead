@@ -90,14 +90,44 @@ def trusted_application_origins() -> set[str]:
     return origins
 
 
+COOKIE_INDEPENDENT_AUTH_PATHS = {
+    "/api/auth/login",
+    "/api/auth/register",
+    "/api/auth/password-recovery/request",
+    "/api/auth/password-recovery/reset",
+    "/api/onboarding/login",
+}
+
+
+def request_origin_is_trusted(request: Request, origin: str) -> bool:
+    """Accept configured origins and the request's actual same-site origin."""
+    normalized_origin = origin.rstrip("/")
+    if normalized_origin in trusted_application_origins():
+        return True
+
+    parsed = urlsplit(normalized_origin)
+    request_host = request.headers.get("host", "").strip().casefold()
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
+    request_scheme = (forwarded_proto or request.url.scheme).casefold()
+    return (
+        parsed.scheme.casefold() in {"http", "https"}
+        and parsed.scheme.casefold() == request_scheme
+        and parsed.netloc.casefold() == request_host
+    )
+
+
 class CsrfProtectionMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         unsafe_method = request.method.upper() not in {"GET", "HEAD", "OPTIONS"}
+        if unsafe_method and request.url.path in COOKIE_INDEPENDENT_AUTH_PATHS:
+            # These endpoints authenticate only from their request body. An old
+            # session cookie must not prevent a user from signing in again.
+            return await call_next(request)
         cookie_authenticated = bool(request.cookies.get(SESSION_COOKIE_NAME))
         bearer_authenticated = request.headers.get("authorization", "").lower().startswith("bearer ")
         if unsafe_method and cookie_authenticated and not bearer_authenticated:
             origin = request.headers.get("origin", "").rstrip("/")
-            if origin not in trusted_application_origins():
+            if not request_origin_is_trusted(request, origin):
                 return apply_security_headers(
                     JSONResponse({"detail": "Untrusted request origin"}, status_code=403)
                 )

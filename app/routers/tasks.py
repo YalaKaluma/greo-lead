@@ -152,7 +152,6 @@ class TaskResponse(BaseModel):
 
 
 class TaskReorderRequest(BaseModel):
-    user_number: str
     ordered_task_ids: List[int]
 
 

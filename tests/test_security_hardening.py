@@ -748,6 +748,41 @@ def test_cookie_authenticated_writes_require_trusted_origin(monkeypatch):
     ).status_code == 200
 
 
+def test_cookie_authenticated_writes_accept_actual_same_origin(monkeypatch):
+    from app.security_middleware import CsrfProtectionMiddleware
+    from app.utils.session_cookie import SESSION_COOKIE_NAME
+
+    monkeypatch.setenv("PUBLIC_APP_URL", "https://misconfigured.example.com")
+    test_app = FastAPI()
+    test_app.add_middleware(CsrfProtectionMiddleware)
+
+    @test_app.post("/write")
+    async def write():
+        return {"ok": True}
+
+    client = TestClient(test_app, base_url="https://actual.example.com")
+    client.cookies.set(SESSION_COOKIE_NAME, "signed-session-token")
+    assert client.post(
+        "/write", headers={"Origin": "https://actual.example.com"}
+    ).status_code == 200
+
+
+def test_stale_cookie_does_not_block_public_login():
+    from app.security_middleware import CsrfProtectionMiddleware
+    from app.utils.session_cookie import SESSION_COOKIE_NAME
+
+    test_app = FastAPI()
+    test_app.add_middleware(CsrfProtectionMiddleware)
+
+    @test_app.post("/api/auth/login")
+    async def login():
+        return {"success": False}
+
+    client = TestClient(test_app)
+    client.cookies.set(SESSION_COOKIE_NAME, "stale-session-token")
+    assert client.post("/api/auth/login").status_code == 200
+
+
 class SingleUserDb:
     def __init__(self, user):
         self.user = user
