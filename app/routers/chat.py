@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 from app.models import Message
+from app.utils.safe_errors import log_failure
 
 from app.db import get_db
 from app.models import User, OnboardingStep
@@ -79,8 +80,7 @@ async def send_chat_message(
     """
 
     print(f"\n🔵 WEB CHAT MESSAGE RECEIVED:")
-    print(f"   User: {chat_msg.user_number}")
-    print(f"   Message: {chat_msg.message}")
+    print(f"   Message received; length={len(chat_msg.message or '')}")
 
     # Get user to check onboarding status
     user = db.query(User).filter(User.phone_number == chat_msg.user_number).first()
@@ -122,7 +122,6 @@ async def send_chat_message(
         conversation_type=conversation_type,
     )
 
-    print(f"   Alfred Response: {reply}")
     print(f"🔵 WEB CHAT MESSAGE COMPLETE\n")
 
     # Check if this triggers any tour actions (for onboarding)
@@ -166,7 +165,7 @@ async def jump_to_stage(
     """
     from app.services.state_machine import get_or_create_state, States
     
-    print(f"🎯 Stage jump requested: {request.user_number} -> {request.stage}")
+    print(f"Stage jump requested stage={request.stage}")
     
     # Get current state
     state = get_or_create_state(db, request.user_number)
@@ -235,7 +234,7 @@ async def end_goal_review_session(
     from app.services.state_machine import get_or_create_state, States
     from app.services.orchestrator import _finalize_goal_review_session
     
-    print(f"🛑 Explicit goal review end requested by user: {user_number}")
+    print("Explicit goal review end requested")
     
     # Get current state
     state = get_or_create_state(db, user_number)
@@ -260,7 +259,7 @@ async def end_goal_review_session(
         print(f"✅ Session finalized: {len(tasks_created)} tasks created")
         
     except Exception as e:
-        print(f"⚠️ Error finalizing session: {e}")
+        log_failure("chat_session_finalize", e)
         tasks_created = 0
     
     # Clear state and return to IDLE
@@ -279,7 +278,7 @@ async def end_goal_review_session(
         conversation_type="goal_coaching",
     )
     
-    print(f"✅ Goal review session ended for {user_number}")
+    print("Goal review session ended")
     
     return {
         "success": True,
@@ -343,7 +342,7 @@ async def get_chat_history(
         return {"messages": formatted_messages}
 
     except Exception as e:
-        print(f"Error loading chat history: {e}")
+        log_failure("chat_history_load", e)
         return {"messages": []}
 
 @router.get("/chat/unread-nudges")

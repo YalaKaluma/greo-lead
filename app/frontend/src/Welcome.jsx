@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { API_URL } from "./config";
+import { storeSessionToken } from './sessionCredentials';
 
 /**
  * Welcome Page - First-time login for new users
@@ -49,13 +50,15 @@ export default function Welcome({ onLogin }) {
       // Store user info and trigger login
       localStorage.setItem("user_number", data.user_number);
       localStorage.setItem("user_name", data.user_name);
-      localStorage.setItem("access_token", data.access_token);
+      storeSessionToken(data.access_token);
       localStorage.setItem("needs_tour", data.needs_tour.toString());
       
       // ✅ NOTE: Onboarding data is now processed automatically during WhatsApp onboarding
       // No need to call process-onboarding-data here anymore!
 
-      onLogin(data.user_number, data.needs_tour);
+      if (data.must_change_password) localStorage.setItem("must_change_password", "true");
+      else localStorage.removeItem("must_change_password");
+      onLogin(data.user_number, data.needs_tour, Boolean(data.must_change_password));
     } catch (err) {
       console.error("Login error:", err);
       setError("Connection error. Please try again.");

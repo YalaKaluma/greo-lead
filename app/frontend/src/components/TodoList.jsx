@@ -178,9 +178,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   const fetchFilters = async () => {
     if (apiUrl == null || !userNumber) return;
     try {
-      const response = await axios.get(`${apiUrl}/api/tasks/filters`, {
-        params: { user_number: userNumber }
-      });
+      const response = await axios.get(`${apiUrl}/api/tasks/filters`);
       if (response.data) {
         setDelegates(response.data.delegates || []);
       }
@@ -212,7 +210,6 @@ export default function TodoList({ apiUrl, userNumber }) {
     setError(null);
     try {
       const params = {
-        user_number: userNumber,
         // If a goal is selected, show ALL tasks for that goal, not just due today.
         filter_type: activeTab === 'calendar' || selectedGoal ? 'all' : filterType
       };
@@ -276,9 +273,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     setMtnTrendsLoading(true);
     setMtnTrendsError(null);
     try {
-      const response = await axios.get(`${apiUrl}/api/tasks/mtn-trends`, {
-        params: { user_number: userNumber },
-      });
+      const response = await axios.get(`${apiUrl}/api/tasks/mtn-trends`);
       setMtnTrends(response.data);
     } catch (err) {
       console.error('Error fetching MTN trends:', err);
@@ -295,7 +290,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     calendarHistoryRequestRef.current = requestId;
     try {
       const response = await axios.get(`${apiUrl}/api/tasks/mtn-history`, {
-        params: { user_number: userNumber, start_date: startDate, end_date: endDate },
+        params: { start_date: startDate, end_date: endDate },
       });
       if (calendarHistoryRequestRef.current === requestId) {
         setCalendarHistoryDays(Array.isArray(response.data?.days) ? response.data.days : []);
@@ -347,7 +342,6 @@ export default function TodoList({ apiUrl, userNumber }) {
     setSortOrder(order);
 
     axios.post(`${apiUrl}/api/tasks/reorder`, {
-      user_number: userNumber,
       ordered_task_ids: order
     }).catch(err => {
       console.error('Failed to persist task order:', err);
@@ -411,8 +405,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     try {
       await axios.put(
         `${apiUrl}/api/tasks/${task.id}`,
-        { due_date: targetDate },
-        { params: { user_number: userNumber } }
+        { due_date: targetDate }
       );
       await fetchTasks();
       if (showTaskTrends) fetchMtnTrends();
@@ -453,7 +446,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     )));
 
     try {
-      await axios.put(`${apiUrl}/api/tasks/${task.id}`, updates, { params: { user_number: userNumber } });
+      await axios.put(`${apiUrl}/api/tasks/${task.id}`, updates);
       await fetchTasks({ skipMtnBackfill: true });
       return { taskId: task.id, previousDueDate, targetDate };
     } catch (err) {
@@ -467,7 +460,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   const handleUndoDoLater = async ({ taskId, previousDueDate }) => {
     const updates = { due_date: previousDueDate };
     try {
-      await axios.put(`${apiUrl}/api/tasks/${taskId}`, updates, { params: { user_number: userNumber } });
+      await axios.put(`${apiUrl}/api/tasks/${taskId}`, updates);
       await fetchTasks({ skipMtnBackfill: true });
       return true;
     } catch (err) {
@@ -483,8 +476,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     try {
       await axios.patch(
         `${apiUrl}/api/tasks/${taskId}/toggle`,
-        {},
-        { params: { user_number: userNumber } }
+        {}
       );
       window.dispatchEvent(new Event('alfred-sidebar-counts-refresh'));
       
@@ -505,9 +497,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     if (!confirm('Delete this task?')) return;
     
     try {
-      await axios.delete(`${apiUrl}/api/tasks/${taskId}`, {
-        params: { user_number: userNumber }
-      });
+      await axios.delete(`${apiUrl}/api/tasks/${taskId}`);
       setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
       setSortOrder(sortOrder.filter(id => id !== taskId));
     } catch (err) {
@@ -520,8 +510,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     try {
       await axios.put(
         `${apiUrl}/api/tasks/${taskId}`,
-        updates,
-        { params: { user_number: userNumber } }
+        updates
       );
       await fetchTasks();
       setShowTaskModal(false);
@@ -536,8 +525,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     try {
       await axios.post(
         `${apiUrl}/api/tasks/`,
-        taskData,
-        { params: { user_number: userNumber } }
+        taskData
       );
       await fetchTasks();
       setShowTaskModal(false);
@@ -569,9 +557,7 @@ export default function TodoList({ apiUrl, userNumber }) {
   const resetSortOrder = () => {
     localStorage.removeItem('taskSortOrder');
     setSortOrder([]);
-    axios.post(`${apiUrl}/api/tasks/reorder/reset`, null, {
-      params: { user_number: userNumber }
-    }).catch(err => {
+    axios.post(`${apiUrl}/api/tasks/reorder/reset`).catch(err => {
       console.error('Failed to reset persisted task order:', err);
     });
   };
@@ -591,8 +577,7 @@ export default function TodoList({ apiUrl, userNumber }) {
         overdueTasks.map(task =>
           axios.put(
             `${apiUrl}/api/tasks/${task.id}`,
-            { due_date: today },
-            { params: { user_number: userNumber } }
+            { due_date: today }
           )
         )
       );
@@ -608,7 +593,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     setDeferLoading(true);
     try {
       const response = await axios.get(`${apiUrl}/api/tasks/`, {
-        params: { user_number: userNumber, filter_type: 'all' },
+        params: { filter_type: 'all' },
       });
       const allOpenTasks = (Array.isArray(response.data) ? response.data : [])
         .filter(task => String(task.status || 'open').toLowerCase() !== 'completed');
@@ -641,8 +626,7 @@ export default function TodoList({ apiUrl, userNumber }) {
         `${apiUrl}/api/tasks/${move.task.id}`,
         {
           due_date: move.targetDate,
-        },
-        { params: { user_number: userNumber } }
+        }
       );
       return true;
     } catch (err) {
@@ -659,8 +643,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     try {
       await axios.patch(
         `${apiUrl}/api/tasks/${task.id}/toggle`,
-        {},
-        { params: { user_number: userNumber } }
+        {}
       );
       fetchMtnTrends();
       return true;
@@ -685,8 +668,7 @@ export default function TodoList({ apiUrl, userNumber }) {
         selectedTaskRecords.map(task => (
           axios.put(
             `${apiUrl}/api/tasks/${task.id}`,
-            updates,
-            { params: { user_number: userNumber } }
+            updates
           )
         ))
       );
@@ -743,10 +725,12 @@ export default function TodoList({ apiUrl, userNumber }) {
     }
   }, [priorityMode, priorityRecommendation, tasks]);
 
-  const handleMtnFeedback = async (taskId, rating, feedback, tag, recommendationId) => {
-    const result = await submitMtnFeedback(taskId, rating, feedback, tag, recommendationId);
+  const handleMtnFeedback = async (taskId, rating, feedback, tag, recommendationId, scoreId, adjustedScore) => {
+    const result = await submitMtnFeedback(taskId, rating, feedback, tag, recommendationId, scoreId, adjustedScore);
     if (!result.success) {
       alert(result.error);
+    } else {
+      await fetchTasks({ skipMtnBackfill: true });
     }
     return result;
   };
@@ -990,7 +974,11 @@ export default function TodoList({ apiUrl, userNumber }) {
       )}
 
       {listUndoMove && (
-        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-3 text-sm text-white shadow-xl" role="status">
+        <div
+          className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-3 text-sm text-white shadow-xl"
+          style={{ bottom: 'calc(1.25rem + var(--alfred-safe-area-bottom))' }}
+          role="status"
+        >
           <span>{t('calendar.movedTo', 'Task moved to')} {formatShortDate(listUndoMove.targetDate)}</span>
           <button
             type="button"

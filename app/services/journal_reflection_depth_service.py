@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.config import OPENAI_MODEL
+from app.utils.safe_errors import log_failure
 from app.models import Message
 from app.services.onboarding_seed_service import is_starter_journal_example
 from app.services.openai_service import client
@@ -146,7 +147,7 @@ recommendations must be 2-3 short personalized strings.
             ][:3],
         }
     except Exception as error:
-        print(f"Reflection depth scoring failed: {error}")
+        log_failure("journal_reflection_scoring", error)
         return _fallback_score(text)
 
 

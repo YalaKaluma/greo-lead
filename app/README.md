@@ -23,9 +23,15 @@ This folder contains the FastAPI backend for Alfred / Leadership OS.
 On startup the backend:
 
 - Loads `.env` through `app/config.py`.
-- Verifies the presence of required database, OpenAI, Twilio, Mailgun, and default-user settings.
-- Creates/verifies SQLAlchemy tables with `Base.metadata.create_all`.
-- Ensures admin schema and seed data are present through `ensure_admin_schema_and_seed`.
+- Verifies the presence of required database, OpenAI, authentication, scheduler, public-URL, and default-user settings.
+- Treats Alembic as the only deployed schema owner. Railway runs `alembic upgrade head`
+  once as its pre-deploy command; the application process never creates or alters tables.
+- Refuses to start when the database is unavailable or `alembic_version` is not the
+  repository head. The original `20260609_0001` revision is a baseline for the
+  historical schema, so a completely new database must first restore the reviewed
+  baseline from `db_migrations/` before running the Alembic chain.
+- Administrator creation is an explicit operational action; application startup does
+  not automatically promote the first registered user.
 - Registers API routers under `/api/...`.
 - Serves built frontend assets from repository-level `static/` when present.
 - Starts `app.email_poller.run_email_loop` in a daemon thread.
@@ -38,12 +44,9 @@ Core required values checked by `main.py`:
 - `DATABASE_URL`
 - `OPENAI_API_KEY`
 - `DEFAULT_USER_NUMBER`
-- `TWILIO_SID`
-- `TWILIO_AUTH_TOKEN`
-- `TWILIO_WHATSAPP_NUMBER`
-- `MAILGUN_API_KEY`
-- `MAILGUN_DOMAIN`
-- `MAILGUN_FROM`
+- `APP_SESSION_SECRET`
+- `ALFRED_SCHEDULER_SECRET`
+- `PUBLIC_APP_URL`
 
 Additional settings loaded by `config.py`:
 
@@ -90,7 +93,7 @@ GitHub issue creation from Operations Director and CTO Director findings:
 
 Alfred combines:
 
-- Conversational coaching through WhatsApp, email, and in-app chat.
+- Conversational coaching through in-app chat.
 - A React executive operating system UI.
 - Journey 2.0 domains, subdomains, belts, trials, readiness assessment, and behavioral evidence.
 - Vision/Pillar/Outcome goals, transformation roadmap waves, goal progress reviews, and AI-assisted opportunity suggestions.

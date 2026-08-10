@@ -9,8 +9,6 @@ This folder contains FastAPI routers. Routers should stay thin: validate request
 - `auth.py` under `/api/auth` for login, logout, and current-user lookup.
 - `onboarding.py` under `/api/onboarding` for onboarding login, email verification, tour progress, and onboarding data processing.
 - `journal.py` under `/api/journal/journal` for journal CRUD and trends. The nested path comes from both `main.py` and `journal.py` adding a journal prefix.
-- `webhook.py` under `/api` for WhatsApp and email webhooks.
-- `webhook_brain.py` under `/api/brain` for alternate brain webhook flows.
 - `tasks.py` under `/api/tasks` for tasks, filters, MTN trends and history, calendar scheduling through `due_date`, reordering, recurring metadata, postpone behavior, follow-ups, and enrichment.
 - `nudge.py` under `/api` for morning/evening/weekly nudges, batch sends, config reload, logs, and health.
 - `journey.py` under `/api/journey` for Journey 2.0, goals, roadmap waves, people reviews, and Journey evidence.

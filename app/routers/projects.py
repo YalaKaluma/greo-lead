@@ -14,13 +14,17 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
-from app.models import JourneyProject, Meeting, MeetingProjectLink, ProjectDocument
+from app.models import JourneyProject, Meeting, MeetingProjectLink, ProjectDocument, User
 from app.services.project_intelligence_service import process_project_document
+from app.routers.auth import require_authenticated_user
+from app.security_dependencies import authenticated_user_identifier, ensure_user_identity
+from app.utils.safe_storage import stored_path_within_root
 
 
 router = APIRouter()
 STORAGE_ROOT = Path(os.getenv("PROJECT_STORAGE_DIR") or Path(tempfile.gettempdir()) / "alfred-projects")
 MAX_FILE_BYTES = int(os.getenv("PROJECT_MAX_FILE_BYTES", str(50 * 1024 * 1024)))
+ALLOWED_DOCUMENT_SUFFIXES = {".pdf", ".pptx", ".docx", ".txt", ".md", ".csv"}
 
 
 class ProjectCreate(BaseModel):
@@ -72,13 +76,15 @@ def _payload(project: JourneyProject, meetings: Optional[list[Meeting]] = None):
 
 
 @router.get("")
-def list_projects(user_number: str, db: Session = Depends(get_db)):
+def list_projects(user_number: Optional[str] = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+    user_number = authenticated_user_identifier(current_user)
     projects = db.query(JourneyProject).options(selectinload(JourneyProject.documents)).filter(JourneyProject.user_number == user_number).order_by(JourneyProject.updated_at.desc()).all()
     return [_payload(project) for project in projects]
 
 
 @router.post("", status_code=201)
-def create_project(payload: ProjectCreate, user_number: str, db: Session = Depends(get_db)):
+def create_project(payload: ProjectCreate, user_number: Optional[str] = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+    user_number = authenticated_user_identifier(current_user)
     project = JourneyProject(user_number=user_number, goal=payload.objective, **payload.model_dump())
     db.add(project)
     db.commit()
@@ -88,14 +94,16 @@ def create_project(payload: ProjectCreate, user_number: str, db: Session = Depen
 
 
 @router.get("/{project_id}")
-def get_project(project_id: int, user_number: str, db: Session = Depends(get_db)):
+def get_project(project_id: int, user_number: Optional[str] = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+    user_number = authenticated_user_identifier(current_user)
     project = _project_or_404(db, project_id, user_number)
     meetings = db.query(Meeting).options(selectinload(Meeting.participants)).join(MeetingProjectLink).filter(MeetingProjectLink.project_id == project.id, Meeting.user_number == user_number).order_by(Meeting.started_at.desc().nullslast(), Meeting.created_at.desc()).all()
     return _payload(project, meetings)
 
 
 @router.patch("/{project_id}")
-def update_project(project_id: int, payload: ProjectUpdate, user_number: str, db: Session = Depends(get_db)):
+def update_project(project_id: int, payload: ProjectUpdate, user_number: Optional[str] = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+    user_number = authenticated_user_identifier(current_user)
     project = _project_or_404(db, project_id, user_number)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(project, field, value)
@@ -108,20 +116,32 @@ def update_project(project_id: int, payload: ProjectUpdate, user_number: str, db
 
 
 @router.post("/{project_id}/documents", status_code=201)
-async def upload_document(project_id: int, background_tasks: BackgroundTasks, user_number: str = Form(...), document_type: Optional[str] = Form(None), file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_document(project_id: int, background_tasks: BackgroundTasks, user_number: str = Form(...), document_type: Optional[str] = Form(None), file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+    ensure_user_identity(current_user, user_number)
+    user_number = authenticated_user_identifier(current_user)
     project = _project_or_404(db, project_id, user_number)
     safe_name = re.sub(r"[^A-Za-z0-9._ -]", "_", file.filename or "project-document")[:300]
+    suffix = Path(safe_name).suffix.lower()
+    if suffix not in ALLOWED_DOCUMENT_SUFFIXES:
+        raise HTTPException(status_code=415, detail="Upload a PDF, PPTX, DOCX, TXT, MD, or CSV document.")
     user_dir = STORAGE_ROOT / re.sub(r"[^A-Za-z0-9_-]", "_", user_number)[:100] / str(project.id)
     user_dir.mkdir(parents=True, exist_ok=True)
     path = user_dir / f"{uuid.uuid4().hex}-{safe_name}"
     size = 0
+    first_bytes = b""
     try:
         with path.open("wb") as output:
             while chunk := await file.read(1024 * 1024):
+                if not first_bytes:
+                    first_bytes = chunk[:8]
                 size += len(chunk)
                 if size > MAX_FILE_BYTES:
                     raise HTTPException(status_code=413, detail="Project file exceeds the 50 MB limit.")
                 output.write(chunk)
+        if suffix == ".pdf" and not first_bytes.startswith(b"%PDF-"):
+            raise HTTPException(status_code=415, detail="The uploaded file is not a valid PDF.")
+        if suffix in {".pptx", ".docx"} and not first_bytes.startswith(b"PK"):
+            raise HTTPException(status_code=415, detail="The uploaded Office document is invalid.")
     except Exception:
         path.unlink(missing_ok=True)
         raise
@@ -134,7 +154,8 @@ async def upload_document(project_id: int, background_tasks: BackgroundTasks, us
 
 
 @router.post("/{project_id}/documents/{document_id}/retry", status_code=202)
-def retry_document(project_id: int, document_id: int, user_number: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def retry_document(project_id: int, document_id: int, background_tasks: BackgroundTasks, user_number: Optional[str] = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+    user_number = authenticated_user_identifier(current_user)
     document = db.query(ProjectDocument).filter(ProjectDocument.id == document_id, ProjectDocument.project_id == project_id, ProjectDocument.user_number == user_number).first()
     if not document:
         raise HTTPException(status_code=404, detail="Project document not found.")
@@ -146,8 +167,15 @@ def retry_document(project_id: int, document_id: int, user_number: str, backgrou
 
 
 @router.get("/{project_id}/documents/{document_id}")
-def download_document(project_id: int, document_id: int, user_number: str, db: Session = Depends(get_db)):
+def download_document(project_id: int, document_id: int, user_number: Optional[str] = None, db: Session = Depends(get_db), current_user: User = Depends(require_authenticated_user)):
+    user_number = authenticated_user_identifier(current_user)
     document = db.query(ProjectDocument).filter(ProjectDocument.id == document_id, ProjectDocument.project_id == project_id, ProjectDocument.user_number == user_number).first()
-    if not document or not Path(document.storage_key).is_file():
+    stored_path = stored_path_within_root(document.storage_key, STORAGE_ROOT) if document else None
+    if not document or not stored_path or not stored_path.is_file():
         raise HTTPException(status_code=404, detail="Project document not found.")
-    return FileResponse(document.storage_key, media_type=document.content_type, filename=document.filename)
+    return FileResponse(
+        stored_path,
+        media_type=document.content_type,
+        filename=document.filename,
+        headers={"Cache-Control": "private, no-store"},
+    )

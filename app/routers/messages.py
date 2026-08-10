@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_db
-from app.models import Message
+from app.models import Message, User
+from app.routers.auth import require_authenticated_user
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
@@ -31,14 +32,15 @@ class MessageResponse(BaseModel):
 
 @router.get("/messages", response_model=list[MessageResponse])
 def get_messages(
-        user_number: str,
+        user_number: Optional[str] = None,
         limit: Optional[int] = 1000,
         conversation_type: Optional[str] = None,
-        db: Session = Depends(get_db)
+        db: Session = Depends(get_db),
+        current_user: User = Depends(require_authenticated_user),
 ):
     """Get conversation messages for a user"""
     query = db.query(Message).filter(
-        Message.user_number == user_number
+        Message.user_number == current_user.phone_number
     )
 
     normalized_conversation_type = normalize_conversation_type(conversation_type)

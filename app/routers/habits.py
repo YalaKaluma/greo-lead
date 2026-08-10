@@ -19,6 +19,7 @@ from app.services.habit_coaching_service import (
     refresh_habit_coaching_review,
 )
 from app.services.habits.habit_trend_service import get_habit_trends
+from app.utils.safe_errors import internal_error
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -105,11 +106,20 @@ def calculate_streak(completions: list, frequency: str, today: date) -> int:
 
     streak = 0
 
-    # Start from today or yesterday
-    current_date = today if today in dates else (
-        today - timedelta(days=1) if (today - timedelta(days=1)) in dates else None)
+    # Start from today, or from the most recent scheduled day. This keeps a
+    # Friday streak alive through the weekend and until Monday is completed.
+    current_date = today
+    if frequency == 'weekdays':
+        while current_date.weekday() in [5, 6]:
+            current_date -= timedelta(days=1)
 
-    if current_date is None:
+    if current_date not in dates:
+        current_date -= timedelta(days=1)
+        if frequency == 'weekdays':
+            while current_date.weekday() in [5, 6]:
+                current_date -= timedelta(days=1)
+
+    if current_date not in dates:
         return 0
 
     # Count consecutive days
@@ -389,10 +399,10 @@ def refresh_coaching_review(user_number: str, db: Session = Depends(get_db)):
 
     try:
         return {"review": refresh_habit_coaching_review(db, user_number)}
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Habit coaching data not found")
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to refresh habit coaching: {exc}")
+        raise internal_error("habit_coaching_refresh", exc, "Habit coaching could not be refreshed.")
 
 
 @router.post("/{habit_id}/toggle_today")

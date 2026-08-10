@@ -184,19 +184,12 @@ Review these in Railway production service variables before launch and after any
 - [ ] `DEFAULT_USER_NUMBER` is set.
 - [ ] `APP_URL` or `PUBLIC_APP_URL` points to the production app URL.
 
-### Twilio / WhatsApp
+### Authentication And Internal Jobs
 
-- [ ] `TWILIO_SID` is set.
-- [ ] `TWILIO_AUTH_TOKEN` is set.
-- [ ] `TWILIO_WHATSAPP_NUMBER` is set.
-- [ ] Twilio webhook URLs point to the production Railway app/domain.
-
-### Mailgun
-
-- [ ] `MAILGUN_API_KEY` is set.
-- [ ] `MAILGUN_DOMAIN` is set.
-- [ ] `MAILGUN_FROM` is set.
-- [ ] Mailgun inbound/outbound routes point to production where applicable.
+- [ ] `APP_SESSION_SECRET` is a random value of at least 32 characters.
+- [ ] `ALFRED_SCHEDULER_SECRET` is a separate random value of at least 32 characters.
+- [ ] `PUBLIC_APP_URL` is the canonical HTTPS production origin used for invitation links.
+- [ ] Scheduled nudge requests send `X-Alfred-Scheduler-Secret`; the secret is never placed in a URL.
 
 ### Gmail Invitation Email
 
@@ -231,7 +224,7 @@ Review these in Railway production service variables before launch and after any
 ### Safety Checks
 
 - [ ] No dev Neon URL is present in production.
-- [ ] No test Twilio, Mailgun, or Gmail sender is present in production.
+- [ ] No test Gmail sender is present in production.
 - [ ] Secrets are not committed to the repository.
 - [ ] Variable changes have been reviewed and deployed in Railway.
 - [ ] After variable changes, `/api/health` returns HTTP 200.
@@ -249,7 +242,7 @@ Run this after every production deploy, rollback, database restore, or critical 
 - [ ] Confirm HTTP 200.
 - [ ] Confirm response includes `"status": "ok"` or equivalent.
 - [ ] Confirm database status is `connected`.
-- [ ] Confirm OpenAI, Twilio, and Mailgun configuration flags look expected.
+- [ ] Confirm OpenAI and Gmail configuration flags look expected.
 
 ### Login And Admin
 
@@ -291,7 +284,6 @@ Run this after every production deploy, rollback, database restore, or critical 
 
 - [ ] Trigger one lightweight Alfred response that uses OpenAI.
 - [ ] Confirm no OpenAI error is recorded.
-- [ ] If WhatsApp is in scope, send a production test WhatsApp message.
 - [ ] If email is in scope, send or receive a production test email.
 - [ ] If invitation email is in scope, send a test invitation.
 
@@ -333,8 +325,7 @@ Fill in the names and contact channels before beta launch.
 - [ ] Railway owner:
 - [ ] Neon owner:
 - [ ] OpenAI/API owner:
-- [ ] Twilio owner:
-- [ ] Mailgun/Gmail owner:
+- [ ] Gmail owner:
 - [ ] Customer/user communications owner:
 
 ### Access
@@ -343,8 +334,7 @@ Fill in the names and contact channels before beta launch.
 - [ ] At least two people can access Neon production.
 - [ ] At least two people can access DNS/domain settings.
 - [ ] At least two people can access OpenAI billing/API settings.
-- [ ] At least two people can access Twilio.
-- [ ] At least two people can access Mailgun/Gmail configuration.
+- [ ] At least two people can access Gmail configuration.
 
 ### Severity Levels
 
@@ -381,7 +371,7 @@ Severity 3:
 - [ ] Restore or repair Neon production data.
 - [ ] Rotate compromised secrets.
 - [ ] Disable affected user account.
-- [ ] Pause outbound WhatsApp/email if messages are misfiring.
+- [ ] Pause outbound Gmail invitations or scheduled nudges if messages are misfiring.
 - [ ] Notify users if user-facing impact occurred.
 
 ### Post-Incident Review

@@ -76,7 +76,9 @@ const candidateDateKeys = (todayKey, period, deadlineKey = '') => {
   let start = tomorrow;
   let end;
 
-  if (period === 'later_this_week') {
+  if (period === 'tomorrow') {
+    return [formatDateKey(tomorrow)];
+  } else if (period === 'later_this_week') {
     end = addDays(today, (7 - today.getDay()) % 7);
   } else if (period === 'next_week') {
     const daysUntilMonday = today.getDay() === 0 ? 1 : 8 - today.getDay();

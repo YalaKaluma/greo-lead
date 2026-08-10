@@ -21,22 +21,24 @@ DOMAINS = [
 
 
 def _generate_leadership_trends(db: Session, user_number: str, days: int) -> dict:
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    meetings = (
+    meetings_query = (
         db.query(Meeting)
         .options(selectinload(Meeting.leadership_domain_assessments))
         .filter(
             Meeting.user_number == user_number,
             Meeting.processing_status == "ready",
+            Meeting.leadership_domain_assessments.any(),
+        )
+    )
+    if days > 0:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        meetings_query = meetings_query.filter(
             or_(
                 Meeting.started_at >= cutoff,
                 and_(Meeting.started_at.is_(None), Meeting.created_at >= cutoff),
             ),
-            Meeting.leadership_domain_assessments.any(),
         )
-        .order_by(Meeting.started_at.desc())
-        .all()
-    )
+    meetings = meetings_query.order_by(Meeting.started_at.desc()).all()
 
     scores_by_domain: dict[str, list[int]] = defaultdict(list)
     saved_feedback = []
@@ -114,7 +116,7 @@ def _generate_leadership_trends(db: Session, user_number: str, days: int) -> dic
                     "several meetings. Use second person and plain, supportive language. Do not calculate or alter "
                     "scores; averages are supplied for context. Do not present a one-off observation as a recurring "
                     "pattern.\n\n"
-                    f"WINDOW: Last {days} days\n"
+                    f"WINDOW: {'Full history' if days == 0 else f'Last {days} days'}\n"
                     f"MEETINGS WITH ASSESSMENTS: {len(meetings)}\n"
                     f"DOMAIN AVERAGES: {json.dumps(domain_averages)}\n"
                     f"SAVED ASSESSMENTS: {json.dumps(saved_feedback, default=str)[:100000]}"
@@ -130,7 +132,7 @@ def get_leadership_trends(db: Session, user_number: str, days: int = 90, refresh
     snapshot = db.query(LeadershipTrendsSnapshot).filter(
         LeadershipTrendsSnapshot.user_number == user_number,
     ).first()
-    if snapshot and not refresh:
+    if snapshot and snapshot.period_days == days and not refresh:
         return {
             **snapshot.result_payload,
             "generated_at": snapshot.generated_at,

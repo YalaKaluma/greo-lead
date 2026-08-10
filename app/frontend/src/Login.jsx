@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
 import { API_URL } from "./config";
+import { useLanguage } from './i18n/LanguageContext';
+import { storeSessionToken } from './sessionCredentials';
 
 export default function Login({ onLogin }) {
+  const { t } = useLanguage();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState("login");
@@ -35,8 +38,10 @@ export default function Login({ onLogin }) {
       }
       localStorage.setItem("user_number", data.user_number);
       localStorage.setItem("user_name", data.user_name);
-      localStorage.setItem("access_token", data.access_token);
-      onLogin(data.user_number);
+      storeSessionToken(data.access_token);
+      if (data.must_change_password) localStorage.setItem("must_change_password", "true");
+      else localStorage.removeItem("must_change_password");
+      onLogin(data.user_number, Boolean(data.must_change_password));
 
     } catch (err) {
       setError(err.message || (mode === "login" ? "Invalid credentials" : "Registration failed"));
@@ -152,11 +157,11 @@ export default function Login({ onLogin }) {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Username
+                {t(mode === 'register' ? 'auth.email' : 'auth.usernameOrEmail')}
               </label>
               <input
-                type="text"
-                placeholder="Enter your username"
+                type={mode === 'register' ? 'email' : 'text'}
+                placeholder={t(mode === 'register' ? 'auth.emailPlaceholder' : 'auth.usernamePlaceholder')}
                 value={username}
                 onChange={e => setUsername(e.target.value)}
                 className="w-full px-4 py-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-slate-500 focus:border-slate-500 outline-none transition shadow-sm"
@@ -173,9 +178,12 @@ export default function Login({ onLogin }) {
                 placeholder="Enter your password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
+                minLength={mode === 'register' ? 12 : undefined}
+                maxLength={128}
                 className="w-full px-4 py-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-slate-500 focus:border-slate-500 outline-none transition shadow-sm"
                 required
               />
+              {mode === 'register' && <p className="mt-2 text-xs text-slate-500">{t('auth.passwordHint')}</p>}
             </div>
 
             {error && (
@@ -194,6 +202,12 @@ export default function Login({ onLogin }) {
               {mode === "login" ? "Sign In" : "Create Account"}
             </button>
           </form>
+
+          {mode === 'login' && (
+            <button type="button" onClick={() => window.location.assign('/reset-password')} className="mt-4 w-full text-center text-sm font-semibold text-slate-700 hover:underline">
+              {t('auth.forgotPassword')}
+            </button>
+          )}
 
           {/* Toggle Mode */}
           <div className="mt-8 text-center">

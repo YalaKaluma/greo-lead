@@ -70,11 +70,12 @@ def _decode_token_part(value: str) -> bytes:
     return base64.urlsafe_b64decode(f"{value}{padding}".encode("ascii"))
 
 
-def create_session_token(user_id: int, user_number: str) -> str:
+def create_session_token(user_id: int, user_number: str, session_version: int = 0) -> str:
     now = int(time.time())
     payload = {
         "sub": int(user_id),
         "usr": user_number,
+        "ver": int(session_version),
         "iat": now,
         "exp": now + SESSION_TOKEN_TTL_SECONDS,
         "nonce": secrets.token_urlsafe(12),
@@ -101,3 +102,12 @@ def decode_session_token(token: str) -> dict | None:
         return payload
     except (ValueError, TypeError, json.JSONDecodeError, RuntimeError):
         return None
+
+
+def generate_password_reset_token() -> tuple[str, str]:
+    raw_token = secrets.token_urlsafe(32)
+    return raw_token, hash_password_reset_token(raw_token)
+
+
+def hash_password_reset_token(raw_token: str) -> str:
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()

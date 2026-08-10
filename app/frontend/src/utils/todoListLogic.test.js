@@ -24,6 +24,7 @@ describe('todoListLogic score resolution', () => {
     expect(getStoredTaskScore(task({
       id: 7,
       title: 'Lead team sync',
+      mtn_score_id_today: 42,
       mtn_score_today: 8.5,
       mtn_reason_today: 'Highest leverage',
       mtn_risk_today: 'Launch slips',
@@ -31,6 +32,7 @@ describe('todoListLogic score resolution', () => {
       mtn_recommended_today: true,
       mtn_recommendation_id: 'rec-7',
     }))).toEqual({
+      score_id: 42,
       task_id: 7,
       title: 'Lead team sync',
       score: 0.85,

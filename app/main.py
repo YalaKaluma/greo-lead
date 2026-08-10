@@ -1,4 +1,6 @@
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,15 +11,21 @@ import os
 import time
 from urllib.parse import parse_qsl, urlencode
 from datetime import datetime
-from app.db import Base, engine, SessionLocal
-from app.routers import journal, webhook, tasks, nudge, webhook_brain, journey, messages, habits, waitlist, onboarding, chat, priority, leadership_coaching_router, audio, meetings, projects, message_feedback, opportunities, message_signals, settings, admin, admin_operations, admin_cto, usage, home, notifications
+from app.db import engine, SessionLocal
+from app.routers import journal, tasks, nudge, journey, messages, habits, waitlist, onboarding, chat, priority, leadership_coaching_router, audio, meetings, projects, message_feedback, opportunities, message_signals, settings, admin, admin_operations, admin_cto, usage, home, notifications
 from app.routers import auth
 from sqlalchemy import text
 import threading
 from app.email_poller import run_email_loop
-from app.services.admin_bootstrap import ensure_admin_schema_and_seed
-from app.security_middleware import RateLimitMiddleware, SecurityHeadersMiddleware
+from app.security_middleware import (
+    CsrfProtectionMiddleware,
+    RateLimitMiddleware,
+    SecurityHeadersMiddleware,
+    trusted_application_origins,
+)
+from app.security_dependencies import require_authenticated_identity
 from app.services.operations_director.health_events import record_exception, record_health_event
+from app.utils.schema_readiness import verify_database_schema
 
 # Configure logging with timestamp
 logging.basicConfig(
@@ -51,13 +59,9 @@ required_vars = [
     "DATABASE_URL",
     "OPENAI_API_KEY",
     "DEFAULT_USER_NUMBER",
-    "TWILIO_SID",
-    "TWILIO_AUTH_TOKEN",
-    "TWILIO_WHATSAPP_NUMBER",
-    "MAILGUN_API_KEY",
-    "MAILGUN_DOMAIN",
-    "MAILGUN_FROM",
-    "APP_SESSION_SECRET"
+    "APP_SESSION_SECRET",
+    "ALFRED_SCHEDULER_SECRET",
+    "PUBLIC_APP_URL",
 ]
 
 missing_vars = []
@@ -75,23 +79,6 @@ else:
     logger.info("✓ All required environment variables are set")
 
 # --------------------------------------
-# Database Initialization
-# --------------------------------------
-logger.info("💾 Initializing Database...")
-try:
-    if os.getenv("SKIP_DB_INIT", "").lower() in {"1", "true", "yes"}:
-        logger.info("Database initialization skipped by SKIP_DB_INIT")
-    else:
-        Base.metadata.create_all(bind=engine)
-        ensure_admin_schema_and_seed()
-    logger.info("✓ Database tables created/verified successfully")
-    logger.info(f"  Database engine: {engine.url.drivername}")
-    logger.info(f"  Database host: {engine.url.host}")
-except Exception as e:
-    logger.error(f"✗ Database initialization failed: {e}")
-    logger.error("  This may cause API endpoints to fail!")
-
-# --------------------------------------
 # Initialize App
 # --------------------------------------
 logger.info("⚙️  Initializing FastAPI application...")
@@ -99,8 +86,40 @@ app = FastAPI(
     title="Leadership OS API",
     version="3.0",
     description="AI-powered Chief of Staff for busy executives",
+    docs_url="/docs" if os.getenv("ENABLE_API_DOCS", "").lower() in {"1", "true", "yes"} else None,
+    redoc_url=None,
+    openapi_url="/openapi.json" if os.getenv("ENABLE_API_DOCS", "").lower() in {"1", "true", "yes"} else None,
     redirect_slashes=True  # ← ADDED: Handle both /api/tasks and /api/tasks/
 )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def sanitized_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Never expose implementation errors from server-side failures."""
+
+    if exc.status_code >= 500:
+        logger.error(
+            "Request failed method=%s path=%s status=%s error_type=%s",
+            request.method,
+            request.url.path,
+            exc.status_code,
+            type(exc).__name__,
+        )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": "The request could not be completed."},
+        )
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_request: Request, exc: RequestValidationError):
+    # Values rejected by validation may contain credentials or private content.
+    errors = [
+        {key: value for key, value in error.items() if key not in {"input", "ctx"}}
+        for error in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": errors})
 logger.info("✓ FastAPI app created")
 
 # --------------------------------------
@@ -109,18 +128,19 @@ logger.info("✓ FastAPI app created")
 logger.info("🌐 Configuring CORS middleware...")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=sorted(trusted_application_origins()),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Alfred-Scheduler-Secret"],
 )
-logger.info("✓ CORS middleware configured (allowing all origins)")
+logger.info("✓ CORS middleware configured for trusted application origins")
 
 
 # --------------------------------------
 # Security headers and rate limiting
 # --------------------------------------
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(CsrfProtectionMiddleware)
 app.add_middleware(RateLimitMiddleware)
 logger.info("✓ Security headers and rate limiting configured")
 
@@ -159,7 +179,7 @@ def _request_log_target(request: Request) -> str:
 async def log_requests(request: Request, call_next):
     start = time.perf_counter()
     log_target = _request_log_target(request)
-    logger.info(f"📥 {request.method} {log_target}")
+    logger.info("Request started method=%s target=%s", request.method, log_target)
     try:
         response = await call_next(request)
     except Exception as exc:
@@ -172,14 +192,24 @@ async def log_requests(request: Request, call_next):
             method=request.method,
             status_code=500,
             response_time_ms=elapsed_ms,
-            message=str(exc),
+            message=type(exc).__name__,
             exc=exc,
         )
-        logger.exception(f"📤 {request.method} {log_target} → 500")
+        logger.error(
+            "Request raised an exception method=%s path=%s error_type=%s",
+            request.method,
+            request.url.path,
+            type(exc).__name__,
+        )
         raise
 
     elapsed_ms = round((time.perf_counter() - start) * 1000)
-    logger.info(f"📤 {request.method} {log_target} → {response.status_code}")
+    logger.info(
+        "Request completed method=%s target=%s status=%s",
+        request.method,
+        log_target,
+        response.status_code,
+    )
     if _should_record_system_health_event(request.url.path, response.status_code, elapsed_ms):
         _record_system_health_event(
             event_type=_classify_response_event(request.url.path, response.status_code, elapsed_ms),
@@ -224,7 +254,7 @@ def _classify_exception_event(path: str, exc: Exception) -> str:
         return "database_failure"
     if "openai" in combined:
         return "openai_failure"
-    if "gmail" in combined or "mailgun" in combined or "email" in combined:
+    if "gmail" in combined or "email" in combined:
         return "email_failure"
     return "api_error"
 
@@ -295,50 +325,53 @@ def _record_system_health_event(
             if db:
                 db.close()
     except Exception as exc:
-        logger.warning(f"Could not record system health event: {exc}")
+        logger.warning(
+            "Could not record system health event error_type=%s",
+            type(exc).__name__,
+        )
 
 # --------------------------------------
 # Include API routers
 # --------------------------------------
 logger.info("🔌 Registering API routers...")
 routers_to_register = [
-    (journal.router, "/api/journal", "Journal"),
-    (auth.router, "/api/auth", "Auth"),
-    (onboarding.router, "/api/onboarding", "Onboarding"),
-    (webhook.router, "/api", "Webhook"),
-    (webhook_brain.router, "/api/brain", "Webhook-Brain"),
-    (tasks.router, "/api/tasks", "Tasks"),
-    (nudge.router, "/api", "Nudge"),
-    (journey.router, "/api/journey", "Journey"),
-    (messages.router, "/api", "Messages"),
-    (waitlist.router, "/api", "Waitlist"),
-    (habits.router, "/api/habits", "Habits"),
-    (chat.router, "/api", "Chat"),
-    (settings.router, "/api", "Settings"),
-    (notifications.router, "/api", "Notifications"),
-    (admin.router, "/api/admin", "Admin"),
-    (admin_operations.router, "/api/admin", "Admin-Operations"),
-    (admin_cto.router, "/api/admin", "Admin-CTO"),
-    (audio.router, "/api/audio", "Audio"),
-    (meetings.router, "/api/meetings", "Meetings"),
-    (projects.router, "/api/projects", "Projects"),
-    (message_feedback.router, "/api", "Message-Feedback"),
-    (message_signals.router, "/api/message-signals", "Message-Signals"),
-    (usage.router, "/api", "Usage"),
-    (opportunities.router, "/api/opportunities", "Opportunities"),
-    (priority.router, "/api/priority", "Priority"),
-    (home.router, "/api/home", "Home"),
-    (leadership_coaching_router.router, "/api/leadership-coaching", "Leadership-Coaching"),
+    (journal.router, "/api/journal", "Journal", "authenticated"),
+    (auth.router, "/api/auth", "Auth", "mixed"),
+    (onboarding.public_router, "/api/onboarding", "Onboarding-Public", "public"),
+    (onboarding.router, "/api/onboarding", "Onboarding", "authenticated"),
+    (tasks.router, "/api/tasks", "Tasks", "authenticated"),
+    (nudge.router, "/api", "Nudge", "scheduler"),
+    (journey.router, "/api/journey", "Journey", "authenticated"),
+    (messages.router, "/api", "Messages", "authenticated"),
+    (waitlist.router, "/api", "Waitlist", "public"),
+    (habits.router, "/api/habits", "Habits", "authenticated"),
+    (chat.router, "/api", "Chat", "authenticated"),
+    (settings.router, "/api", "Settings", "authenticated"),
+    (notifications.router, "/api", "Notifications", "authenticated"),
+    (admin.router, "/api/admin", "Admin", "admin"),
+    (admin_operations.router, "/api/admin", "Admin-Operations", "admin"),
+    (admin_cto.router, "/api/admin", "Admin-CTO", "admin"),
+    (audio.router, "/api/audio", "Audio", "authenticated"),
+    (meetings.router, "/api/meetings", "Meetings", "authenticated"),
+    (projects.router, "/api/projects", "Projects", "authenticated"),
+    (message_feedback.router, "/api", "Message-Feedback", "authenticated"),
+    (message_signals.router, "/api/message-signals", "Message-Signals", "authenticated"),
+    (usage.router, "/api", "Usage", "authenticated"),
+    (opportunities.router, "/api/opportunities", "Opportunities", "authenticated"),
+    (priority.router, "/api/priority", "Priority", "authenticated"),
+    (home.router, "/api/home", "Home", "authenticated"),
+    (leadership_coaching_router.router, "/api/leadership-coaching", "Leadership-Coaching", "authenticated"),
 ]
 
 
 
-for router, prefix, tag in routers_to_register:
+for router, prefix, tag, access_class in routers_to_register:
     try:
-        app.include_router(router, prefix=prefix, tags=[tag])
-        logger.info(f"  ✓ {tag} router registered at {prefix}")
+        dependencies = [Depends(require_authenticated_identity)] if access_class == "authenticated" else None
+        app.include_router(router, prefix=prefix, tags=[tag], dependencies=dependencies)
+        logger.info(f"  ✓ {tag} router registered at {prefix} ({access_class})")
     except Exception as e:
-        logger.error(f"  ✗ Failed to register {tag} router: {e}")
+        logger.error("Failed to register router tag=%s error_type=%s", tag, type(e).__name__)
 
 logger.info("✓ All API routers registered")
 
@@ -360,32 +393,21 @@ def health():
             conn.execute(text("SELECT 1"))
         db_status = "connected"
         db_test = "✓"
-    except Exception as e:
+    except Exception:
         db_status = "error"
-        db_test = f"✗ {str(e)[:50]}"
+        db_test = "failed"
 
     response = {
-        "status": "ok",
+        "status": "ok" if db_status == "connected" else "error",
         "service": "Leadership OS",
         "version": "3.0",
-        "deployment": {
-            "commit": os.getenv("RAILWAY_GIT_COMMIT_SHA") or os.getenv("GIT_COMMIT_SHA") or "unknown",
-            "service": os.getenv("RAILWAY_SERVICE_NAME") or "unknown",
-            "environment": os.getenv("RAILWAY_ENVIRONMENT_NAME") or "unknown",
-            "deployment_id": os.getenv("RAILWAY_DEPLOYMENT_ID") or "unknown",
-        },
         "timestamp": datetime.now().isoformat(),
         "database": db_status,
         "database_test": db_test,
-        "environment": {
-            "has_openai_key": bool(os.getenv("OPENAI_API_KEY")),
-            "has_twilio_config": bool(os.getenv("TWILIO_SID")),
-            "has_mailgun_config": bool(os.getenv("MAILGUN_API_KEY")),
-        }
     }
 
     logger.info(f"🏥 Health check called - Status: {response['status']}, DB: {db_status}")
-    return response
+    return JSONResponse(status_code=200 if db_status == "connected" else 503, content=response)
 
 
 logger.info("✓ Health check endpoints configured")
@@ -395,6 +417,7 @@ logger.info("✓ Health check endpoints configured")
 # --------------------------------------
 logger.info("📁 Configuring static file serving...")
 static_path = Path(__file__).parent.parent / "static"
+static_root = static_path.resolve()
 logger.info(f"  Static path: {static_path.absolute()}")
 
 if static_path.exists():
@@ -413,7 +436,7 @@ if static_path.exists():
             logger.warning("  ⚠️  index.html NOT found!")
 
     except Exception as e:
-        logger.error(f"  ✗ Could not list static directory: {e}")
+        logger.error("Could not inspect static directory error_type=%s", type(e).__name__)
 
     # Mount assets
     assets_path = static_path / "assets"
@@ -426,7 +449,7 @@ if static_path.exists():
             logger.info(f"  ✓ Assets mounted at /assets ({len(asset_files)} files)")
             logger.info(f"  Frontend JS assets: {[asset.name for asset in asset_files if asset.suffix == '.js']}")
         except Exception as e:
-            logger.error(f"  ✗ Failed to mount assets: {e}")
+            logger.error("Failed to mount assets error_type=%s", type(e).__name__)
     else:
         logger.warning("  ⚠️  Assets directory not found")
 
@@ -459,18 +482,21 @@ if static_path.exists():
             raise HTTPException(status_code=404, detail="Not found")
 
         # Try to serve static files first (images, etc.)
-        file_path = static_path / full_path
+        file_path = (static_root / full_path).resolve()
+        if not file_path.is_relative_to(static_root):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Not found")
         if file_path.is_file():
-            logger.info(f"📄 Serving static file: /{full_path}")
+            logger.info("Serving static file")
             return FileResponse(str(file_path))
 
         # Serve React app for everything else (including root "/")
         index_file = static_path / "index.html"
         if index_file.exists():
-            logger.info(f"🎨 Serving React app for: /{full_path}")
+            logger.info("Serving React application")
             return FileResponse(str(index_file))
 
-        logger.error(f"React app requested but index.html not found at {index_file}")
+        logger.error("React app requested but index.html is unavailable")
         return JSONResponse({
             "error": "React app not found",
             "message": "Frontend not built",
@@ -490,6 +516,8 @@ else:
 
 @app.on_event("startup")
 def start_email():
+    revision = verify_database_schema(engine)
+    logger.info("Database readiness verified revision=%s", revision)
     if os.getenv("SKIP_STARTUP_TASKS", "").lower() in {"1", "true", "yes"}:
         logger.info("Startup background tasks skipped by SKIP_STARTUP_TASKS")
         return
@@ -505,11 +533,8 @@ logger.info("=" * 70)
 logger.info("📍 Available endpoints:")
 logger.info("   • Root:        / (serves React app)")
 logger.info("   • Health:      /api/health")
-logger.info("   • API Docs:    /docs")
 logger.info("   • Tasks:       /api/tasks")
 logger.info("   • Journey:     /api/journey")
-logger.info("   • Webhook:     /api/webhook")
-logger.info("   • Email:       /api/email/webhook")
 logger.info("=" * 70)
 logger.info("🎯 Ready to serve requests!")
 logger.info("=" * 70)

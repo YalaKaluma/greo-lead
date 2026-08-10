@@ -17,12 +17,11 @@ const getApiBaseUrl = () => {
 };
 
 export const API_BASE_URL = getApiBaseUrl();
-export const USER_NUMBER = import.meta.env.VITE_USER_NUMBER || 'whatsapp:+17707789240';
+export const USER_NUMBER = import.meta.env.VITE_USER_NUMBER || '';
 
 console.log('API Config:', {
   mode: import.meta.env.MODE,
-  apiBaseUrl: API_BASE_URL,
-  userNumber: USER_NUMBER
+  apiBaseUrl: API_BASE_URL
 });
 // Alias export for compatibility
 export const API_URL = API_BASE_URL;

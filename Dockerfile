@@ -1,46 +1,34 @@
-FROM python:3.11-slim
+FROM node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS frontend-builder
 
-# --------------------
-# System deps + Node
-# --------------------
-RUN apt-get update && \
-    apt-get install -y curl gnupg ffmpeg && \
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# --------------------
-# Backend deps
-# --------------------
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-
-# --------------------
-# Frontend build FIRST
-# Vite builds to /static (via ../../static from /app/frontend)
-# --------------------
 WORKDIR /app/frontend
-COPY app/frontend/package.json ./
-RUN npm install
+RUN corepack enable
+COPY app/frontend/package.json app/frontend/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY app/frontend/ ./
-RUN npm run build
+RUN pnpm build
 
-# --------------------
-# Copy backend code AFTER frontend build
-# --------------------
+
+FROM python:3.11-slim@sha256:90744cff8f32887f075c47d747a173ff333e9e98801667af93c357fa9f5e28ff
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    apt-get clean && rm -rf /var/lib/apt/lists/* && \
+    useradd --create-home --uid 10001 alfred
+
 WORKDIR /app
-COPY app/ ./app
-COPY alembic.ini ./alembic.ini
-COPY alembic/ ./alembic/
+COPY requirements.txt ./
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 
-# --------------------
-# REPLACE static files: delete old, move new from /static to /app/static
-# --------------------
-RUN rm -rf /app/static && \
-    mkdir -p /app/static && \
-    mv /static/* /app/static/ 2>/dev/null || true
+COPY --chown=alfred:alfred app/ ./app
+COPY --chown=alfred:alfred alembic.ini ./alembic.ini
+COPY --chown=alfred:alfred alembic/ ./alembic/
+COPY --from=frontend-builder --chown=alfred:alfred /static/ ./static/
 
+USER alfred
 EXPOSE 8080
-CMD ["sh", "-c", "DIRECT_DATABASE_URL= alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]

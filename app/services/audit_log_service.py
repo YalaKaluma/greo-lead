@@ -5,6 +5,7 @@ from fastapi import Request
 from sqlalchemy.orm import Session
 
 from app.models import AuditLog, User
+from app.utils.safe_errors import log_failure
 
 logger = logging.getLogger(__name__)
 
@@ -82,4 +83,4 @@ def write_audit_log(
             db.rollback()
         except Exception as rollback_exc:
             logger.debug("Could not rollback after audit log failure: %s", rollback_exc)
-        logger.warning("Could not write audit log event_type=%s: %s", event_type, exc)
+        log_failure("audit_log_write", exc, level=logging.WARNING)

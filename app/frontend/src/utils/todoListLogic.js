@@ -7,6 +7,7 @@ export const getStoredTaskScore = (task) => {
   if (Number.isNaN(numericScore)) return null;
 
   return {
+    score_id: task.mtn_score_id_today ?? null,
     task_id: task.id,
     title: task.title,
     score: numericScore > 1 ? numericScore / 10 : numericScore,
@@ -79,8 +80,8 @@ export const mtnSortValue = (task, getTaskScore = () => null) => {
     '1. Transformation': 0,
     '2. Strategic': 1,
     '3. Important': 2,
-    '4. Maintenance': 3,
-    '5. Low Leverage': 4
+    '4. Tactical': 3,
+    '5. Operational': 4
   };
   return labelOrder[getMtnLabel(scoreData.score)] ?? 999;
 };

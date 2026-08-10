@@ -1,0 +1,10 @@
+title = "Gitleaks config"
+
+[allowlist]
+description = "Allow historical CI placeholder for scheduler secret in workflow files"
+paths = [
+  '''^\.github/workflows/(security-ci|release-prod)\.yml$''',
+]
+regexes = [
+  '''ALFRED_SCHEDULER_SECRET:\s*ci-scheduler-secret-at-least-32-characters''',
+]

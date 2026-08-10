@@ -1,6 +1,8 @@
 ﻿from app.services.journey_support import *
 from app.config import OPENAI_API_KEY, OPENAI_MODEL
 from openai import OpenAI
+from app.security_dependencies import require_authenticated_user_identifier
+from app.utils.safe_errors import internal_error, log_failure
 
 router = APIRouter()
 openai_client_journey = OpenAI(api_key=OPENAI_API_KEY)
@@ -103,7 +105,7 @@ def _ensure_onboarding_goal_visible(db: Session, user: User) -> bool:
 # ========================================
 @router.get("/goals", response_model=list[GoalResponse])
 def get_goals(
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """Get all goals for a user"""
@@ -130,7 +132,7 @@ def get_goals(
 @router.post("/goals", response_model=GoalResponse)
 def create_goal(
         goal_data: GoalCreate,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """Create a new goal"""
@@ -180,7 +182,7 @@ def create_goal(
 @router.patch("/goals/reorder")
 def reorder_goals(
         reorder_data: GoalReorderRequest,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """Persist manual goal ordering within a single parent scope."""
@@ -246,7 +248,7 @@ def reorder_goals(
 def update_goal(
         goal_id: int,
         goal_data: GoalUpdate,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """Update a goal"""
@@ -289,7 +291,7 @@ def update_goal(
 @router.delete("/goals/{goal_id}")
 def delete_goal(
         goal_id: int,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """Delete a goal"""
@@ -339,7 +341,7 @@ def delete_goal(
 @router.get("/visions/{vision_id}/roadmap")
 def get_vision_roadmap(
         vision_id: int,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     vision = get_user_goal_or_404(db, vision_id, user_number)
@@ -368,34 +370,34 @@ def get_vision_roadmap(
 @router.get("/visions/{vision_id}/progress-review")
 def get_vision_progress_review(
         vision_id: int,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     try:
         return VisionProgressReviewService.get_latest_or_generated(db, user_number, vision_id)
-    except ValueError as error:
-        raise HTTPException(status_code=404, detail=str(error))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Vision progress review not found")
 
 
 @router.post("/visions/{vision_id}/progress-review/refresh")
 def refresh_vision_progress_review(
         vision_id: int,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     try:
         return VisionProgressReviewService.refresh_vision_progress_review(db, user_number, vision_id)
-    except ValueError as error:
-        raise HTTPException(status_code=404, detail=str(error))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Vision progress review not found")
     except Exception as error:
-        raise HTTPException(status_code=502, detail=f"Could not refresh the progress review: {error}")
+        raise internal_error("vision_progress_review_refresh", error, "The progress review could not be refreshed.")
 
 
 @router.post("/visions/{vision_id}/waves")
 def create_wave(
         vision_id: int,
         wave_data: WaveCreate,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     vision = get_user_goal_or_404(db, vision_id, user_number)
@@ -432,7 +434,7 @@ def create_wave(
 def update_wave(
         wave_id: int,
         wave_data: WaveUpdate,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     wave = db.query(VisionRoadmapWave).filter(
@@ -464,7 +466,7 @@ def update_wave(
 @router.delete("/waves/{wave_id}")
 def delete_wave(
         wave_id: int,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     wave = db.query(VisionRoadmapWave).filter(
@@ -483,7 +485,7 @@ def delete_wave(
 def add_goal_to_wave(
         wave_id: int,
         link_data: WaveGoalCreate,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     wave = db.query(VisionRoadmapWave).filter(
@@ -537,7 +539,7 @@ def add_goal_to_wave(
 def reorder_wave_goals(
         wave_id: int,
         reorder_data: WaveGoalReorderRequest,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     wave = db.query(VisionRoadmapWave).filter(
@@ -569,7 +571,7 @@ def update_goal_in_wave(
         wave_id: int,
         goal_id: int,
         link_data: WaveGoalUpdate,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     wave = db.query(VisionRoadmapWave).filter(
@@ -599,7 +601,7 @@ def update_goal_in_wave(
 def remove_goal_from_wave(
         wave_id: int,
         goal_id: int,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     wave = db.query(VisionRoadmapWave).filter(
@@ -626,7 +628,7 @@ def remove_goal_from_wave(
 def reorder_waves(
         vision_id: int,
         reorder_data: WaveReorderRequest,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     waves = db.query(VisionRoadmapWave).filter(
@@ -650,7 +652,7 @@ def reorder_waves(
 def generate_roadmap(
         vision_id: int,
         request: RoadmapDraftRequest,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     vision = get_user_goal_or_404(db, vision_id, user_number)
@@ -713,7 +715,7 @@ Rules:
                 wave["new_goal_suggestions"] = []
         return draft
     except Exception as e:
-        print(f"Error generating roadmap draft: {e}")
+        log_failure("journey_roadmap_draft", e)
         raise HTTPException(status_code=500, detail="Failed to generate roadmap draft")
 
 

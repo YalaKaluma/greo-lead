@@ -7,6 +7,7 @@ based on conversation state. All behavior flows through this orchestrator.
 """
 
 import json
+from app.utils.safe_errors import log_failure
 from uuid import uuid4
 from datetime import datetime
 from typing import Dict, List, Any, Optional
@@ -78,13 +79,13 @@ def orchestrate(
 
     print(f"\n{'=' * 60}")
     print(f"🧠 BRAIN ORCHESTRATION")
-    print(f"User: {user_number}")
+    print("Authenticated user request received")
     if preferred_language is None:
         user = db.query(User).filter(User.phone_number == user_number).first()
         preferred_language = getattr(user, "language_preference", None)
     preferred_language = normalize_language(preferred_language)
     normalized_conversation_type = (conversation_type or "").strip().lower()
-    print(f"Message: {user_message[:100]}...")
+    print(f"Message received; length={len(user_message or '')}")
     print(f"Preferred language: {preferred_language}")
     print(f"Conversation type: {normalized_conversation_type or 'default'}")
     print(f"{'=' * 60}")
@@ -615,7 +616,7 @@ def handle_learning(
     """
 
     # Store user preference (implement in Phase 3)
-    print(f"📚 Would store user preference: {user_message}")
+    print(f"📚 Preference received; length={len(user_message or '')}")
 
     return OrchestrationResult(
         response="Got it. I'll remember that.",
@@ -756,7 +757,7 @@ def _finalize_goal_review_session(
             # Support both 'title' and 'task' field names
             title = t.get("title") or t.get("task")
             if not title:
-                print(f"⚠️ Skipping invalid task #{i}: missing title/task - {t}")
+                print(f"⚠️ Skipping invalid task #{i}: missing title/task")
                 continue
 
             # Calculate due_date - support both formats
@@ -786,10 +787,10 @@ def _finalize_goal_review_session(
             )
 
             created_tasks.append(task.id)
-            print(f"✅ Created task #{i}: {title} (ID: {task.id})")
+            print(f"✅ Created task #{i} (ID: {task.id})")
 
         except Exception as e:
-            print(f"❌ Failed to create task #{i}: {e}")
+            log_failure("orchestrator_task_creation", e)
             continue
 
     # Save session to database
@@ -821,7 +822,7 @@ def _finalize_goal_review_session(
     db.commit()
 
     print(f"✅ Goal review session saved (ID: {session.id})")
-    print(f"   - Goal: {session.goal_title}")
+    print(f"   - Goal present: {bool(session.goal_title)}")
     print(f"   - Tasks created: {len(created_tasks)}")
     print(f"   - Has summary: {'Yes' if session.summary else 'No'}")
     print(f"   - Ended early: {'Yes' if force_end else 'No'}")
@@ -1073,8 +1074,8 @@ Just the raw JSON object or array. Your response should start with {{ or [.
         
         return parsed
     except Exception as e:
-        print(f"⚠️ Failed to parse JSON from internal prompt: {e}")
-        print(f"Raw content: {content[:400]}")
+        log_failure("orchestrator_internal_json_parse", e)
+        print(f"Raw content omitted; response length={len(content or '')}")
         # Return empty list for task synthesis, empty dict for summary
         if "task_synthesis" in prompt_path:
             return []
@@ -1116,7 +1117,7 @@ def handle_goal_review(
     print(f"\n{'=' * 60}")
     print(f"🎯 GOAL REVIEW SESSION")
     print(f"Current phase: {phase}")
-    print(f"User message: {user_message[:100]}...")
+    print(f"User message received; length={len(user_message or '')}")
     print(f"{'=' * 60}")
 
     # --------------------------------------------------------------
@@ -1499,7 +1500,7 @@ def handle_leadership_coaching(
     
     print(f"\n{'=' * 60}")
     print(f"🧭 LEADERSHIP COACHING SESSION")
-    print(f"User message: {user_message[:100]}...")
+    print(f"User message received; length={len(user_message or '')}")
     print(f"{'=' * 60}")
     
     # Call the leadership coaching orchestrator

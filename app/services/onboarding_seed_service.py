@@ -15,6 +15,7 @@ from app.models import (
     WaveGoal,
 )
 from app.services.timezone_service import get_user_timezone, today_for_timezone
+from app.utils.safe_errors import log_failure
 
 
 logger = logging.getLogger(__name__)
@@ -322,7 +323,7 @@ def ensure_starter_examples_seeded(db: Session, user: User) -> bool:
     is_new_starter_seed = not onboarding_data.get(STARTER_SEED_KEY)
 
     try:
-        logger.info("Starter seed: building goals for user_id=%s user_number=%s", user.id, user.phone_number)
+        logger.info("Starter seed: building goals")
         created_goals = _seed_goals(
             db,
             user.phone_number,
@@ -352,7 +353,7 @@ def ensure_starter_examples_seeded(db: Session, user: User) -> bool:
                 seeded_anything = True
 
         if not onboarding_data.get(COMPACT_GOAL_SAMPLE_KEY):
-            logger.info("Starter seed: compacting sample goals for user_id=%s", user.id)
+            logger.info("Starter seed: compacting sample goals")
             if not is_new_starter_seed:
                 _compact_sample_goal_hierarchy(db, user.phone_number, created_goals)
                 _seed_roadmaps(db, user.phone_number, created_goals, sync_existing=True)
@@ -361,8 +362,8 @@ def ensure_starter_examples_seeded(db: Session, user: User) -> bool:
                 "version": 1,
             }
             seeded_anything = True
-    except Exception:
-        logger.exception("Starter seed failed for user_id=%s user_number=%s", user.id, user.phone_number)
+    except Exception as exc:
+        log_failure("starter_seed", exc)
         raise
 
     user.onboarding_data = onboarding_data

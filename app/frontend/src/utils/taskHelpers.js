@@ -225,8 +225,8 @@ export const MTN_TAG_OPTIONS = [
   '1. Transformation',
   '2. Strategic',
   '3. Important',
-  '4. Maintenance',
-  '5. Low Leverage'
+  '4. Tactical',
+  '5. Operational'
 ];
 
 export const getMtnLabel = (score) => {
@@ -235,8 +235,8 @@ export const getMtnLabel = (score) => {
   if (numericScore >= 0.85) return '1. Transformation';
   if (numericScore >= 0.7) return '2. Strategic';
   if (numericScore >= 0.5) return '3. Important';
-  if (numericScore >= 0.3) return '4. Maintenance';
-  return '5. Low Leverage';
+  if (numericScore >= 0.3) return '4. Tactical';
+  return '5. Operational';
 };
 
 export const getMtnStyle = (scoreOrLabel) => {
@@ -244,6 +244,6 @@ export const getMtnStyle = (scoreOrLabel) => {
   if (label === '1. Transformation') return 'bg-blue-900 text-white border-blue-900';
   if (label === '2. Strategic') return 'bg-blue-700 text-white border-blue-700';
   if (label === '3. Important') return 'bg-blue-100 text-blue-800 border-blue-200';
-  if (label === '4. Maintenance') return 'bg-sky-50 text-sky-700 border-sky-200';
+  if (label === '4. Tactical') return 'bg-sky-50 text-sky-700 border-sky-200';
   return 'bg-slate-50 text-slate-600 border-slate-200';
 };

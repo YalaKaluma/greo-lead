@@ -123,7 +123,7 @@ class NotificationService:
             subscription.device_label = payload.device_label
             subscription.is_active = True
             subscription.updated_at = now
-            logger.info("Updated push subscription for user=%s subscription_id=%s", user_number, subscription.id)
+            logger.info("Updated push subscription")
         else:
             subscription = PushSubscription(
                 user_number=user_number,
@@ -136,7 +136,7 @@ class NotificationService:
                 is_active=True,
             )
             self.db.add(subscription)
-            logger.info("Created push subscription for user=%s", user_number)
+            logger.info("Created push subscription")
 
         preferences = self.get_or_create_preferences(user_number)
         preferences.notifications_enabled = True
@@ -206,7 +206,7 @@ class NotificationService:
         preferences.updated_at = datetime.utcnow()
         self.db.commit()
         self.db.refresh(preferences)
-        logger.info("Updated notification preferences for user=%s", user_number)
+        logger.info("Updated notification preferences")
         return preferences
 
     def status(self, user_number: str) -> dict[str, Any]:
@@ -231,7 +231,7 @@ class NotificationService:
     def send(self, payload: NotificationPayload) -> NotificationResult:
         preferences = self.get_or_create_preferences(payload.user_number)
         if not preferences.notifications_enabled:
-            logger.info("Notification blocked by preferences for user=%s", payload.user_number)
+            logger.info("Notification blocked by preferences")
             return NotificationResult(skipped=1, reason="notifications_disabled")
 
         if payload.notification_type and preferences.notification_types_enabled:
@@ -278,17 +278,18 @@ class NotificationService:
                         vapid_claims={"sub": VAPID_SUBJECT},
                     )
             except Exception as error:
-                error_reason = str(error)
+                configured_reason = error.args[0] if error.args and isinstance(error.args[0], str) else ""
+                error_reason = (
+                    configured_reason
+                    if configured_reason in {"vapid_not_configured", "pywebpush_unavailable"}
+                    else type(error).__name__
+                )
                 failure_reasons.add(error_reason)
                 result.failed += 1
                 self._record_failure(subscription, payload, error_reason)
                 if _is_invalid_subscription_error(error):
                     subscription.is_active = False
-                    logger.info(
-                        "Invalid push subscription deactivated user=%s subscription_id=%s",
-                        payload.user_number,
-                        subscription.id,
-                    )
+                    logger.info("Invalid push subscription deactivated")
                 result.deliveries.append(NotificationDelivery(subscription.id, "failed", error_reason))
             else:
                 result.sent += 1
@@ -312,14 +313,14 @@ class NotificationService:
                 subscription_id=subscription.id,
                 notification_type=payload.notification_type,
                 source_service=payload.source_service,
-                title=payload.title,
-                body=payload.body,
-                target_url=payload.url,
+                title="",
+                body="",
+                target_url="",
                 status="sent",
                 metadata_json=payload.metadata or {},
             )
         )
-        logger.info("Notification send success user=%s subscription_id=%s", payload.user_number, subscription.id)
+        logger.info("Notification send succeeded")
 
     def _record_failure(self, subscription: PushSubscription, payload: NotificationPayload, error: str) -> None:
         now = datetime.utcnow()
@@ -340,12 +341,7 @@ class NotificationService:
                 metadata_json=payload.metadata or {},
             )
         )
-        logger.warning(
-            "Notification send failure user=%s subscription_id=%s error=%s",
-            payload.user_number,
-            subscription.id,
-            error,
-        )
+        logger.warning("Notification send failure error_type=%s", error)
 
 
 def _is_invalid_subscription_error(error: Exception) -> bool:
@@ -417,14 +413,14 @@ def _firebase_credentials_info() -> dict[str, Any] | None:
         try:
             raw = base64.b64decode(FIREBASE_SERVICE_ACCOUNT_B64).decode("utf-8")
         except Exception as error:
-            logger.warning("Could not decode FIREBASE_SERVICE_ACCOUNT_B64: %s", error)
+            logger.warning("Could not decode Firebase service account error_type=%s", type(error).__name__)
             return None
     if not raw:
         return None
     try:
         return json.loads(raw)
     except Exception as error:
-        logger.warning("Could not parse Firebase service account JSON: %s", error)
+        logger.warning("Could not parse Firebase service account error_type=%s", type(error).__name__)
         return None
 
 

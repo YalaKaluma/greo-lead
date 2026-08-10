@@ -2,7 +2,6 @@ import hashlib
 import logging
 import os
 import re
-import traceback
 from datetime import datetime
 from typing import Any
 
@@ -53,7 +52,7 @@ def normalize_category(category: str | None, source: str | None = None, status_c
     text = f"{category or ''} {source or ''}".lower()
     if any(term in text for term in ("cron", "nudge", "job", "scheduled")):
         return "cron_failure"
-    if any(term in text for term in ("openai", "twilio", "mailgun", "gmail", "github", "external")):
+    if any(term in text for term in ("openai", "gmail", "github", "external")):
         return "external_service_failure"
     if any(term in text for term in ("database", "db", "sqlalchemy", "psycopg", "migration", "schema")):
         return "database_failure"
@@ -265,11 +264,11 @@ def record_health_event_with_new_session(**kwargs) -> None:
     try:
         HealthEventService(db).record_health_event(**kwargs)
     except Exception as exc:
-        logger.warning("Could not record operations health event: %s", exc)
+        logger.warning("Could not record operations health event error_type=%s", type(exc).__name__)
         try:
             db.rollback()
         except Exception as rollback_exc:
-            logger.debug("Could not roll back failed health event session: %s", rollback_exc)
+            logger.debug("Could not roll back failed health event session error_type=%s", type(rollback_exc).__name__)
     finally:
         db.close()
 
@@ -278,20 +277,21 @@ def record_exception(db: Session, *, source: str, exc: Exception, **kwargs) -> S
     return record_health_event(
         db,
         source=source,
-        message=str(exc),
+        message=type(exc).__name__,
         exception_type=type(exc).__name__,
-        stack_trace="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+        stack_trace=None,
         **kwargs,
     )
 
 
 def record_job_failure(db: Session, *, job_name: str, error: Exception | str, **kwargs) -> SystemHealthEvent:
+    safe_message = type(error).__name__ if isinstance(error, Exception) else "Job failed"
     return record_health_event(
         db,
         source=kwargs.pop("source", "cron"),
         category="cron_failure",
         job_name=job_name,
-        message=str(error),
+        message=safe_message,
         exception_type=type(error).__name__ if isinstance(error, Exception) else None,
         **kwargs,
     )
@@ -304,11 +304,12 @@ def record_external_service_failure_with_new_session(
     error: Exception | str,
     retry_status: str | None = None,
 ) -> None:
+    safe_message = type(error).__name__ if isinstance(error, Exception) else "External service failed"
     record_health_event_with_new_session(
         source=service_name.lower(),
         category="external_service_failure",
         service_name=service_name,
-        message=str(error),
+        message=safe_message,
         details={"operation": operation, "retry_status": retry_status},
         exception_type=type(error).__name__ if isinstance(error, Exception) else None,
     )

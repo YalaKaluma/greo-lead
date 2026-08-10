@@ -5,12 +5,13 @@ import threading
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.routers.auth import require_authenticated_user, user_requires_password_change
 from app.models import (
     AdminAuditLog,
     AuditLog,
@@ -31,6 +32,7 @@ from app.models import (
 )
 from app.utils.security import generate_temporary_password, hash_password
 from app.services.admin_system_health_service import AdminSystemHealthService
+from app.utils.safe_errors import log_failure
 from app.services.admin_ai_briefing_service import AdminAIBriefingService
 from app.services.onboarding_seed_service import ensure_starter_examples_seeded
 from app.services.meeting_intelligence_service import (
@@ -190,24 +192,14 @@ def _display_priority_feedback(decision: TaskPriorityDecision, task: Task | None
     }
 
 
-def _get_admin_user(user_number: str, db: Session) -> User:
-    user = db.query(User).filter(
-        (User.phone_number == user_number) | (User.email == user_number)
-    ).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-    if not getattr(user, "is_active", True):
-        raise HTTPException(status_code=403, detail="Inactive users cannot use admin tools")
+def require_admin(
+    user: User = Depends(require_authenticated_user),
+) -> User:
+    if user_requires_password_change(user):
+        raise HTTPException(status_code=403, detail="Password change required")
     if not getattr(user, "is_admin", False):
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
-
-
-def require_admin(
-    admin_user_number: str = Query(..., alias="user_number"),
-    db: Session = Depends(get_db),
-) -> User:
-    return _get_admin_user(admin_user_number, db)
 
 
 def _assessable_meetings_query(db: Session):
@@ -235,7 +227,7 @@ def _run_leadership_reassessment(meeting_ids: list[int]) -> None:
             except Exception as error:
                 _leadership_reassessment_state["failed"] += 1
                 _leadership_reassessment_state["last_error"] = type(error).__name__
-                logger.exception("Historical leadership reassessment failed for meeting_id=%s", meeting_id)
+                log_failure("admin_historical_leadership_reassessment", error)
             else:
                 _leadership_reassessment_state["processed"] += 1
     finally:
@@ -399,6 +391,8 @@ def _set_new_temp_password(user: User) -> str:
     temporary_password = generate_temporary_password()
     user.temp_password = hash_password(temporary_password)
     user.temp_password_expires = datetime.utcnow() + timedelta(hours=24)
+    user.temp_password_consumed_at = None
+    user.session_version = int(user.session_version or 0) + 1
     return temporary_password
 
 
@@ -576,6 +570,7 @@ def deactivate_user(
         raise HTTPException(status_code=400, detail="You cannot deactivate the last remaining admin")
 
     target.is_active = False
+    target.session_version = int(target.session_version or 0) + 1
     _log_admin_action(db, admin_user, "deactivated_user", target)
     db.commit()
     db.refresh(target)

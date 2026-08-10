@@ -15,6 +15,7 @@ from app.models import Habit, JourneyDevelopmentArea, JourneyGoal, JourneyStreng
 from app.services.audit_log_service import write_audit_log
 from app.services.leadership_coaching_service import LEADERSHIP_QUADRANTS
 from app.services.timezone_service import get_user_timezone, today_for_timezone
+from app.utils.safe_errors import log_failure
 
 logger = logging.getLogger(__name__)
 FLOW_VERSION = 3
@@ -209,8 +210,8 @@ def _persist(db: Session, user: User, proposal: dict, data: dict) -> dict:
             "all_scored_tasks": (serialized or {}).get("all_scored_tasks", []),
             "prioritized_at": (serialized or {}).get("prioritized_at"),
         }
-    except Exception:
-        logger.exception("Onboarding MTN prioritization failed")
+    except Exception as exc:
+        log_failure("onboarding_mtn_prioritization", exc)
         mtn_result = {"status": "failed", "top_mtn_tasks": [], "all_scored_tasks": []}
 
     result = {"generation_key": f"user-{user.id}-v{FLOW_VERSION}", "vision_id": vision.id,
@@ -245,7 +246,7 @@ def respond(db: Session, user: User, answer: str) -> dict:
     try:
         turn = _coach_turn(history, data.get("facts") or {}, count)
     except Exception as exc:
-        logger.exception("Onboarding coaching turn failed")
+        log_failure("onboarding_coaching_turn", exc)
         raise RuntimeError("Alfred could not process that response. Please try again.") from exc
     data["facts"] = turn.get("facts") or data.get("facts") or {}
     data["readiness"] = turn.get("readiness") or {}
@@ -288,7 +289,7 @@ def respond(db: Session, user: User, answer: str) -> dict:
                         metadata={"flow_version": FLOW_VERSION, "vision_id": result["vision_id"]})
     except Exception as exc:
         db.rollback()
-        logger.exception("Leadership OS generation failed")
+        log_failure("onboarding_leadership_os_generation", exc)
         data["status"] = "failed"
         history.append({"role": "assistant", "content": "I wasn’t able to complete your first draft just yet. Our conversation is saved, so we can try again without starting over."})
         data["history"] = history

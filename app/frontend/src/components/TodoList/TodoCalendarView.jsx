@@ -577,7 +577,11 @@ export default function TodoCalendarView({
         />
       )}
       {undoMove && (
-        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-3 text-sm text-white shadow-xl" role="status">
+        <div
+          className="fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-lg bg-slate-900 px-4 py-3 text-sm text-white shadow-xl"
+          style={{ bottom: 'calc(1.25rem + var(--alfred-safe-area-bottom))' }}
+          role="status"
+        >
           <span>{t('calendar.movedTo', 'Task moved to')} {formatShortDate(undoMove.targetDate)}</span>
           <button
             type="button"

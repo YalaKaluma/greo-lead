@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import json
+import logging
+from app.utils.safe_errors import log_failure
 from statistics import mean
 from typing import Any
 
@@ -13,6 +16,8 @@ from app.models import (
     HomeDashboardSnapshot,
     JourneyBeltTrial,
     JourneyGoal,
+    Meeting,
+    MeetingLeadershipDomainAssessment,
     Message,
     OpportunitySuggestion,
     Task,
@@ -27,6 +32,9 @@ from app.services.journal_reflection_depth_service import get_reflection_depth_t
 from app.services.onboarding_seed_service import is_starter_goal_example
 from app.services.task_mtn_trend_service import get_task_mtn_trends
 from app.services.timezone_service import get_user_timezone, today_for_timezone
+from app.config import OPENAI_MODEL
+from app.services.openai_service import client
+from app.services.opportunity.opportunity_service import get_best_opportunities
 
 
 DOMAIN_LABELS = {
@@ -38,7 +46,8 @@ DOMAIN_LABELS = {
 }
 
 DOMAIN_ORDER = ["vision", "people", "execute", "energy", "learning"]
-HOME_DASHBOARD_SCHEMA_VERSION = 9
+HOME_DASHBOARD_SCHEMA_VERSION = 11
+logger = logging.getLogger(__name__)
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
@@ -136,13 +145,56 @@ def _rank_top_tasks(
             urgent,
             aligned,
             priority_order.get((task.priority or "").lower(), 0),
-            -(due_day.toordinal() if due_day else 999999),
+            due_day.toordinal() if due_day else 0,
         )
 
+    today_tasks = [task for task in tasks if (_task_due_day(task) and _task_due_day(task) <= today)]
     return [
         _serialize_task(task, scores_by_task.get(task.id), goals_by_id)
-        for task in sorted(tasks, key=sort_key, reverse=True)[:3]
+        for task in sorted(today_tasks, key=sort_key, reverse=True)[:3]
     ]
+
+
+def _operating_system_commentary(
+    metrics: dict[str, Any],
+    trends: dict[str, Any],
+    tasks: list[Task],
+    journal_messages: list[Message],
+    meeting_feedback: list[MeetingLeadershipDomainAssessment],
+    language: str = "en",
+) -> str:
+    context = {
+        "indexes": metrics,
+        "last_14_days": {key: (value or [])[-14:] for key, value in trends.items()},
+        "open_tasks": [
+            {"title": task.title, "due_date": _iso(task.due_date), "priority": task.priority}
+            for task in tasks[:20]
+        ],
+        "recent_journal": [message.content for message in journal_messages[:8] if message.content],
+        "recent_meeting_leadership_feedback": [
+            {"domain": item.domain, "score": item.score, "feedback": item.feedback}
+            for item in meeting_feedback[:12]
+        ],
+    }
+    response = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        temperature=0.25,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are Alfred, an executive chief of staff. Write one concise operating-system observation "
+                    "of 90-140 words in second person. Synthesize the indexes, their recent direction, the last few "
+                    "days of journal context, open work, and meeting leadership feedback. Identify the central pattern, "
+                    "name one tension or risk, and end with one practical focus for today. Be warm, direct, and specific. "
+                    "Do not invent evidence, list every input, or use headings."
+                    + (" Write in French." if language == "fr" else " Write in English.")
+                ),
+            },
+            {"role": "user", "content": json.dumps(context, default=str, ensure_ascii=False)[:60000]},
+        ],
+    )
+    return (response.choices[0].message.content or "").strip()
 
 
 def _rank_procrastinated_tasks(
@@ -416,16 +468,35 @@ class HomeDashboardService:
         )
         if snapshot and not force and self._is_fresh(snapshot, user_number):
             return snapshot
-        if not force:
-            latest_snapshot = (
-                self.db.query(HomeDashboardSnapshot)
-                .filter(HomeDashboardSnapshot.user_number == user_number)
-                .order_by(HomeDashboardSnapshot.snapshot_date.desc(), HomeDashboardSnapshot.updated_at.desc())
-                .first()
-            )
-            if latest_snapshot and self._is_fresh(latest_snapshot, user_number):
-                return latest_snapshot
         return self.refresh(user_number, source=source)
+
+    def refresh_daily_recommendations(self, user_number: str) -> int:
+        user = self.db.query(User).filter(
+            or_(User.phone_number == user_number, User.email == user_number)
+        ).first()
+        if not user:
+            return 0
+
+        generated = get_best_opportunities(
+            user_id=user.id,
+            surface="home_dashboard",
+            opportunity_type="task",
+            limit=3,
+            db=self.db,
+        )
+        new_ids = [int(item["id"]) for item in generated]
+        stale_query = self.db.query(OpportunitySuggestion).filter(
+            OpportunitySuggestion.user_id == user.id,
+            OpportunitySuggestion.surface == "home_dashboard",
+            OpportunitySuggestion.status == "suggested",
+        )
+        if new_ids:
+            stale_query = stale_query.filter(~OpportunitySuggestion.id.in_(new_ids))
+        for suggestion in stale_query.all():
+            suggestion.status = "expired"
+            suggestion.updated_at = datetime.utcnow()
+        self.db.commit()
+        return len(new_ids)
 
     def refresh(self, user_number: str, source: str = "manual") -> HomeDashboardSnapshot:
         timezone_name = get_user_timezone(self.db, user_number)
@@ -462,17 +533,24 @@ class HomeDashboardService:
             .order_by(desc(JourneyBeltTrial.started_at))
             .all()
         )
-        opportunities = (
+        opportunity_query = (
             self.db.query(OpportunitySuggestion)
             .join(User, OpportunitySuggestion.user_id == User.id)
             .filter(
                 or_(User.phone_number == user_number, User.email == user_number),
                 OpportunitySuggestion.status == "suggested",
+                OpportunitySuggestion.surface == "home_dashboard",
             )
             .order_by(desc(OpportunitySuggestion.mtn_score), desc(OpportunitySuggestion.created_at))
             .limit(3)
-            .all()
         )
+        opportunities = opportunity_query.all()
+        if not opportunities:
+            try:
+                self.refresh_daily_recommendations(user_number)
+                opportunities = opportunity_query.all()
+            except Exception as exc:
+                log_failure("home_recommendations", exc, level=logging.WARNING)
 
         mtn_week = _mtn_period_stats(mtn_chart, 7)
         mtn_month = _mtn_period_stats(mtn_chart, 30)
@@ -521,6 +599,61 @@ class HomeDashboardService:
             )
         )
 
+        metrics = {
+            "mtn": {
+                "score": _as_float(mtn_week.get("average_score"), 0),
+                "completed_tasks": int(mtn_week.get("completed_tasks") or 0),
+                "average_tasks_per_day": round(int(mtn_week.get("completed_tasks") or 0) / 7, 1),
+                "delta": _as_float((mtn_week.get("trend") or {}).get("delta_vs_30"), 0),
+                "status": (mtn_week.get("trend") or {}).get("label") or "Stable",
+                "sparkline": [item.get("rolling_average") for item in mtn_chart[-14:]],
+                "five_week_average": _average_chart_value(mtn_chart, "mtn_score"),
+            },
+            "habits": {
+                "compliance_rate": int(habit_week.get("compliance_rate") or 0),
+                "completed": int(habit_week.get("completed") or 0),
+                "expected": int(habit_week.get("expected") or 0),
+                "delta": int(habit_week.get("compliance_rate") or 0) - int(habit_baseline.get("compliance_rate") or 0),
+                "status": (habit_week.get("trend") or {}).get("label") or "Stable",
+                "five_week_average": _average_chart_value(habit_chart, "rolling_average"),
+            },
+            "journal": {
+                **journal_metrics,
+                "sparkline": [item.get("weekly_average") for item in journal_chart[-14:]],
+                "five_week_average": _five_week_wisdom_average(journal_chart),
+            },
+        }
+        trends = {"mtn": mtn_chart, "habits": habit_chart, "journal": journal_chart, "energy": energy_chart}
+
+        existing_snapshot = self.db.query(HomeDashboardSnapshot).filter(
+            HomeDashboardSnapshot.user_number == user_number,
+            HomeDashboardSnapshot.snapshot_date == today,
+        ).first()
+        operating_commentary = ((existing_snapshot.payload or {}).get("operating_commentary") if existing_snapshot else None)
+        if source == "morning_nudge" or not operating_commentary:
+            user = self.db.query(User).filter(
+                or_(User.phone_number == user_number, User.email == user_number)
+            ).first()
+            recent_journal = self.db.query(Message).filter(
+                Message.user_number == user_number,
+                Message.sender == "user",
+            ).order_by(Message.timestamp.desc()).limit(8).all()
+            recent_meeting_feedback = self.db.query(MeetingLeadershipDomainAssessment).join(Meeting).filter(
+                Meeting.user_number == user_number,
+            ).order_by(Meeting.created_at.desc()).limit(12).all()
+            try:
+                operating_commentary = _operating_system_commentary(
+                    metrics,
+                    trends,
+                    tasks,
+                    recent_journal,
+                    recent_meeting_feedback,
+                    (user.language_preference if user else "en"),
+                )
+            except Exception as exc:
+                log_failure("home_operating_commentary", exc, level=logging.WARNING)
+                operating_commentary = operating_commentary or ""
+
         payload = {
             "schema_version": HOME_DASHBOARD_SCHEMA_VERSION,
             "snapshot_date": today.isoformat(),
@@ -529,36 +662,9 @@ class HomeDashboardService:
                 "journal": self._journal_source_state(user_number),
             },
             "activation_ready": activation_ready,
-            "metrics": {
-                "mtn": {
-                    "score": _as_float(mtn_week.get("average_score"), 0),
-                    "completed_tasks": int(mtn_week.get("completed_tasks") or 0),
-                    "average_tasks_per_day": round(int(mtn_week.get("completed_tasks") or 0) / 7, 1),
-                    "delta": _as_float((mtn_week.get("trend") or {}).get("delta_vs_30"), 0),
-                    "status": (mtn_week.get("trend") or {}).get("label") or "Stable",
-                    "sparkline": [item.get("rolling_average") for item in mtn_chart[-14:]],
-                    "five_week_average": _average_chart_value(mtn_chart, "mtn_score"),
-                },
-                "habits": {
-                    "compliance_rate": int(habit_week.get("compliance_rate") or 0),
-                    "completed": int(habit_week.get("completed") or 0),
-                    "expected": int(habit_week.get("expected") or 0),
-                    "delta": int(habit_week.get("compliance_rate") or 0) - int(habit_baseline.get("compliance_rate") or 0),
-                    "status": (habit_week.get("trend") or {}).get("label") or "Stable",
-                    "five_week_average": _average_chart_value(habit_chart, "rolling_average"),
-                },
-                "journal": {
-                    **journal_metrics,
-                    "sparkline": [item.get("weekly_average") for item in journal_chart[-14:]],
-                    "five_week_average": _five_week_wisdom_average(journal_chart),
-                },
-            },
-            "trends": {
-                "mtn": mtn_chart,
-                "habits": habit_chart,
-                "journal": journal_chart,
-                "energy": energy_chart,
-            },
+            "metrics": metrics,
+            "trends": trends,
+            "operating_commentary": operating_commentary,
             "top_tasks": _rank_top_tasks(tasks, scores_by_task, goals_by_id, today),
             "procrastinated_tasks": _rank_procrastinated_tasks(tasks, scores_by_task, goals_by_id),
             "recommendations": [
@@ -582,11 +688,7 @@ class HomeDashboardService:
             "next_trial": _next_trial(readiness, trials, wheel_segments),
         }
 
-        snapshot = (
-            self.db.query(HomeDashboardSnapshot)
-            .filter(HomeDashboardSnapshot.user_number == user_number, HomeDashboardSnapshot.snapshot_date == today)
-            .first()
-        )
+        snapshot = existing_snapshot
         if snapshot:
             snapshot.payload = payload
             snapshot.source = source

@@ -93,6 +93,17 @@ class HabitsRouterTest(TestCase):
 
         self.assertEqual(habits.calculate_streak(completions, "weekdays", today), 3)
 
+    def test_weekday_streak_survives_the_weekend(self):
+        friday = date(2026, 6, 12)
+        completions = [
+            HabitCompletion(date=friday, status="done"),
+            HabitCompletion(date=friday - timedelta(days=1), status="done"),
+        ]
+
+        self.assertEqual(habits.calculate_streak(completions, "weekdays", friday + timedelta(days=1)), 2)
+        self.assertEqual(habits.calculate_streak(completions, "weekdays", friday + timedelta(days=2)), 2)
+        self.assertEqual(habits.calculate_streak(completions, "weekdays", friday + timedelta(days=3)), 2)
+
     def test_create_habit_validates_goal_and_trims_title(self):
         db = FakeHabitDb()
         db.goals.append((7,))

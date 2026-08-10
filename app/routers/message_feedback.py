@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import Message, MessageFeedback, User
+from app.routers.auth import require_authenticated_user
+from app.security_dependencies import authenticated_user_identifier
 from app.services.audit_log_service import write_audit_log
 
 router = APIRouter()
@@ -21,20 +23,18 @@ class MessageFeedbackRequest(BaseModel):
 def submit_message_feedback(
     payload: MessageFeedbackRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_authenticated_user),
 ):
+    user_number = authenticated_user_identifier(current_user)
     message = db.query(Message).filter(
         Message.id == payload.message_id,
-        Message.user_number == payload.user_number,
+        Message.user_number == user_number,
     ).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
 
-    user = None
-    if message.user_number:
-        user = db.query(User).filter(User.phone_number == message.user_number).first()
-
     feedback = MessageFeedback(
-        user_id=user.id if user else None,
+        user_id=current_user.id,
         message_id=payload.message_id,
         source_context=payload.source_context,
         rating=payload.rating,
@@ -45,7 +45,7 @@ def submit_message_feedback(
     db.refresh(feedback)
     write_audit_log(
         db,
-        user_id=user.id if user else None,
+        user_id=current_user.id,
         event_type="message_feedback_submitted",
         object_type="message_feedback",
         object_id=feedback.id,

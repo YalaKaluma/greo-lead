@@ -70,20 +70,19 @@ export function usePriority(apiUrl, userNumber) {
     setPriorityRecommendation(null);
   };
 
-  const submitMtnFeedback = async (taskId, rating, feedback, tag, recommendationId = null) => {
+  const submitMtnFeedback = async (taskId, rating, feedback, tag, recommendationId = null, scoreId = null, adjustedScore = null) => {
     const activeRecommendationId = recommendationId || priorityRecommendation?.recommendation_id;
-    if (!activeRecommendationId) {
-      return { success: false, error: 'No MTN run found for this feedback' };
-    }
 
     try {
       await axios.post(`${apiUrl}/api/priority/feedback`, {
-        recommendation_id: activeRecommendationId,
+        recommendation_id: activeRecommendationId || null,
+        score_id: scoreId,
         task_id: taskId,
         user_number: userNumber,
         rating,
         tag,
-        feedback
+        feedback,
+        adjusted_score: adjustedScore
       });
 
       return { success: true };

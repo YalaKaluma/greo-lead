@@ -7,6 +7,7 @@ Onboarding Service - Executive Onboarding Flow
 from sqlalchemy.orm import Session
 from app.models import User, OnboardingStep, EmailVerification
 from app.services.onboarding_seed_service import ensure_starter_examples_seeded
+from app.utils.security import hash_password, verify_password
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
 import re
@@ -23,13 +24,13 @@ class OnboardingConversation:
         msg_lower = message.lower().strip()
         # Use startswith to match only at beginning, avoiding "restarted" matching "start"
         result = any(msg_lower.startswith(trigger) for trigger in OnboardingConversation.TRIGGER_PHRASES)
-        print(f"🔍 DEBUG [is_onboarding_trigger]: message='{message}' → result={result}")
+        print(f"🔍 DEBUG [is_onboarding_trigger]: message_present={bool(message)} result={result}")
         return result
 
     @staticmethod
     def get_user_or_create(db: Session, phone_number: str) -> Tuple[User, bool]:
         """Get existing user or create new one. Returns: (user, is_new)"""
-        print(f"🔍 DEBUG [get_user_or_create]: Looking for user with phone={phone_number}")
+        print("DEBUG [get_user_or_create]: Looking up user")
 
         user = db.query(User).filter(User.phone_number == phone_number).first()
         is_new = False
@@ -47,9 +48,9 @@ class OnboardingConversation:
             db.commit()
             db.refresh(user)
             is_new = True
-            print(f"✅ DEBUG [get_user_or_create]: User created with id={user.id}")
+            print("DEBUG [get_user_or_create]: User created")
         else:
-            print(f"♻️ DEBUG [get_user_or_create]: Existing user found with id={user.id}")
+            print("DEBUG [get_user_or_create]: Existing user found")
 
         return user, is_new
 
@@ -58,10 +59,9 @@ class OnboardingConversation:
         """Process a message during onboarding and return Alfred's response."""
         step = user.onboarding_step
         print(f"\n🔍 DEBUG [process_onboarding_message]:")
-        print(f"   User ID: {user.id}")
         print(f"   Current step: {step}")
-        print(f"   Message: '{message}'")
-        print(f"   Current onboarding_data: {user.onboarding_data}")
+        print(f"   Message length: {len(message or '')}")
+        print(f"   Onboarding data present: {bool(user.onboarding_data)}")
 
         # INITIAL: User just said "Hey Alfred"
         if step == 'INITIAL':
@@ -76,7 +76,7 @@ class OnboardingConversation:
         # NAME: Collecting name
         elif step == 'NAME':
             name = OnboardingConversation._extract_name(message)
-            print(f"📝 DEBUG [NAME]: Extracted name='{name}'")
+            print(f"📝 DEBUG [NAME]: Extracted name present={bool(name)}")
 
             if name:
                 user.name = name
@@ -89,8 +89,7 @@ class OnboardingConversation:
                 db.commit()
                 db.refresh(user)  # ← ADDED: Verify commit worked
 
-                print(f"✅ DEBUG [NAME]: Saved name='{name}', moved to PROFESSION")
-                print(f"   onboarding_data after refresh: {user.onboarding_data}")
+                print("✅ DEBUG [NAME]: Saved name, moved to PROFESSION")
                 return OnboardingConversation._ask_profession(name)
             else:
                 print(f"❌ DEBUG [NAME]: Could not extract name from message")
@@ -99,7 +98,7 @@ class OnboardingConversation:
         # PROFESSION: Collecting profession/role
         elif step == 'PROFESSION':
             profession = message.strip()
-            print(f"📝 DEBUG [PROFESSION]: Saving profession='{profession}'")
+            print(f"📝 DEBUG [PROFESSION]: Saving profession length={len(profession)}")
 
             user.profession = profession
             user.onboarding_step = 'GOAL'
@@ -111,13 +110,12 @@ class OnboardingConversation:
             db.refresh(user)  # ← ADDED: Verify commit worked
 
             print(f"✅ DEBUG [PROFESSION]: Saved, moved to GOAL")
-            print(f"   onboarding_data after refresh: {user.onboarding_data}")
             return OnboardingConversation._ask_goal(user.name, profession)
 
         # GOAL: Collecting first goal
         elif step == 'GOAL':
             goal = message.strip()
-            print(f"📝 DEBUG [GOAL]: Saving goal='{goal}'")
+            print(f"📝 DEBUG [GOAL]: Saving goal length={len(goal)}")
 
             user.onboarding_step = 'GOAL_WHY'
             data = user.onboarding_data or {}
@@ -128,7 +126,6 @@ class OnboardingConversation:
             db.refresh(user)  # ← ADDED: Verify commit worked
 
             print(f"✅ DEBUG [GOAL]: Saved, moved to GOAL_WHY")
-            print(f"   onboarding_data after refresh: {user.onboarding_data}")
             return OnboardingConversation._ask_goal_why(goal)
 
         # GOAL_WHY: Collecting goal motivation (optional, can skip)
@@ -143,7 +140,7 @@ class OnboardingConversation:
                 return OnboardingConversation._ask_tasks(user.name)
             else:
                 why = message.strip()
-                print(f"📝 DEBUG [GOAL_WHY]: Saving why='{why}'")
+                print(f"📝 DEBUG [GOAL_WHY]: Saving response length={len(why)}")
 
                 data = user.onboarding_data or {}
                 data['goal_why'] = why
@@ -154,14 +151,12 @@ class OnboardingConversation:
                 db.refresh(user)  # ← ADDED: Verify commit worked
 
                 print(f"✅ DEBUG [GOAL_WHY]: Saved, moved to TASKS")
-                print(f"   onboarding_data after refresh: {user.onboarding_data}")
                 return OnboardingConversation._ask_tasks(user.name)
 
         # TASKS: Collecting initial tasks
         elif step == 'TASKS':
             tasks_text = message.strip()
             print(f"📝 DEBUG [TASKS]: Saving tasks_raw (length={len(tasks_text)} chars)")
-            print(f"   tasks_raw preview: '{tasks_text[:100]}...'")
 
             data = user.onboarding_data or {}
             data['tasks_raw'] = tasks_text
@@ -172,14 +167,13 @@ class OnboardingConversation:
             db.refresh(user)  # ← ADDED: Verify commit worked
 
             print(f"✅ DEBUG [TASKS]: Saved, moved to QUICK_WIN")
-            print(f"   onboarding_data after refresh: {user.onboarding_data}")
             print(f"   onboarding_data keys: {list((user.onboarding_data or {}).keys())}")
             return OnboardingConversation._ask_quick_win()
 
         # QUICK_WIN: Identifying first task to tackle
         elif step == 'QUICK_WIN':
             quick_win = message.strip()
-            print(f"📝 DEBUG [QUICK_WIN]: Saving quick_win='{quick_win}'")
+            print(f"📝 DEBUG [QUICK_WIN]: Saving response length={len(quick_win)}")
 
             data = user.onboarding_data or {}
             data['quick_win'] = quick_win
@@ -190,7 +184,6 @@ class OnboardingConversation:
             db.refresh(user)  # ← ADDED: Verify commit worked
 
             print(f"✅ DEBUG [QUICK_WIN]: Saved, moved to APP_LINK_SENT")
-            print(f"   onboarding_data after refresh: {user.onboarding_data}")
             print(f"   FINAL onboarding_data keys: {list((user.onboarding_data or {}).keys())}")
 
             # ✅ NEW: Process onboarding data immediately into tasks and goals
@@ -201,7 +194,7 @@ class OnboardingConversation:
             temp_password = user.generate_temp_password()
             db.commit()
             db.refresh(user)  # ← ADDED: Verify password was saved
-            print(f"🔑 DEBUG [QUICK_WIN]: Generated temp_password='{temp_password}'")
+            print("🔑 DEBUG [QUICK_WIN]: Generated one-time temporary password")
 
             return OnboardingConversation._send_app_link(user.name, user.id, temp_password)
 
@@ -283,12 +276,12 @@ See you inside."""
     def _extract_name(message: str) -> Optional[str]:
         """Extract name from message."""
         message = message.strip()
-        print(f"🔍 DEBUG [_extract_name]: Parsing '{message}'")
+        print(f"🔍 DEBUG [_extract_name]: Parsing message length={len(message or '')}")
 
         # Direct name (no prefixes)
         if len(message.split()) <= 3 and not any(word in message.lower() for word in ['is', 'am', 'call']):
             result = message.title()
-            print(f"✅ DEBUG [_extract_name]: Direct name → '{result}'")
+            print("✅ DEBUG [_extract_name]: Direct name extracted")
             return result
 
         # "My name is John" or "I'm John"
@@ -301,13 +294,13 @@ See you inside."""
             match = re.search(pattern, message, re.IGNORECASE)
             if match:
                 result = match.group(1).strip().title()
-                print(f"✅ DEBUG [_extract_name]: Pattern match → '{result}'")
+                print("✅ DEBUG [_extract_name]: Pattern match extracted")
                 return result
 
         # Fallback
         if len(message.split()) <= 3:
             result = message.title()
-            print(f"⚠️ DEBUG [_extract_name]: Fallback → '{result}'")
+            print("⚠️ DEBUG [_extract_name]: Fallback name extracted")
             return result
 
         print(f"❌ DEBUG [_extract_name]: Could not extract name")
@@ -316,7 +309,7 @@ See you inside."""
     @staticmethod
     def complete_onboarding(db: Session, user: User):
         """Mark onboarding as completed"""
-        print(f"🏁 DEBUG [complete_onboarding]: Marking user {user.id} as completed")
+        print("DEBUG [complete_onboarding]: Marking user completed")
         user.onboarding_completed = True
         user.onboarding_step = 'COMPLETED'
         db.commit()
@@ -329,72 +322,8 @@ See you inside."""
         Process onboarding_data and create actual tasks and goals in their respective tables.
         This is called automatically at the end of WhatsApp onboarding.
         """
-        print(f"INFO [process_data]: Deprecated onboarding prefill skipped for user {user.id}")
+        print("INFO [process_data]: Deprecated onboarding prefill skipped")
         return
-
-        from app.services import journey_service
-        from app.models import Task
-
-        data = user.onboarding_data
-        if not data:
-            print(f"⚠️ DEBUG [process_data]: No onboarding_data found")
-            return
-
-        print(f"📊 DEBUG [process_data]: Processing data with keys: {list(data.keys())}")
-        user_number = user.phone_number
-
-        # 1. Create goal in journey_goals table
-        if 'first_goal' in data:
-            goal_text = data['first_goal']
-            why = data.get('goal_why', '')
-
-            print(f"🎯 DEBUG [process_data]: Creating goal: '{goal_text}'")
-            try:
-                goal = journey_service.add_goal(
-                    db,
-                    user_number,
-                    goal_text=goal_text,
-                    why=why,
-                    time_horizon='vision'
-                )
-                print(f"✅ DEBUG [process_data]: Goal created with ID={goal.id}")
-            except Exception as e:
-                print(f"❌ DEBUG [process_data]: Failed to create goal: {e}")
-
-        # 2. Create tasks in tasks table
-        if 'tasks_raw' in data:
-            tasks_text = data['tasks_raw']
-            quick_win = data.get('quick_win', '')
-
-            print(f"📝 DEBUG [process_data]: Extracting tasks from: '{tasks_text[:50]}...'")
-            tasks = extract_tasks_from_onboarding(tasks_text)
-            print(f"✅ DEBUG [process_data]: Extracted {len(tasks)} tasks")
-
-            for task_text in tasks:
-                is_quick_win = quick_win.lower() in task_text.lower() if quick_win else False
-
-                try:
-                    # ✅ Set due_date to today so tasks appear in default "Tasks due today" view
-                    from datetime import date
-                    today = date.today()
-
-                    task = Task(
-                        user_number=user_number,
-                        title=task_text,
-                        priority='High' if is_quick_win else 'Medium',
-                        status='open',
-                        due_date=today,  # ✅ NEW: Set to today so they show up immediately
-                        notes=f"Added during onboarding" + (f" - Quick win!" if is_quick_win else "")
-                    )
-                    db.add(task)
-                    print(f"  ✓ Task queued: '{task_text}' (priority: {task.priority}, due: {today})")
-                except Exception as e:
-                    print(f"  ✗ Failed to create task '{task_text}': {e}")
-
-            db.commit()
-            print(f"✅ DEBUG [process_data]: All tasks committed to database!")
-
-        print(f"🎉 DEBUG [process_data]: Onboarding data processing complete!")
 
 
 class EmailVerificationService:
@@ -404,10 +333,18 @@ class EmailVerificationService:
     def create_verification(db: Session, user_id: int, email: str) -> str:
         """Create a verification code and send to user's email. Returns the verification code."""
         code = EmailVerification.generate_code()
+        db.query(EmailVerification).filter(
+            EmailVerification.user_id == user_id,
+            EmailVerification.verified == False,
+        ).update(
+            {"verified": True, "verified_at": datetime.utcnow()},
+            synchronize_session=False,
+        )
         verification = EmailVerification(
             user_id=user_id,
             email=email,
-            verification_code=code,
+            verification_code=hash_password(code),
+            attempt_count=0,
             expires_at=datetime.utcnow() + timedelta(minutes=15)
         )
         db.add(verification)
@@ -417,17 +354,27 @@ class EmailVerificationService:
     @staticmethod
     def verify_code(db: Session, user_id: int, code: str) -> Tuple[bool, str]:
         """Verify the code sent via WhatsApp matches the one sent to email. Returns: (success, message)"""
+        normalized_code = (code or "").strip()
         verification = db.query(EmailVerification).filter(
             EmailVerification.user_id == user_id,
-            EmailVerification.verification_code == code,
             EmailVerification.verified == False
-        ).order_by(EmailVerification.created_at.desc()).first()
+        ).order_by(EmailVerification.created_at.desc()).with_for_update().first()
 
         if not verification:
             return False, "Invalid verification code. Please check and try again."
 
         if not verification.is_valid():
             return False, "This code has expired. Please request a new one by sending another email."
+
+        if len(normalized_code) != 6 or not normalized_code.isdigit() or not verify_password(
+            normalized_code,
+            verification.verification_code,
+        ):
+            verification.attempt_count = int(verification.attempt_count or 0) + 1
+            db.commit()
+            if verification.attempt_count >= 5:
+                return False, "Too many incorrect attempts. Please request a new verification code."
+            return False, "Invalid verification code. Please check and try again."
 
         verification.verified = True
         verification.verified_at = datetime.utcnow()

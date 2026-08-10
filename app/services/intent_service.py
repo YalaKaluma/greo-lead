@@ -10,6 +10,7 @@ from openai import OpenAI
 from app.config import OPENAI_API_KEY, OPENAI_MODEL
 import json
 from typing import Dict, List, Any, Optional
+from app.utils.safe_errors import log_failure
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -148,8 +149,8 @@ def detect_intents(
         return result
         
     except json.JSONDecodeError as e:
-        print(f"⚠️ Intent detection JSON parse error: {e}")
-        print(f"Raw response: {result_text}")
+        log_failure("intent_json_parse", e)
+        print(f"Intent response parse failed; response length={len(result_text or '')}")
         # Fallback to low-confidence COACH intent
         return {
             "intents": [{"name": "COACH", "confidence": 0.4}],
@@ -158,12 +159,12 @@ def detect_intents(
         }
     
     except Exception as e:
-        print(f"❌ Intent detection error: {e}")
+        log_failure("intent_detection", e)
         # Safe fallback
         return {
             "intents": [{"name": "COACH", "confidence": 0.3}],
             "explicit_execution": False,
-            "reasoning": f"Error in detection: {str(e)}"
+            "reasoning": "Intent detection was unavailable"
         }
 
 

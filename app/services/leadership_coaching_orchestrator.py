@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 from openai import OpenAI
 from app.services.leadership_coaching_service import LeadershipCoachingService, LEADERSHIP_QUADRANTS
+from app.utils.safe_errors import log_failure
 from app.services.journey_context import build_journey_context
 from app.services.message_service import load_conversation_history
 from app.models import LeadershipCoachingSession, JourneyDevelopmentArea
@@ -355,7 +356,7 @@ def _handle_planning(
         db.commit()
         print(f"✅ Added development area from leadership session")
     except Exception as e:
-        print(f"⚠️ Could not add development area: {e}")
+        log_failure("leadership_development_area", e)
     
     # Auto-create task for the experiment using the EXTRACTED experiment
     task_created = False
@@ -378,9 +379,9 @@ def _handle_planning(
         db.add(task)
         db.commit()
         task_created = True
-        print(f"✅ Auto-created leadership experiment task: {task_title}")
+        print("✅ Auto-created leadership experiment task")
     except Exception as e:
-        print(f"⚠️ Could not auto-create task: {e}")
+        log_failure("leadership_task_creation", e)
     
     # Complete the session
     LeadershipCoachingService.complete_session(db, session_id)

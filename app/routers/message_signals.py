@@ -15,6 +15,8 @@ from app.services.message_signal_classifier import (
     get_message_signal_flags,
     mark_message_for_reclassification,
 )
+from app.routers.auth import require_authenticated_user
+from app.utils.safe_errors import internal_error
 
 router = APIRouter()
 
@@ -74,28 +76,30 @@ def classify_one_message(
     user_id: Optional[int] = None,
     force: bool = False,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_authenticated_user),
 ):
     try:
-        _message_for_user_or_404(db, message_id, user_number=user_number, user_id=user_id)
+        _message_for_user_or_404(db, message_id, user_id=current_user.id)
         if force:
             mark_message_for_reclassification(db, message_id)
         return classify_message_signals(db, message_id, force=force)
-    except ValueError as error:
-        raise HTTPException(status_code=404, detail=str(error))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Message not found")
     except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error))
+        raise internal_error("message_signal_classification", error, "Message signals could not be classified.")
 
 
 @router.post("/backfill")
 def backfill_message_signals(
     request: BackfillRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_authenticated_user),
 ):
     limit = max(1, min(request.limit or 50, 200))
     return classify_unprocessed_messages(
         db,
-        user_id=request.user_id,
-        user_number=request.user_number,
+        user_id=current_user.id,
+        user_number=None,
         limit=limit,
     )
 
@@ -108,13 +112,12 @@ def list_message_signal_flags(
     signal_type: Optional[str] = None,
     source_type: Optional[str] = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_authenticated_user),
 ):
-    if not user_number and user_id is None:
-        raise HTTPException(status_code=400, detail="Provide user_number or user_id.")
     return get_message_signal_flags(
         db,
-        user_number=user_number,
-        user_id=user_id,
+        user_number=None,
+        user_id=current_user.id,
         signal_type=signal_type,
         source_type=source_type,
     )
@@ -126,8 +129,9 @@ def get_message_signal_debug(
     user_number: Optional[str] = None,
     user_id: Optional[int] = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_authenticated_user),
 ):
-    _message_for_user_or_404(db, message_id, user_number=user_number, user_id=user_id)
+    _message_for_user_or_404(db, message_id, user_id=current_user.id)
     flags = (
         db.query(MessageSignalFlag)
         .filter(MessageSignalFlag.message_id == message_id)

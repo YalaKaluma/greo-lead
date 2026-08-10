@@ -21,7 +21,8 @@ from app.models import (
     TaskPrioritizationContext,
     TaskPriorityScore,
     TaskPriorityRecommendation,
-    TaskPriorityDecision
+    TaskPriorityDecision,
+    TaskMtnFeedback,
 )
 from app.services.timezone_service import get_user_timezone
 
@@ -40,6 +41,26 @@ class PriorityService:
 
     def __init__(self, db: Session):
         self.db = db
+
+    def _attach_mtn_learning_examples(self, context: TaskPrioritizationContext, user_number: str) -> None:
+        """Attach recent user corrections for prompt-time personalization."""
+        feedback_rows = (
+            self.db.query(TaskMtnFeedback)
+            .filter(TaskMtnFeedback.user_number == user_number)
+            .order_by(desc(TaskMtnFeedback.created_at))
+            .limit(20)
+            .all()
+        )
+        context.mtn_feedback_examples = [
+            {
+                "title": row.task.title if getattr(row, "task", None) else None,
+                "original_score": float(row.original_score),
+                "adjusted_score": float(row.adjusted_score),
+                "selected_tag": row.selected_tag,
+                "feedback": row.feedback,
+            }
+            for row in feedback_rows
+        ]
 
     def _timezone_for_user(self, user_number: str):
         return pytz.timezone(get_user_timezone(self.db, user_number))
@@ -270,6 +291,7 @@ class PriorityService:
                 return context, existing, scores, 0
 
         context = self.create_context_snapshot(user_number)
+        self._attach_mtn_learning_examples(context, user_number)
         tasks = self.get_tasks_for_scoring(user_number)
         if max_tasks:
             tasks = tasks[:max_tasks]
@@ -344,6 +366,7 @@ class PriorityService:
             }
 
         context = self.create_context_snapshot(user_number)
+        self._attach_mtn_learning_examples(context, user_number)
         llm_result = llm_service.score_tasks(missing_tasks, context)
         scores = self.save_priority_scores(
             context_id=context.id,
@@ -434,6 +457,7 @@ class PriorityService:
             task = self.db.query(Task).get(s.task_id)
             all_scored.append({
                 "task_id": s.task_id,
+                "score_id": s.id,
                 "title": task.title if task else f"Task #{s.task_id}",
                 "notes": task.notes if task else None,
                 "priority": task.priority if task else None,

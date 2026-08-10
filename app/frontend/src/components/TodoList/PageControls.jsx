@@ -262,7 +262,10 @@ export function FloatingSelectionBar({ selectedCount, onCancel, onEditSelected }
   if (selectedCount <= 0) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-blue-500 shadow-2xl z-50">
+    <div
+      className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-blue-500 shadow-2xl z-50"
+      style={{ paddingBottom: 'var(--alfred-safe-area-bottom)' }}
+    >
       <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <span className="text-slate-700 font-medium">

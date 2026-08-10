@@ -21,6 +21,11 @@ from app.services.meeting_intelligence_service import answer_meeting_question, p
 from app.services.leadership_trends_service import get_leadership_trends
 from app.services.journey_support import goal_level_variants, normalize_goal_level
 from app.services.timezone_service import get_user_timezone, today_for_timezone
+from app.services.priority_service import PriorityService
+from app.services.priority_llm_service import PriorityLLMService
+from app.routers.auth import require_authenticated_user
+from app.security_dependencies import authenticated_user_identifier, ensure_user_identity, require_authenticated_user_identifier
+from app.utils.safe_storage import stored_path_within_root
 
 router = APIRouter()
 ALLOWED_AUDIO_TYPES = {"audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a", "audio/x-m4a", "audio/webm", "video/webm"}
@@ -58,6 +63,11 @@ class ActionConversion(BaseModel):
 class ActionItemUpdate(BaseModel):
     user_number: str
     description: Optional[str] = Field(default=None, min_length=1, max_length=2000)
+    notes: Optional[str] = Field(default=None, max_length=30000)
+    due_date: Optional[date] = None
+    priority: Optional[str] = Field(default=None, max_length=20)
+    delegated_to: Optional[str] = Field(default=None, max_length=200)
+    goal_id: Optional[int] = None
     ignored: Optional[bool] = None
 
 
@@ -196,7 +206,7 @@ def _meeting_payload(meeting: Meeting, detail: bool = False):
 
 @router.get("")
 def list_meetings(
-    user_number: str,
+    user_number: str = Depends(require_authenticated_user_identifier),
     search: Optional[str] = None,
     status: Optional[str] = None,
     meeting_type: Optional[str] = None,
@@ -250,7 +260,7 @@ def list_meetings(
 
 
 @router.get("/action-items/tasks")
-def list_meeting_action_items(user_number: str, db: Session = Depends(get_db)):
+def list_meeting_action_items(user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db)):
     rows = db.query(MeetingActionItem, Meeting).join(Meeting).filter(
         Meeting.user_number == user_number,
         MeetingActionItem.created_task_id.is_(None),
@@ -262,18 +272,71 @@ def list_meeting_action_items(user_number: str, db: Session = Depends(get_db)):
         "meeting_id": meeting.id,
         "meeting_title": meeting.title,
         "owner_name": action.owner_name,
+        "notes": action.notes,
+        "due_date": action.due_date,
+        "priority": action.priority or "Medium",
+        "delegated_to": action.delegated_to,
+        "goal_id": action.goal_id,
         "created_at": action.created_at,
+        "mtn_score": float(action.mtn_score) if action.mtn_score is not None else None,
+        "mtn_reason": action.mtn_reason,
+        "mtn_risk_if_ignored": action.mtn_risk_if_ignored,
     } for action, meeting in rows]
 
 
+@router.post("/action-items/tasks/prepare")
+def prepare_meeting_action_items(payload: ActionConversion, db: Session = Depends(get_db)):
+    """Score pending commitments without turning them into to-do tasks."""
+    actions = db.query(MeetingActionItem).join(Meeting).filter(
+        Meeting.user_number == payload.user_number,
+        MeetingActionItem.created_task_id.is_(None),
+        MeetingActionItem.ignored_at.is_(None),
+        MeetingActionItem.mtn_score.is_(None),
+    ).limit(50).all()
+    if not actions:
+        return {"scored": 0}
+
+    priority_service = PriorityService(db)
+    context = priority_service.create_context_snapshot(payload.user_number)
+    temporary_tasks = [Task(
+        id=-action.id,
+        user_number=payload.user_number,
+        title=action.description,
+        notes=f"Meeting: {action.meeting.title}\nOwner: {action.owner_name or 'Unclear'}",
+        due_date=datetime.combine(action.due_date or today_for_timezone(get_user_timezone(db, payload.user_number)), datetime.min.time()),
+        priority=action.priority or "Medium",
+        status="open",
+        goal_id=action.goal_id,
+        delegated_to=action.delegated_to or action.owner_name,
+        created_at=action.created_at or datetime.now(timezone.utc),
+    ) for action in actions]
+    result = PriorityLLMService().score_tasks(temporary_tasks, context)
+    score_by_action_id = {-int(item["task_id"]): item for item in result["scores"]}
+    scored_at = datetime.now(timezone.utc)
+    for action in actions:
+        score = score_by_action_id.get(action.id)
+        if not score:
+            continue
+        action.mtn_score = score["top10_likelihood"]
+        action.mtn_reason = score.get("primary_reason")
+        action.mtn_risk_if_ignored = score.get("risk_if_ignored")
+        action.mtn_scored_at = scored_at
+    db.commit()
+    return {"scored": len(score_by_action_id)}
+
+
 @router.get("/leadership-trends")
-def leadership_trends(user_number: str, db: Session = Depends(get_db)):
-    return get_leadership_trends(db, user_number, days=90)
+def leadership_trends(user_number: str = Depends(require_authenticated_user_identifier), days: int = 90, db: Session = Depends(get_db)):
+    if days not in {0, 7, 30, 90}:
+        raise HTTPException(status_code=400, detail="Days must be 0, 7, 30, or 90")
+    return get_leadership_trends(db, user_number, days=days)
 
 
 @router.post("/leadership-trends/refresh")
-def refresh_leadership_trends(user_number: str, db: Session = Depends(get_db)):
-    return get_leadership_trends(db, user_number, days=90, refresh=True)
+def refresh_leadership_trends(user_number: str = Depends(require_authenticated_user_identifier), days: int = 90, db: Session = Depends(get_db)):
+    if days not in {0, 7, 30, 90}:
+        raise HTTPException(status_code=400, detail="Days must be 0, 7, 30, or 90")
+    return get_leadership_trends(db, user_number, days=days, refresh=True)
 
 
 @router.patch("/action-items/{action_item_id}")
@@ -286,14 +349,47 @@ def update_action_item(action_item_id: int, payload: ActionItemUpdate, db: Sessi
         raise HTTPException(status_code=404, detail="Action item not found.")
     if payload.description is not None:
         action.description = payload.description.strip()
+        if action.created_task:
+            action.created_task.title = action.description
+            action.created_task.updated_at = datetime.now(timezone.utc)
+    supplied_fields = payload.model_fields_set
+    if "goal_id" in supplied_fields and payload.goal_id is not None:
+        goal = db.query(JourneyGoal).filter(
+            JourneyGoal.id == payload.goal_id,
+            JourneyGoal.user_number == payload.user_number,
+        ).first()
+        if not goal:
+            raise HTTPException(status_code=404, detail="Goal not found.")
+    for field in ("notes", "due_date", "priority", "delegated_to", "goal_id"):
+        if field not in supplied_fields:
+            continue
+        value = getattr(payload, field)
+        setattr(action, field, value.strip() if isinstance(value, str) else value)
+    if "goal_id" in supplied_fields:
+        action.goal_override_set = True
+    if supplied_fields.intersection({"description", "notes", "due_date", "priority", "delegated_to", "goal_id"}):
+        action.mtn_score = None
+        action.mtn_reason = None
+        action.mtn_risk_if_ignored = None
+        action.mtn_scored_at = None
     if payload.ignored is not None:
         action.ignored_at = datetime.now(timezone.utc) if payload.ignored else None
     db.commit()
-    return {"id": action.id, "description": action.description, "ignored": bool(action.ignored_at)}
+    return {
+        "id": action.id,
+        "description": action.description,
+        "notes": action.notes,
+        "due_date": action.due_date,
+        "priority": action.priority or "Medium",
+        "delegated_to": action.delegated_to,
+        "goal_id": action.goal_id,
+        "mtn_score": float(action.mtn_score) if action.mtn_score is not None else None,
+        "ignored": bool(action.ignored_at),
+    }
 
 
 @router.get("/{meeting_id:int}")
-def get_meeting(meeting_id: int, user_number: str, db: Session = Depends(get_db)):
+def get_meeting(meeting_id: int, user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db)):
     meeting = _query(db).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found.")
@@ -301,7 +397,7 @@ def get_meeting(meeting_id: int, user_number: str, db: Session = Depends(get_db)
 
 
 @router.patch("/{meeting_id:int}")
-def update_meeting(meeting_id: int, user_number: str, payload: MeetingUpdate, db: Session = Depends(get_db)):
+def update_meeting(meeting_id: int, payload: MeetingUpdate, user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db)):
     meeting = _query(db).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found.")
@@ -318,7 +414,7 @@ def update_meeting(meeting_id: int, user_number: str, payload: MeetingUpdate, db
 
 
 @router.get("/context/options")
-def meeting_context_options(user_number: str, db: Session = Depends(get_db)):
+def meeting_context_options(user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db)):
     people = db.query(JourneyPerson).filter(JourneyPerson.user_number == user_number).order_by(JourneyPerson.name).all()
     goals = db.query(JourneyGoal).filter(
         JourneyGoal.user_number == user_number,
@@ -402,7 +498,7 @@ def _find_user(db: Session, user_number: str):
 
 
 @router.get("/voice-profile")
-def get_voice_profile(user_number: str, db: Session = Depends(get_db)):
+def get_voice_profile(user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db)):
     user = _find_user(db, user_number)
     if not user:
         raise HTTPException(status_code=404, detail="Current user not found.")
@@ -416,7 +512,10 @@ async def enroll_voice_profile(
     duration_seconds: float = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_authenticated_user),
 ):
+    ensure_user_identity(current_user, user_number)
+    user_number = authenticated_user_identifier(current_user)
     if not consent_acknowledged:
         raise HTTPException(status_code=400, detail="Voice-reference consent is required.")
     if duration_seconds < 2 or duration_seconds > 10:
@@ -438,7 +537,7 @@ async def enroll_voice_profile(
 
 
 @router.delete("/voice-profile", status_code=204)
-def delete_voice_profile(user_number: str, db: Session = Depends(get_db)):
+def delete_voice_profile(user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db)):
     user = _find_user(db, user_number)
     if not user:
         raise HTTPException(status_code=404, detail="Current user not found.")
@@ -554,7 +653,7 @@ def create_notes_meeting(payload: NotesMeetingCreate, background_tasks: Backgrou
 
 
 @router.post("/{meeting_id}/retry", status_code=202)
-def retry_meeting(meeting_id: int, user_number: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def retry_meeting(meeting_id: int, background_tasks: BackgroundTasks, user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db)):
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found.")
@@ -568,7 +667,7 @@ def retry_meeting(meeting_id: int, user_number: str, background_tasks: Backgroun
 
 
 @router.post("/{meeting_id}/leadership-assessment", status_code=202)
-def create_leadership_assessment(meeting_id: int, user_number: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def create_leadership_assessment(meeting_id: int, background_tasks: BackgroundTasks, user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db)):
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found.")
@@ -591,7 +690,10 @@ async def upload_meeting(
     project_id: Optional[int] = Form(None),
     meeting_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_authenticated_user),
 ):
+    ensure_user_identity(current_user, user_number)
+    user_number = authenticated_user_identifier(current_user)
     project = None
     if project_id is not None:
         project = db.query(JourneyProject).filter(JourneyProject.id == project_id, JourneyProject.user_number == user_number).first()
@@ -656,20 +758,27 @@ async def upload_meeting(
 
 
 @router.get("/{meeting_id}/recording")
-def get_recording(meeting_id: int, user_number: str, db: Session = Depends(get_db)):
+def get_recording(meeting_id: int, user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db)):
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
-    if not meeting or not meeting.recording_storage_key or not Path(meeting.recording_storage_key).is_file():
+    stored_path = stored_path_within_root(meeting.recording_storage_key, STORAGE_ROOT) if meeting and meeting.recording_storage_key else None
+    if not meeting or not stored_path or not stored_path.is_file():
         raise HTTPException(status_code=404, detail="Recording not found.")
-    return FileResponse(meeting.recording_storage_key, media_type=meeting.recording_content_type, filename=meeting.recording_filename)
+    return FileResponse(
+        stored_path,
+        media_type=meeting.recording_content_type,
+        filename=meeting.recording_filename,
+        headers={"Cache-Control": "private, no-store"},
+    )
 
 
 @router.delete("/{meeting_id}/recording", status_code=204)
-def delete_recording(meeting_id: int, user_number: str, db: Session = Depends(get_db)):
+def delete_recording(meeting_id: int, user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db)):
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found.")
-    if meeting.recording_storage_key:
-        Path(meeting.recording_storage_key).unlink(missing_ok=True)
+    stored_path = stored_path_within_root(meeting.recording_storage_key, STORAGE_ROOT) if meeting.recording_storage_key else None
+    if stored_path:
+        stored_path.unlink(missing_ok=True)
     meeting.recording_storage_key = None
     meeting.recording_filename = None
     meeting.recording_content_type = None
@@ -691,6 +800,10 @@ def convert_action_item(action_item_id: int, payload: ActionConversion, db: Sess
     goal_links = db.query(MeetingGoalLink).filter(MeetingGoalLink.meeting_id == action.meeting_id).all()
     project_links = db.query(MeetingProjectLink).filter(MeetingProjectLink.meeting_id == action.meeting_id).all()
     linked_goals = db.query(JourneyGoal).filter(JourneyGoal.id.in_([link.goal_id for link in goal_links])).all() if goal_links else []
+    selected_goal = db.query(JourneyGoal).filter(
+        JourneyGoal.id == action.goal_id,
+        JourneyGoal.user_number == payload.user_number,
+    ).first() if action.goal_id else None
     linked_projects = db.query(JourneyProject).filter(JourneyProject.id.in_([link.project_id for link in project_links])).all() if project_links else []
     context_lines = [
         f"Related meeting: {action.meeting.title}",
@@ -744,13 +857,15 @@ def convert_action_item(action_item_id: int, payload: ActionConversion, db: Sess
     task = Task(
         user_number=payload.user_number,
         title=title,
-        notes=enriched_notes,
-        goal_id=linked_goals[0].id if linked_goals else None,
+        notes="\n\n".join(part for part in (action.notes, enriched_notes) if part),
+        goal_id=(selected_goal.id if selected_goal else None) if action.goal_override_set else (linked_goals[0].id if linked_goals else None),
         project=linked_projects[0].project_name if linked_projects else None,
-        delegated_to=delegated_to,
-        due_date=today_due,
-        priority="Medium",
+        delegated_to=action.delegated_to or delegated_to,
+        due_date=datetime.combine(action.due_date, datetime.min.time()) if action.due_date else today_due,
+        priority=(action.priority or "Medium").capitalize(),
         status="open",
+        move_the_needle_score=action.mtn_score,
+        last_prioritized_at=action.mtn_scored_at,
     )
     db.add(task)
     db.flush()
@@ -758,6 +873,28 @@ def convert_action_item(action_item_id: int, payload: ActionConversion, db: Sess
     action.tracking_mode = mode
     db.commit()
     return {"task_id": task.id, "already_created": False}
+
+
+@router.post("/action-items/{action_item_id}/complete")
+def complete_action_item(action_item_id: int, payload: ActionConversion, db: Session = Depends(get_db)):
+    """Create the corresponding to-do and complete it so its MTN counts today."""
+    result = convert_action_item(
+        action_item_id,
+        ActionConversion(user_number=payload.user_number, mode="my_todo"),
+        db,
+    )
+    task = db.query(Task).filter(
+        Task.id == result["task_id"],
+        Task.user_number == payload.user_number,
+    ).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Created task not found.")
+    completed_at = datetime.now()
+    task.status = "completed"
+    task.completed_at = completed_at
+    task.updated_at = completed_at
+    db.commit()
+    return {"task_id": task.id, "status": task.status}
 
 
 @router.post("/{meeting_id:int}/ask")
@@ -794,11 +931,12 @@ def ask_about_meeting(meeting_id: int, payload: MeetingQuestion, db: Session = D
 
 
 @router.delete("/{meeting_id:int}", status_code=204)
-def delete_meeting(meeting_id: int, user_number: str, db: Session = Depends(get_db)):
+def delete_meeting(meeting_id: int, user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db)):
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found.")
-    if meeting.recording_storage_key:
-        Path(meeting.recording_storage_key).unlink(missing_ok=True)
+    stored_path = stored_path_within_root(meeting.recording_storage_key, STORAGE_ROOT) if meeting.recording_storage_key else None
+    if stored_path:
+        stored_path.unlink(missing_ok=True)
     db.delete(meeting)
     db.commit()

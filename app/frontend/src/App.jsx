@@ -21,9 +21,11 @@ import { useEffect, useRef, useState } from "react";
 import Login from "./Login";
 import Welcome from "./Welcome";
 import Waitlist from "./Waitlist";
+import PasswordRecovery from "./PasswordRecovery";
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { API_URL } from './config';
 import { initializeNotificationRouting, refreshNativeNotificationRegistration } from './services/notifications';
+import { clearSessionCredentials } from './sessionCredentials';
 
 const HOME_PAGE = 'home';
 const TRUST_SECURITY_PAGE = 'trust-security';
@@ -46,6 +48,7 @@ const VALID_PAGE_IDS = new Set([
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
   const [userNumber, setUserNumber] = useState(null);
   const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -55,11 +58,29 @@ function App() {
   // 🔍 Check login on app load
   useEffect(() => {
     const storedUser = localStorage.getItem("user_number");
-    
-    if (storedUser) {
-      setUserNumber(storedUser);
-      setIsLoggedIn(true);
+
+    if (!storedUser) {
+      clearSessionCredentials();
+      setAuthChecked(true);
+      return;
     }
+
+    fetch(`${API_URL}/api/auth/me`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Unauthenticated');
+        const data = await response.json();
+        const authenticatedUser = data?.user?.phone_number || storedUser;
+        localStorage.setItem("user_number", authenticatedUser);
+        setUserNumber(authenticatedUser);
+        setIsLoggedIn(true);
+      })
+      .catch(() => {
+        clearSessionCredentials();
+        localStorage.removeItem("user_number");
+        localStorage.removeItem("user_name");
+        localStorage.removeItem("must_change_password");
+      })
+      .finally(() => setAuthChecked(true));
   }, []);
 
   useEffect(() => {
@@ -148,14 +169,17 @@ function App() {
     setIsSidebarOpen(!isSidebarOpen);
   };
 
-  const handleLogin = (userNumber, requiresTour = false) => {
+  const handleLogin = (userNumber, requiresTour = false, mustChangePassword = false) => {
     localStorage.setItem("user_number", userNumber);
     localStorage.removeItem("needs_tour");
     setUserNumber(userNumber);
     setIsLoggedIn(true);
+    setAuthChecked(true);
     
     // First-time users start on the default page without an automatic tour.
-    if (requiresTour) {
+    if (mustChangePassword) {
+      setCurrentPage('settings');
+    } else if (requiresTour) {
       setCurrentPage(NEW_USER_DEFAULT_PAGE);
     }
   };
@@ -163,6 +187,14 @@ function App() {
   // Waitlist page
   if (window.location.pathname === "/waitlist") {
     return <Waitlist />;
+  }
+
+  if (window.location.pathname === "/reset-password") {
+    return (
+      <LanguageProvider apiUrl={API_URL} userNumber={null}>
+        <PasswordRecovery />
+      </LanguageProvider>
+    );
   }
 
   if (["/trust-security", "/privacy"].includes(window.location.pathname)) {
@@ -196,6 +228,8 @@ function App() {
   const params = new URLSearchParams(window.location.search);
   const userParam = params.get('user');
   const isNumericUser = userParam && !isNaN(parseInt(userParam));
+
+  if (!authChecked && !isNumericUser) return null;
   
   if (isNumericUser && !isLoggedIn) {
     return <Welcome onLogin={handleLogin} />;
@@ -204,11 +238,13 @@ function App() {
   // 🔒 AUTH GATE (existing users)
   if (!isLoggedIn) {
     return (
-      <Login
-        onLogin={(userNumber) => {
-          handleLogin(userNumber, false);
-        }}
-      />
+      <LanguageProvider apiUrl={API_URL} userNumber={null}>
+        <Login
+          onLogin={(userNumber, mustChangePassword) => {
+            handleLogin(userNumber, false, mustChangePassword);
+          }}
+        />
+      </LanguageProvider>
     );
   }
 
@@ -245,9 +281,7 @@ function MainAppShell({
 
   useEffect(() => {
     if (!userNumber) return;
-    fetch(`${API_URL}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('access_token') || ''}` }
-    })
+    fetch(`${API_URL}/api/auth/me`)
       .then((response) => response.ok ? response.json() : null)
       .then((data) => setOnboardingComplete(Boolean(data?.user?.onboarding_completed)))
       .catch(() => setOnboardingComplete(true));
@@ -323,7 +357,7 @@ function MainAppShell({
           className="fixed top-0 left-0 right-0 h-14 bg-white border-b border-gray-200 flex items-center px-4 z-30"
           style={{
             boxSizing: 'content-box',
-            paddingTop: 'env(safe-area-inset-top)',
+            paddingTop: 'var(--alfred-safe-area-top)',
           }}
         >
           <button
@@ -360,7 +394,8 @@ function MainAppShell({
       <main
         className="flex-1 overflow-auto"
         style={{
-          marginTop: isMobile ? 'calc(3.5rem + env(safe-area-inset-top))' : undefined,
+          marginTop: isMobile ? 'calc(3.5rem + var(--alfred-safe-area-top))' : undefined,
+          paddingBottom: 'var(--alfred-safe-area-bottom)',
         }}
       >
         <PageIntroBanner

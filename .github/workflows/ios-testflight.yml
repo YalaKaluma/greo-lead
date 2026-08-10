@@ -17,6 +17,9 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+
 jobs:
   build-ios:
     name: Build iOS release
@@ -30,29 +33,31 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
 
       - name: Install frontend dependencies
         working-directory: app/frontend
-        run: npm install
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
 
       - name: Build web bundle
         working-directory: app/frontend
-        run: npm run build
+        run: pnpm build
 
       - name: Generate and sync the Capacitor iOS project
         working-directory: app/frontend
         run: |
           node -e "const fs=require('fs'); const path='capacitor.config.json'; const config=JSON.parse(fs.readFileSync(path)); config.appId=process.env.IOS_BUNDLE_ID; fs.writeFileSync(path, JSON.stringify(config, null, 2) + '\n')"
           if [ ! -d ios/App ]; then
-            npx cap add ios
+            pnpm exec cap add ios
           fi
-          npx cap sync ios
+          pnpm exec cap sync ios
 
       - name: Configure the iOS application
         working-directory: app/frontend
@@ -165,7 +170,7 @@ jobs:
 
       - name: Upload iOS archive artifacts
         if: inputs.upload_to_testflight
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: alfred-ios-${{ github.run_number }}
           path: |
@@ -176,7 +181,7 @@ jobs:
 
       - name: Upload generated iOS project for diagnostics
         if: ${{ !inputs.upload_to_testflight }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: alfred-ios-project-${{ github.run_number }}
           path: app/frontend/ios

@@ -223,7 +223,6 @@ class AdminSystemHealthService:
         database = self._database_status()
         environment = {
             "openai_configured": bool(os.getenv("OPENAI_API_KEY")),
-            "mailgun_configured": bool(os.getenv("MAILGUN_API_KEY") and os.getenv("MAILGUN_DOMAIN") and os.getenv("MAILGUN_FROM")),
             "gmail_token_present": bool(os.getenv("GMAIL_TOKEN_JSON")),
         }
         summary = self.get_log_summary()
@@ -257,11 +256,11 @@ class AdminSystemHealthService:
             record_health_event_with_new_session(
                 source="database",
                 category="database_failure",
-                message=str(exc),
+                message=type(exc).__name__,
                 details={"operation": "admin_system_health_database_check"},
                 exception_type=type(exc).__name__,
             )
-            return {"status": "Error", "response_time_ms": None, "message": str(exc)[:240]}
+            return {"status": "Error", "response_time_ms": None, "message": "Database check failed"}
 
     def _count(self, *filters) -> int:
         return self.db.query(func.count(SystemHealthEvent.id)).filter(*filters).scalar() or 0
@@ -292,9 +291,9 @@ class AdminSystemHealthService:
             if token_type not in {"account", "workspace", "oauth", "bearer"} and exc.code in {401, 403}:
                 os.environ["RAILWAY_TOKEN_TYPE"] = "account"  # nosec B105 - token type label, not a password.
                 return self._railway_graphql(query, variables)
-            return {"ok": False, "error": f"Railway API HTTP {exc.code}: {body[:300]}", "data": {}}
+            return {"ok": False, "error": f"Railway API HTTP {exc.code}", "data": {}}
         except Exception as exc:
-            return {"ok": False, "error": f"Railway API request failed: {str(exc)[:240]}", "data": {}}
+            return {"ok": False, "error": f"Railway API request failed ({type(exc).__name__})", "data": {}}
 
         try:
             parsed = json.loads(body)

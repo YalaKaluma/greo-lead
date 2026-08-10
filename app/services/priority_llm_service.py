@@ -2,7 +2,7 @@
 """
 Priority LLM Service: AI-powered task scoring.
 
-Uses GPT-4o to evaluate tasks and estimate Top 10 likelihood.
+Uses GPT-4o to evaluate the absolute move-the-needle value of each task.
 
 Key principles:
 - Strategic alignment > urgency
@@ -33,7 +33,7 @@ class PriorityLLMService:
         context: TaskPrioritizationContext
     ) -> Dict:
         """
-        Score tasks for Top 10 likelihood.
+        Score each task's move-the-needle value independently.
         
         Process:
         1. Build system prompt with scoring criteria
@@ -76,7 +76,7 @@ class PriorityLLMService:
             }
             
         except Exception as e:
-            raise Exception(f"LLM scoring failed: {str(e)}")
+            raise RuntimeError("LLM scoring failed") from e
     
     def _build_system_prompt(self) -> str:
         """
@@ -85,7 +85,7 @@ class PriorityLLMService:
         This is the core of the prioritization intelligence.
         Emphasizes strategic thinking over urgency.
         """
-        return """You are an executive prioritization advisor. Your job is to evaluate tasks and estimate whether each belongs in the user's Top 10 focus list RIGHT NOW.
+        return """You are an executive prioritization advisor. Assign each task an absolute move-the-needle (MTN) score based only on that task and the user's goals. The score must not change because other tasks are present or absent from the request.
 
 CRITICAL PRINCIPLES:
 1. Strategic alignment beats urgency
@@ -135,13 +135,21 @@ OUTPUT FORMAT (JSON):
   ]
 }
 
+ABSOLUTE SCORE ANCHORS:
+- 0.85-1.00 Transformation: materially changes an important outcome or creates exceptional leverage
+- 0.70-0.84 Strategic: directly advances a key goal or unblocks high-value work
+- 0.50-0.69 Important: meaningful progress with limited strategic leverage
+- 0.30-0.49 Tactical: necessary near-term execution that supports current priorities
+- 0.00-0.29 Operational: routine, deferrable, delegable, or weakly aligned work
+
 RULES:
-- top10_likelihood: 0.00 to 1.00 (use full range, don't cluster around 0.5)
+- top10_likelihood is the task's absolute MTN score from 0.00 to 1.00. The field name is retained for API compatibility.
+- Apply the anchors consistently. Never curve, rank, normalize, or compare scores against the other tasks in the request.
 - primary_reason: Single sentence, specific and actionable
 - risk_if_ignored: Concrete cost of delay, not generic
 - confidence: "high" (clear), "medium" (some ambiguity), "low" (need more info)
 
-IMPORTANT: You do NOT rank tasks. You estimate Top 10 likelihood for each task INDEPENDENTLY."""
+IMPORTANT: Score every task independently. The same task with the same task and goal context must receive the same score whether evaluated alone or in a batch."""
 
     def _build_scoring_prompt(
         self,
@@ -163,7 +171,7 @@ IMPORTANT: You do NOT rank tasks. You estimate Top 10 likelihood for each task I
 
 {tasks_str}
 
-Evaluate each task and return scores in JSON format as specified in the system prompt."""
+Evaluate each task independently and return absolute MTN scores in JSON format as specified in the system prompt."""
         
         return prompt
     
@@ -199,6 +207,19 @@ Evaluate each task and return scores in JSON format as specified in the system p
         if context.self_reported_energy:
             context_str += f"\nUser State:\n"
             context_str += f"  Energy level: {context.self_reported_energy}\n"
+
+        feedback_examples = getattr(context, "mtn_feedback_examples", None) or []
+        if feedback_examples:
+            context_str += "\nRecent user MTN corrections (personal calibration examples):\n"
+            for example in feedback_examples:
+                title = example.get("title") or "Task"
+                context_str += (
+                    f"  - {title}: Alfred {example['original_score']:.2f}, "
+                    f"user {example['adjusted_score']:.2f} ({example['selected_tag']})"
+                )
+                if example.get("feedback"):
+                    context_str += f" — {example['feedback']}"
+                context_str += "\n"
         
         return context_str
     
@@ -220,7 +241,7 @@ Evaluate each task and return scores in JSON format as specified in the system p
             task_str += f"  Linked Goal: {'Goal #' + str(task.goal_id) if task.goal_id else 'None'}\n"
             task_str += f"  Times Postponed: {task.times_postponed or 0}\n"
             task_str += f"  Delegated To: {task.delegated_to or 'Self'}\n"
-            task_str += f"  Created: {task.created_at.strftime('%Y-%m-%d')}\n"
+            task_str += f"  Created: {task.created_at.strftime('%Y-%m-%d') if task.created_at else 'Unknown'}\n"
             task_str += f"  In Current Top 10: {'Yes' if task.in_top10 else 'No'}\n"
             task_str += "\n"
             

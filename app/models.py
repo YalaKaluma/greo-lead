@@ -532,18 +532,28 @@ class MeetingActionItem(Base):
     id = Column(Integer, primary_key=True)
     meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True)
     description = Column(Text, nullable=False)
+    notes = Column(Text, nullable=True)
     owner_name = Column(String(200), nullable=True)
     due_date = Column(Date, nullable=True)
+    priority = Column(String(20), nullable=True)
+    delegated_to = Column(String(200), nullable=True)
+    goal_id = Column(Integer, ForeignKey("journey_goals.id", ondelete="SET NULL"), nullable=True, index=True)
+    goal_override_set = Column(Boolean, nullable=False, default=False)
     confidence = Column(Float, nullable=True)
     evidence_excerpt = Column(Text, nullable=True)
     transcript_segment_id = Column(Integer, ForeignKey("meeting_transcript_segments.id", ondelete="SET NULL"), nullable=True)
     created_task_id = Column(Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
     tracking_mode = Column(String(30), nullable=True)  # my_todo, follow_up, clarify_owner
     ignored_at = Column(DateTime(timezone=True), nullable=True)
+    mtn_score = Column(DECIMAL, nullable=True)
+    mtn_reason = Column(Text, nullable=True)
+    mtn_risk_if_ignored = Column(Text, nullable=True)
+    mtn_scored_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     meeting = relationship("Meeting", back_populates="action_items")
     created_task = relationship("Task")
+    goal = relationship("JourneyGoal")
 
 
 class MeetingLeadershipObservation(Base):
@@ -1326,6 +1336,8 @@ class User(Base):
     password_hash = Column(String, nullable=True)  # Hashed password
     temp_password = Column(String, nullable=True)  # Hashed one-time password for first login
     temp_password_expires = Column(DateTime, nullable=True)
+    temp_password_consumed_at = Column(DateTime, nullable=True)
+    session_version = Column(Integer, default=0, nullable=False)
     is_admin = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     account_deletion_requested_at = Column(DateTime(timezone=True), nullable=True)
@@ -1377,6 +1389,7 @@ class User(Base):
         temporary_password = secrets.token_urlsafe(length)[:length].upper()
         self.temp_password = hash_password(temporary_password)
         self.temp_password_expires = datetime.utcnow() + timedelta(hours=24)
+        self.temp_password_consumed_at = None
         return temporary_password
 
     def is_trial_active(self):
@@ -1435,8 +1448,9 @@ class EmailVerification(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    verification_code = Column(String(6), nullable=False)  # 6-digit code
+    verification_code = Column(String(255), nullable=False)  # Hashed 6-digit code
     verified = Column(Boolean, default=False)
+    attempt_count = Column(Integer, default=0, nullable=False)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)  # Code expires after 15 minutes
@@ -1446,12 +1460,27 @@ class EmailVerification(Base):
 
     def is_valid(self):
         """Check if code is still valid"""
-        return not self.verified and datetime.utcnow() < self.expires_at
+        return not self.verified and self.attempt_count < 5 and datetime.utcnow() < self.expires_at
 
     @staticmethod
     def generate_code():
         """Generate a 6-digit verification code"""
         return f"{secrets.randbelow(1000000):06d}"
+
+
+class PasswordResetToken(Base):
+    """Hashed, short-lived, single-use password recovery token."""
+
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User")
 
 
 # models.py
@@ -1563,6 +1592,23 @@ class TaskPriorityScore(Base):
     scored_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     llm_model = Column(String)  # e.g., "gpt-4o"
     llm_tokens_used = Column(Integer)
+
+
+class TaskMtnFeedback(Base):
+    """User correction to an independently calculated task MTN score."""
+    __tablename__ = "task_mtn_feedback"
+
+    id = Column(Integer, primary_key=True)
+    score_id = Column(Integer, ForeignKey("task_priority_scores.id", ondelete="CASCADE"), nullable=False, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_number = Column(String, nullable=False, index=True)
+    original_score = Column(DECIMAL(3, 2), nullable=False)
+    adjusted_score = Column(DECIMAL(3, 2), nullable=False)
+    selected_tag = Column(String, nullable=False)
+    rating = Column(Integer, nullable=False)
+    feedback = Column(Text)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    task = relationship("Task")
 
 
 class TaskPriorityRecommendation(Base):

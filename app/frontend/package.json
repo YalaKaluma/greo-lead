@@ -2,6 +2,7 @@
   "name": "leadership-os-ui",
   "private": true,
   "version": "1.0.0",
+  "packageManager": "pnpm@10.34.5",
   "type": "module",
   "scripts": {
     "dev": "vite",

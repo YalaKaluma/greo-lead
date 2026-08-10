@@ -10,8 +10,10 @@ from typing import Optional, List, Union
 from app.services.task_enrichment_service import enrich_task
 from app.services.timezone_service import get_user_timezone, today_for_timezone
 from app.services.task_mtn_trend_service import get_task_mtn_history, get_task_mtn_trends
+from app.utils.safe_errors import log_failure
 from app.services.onboarding_seed_service import ensure_starter_tasks_visible_today
 from app.services.audit_log_service import user_id_for_identifier, write_audit_log
+from app.security_dependencies import require_authenticated_user_identifier
 
 router = APIRouter()
 
@@ -127,6 +129,7 @@ class TaskResponse(BaseModel):
     top10_position: Optional[int] = None
     last_prioritized_at: Optional[datetime] = None
     mtn_score_today: Optional[float] = None
+    mtn_score_id_today: Optional[int] = None
     mtn_rank_today: Optional[int] = None
     mtn_recommended_today: Optional[bool] = False
     mtn_reason_today: Optional[str] = None
@@ -149,7 +152,6 @@ class TaskResponse(BaseModel):
 
 
 class TaskReorderRequest(BaseModel):
-    user_number: str
     ordered_task_ids: List[int]
 
 
@@ -329,6 +331,7 @@ def attach_today_mtn_metadata(db: Session, user_number: str, tasks: List[Task]) 
                 continue
 
             task.mtn_score_today = float(score.top10_likelihood)
+            task.mtn_score_id_today = score.id
             task.mtn_rank_today = rank_by_task_id.get(task.id)
             task.mtn_recommended_today = bool(task.mtn_rank_today and task.mtn_rank_today <= 3)
             task.mtn_reason_today = score.primary_reason
@@ -336,13 +339,13 @@ def attach_today_mtn_metadata(db: Session, user_number: str, tasks: List[Task]) 
             task.mtn_recommendation_id = recommendation_by_context_id.get(score.context_id)
             task.mtn_prioritized_at = score.scored_at.isoformat() if score.scored_at else None
     except Exception as exc:
-        print(f"[TASKS API] Failed to attach MTN metadata: {exc}")
+        log_failure("task_mtn_metadata", exc)
 
 
 @router.get("", response_model=list[TaskResponse])
 @router.get("/", response_model=list[TaskResponse])
 def get_tasks(
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         filter_type: str = "all",
         project: Optional[str] = None,
         delegated_to: Optional[str] = None,
@@ -357,7 +360,7 @@ def get_tasks(
     goal_id: filter by goal ID
     """
     try:
-        print(f"[TASKS API] Fetching tasks for user: {user_number}")
+        print("[TASKS API] Fetching authenticated user's tasks")
         print(
             f"[TASKS API] Filters - type: {filter_type}, project: {project}, delegate: {delegated_to}, goal_id: {goal_id}")
         repaired_count = ensure_starter_tasks_visible_today(db, user_number)
@@ -443,17 +446,12 @@ def get_tasks(
         return sorted_tasks
 
     except Exception as e:
-        print(f"[TASKS API ERROR] Exception occurred: {type(e).__name__}: {str(e)}")
-        import traceback
-        print(f"[TASKS API ERROR] Traceback:\n{traceback.format_exc()}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error fetching tasks: {str(e)}"
-        )
+        from app.utils.safe_errors import internal_error
+        raise internal_error("task_list", e, "Unable to fetch tasks.")
 
 
 @router.get("/filters")
-def get_filters(user_number: str, db: Session = Depends(get_db)):
+def get_filters(user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db)):
     """
     Get unique project names and delegates for filtering
     Returns: {"projects": [...], "delegates": [...]}
@@ -470,7 +468,7 @@ def get_filters(user_number: str, db: Session = Depends(get_db)):
 
 
 @router.get("/mtn-trends")
-def get_mtn_trends(user_number: str, db: Session = Depends(get_db)):
+def get_mtn_trends(user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db)):
     """Get completed-task MTN score totals for the last 90 days."""
 
     return get_task_mtn_trends(user_number, db, get_user_timezone(db, user_number))
@@ -478,9 +476,9 @@ def get_mtn_trends(user_number: str, db: Session = Depends(get_db)):
 
 @router.get("/mtn-history")
 def get_mtn_history(
-    user_number: str,
     start_date: date,
     end_date: date,
+    user_number: str = Depends(require_authenticated_user_identifier),
     db: Session = Depends(get_db),
 ):
     if end_date < start_date:
@@ -500,8 +498,8 @@ def get_mtn_history(
 
 @router.post("/", response_model=TaskResponse)
 def create_task(
-        user_number: str,
         task: TaskCreate,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """
@@ -545,8 +543,8 @@ def create_task(
 @router.put("/{task_id}", response_model=TaskResponse)
 def update_task(
         task_id: int,
-        user_number: str,
         updates: TaskUpdate,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """
@@ -625,13 +623,14 @@ def update_task(
 @router.post("/reorder")
 def reorder_tasks(
         request: TaskReorderRequest,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """
     Persist the user's current task order.
     """
     tasks = db.query(Task).filter(
-        Task.user_number == request.user_number,
+        Task.user_number == user_number,
         Task.id.in_(request.ordered_task_ids)
     ).all()
 
@@ -657,7 +656,7 @@ def reorder_tasks(
 
 @router.post("/reorder/reset")
 def reset_task_order(
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """
@@ -680,8 +679,8 @@ def reset_task_order(
 
 @router.post("/bulk-defer-non-top-10")
 def bulk_defer_non_top_10(
-        user_number: str,
         request: BulkDeferNonTop10Request,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """
@@ -727,8 +726,8 @@ def bulk_defer_non_top_10(
 @router.post("/{task_id}/follow-up", response_model=TaskFollowUpResponse)
 def create_follow_up_task(
         task_id: int,
-        user_number: str,
         request: TaskFollowUpRequest,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """
@@ -782,7 +781,7 @@ def create_follow_up_task(
         }
     except Exception as exc:
         db.rollback()
-        print(f"[TASKS API] Failed to create follow-up task: {exc}")
+        log_failure("task_follow_up_creation", exc)
         raise HTTPException(
             status_code=500,
             detail="Unable to create follow-up task. Please try again."
@@ -792,7 +791,7 @@ def create_follow_up_task(
 @router.patch("/{task_id}/toggle", response_model=TaskResponse)
 def toggle_task(
         task_id: int,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """
@@ -831,7 +830,7 @@ def toggle_task(
 @router.delete("/{task_id}")
 def delete_task(
         task_id: int,
-        user_number: str,
+        user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
     """
