@@ -5,7 +5,20 @@ Alfred uses a two-speed release model:
 - `main` is active development and deploys to the Railway development environment.
 - `prod` is stable production and deploys to the Railway production environment.
 
-GitHub Actions only runs checks. Railway remains responsible for deployments.
+GitHub Actions runs the mandatory validation gates. Railway remains responsible for deployments.
+
+## Required GitHub Enforcement
+
+Protect both `main` and `prod` with GitHub rulesets or branch protection:
+
+- require changes through pull requests;
+- require branches to be current before merging;
+- require successful `Lightweight checks`, Security CI jobs, and the relevant release gate;
+- require code-owner review for security, migration, dependency, CI, and deployment files;
+- block force pushes and branch deletion;
+- apply the rules to administrators as well as collaborators.
+
+`main` may be merged after its required development and security checks pass. `prod` additionally requires explicit human release approval. A successful CI run after a direct push is not a merge gate and is not an acceptable substitute for branch protection.
 
 ## Branch and Environment Model
 
@@ -18,18 +31,9 @@ Confirm in Railway that development watches `main` and production watches `prod`
 
 ## Development Workflow
 
-```bash
-git checkout main
-git pull origin main
-# make changes
-alembic revision --autogenerate -m "describe change"
-alembic upgrade head
-git add .
-git commit -m "Feature name"
-git push origin main
-```
+Create one focused branch and pull request per independently reviewable risk unit. Merge to `main` only after all required checks pass. Railway then deploys the resulting `main` commit to development.
 
-Pushing to `main` runs the lightweight Dev CI workflow and Railway deploys development.
+Security-boundary, migration, dependency, workflow, and deployment changes require review from the repository code owner in `.github/CODEOWNERS`.
 
 Before promoting to production, run the local checks that match the active surfaces:
 

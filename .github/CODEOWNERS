@@ -1,0 +1,20 @@
+# Security boundaries and release infrastructure require owner review.
+/.github/CODEOWNERS @YalaKaluma81
+/.github/workflows/ @YalaKaluma81
+/Dockerfile @YalaKaluma81
+/railway.json @YalaKaluma81
+/alembic.ini @YalaKaluma81
+/alembic/ @YalaKaluma81
+/app/db.py @YalaKaluma81
+/app/models.py @YalaKaluma81
+/app/config.py @YalaKaluma81
+/app/security_dependencies.py @YalaKaluma81
+/app/security_middleware.py @YalaKaluma81
+/app/utils/security.py @YalaKaluma81
+/app/utils/session_cookie.py @YalaKaluma81
+/app/routers/auth.py @YalaKaluma81
+/app/routers/admin.py @YalaKaluma81
+/requirements*.in @YalaKaluma81
+/requirements*.txt @YalaKaluma81
+/app/frontend/package.json @YalaKaluma81
+/app/frontend/pnpm-lock.yaml @YalaKaluma81
