@@ -1215,6 +1215,26 @@ def test_public_api_documentation_is_disabled_by_default(monkeypatch):
     assert 'openapi_url="/openapi.json" if os.getenv("ENABLE_API_DOCS"' in main_source
 
 
+def test_static_catch_all_rejects_paths_outside_static_root():
+    import asyncio
+    from fastapi import HTTPException
+    from app import main
+
+    catch_all = next(
+        route.endpoint
+        for route in main.app.routes
+        if getattr(route, "path", None) == "/{full_path:path}"
+    )
+
+    with pytest.raises(HTTPException) as rejected:
+        asyncio.run(catch_all(full_path="../requirements.txt"))
+    assert rejected.value.status_code == 404
+
+    source = Path("app/main.py").read_text(encoding="utf-8")
+    assert ".resolve()" in source
+    assert "file_path.is_relative_to(static_root)" in source
+
+
 def test_supply_chain_inputs_are_immutable_and_hash_locked():
     import re
     import subprocess

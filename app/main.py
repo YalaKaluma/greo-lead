@@ -417,6 +417,7 @@ logger.info("✓ Health check endpoints configured")
 # --------------------------------------
 logger.info("📁 Configuring static file serving...")
 static_path = Path(__file__).parent.parent / "static"
+static_root = static_path.resolve()
 logger.info(f"  Static path: {static_path.absolute()}")
 
 if static_path.exists():
@@ -481,18 +482,21 @@ if static_path.exists():
             raise HTTPException(status_code=404, detail="Not found")
 
         # Try to serve static files first (images, etc.)
-        file_path = static_path / full_path
+        file_path = (static_root / full_path).resolve()
+        if not file_path.is_relative_to(static_root):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Not found")
         if file_path.is_file():
-            logger.info(f"📄 Serving static file: /{full_path}")
+            logger.info("Serving static file")
             return FileResponse(str(file_path))
 
         # Serve React app for everything else (including root "/")
         index_file = static_path / "index.html"
         if index_file.exists():
-            logger.info(f"🎨 Serving React app for: /{full_path}")
+            logger.info("Serving React application")
             return FileResponse(str(index_file))
 
-        logger.error(f"React app requested but index.html not found at {index_file}")
+        logger.error("React app requested but index.html is unavailable")
         return JSONResponse({
             "error": "React app not found",
             "message": "Frontend not built",
