@@ -141,6 +141,7 @@ async def login(request: LoginRequest, response: Response, db: Session = Depends
                 expires_in=60 * 60 * 24 * 30,
             )
         else:
+            pass
             return LoginResponse(
                 success=False,
                 message="Incorrect password."
@@ -332,35 +333,19 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
         "message": "Deprecated onboarding prefill skipped."
     }
 
-    print(f"\n{'=' * 60}")
-    print(f"🎯 DEBUG [process-onboarding-data]: ENDPOINT CALLED")
-    print(f"{'=' * 60}")
-
     # Get user
     user = _find_user_by_number_or_email(db, user_number)
     if not user:
-        print("DEBUG: Authenticated user not found")
         raise HTTPException(status_code=404, detail="User not found")
-
-    print(f"✅ DEBUG: User found - id={user.id}, name={user.name}")
-    print(f"   onboarding_completed: {user.onboarding_completed}")
-    print(f"   onboarding_step: {user.onboarding_step}")
 
     # Check if onboarding_data exists
     if not user.onboarding_data:
-        print(f"❌ DEBUG: onboarding_data is EMPTY or None!")
-        print(f"   Type: {type(user.onboarding_data)}")
-        print(f"   Value present: {bool(user.onboarding_data)}")
         raise HTTPException(
             status_code=404,
             detail="No onboarding data found. User may not have completed WhatsApp onboarding."
         )
 
     data = user.onboarding_data
-    print(f"✅ DEBUG: onboarding_data found:")
-    print(f"   Keys: {list(data.keys())}")
-    print("   Onboarding data content omitted from logs")
-
     results = {
         "success": False,
         "goal_added": False,
@@ -396,8 +381,7 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
                 log_failure("onboarding_goal_creation", e)
                 results['errors'].append(error_msg)
         else:
-            print(f"⚠️ DEBUG: No 'first_goal' found in onboarding_data")
-            print(f"   Available keys: {list(data.keys())}")
+            pass
 
         # ========== 2. ADD TASKS ==========
         print(f"\n--- STEP 2: Processing Tasks ---")
@@ -453,8 +437,7 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
                 log_failure("onboarding_task_processing", e)
                 results['errors'].append(error_msg)
         else:
-            print(f"⚠️ DEBUG: No 'tasks_raw' found in onboarding_data")
-            print(f"   Available keys: {list(data.keys())}")
+            pass
 
         # ========== FINAL RESULT ==========
         print(f"\n{'=' * 60}")

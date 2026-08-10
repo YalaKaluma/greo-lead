@@ -1400,6 +1400,29 @@ def test_failure_logging_and_client_errors_do_not_persist_exception_text(caplog)
     assert "Raw response:" not in source
 
 
+def test_sensitive_diagnostics_do_not_log_user_identifiers_or_onboarding_shape():
+    nudge_source = Path("app/routers/nudge.py").read_text(encoding="utf-8")
+    onboarding_source = Path("app/routers/onboarding.py").read_text(encoding="utf-8")
+
+    for forbidden in (
+        "Built task context for {user_number}",
+        "Built habit context for {user_number}",
+        "Validated user_number: {normalized}",
+        "Message saved to database for {user_number}",
+        'return {"summary": f"Error: {e}"}',
+    ):
+        assert forbidden not in nudge_source
+
+    for forbidden in (
+        "User found - id={user.id}, name={user.name}",
+        "onboarding_completed: {user.onboarding_completed}",
+        "onboarding_step: {user.onboarding_step}",
+        "Keys: {list(data.keys())}",
+        "Available keys: {list(data.keys())}",
+    ):
+        assert forbidden not in onboarding_source
+
+
 def test_supply_chain_inputs_are_immutable_and_hash_locked():
     import re
     import subprocess

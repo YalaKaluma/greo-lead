@@ -397,7 +397,7 @@ def build_task_context(db: Session, user_number: str) -> str:
                 lines.append(f"  □ {task.title} {priority}")
 
         context = "\n".join(lines)
-        logger.debug(f"Built task context for {user_number}: {len(tasks)} tasks")
+        logger.debug("Built task context with %s tasks", len(tasks))
         return context
 
     except Exception as e:
@@ -437,7 +437,7 @@ def build_habit_context(db: Session, user_number: str) -> str:
             lines.append(f"{status} {habit.title} {streak_text}")
 
         context = "\n".join(lines)
-        logger.debug(f"Built habit context for {user_number}: {len(habits)} habits")
+        logger.debug("Built habit context with %s habits", len(habits))
         return context
 
     except Exception as e:
@@ -628,7 +628,7 @@ def validate_user_number(user_number: Optional[str]) -> str:
         logger.info("Using configured default user for scheduled nudge")
 
     normalized = normalize_nudge_user_number(user_number)
-    logger.debug(f"Validated user_number: {normalized}")
+    logger.debug("Validated scheduled nudge recipient")
     return normalized
 
 
@@ -727,7 +727,7 @@ def save_message_safe(db: Session, user_number: str, text: str) -> None:
             conversation_type="messages",
             is_read=False,
         )
-        logger.debug(f"Message saved to database for {user_number}")
+        logger.debug("Scheduled nudge message saved")
     except Exception as e:
         log_failure("nudge_message_save", e, level=logging.WARNING)
 
@@ -1556,7 +1556,8 @@ Download: /api/nudge/download_log"""
 
         return {"summary": summary}
     except Exception as e:
-        return {"summary": f"Error: {e}"}
+        log_failure("nudge_log_summary", e)
+        raise HTTPException(status_code=500, detail="Nudge log summary could not be generated")
 
 
 @router.get("/nudge/health")
@@ -1574,8 +1575,8 @@ def health_check(
     try:
         users = get_all_active_users(db)
         user_count = len(users)
-    except Exception as exc:
-        logger.debug("Could not count active users during nudge health check: %s", exc)
+    except Exception:
+        logger.debug("Could not count active users during nudge health check")
 
     return {
         "status": "healthy",
