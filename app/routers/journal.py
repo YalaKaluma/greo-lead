@@ -6,6 +6,7 @@ from app.services.journal_reflection_depth_service import apply_reflection_depth
 from app.services.audit_log_service import write_audit_log
 from app.services.message_service import save_message
 from app.routers.auth import require_authenticated_user
+from app.utils.safe_errors import log_failure
 
 router = APIRouter(prefix="/journal", tags=["journal"])
 
@@ -32,7 +33,7 @@ def create_entry(text: str, user_id: int | None = None, db: Session = Depends(ge
         db.refresh(entry)
     except Exception as error:
         db.rollback()
-        print(f"Reflection depth scoring failed for journal entry {entry.id}: {error}")
+        log_failure("journal_reflection_scoring", error)
 
     if current_user.phone_number:
         try:
@@ -46,7 +47,7 @@ def create_entry(text: str, user_id: int | None = None, db: Session = Depends(ge
             )
         except Exception as error:
             db.rollback()
-            print(f"Journal signal classification failed for journal entry {entry.id}: {error}")
+            log_failure("journal_signal_classification", error)
     return {"status": "created", "entry": entry}
 
 
@@ -112,7 +113,7 @@ def update_entry(entry_id: int, text: str, user_id: int | None = None, db: Sessi
     try:
         apply_reflection_depth(entry, text)
     except Exception as error:
-        print(f"Reflection depth scoring failed for journal entry {entry.id}: {error}")
+        log_failure("journal_reflection_scoring", error)
     db.commit()
     db.refresh(entry)
     return {"status": "updated", "entry": entry}

@@ -24,6 +24,7 @@ from app.routers.tasks import Task as TaskModel
 from app.utils.security import create_session_token, hash_password, verify_password
 from app.utils.session_cookie import set_session_cookie
 from app.services.in_app_onboarding_service import get_session, respond
+from app.utils.safe_errors import internal_error, log_failure
 
 router = APIRouter(tags=["onboarding"])
 public_router = APIRouter(tags=["onboarding"])
@@ -74,7 +75,11 @@ def respond_to_in_app_onboarding(payload: InAppOnboardingResponse, db: Session =
     try:
         return respond(db, user, payload.answer)
     except (ValueError, RuntimeError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        incident_id = log_failure("in_app_onboarding_response", exc)
+        raise HTTPException(
+            status_code=400,
+            detail=f"The onboarding response could not be accepted. Reference: {incident_id}",
+        ) from exc
 
 
 class TourProgressResponse(BaseModel):
@@ -387,11 +392,9 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
                 print(f"   Goal ID: {goal.id}")
                 results['goal_added'] = True
             except Exception as e:
-                error_msg = f"Failed to add goal: {str(e)}"
-                print(f"❌ DEBUG: {error_msg}")
+                error_msg = "Failed to add goal"
+                log_failure("onboarding_goal_creation", e)
                 results['errors'].append(error_msg)
-                import traceback
-                traceback.print_exc()
         else:
             print(f"⚠️ DEBUG: No 'first_goal' found in onboarding_data")
             print(f"   Available keys: {list(data.keys())}")
@@ -433,8 +436,8 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
                         print(f"   Priority: {task.priority}")
                         print(f"   Quick win: {is_quick_win}")
                     except Exception as e:
-                        error_msg = f"Failed to create task '{task_text}': {str(e)}"
-                        print(f"❌ DEBUG: {error_msg}")
+                        error_msg = "Failed to create an onboarding task"
+                        log_failure("onboarding_task_creation", e)
                         results['errors'].append(error_msg)
 
                 # Commit all tasks at once
@@ -446,11 +449,9 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
                     print(f"⚠️ DEBUG: No tasks were created")
 
             except Exception as e:
-                error_msg = f"Failed to process tasks: {str(e)}"
-                print(f"❌ DEBUG: {error_msg}")
+                error_msg = "Failed to process onboarding tasks"
+                log_failure("onboarding_task_processing", e)
                 results['errors'].append(error_msg)
-                import traceback
-                traceback.print_exc()
         else:
             print(f"⚠️ DEBUG: No 'tasks_raw' found in onboarding_data")
             print(f"   Available keys: {list(data.keys())}")
@@ -461,9 +462,6 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
         print(f"   Goal added: {results['goal_added']}")
         print(f"   Tasks added: {results['tasks_added']}")
         print(f"   Errors: {len(results['errors'])}")
-        if results['errors']:
-            for i, error in enumerate(results['errors'], 1):
-                print(f"      {i}. {error}")
         print(f"{'=' * 60}\n")
 
         results['success'] = True
@@ -473,15 +471,10 @@ async def process_onboarding_data(user_number: str, db: Session = Depends(get_db
         return results
 
     except Exception as e:
-        error_msg = f"Unexpected error during onboarding data processing: {str(e)}"
-        print(f"\n❌ DEBUG: {error_msg}")
-        import traceback
-        traceback.print_exc()
-
-        # Re-raise as HTTP exception
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to process onboarding data: {str(e)}"
+        raise internal_error(
+            "onboarding_data_processing",
+            e,
+            "Onboarding data could not be processed.",
         )
 
 

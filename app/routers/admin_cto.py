@@ -240,17 +240,17 @@ def create_issue_from_cto_finding(
             source="github",
             category="external_service_failure",
             service_name="GitHub",
-            message=str(exc),
+            message=type(exc).__name__,
             details={"operation": "create_cto_issue", "finding_id": finding.id},
         )
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail="GitHub issue creation failed") from exc
     except Exception as exc:
         record_health_event(
             db,
             source="github",
             category="external_service_failure",
             service_name="GitHub",
-            message=str(exc),
+            message=type(exc).__name__,
             details={"operation": "create_cto_issue", "finding_id": finding.id},
         )
         raise HTTPException(

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import json
 import logging
+from app.utils.safe_errors import log_failure
 from statistics import mean
 from typing import Any
 
@@ -549,7 +550,7 @@ class HomeDashboardService:
                 self.refresh_daily_recommendations(user_number)
                 opportunities = opportunity_query.all()
             except Exception as exc:
-                logger.warning("Failed to generate Home recommendations for %s: %s", user_number, exc)
+                log_failure("home_recommendations", exc, level=logging.WARNING)
 
         mtn_week = _mtn_period_stats(mtn_chart, 7)
         mtn_month = _mtn_period_stats(mtn_chart, 30)
@@ -650,7 +651,7 @@ class HomeDashboardService:
                     (user.language_preference if user else "en"),
                 )
             except Exception as exc:
-                logger.warning("Failed to generate Home operating commentary for %s: %s", user_number, exc)
+                log_failure("home_operating_commentary", exc, level=logging.WARNING)
                 operating_commentary = operating_commentary or ""
 
         payload = {

@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.config import OPENAI_API_KEY
 from app.db import SessionLocal
+from app.utils.safe_errors import log_failure
 from app.services.meeting_task_extraction_service import extract_action_items
 from app.utils.ai_safety import UNTRUSTED_CONTEXT_POLICY, parse_bounded_json_object, wrap_untrusted_context
 from app.models import (
@@ -265,8 +266,8 @@ def _audio_duration_seconds(path: str) -> float | None:
         if not raw_duration or raw_duration.upper() == "N/A":
             return None
         return float(raw_duration)
-    except (FileNotFoundError, subprocess.SubprocessError, ValueError):
-        logger.exception("Could not determine duration for meeting audio %s", path)
+    except (FileNotFoundError, subprocess.SubprocessError, ValueError) as exc:
+        log_failure("meeting_audio_duration", exc, level=logging.WARNING)
         return None
 
 

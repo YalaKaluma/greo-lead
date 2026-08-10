@@ -449,7 +449,7 @@ if static_path.exists():
             logger.info(f"  ✓ Assets mounted at /assets ({len(asset_files)} files)")
             logger.info(f"  Frontend JS assets: {[asset.name for asset in asset_files if asset.suffix == '.js']}")
         except Exception as e:
-            logger.error(f"  ✗ Failed to mount assets: {e}")
+            logger.error("Failed to mount assets error_type=%s", type(e).__name__)
     else:
         logger.warning("  ⚠️  Assets directory not found")
 

@@ -2,6 +2,7 @@
 from app.config import OPENAI_API_KEY, OPENAI_MODEL
 from openai import OpenAI
 from app.security_dependencies import require_authenticated_user_identifier
+from app.utils.safe_errors import internal_error, log_failure
 
 router = APIRouter()
 openai_client_journey = OpenAI(api_key=OPENAI_API_KEY)
@@ -374,8 +375,8 @@ def get_vision_progress_review(
 ):
     try:
         return VisionProgressReviewService.get_latest_or_generated(db, user_number, vision_id)
-    except ValueError as error:
-        raise HTTPException(status_code=404, detail=str(error))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Vision progress review not found")
 
 
 @router.post("/visions/{vision_id}/progress-review/refresh")
@@ -386,10 +387,10 @@ def refresh_vision_progress_review(
 ):
     try:
         return VisionProgressReviewService.refresh_vision_progress_review(db, user_number, vision_id)
-    except ValueError as error:
-        raise HTTPException(status_code=404, detail=str(error))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Vision progress review not found")
     except Exception as error:
-        raise HTTPException(status_code=502, detail=f"Could not refresh the progress review: {error}")
+        raise internal_error("vision_progress_review_refresh", error, "The progress review could not be refreshed.")
 
 
 @router.post("/visions/{vision_id}/waves")
@@ -714,7 +715,7 @@ Rules:
                 wave["new_goal_suggestions"] = []
         return draft
     except Exception as e:
-        print(f"Error generating roadmap draft: {e}")
+        log_failure("journey_roadmap_draft", e)
         raise HTTPException(status_code=500, detail="Failed to generate roadmap draft")
 
 

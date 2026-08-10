@@ -1235,6 +1235,41 @@ def test_static_catch_all_rejects_paths_outside_static_root():
     assert "file_path.is_relative_to(static_root)" in source
 
 
+def test_failure_logging_and_client_errors_do_not_persist_exception_text(caplog):
+    import logging
+    import re
+    from app.utils.safe_errors import internal_error, log_failure
+
+    secret = "private-journal-content-should-never-be-logged"
+    error = RuntimeError(secret)
+    with caplog.at_level(logging.ERROR, logger="app.security.errors"):
+        incident_id = log_failure("security_test", error)
+        public_error = internal_error("security_test", error, "The operation failed.")
+
+    assert incident_id
+    assert secret not in caplog.text
+    assert secret not in public_error.detail
+    assert "Reference:" in public_error.detail
+
+    source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in Path("app").rglob("*.py")
+        if "back-up" not in path.parts
+    )
+    forbidden_patterns = (
+        r"traceback\.print_exc",
+        r"logger\.exception",
+        r"str\((?:e|exc|error)\)",
+        r"print\(f[^\n]*\{(?:e|exc|error)\}",
+        r"logger\.(?:exception|error|warning)\(f[^\n]*\{(?:e|exc|error)\}",
+        r"detail\s*=\s*f[^\n]*\{(?:e|exc|error)\}",
+    )
+    for pattern in forbidden_patterns:
+        assert not re.search(pattern, source), pattern
+    assert "system_prompt[:500]" not in source
+    assert "Raw response:" not in source
+
+
 def test_supply_chain_inputs_are_immutable_and_hash_locked():
     import re
     import subprocess

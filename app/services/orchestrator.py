@@ -7,6 +7,7 @@ based on conversation state. All behavior flows through this orchestrator.
 """
 
 import json
+from app.utils.safe_errors import log_failure
 from uuid import uuid4
 from datetime import datetime
 from typing import Dict, List, Any, Optional
@@ -78,7 +79,7 @@ def orchestrate(
 
     print(f"\n{'=' * 60}")
     print(f"🧠 BRAIN ORCHESTRATION")
-    print(f"User: {user_number}")
+    print("Authenticated user request received")
     if preferred_language is None:
         user = db.query(User).filter(User.phone_number == user_number).first()
         preferred_language = getattr(user, "language_preference", None)
@@ -789,7 +790,7 @@ def _finalize_goal_review_session(
             print(f"✅ Created task #{i} (ID: {task.id})")
 
         except Exception as e:
-            print(f"❌ Failed to create task #{i}: {e}")
+            log_failure("orchestrator_task_creation", e)
             continue
 
     # Save session to database
@@ -1073,7 +1074,7 @@ Just the raw JSON object or array. Your response should start with {{ or [.
         
         return parsed
     except Exception as e:
-        print(f"⚠️ Failed to parse JSON from internal prompt: {e}")
+        log_failure("orchestrator_internal_json_parse", e)
         print(f"Raw content omitted; response length={len(content or '')}")
         # Return empty list for task synthesis, empty dict for summary
         if "task_synthesis" in prompt_path:

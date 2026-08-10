@@ -54,6 +54,7 @@ from app.services.operations_director.health_events import (
     record_job_failure,
 )
 from app.security_dependencies import require_scheduler_or_admin
+from app.utils.safe_errors import internal_error, log_failure
 from app.config import (
     OPENAI_API_KEY,
     OPENAI_MODEL,
@@ -78,7 +79,7 @@ try:
     openai_client = OpenAI(api_key=OPENAI_API_KEY)
     logger.info("✅ OpenAI client initialized successfully")
 except Exception as e:
-    logger.error(f"❌ Failed to initialize OpenAI client: {e}")
+    log_failure("nudge_openai_initialization", e)
     openai_client = None
 
 
@@ -100,7 +101,7 @@ def load_nudge_configs() -> Dict:
     try:
         with open(config_path, 'r') as f:
             configs = yaml.safe_load(f)
-            logger.info(f"✅ Loaded nudge prompts from {config_path}")
+            logger.info("Loaded nudge prompts")
             return configs
     except FileNotFoundError:
         logger.warning(f"⚠️ Config file not found at {config_path}, using defaults")
@@ -124,7 +125,7 @@ def load_nudge_configs() -> Dict:
             }
         }
     except Exception as e:
-        logger.error(f"❌ Error loading config file: {e}")
+        log_failure("nudge_config_load", e)
         raise
 
 
@@ -155,12 +156,12 @@ def log_nudge_to_excel(
         log_entry = {
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S EST"),
             "Nudge Type": nudge_type,
-            "User": user_number,
+            "User": "[REDACTED]",
             "Status": status,
-            "Message": message_text,
+            "Message": "",
             "Character Count": character_count,
             "Context Summary": context_summary,
-            "Error": error if error else "",
+            "Error": "operation_failed" if error else "",
             # Empty columns for user feedback
             "Your Rating (1-5)": "",
             "Your Feedback": "",
@@ -201,7 +202,7 @@ def log_nudge_to_excel(
         logger.info(f"📊 Logged {nudge_type} to Excel (total: {len(df)} nudges)")
 
     except Exception as e:
-        logger.warning(f"⚠️ Failed to log nudge to Excel: {e}")
+        log_failure("nudge_excel_log", e, level=logging.WARNING)
 
 
 def build_context_summary_for_log(task_context: str, habit_context: str) -> str:
@@ -250,25 +251,16 @@ def refresh_sunday_review_data(db: Session, user_number: str) -> Dict:
         except Exception as exc:
             db.rollback()
             result["vision_reviews"]["failed"] += 1
-            result["vision_reviews"]["errors"].append({
-                "vision_id": vision.id,
-                "title": vision.title or vision.goal_text,
-                "error": str(exc),
-            })
-            logger.warning(
-                "Failed to refresh Sunday vision progress review for %s vision_id=%s: %s",
-                user_number,
-                vision.id,
-                exc,
-            )
+            result["vision_reviews"]["errors"].append({"error": "refresh_failed"})
+            log_failure("nudge_sunday_vision_review", exc, level=logging.WARNING)
 
     try:
         refresh_habit_coaching_review(db, user_number)
         result["habit_trends"]["refreshed"] = True
     except Exception as exc:
         db.rollback()
-        result["habit_trends"]["error"] = str(exc)
-        logger.warning("Failed to refresh Sunday habit trends review for %s: %s", user_number, exc)
+        result["habit_trends"]["error"] = "refresh_failed"
+        log_failure("nudge_sunday_habit_trends", exc, level=logging.WARNING)
 
     return result
 
@@ -408,7 +400,7 @@ def build_task_context(db: Session, user_number: str) -> str:
         return context
 
     except Exception as e:
-        logger.warning(f"Failed to build task context for {user_number}: {e}")
+        log_failure("nudge_task_context", e, level=logging.WARNING)
         return "Unable to load tasks."
 
 
@@ -448,7 +440,7 @@ def build_habit_context(db: Session, user_number: str) -> str:
         return context
 
     except Exception as e:
-        logger.warning(f"Failed to build habit context for {user_number}: {e}")
+        log_failure("nudge_habit_context", e, level=logging.WARNING)
         return "Unable to load habits."
 
 
@@ -470,7 +462,7 @@ def build_full_context(db: Session, user_number: str, include_history: bool = Fa
         if not journey_context:
             journey_context = "No journey data captured yet."
     except Exception as e:
-        logger.warning(f"Failed to build journey context: {e}")
+        log_failure("nudge_journey_context", e, level=logging.WARNING)
         journey_context = "Journey context unavailable."
 
     # Task context
@@ -490,7 +482,7 @@ def build_full_context(db: Session, user_number: str, include_history: bool = Fa
             conversation_history = full_history[-2:] if full_history else []
             logger.debug(f"Loaded {len(conversation_history)} recent messages for context")
         except Exception as e:
-            logger.warning(f"Failed to load conversation history: {e}")
+            log_failure("nudge_conversation_history", e, level=logging.WARNING)
 
     # Build combined context text
     context_text = f"""
@@ -632,7 +624,7 @@ def validate_user_number(user_number: Optional[str]) -> str:
                 detail="user_number parameter is required when DEFAULT_USER_NUMBER is not set"
             )
         user_number = DEFAULT_USER_NUMBER
-        logger.info(f"Using DEFAULT_USER_NUMBER: {user_number}")
+        logger.info("Using configured default user for scheduled nudge")
 
     normalized = normalize_nudge_user_number(user_number)
     logger.debug(f"Validated user_number: {normalized}")
@@ -689,14 +681,13 @@ def generate_ai_message(
             finish_reason = response.choices[0].finish_reason
             if finish_reason == "length":
                 logger.warning(
-                    f"OpenAI stopped {nudge_type} generation at max_tokens={max_tokens}; "
-                    f"message may be truncated for {user_number}"
+                    "OpenAI stopped nudge generation at the token limit; response may be truncated"
                 )
-            logger.info(f"✅ OpenAI generated {nudge_type} message ({len(text)} chars) for {user_number}")
+            logger.info("OpenAI generated nudge message length=%s", len(text))
             return text
 
         except OpenAIError as e:
-            logger.warning(f"OpenAI API error on attempt {attempt + 1}: {e}")
+            log_failure("nudge_openai_retry", e, level=logging.WARNING)
             record_external_service_failure_with_new_session(
                 service_name="OpenAI",
                 operation=f"{nudge_type}_generation",
@@ -705,19 +696,15 @@ def generate_ai_message(
             )
             if attempt == max_retries - 1:
                 logger.error(f"❌ All OpenAI retry attempts failed for {nudge_type}")
-                raise HTTPException(
-                    status_code=503,
-                    detail=f"AI service error after {max_retries} attempts: {str(e)}"
-                )
+                raise HTTPException(status_code=503, detail="AI service is temporarily unavailable")
         except Exception as e:
-            logger.exception(f"Unexpected error in OpenAI call: {e}")
             record_external_service_failure_with_new_session(
                 service_name="OpenAI",
                 operation=f"{nudge_type}_generation",
                 error=e,
                 retry_status="unexpected_error",
             )
-            raise HTTPException(status_code=500, detail=f"Unexpected AI error: {str(e)}")
+            raise internal_error("nudge_openai_generation", e, "The nudge could not be generated.")
 
 
 def save_message_safe(db: Session, user_number: str, text: str) -> None:
@@ -741,7 +728,7 @@ def save_message_safe(db: Session, user_number: str, text: str) -> None:
         )
         logger.debug(f"Message saved to database for {user_number}")
     except Exception as e:
-        logger.warning(f"Failed to save message to database (non-critical): {e}")
+        log_failure("nudge_message_save", e, level=logging.WARNING)
 
 
 def send_nudge_notification_safe(db: Session, user_number: str, nudge_type: str, message_text: str) -> Dict:
@@ -781,8 +768,8 @@ def send_nudge_notification_safe(db: Session, user_number: str, nudge_type: str,
         return result.to_dict()
     except Exception as error:
         db.rollback()
-        logger.warning("Failed to send optional push notification for %s nudge to %s: %s", nudge_type, user_number, error)
-        return {"skipped": 1, "reason": "notification_error", "error": str(error)}
+        log_failure("nudge_optional_push", error, level=logging.WARNING)
+        return {"skipped": 1, "reason": "notification_error"}
 
 
 def get_all_active_users(db: Session) -> List[str]:
@@ -816,7 +803,7 @@ def get_all_active_users(db: Session) -> List[str]:
         logger.info(f"Found {len(user_numbers)} active nudge users")
         return user_numbers
     except Exception as e:
-        logger.error(f"Failed to get active users: {e}")
+        log_failure("nudge_active_users", e)
         return []
 
 
@@ -952,7 +939,7 @@ def send_nudge_for_user(
                 home_service.refresh(user_number, source="morning_nudge")
             except Exception as exc:
                 db.rollback()
-                logger.warning("Failed to refresh Home dashboard snapshot for %s during morning nudge: %s", user_number, exc)
+                log_failure("nudge_home_dashboard_refresh", exc, level=logging.WARNING)
             
 
         # Build context summary for logging
@@ -971,9 +958,7 @@ def send_nudge_for_user(
         )
 
         # DEBUG: Log the actual prompt being sent
-        logger.info(f"🔍 System prompt for {nudge_type} (first 500 chars):")
-        logger.info(f"   {system_prompt[:500]}...")
-        logger.info(f"🔍 Conversation history: {len(conversation_history)} messages")
+        logger.info("Generating nudge with conversation_count=%s", len(conversation_history))
 
         # Give the model enough room to finish the configured nudge while still
         # keeping runaway responses bounded.
@@ -1030,7 +1015,7 @@ def send_nudge_for_user(
         }
 
     except Exception as e:
-        logger.exception(f"Failed to send {nudge_type} to {user_number}: {e}")
+        log_failure("nudge_delivery", e)
         try:
             record_job_failure(
                 db,
@@ -1054,13 +1039,13 @@ def send_nudge_for_user(
             context_summary="",
             character_count=0,
             status="failed",
-            error=str(e)
+            error="operation_failed"
         )
 
         return {
             "status": "failed",
             "user_number": user_number,
-            "error": str(e),
+            "error": "operation_failed",
             "duration_seconds": (datetime.utcnow() - start_time).total_seconds(),
         }
 
@@ -1158,7 +1143,7 @@ def run_cto_weekend_review(db: Session) -> Dict:
             "timestamp": datetime.utcnow().isoformat(),
         }
     except Exception as exc:
-        logger.exception("Failed to run CTO weekend review: %s", exc)
+        log_failure("nudge_cto_weekend_review", exc)
         try:
             record_job_failure(
                 db,
@@ -1174,7 +1159,7 @@ def run_cto_weekend_review(db: Session) -> Dict:
             logger.warning("Failed to record CTO weekend review health event: %s", health_exc)
         return {
             "status": "failed",
-            "error": str(exc),
+            "error": "operation_failed",
             "duration_seconds": (datetime.utcnow() - start_time).total_seconds(),
             "timestamp": datetime.utcnow().isoformat(),
         }
@@ -1509,8 +1494,7 @@ def reload_config(_authorized=Depends(require_scheduler_or_admin)):
             "timestamp": datetime.utcnow().isoformat()
         }
     except Exception as e:
-        logger.exception("Failed to reload configs")
-        raise HTTPException(status_code=500, detail=f"Failed to reload configs: {str(e)}")
+        raise internal_error("nudge_config_reload", e, "Nudge configuration could not be reloaded.")
 
 
 @router.get("/nudge/download_log")

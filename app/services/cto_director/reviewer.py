@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import json
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.models import CtoFinding, CtoReview, OperationsIssueDraft, SystemHealthEvent
 from app.services.github import repository as github_repository
 from app.services.operations_director.health_events import runtime_environment, sanitize_details, sanitize_text
+from app.utils.safe_errors import log_failure
 
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,14 @@ CTO_COPILOT_DEFAULT_URL = os.getenv("GITHUB_COPILOT_CTO_URL", "https://models.gi
 
 class GitHubCopilotCtoError(RuntimeError):
     pass
+
+
+def safe_copilot_error_code(exc: Exception) -> str:
+    """Keep only a bounded HTTP status from this controlled integration error."""
+
+    message = exc.args[0] if exc.args and isinstance(exc.args[0], str) else ""
+    match = re.search(r"\bHTTP\s+(\d{3})\b", message)
+    return f"HTTP {match.group(1)}" if match else type(exc).__name__
 
 
 def build_github_copilot_cto_prompt(snapshot: dict[str, Any]) -> str:
@@ -157,10 +167,10 @@ class CtoDirectorReviewer:
         except Exception as exc:
             review.status = "failed"
             review.completed_at = datetime.utcnow()
-            review.summary = sanitize_text(f"CTO review failed: {exc}", 700)
+            review.summary = f"CTO review failed ({type(exc).__name__})"
             review.updated_at = review.completed_at
             self._flush_or_commit(flush=False)
-            logger.exception("CTO review failed")
+            log_failure("cto_review", exc)
             return review
 
     def run_weekend_review(self) -> CtoReview:
@@ -200,7 +210,7 @@ class CtoDirectorReviewer:
                 "workflow_runs": self._summarize_workflows(github_repository.get_workflow_runs()),
             })
         except Exception as exc:
-            snapshot["error"] = sanitize_text(str(exc), 300)
+            snapshot["error"] = type(exc).__name__
         return snapshot
 
     def _collect_local_snapshot(self) -> dict[str, Any]:
@@ -282,13 +292,13 @@ class CtoDirectorReviewer:
         try:
             raw_findings = request_github_copilot_cto_findings(snapshot)
         except GitHubCopilotCtoError as exc:
-            logger.warning("GitHub Copilot CTO review unavailable: %s", exc)
+            log_failure("cto_copilot_review", exc, level=logging.WARNING)
             snapshot["cto_review_engine"] = {
                 "provider": "github_models",
                 "status": "unavailable",
                 "model": os.getenv("GITHUB_COPILOT_CTO_MODEL", CTO_COPILOT_DEFAULT_MODEL),
                 "endpoint": os.getenv("GITHUB_COPILOT_CTO_URL", CTO_COPILOT_DEFAULT_URL),
-                "error": sanitize_text(str(exc), 500),
+                "error": safe_copilot_error_code(exc),
             }
             return [self._copilot_unavailable_candidate(exc)]
 
@@ -313,7 +323,7 @@ class CtoDirectorReviewer:
         return sorted(findings, key=lambda item: (self._severity_rank(item["severity"]), item["title"]))[:30]
 
     def _copilot_unavailable_candidate(self, exc: Exception) -> dict[str, Any]:
-        message = sanitize_text(str(exc), 500) or "GitHub Copilot CTO review was unavailable."
+        message = safe_copilot_error_code(exc)
         return self._candidate(
             category="release_readiness",
             severity="warning",

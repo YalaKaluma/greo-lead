@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import OPENAI_API_KEY, OPENAI_MODEL
 from app.models import Message, MessageSignalFlag, User
+from app.utils.safe_errors import log_failure
 
 logger = logging.getLogger(__name__)
 
@@ -248,8 +249,8 @@ def classify_unprocessed_messages(
         except Exception as error:
             db.rollback()
             failed += 1
-            errors.append({"message_id": message.id, "error": str(error)})
-            logger.exception("Failed to classify message %s", message.id)
+            errors.append({"message_id": message.id, "error": "classification_failed"})
+            log_failure("message_signal_backfill", error)
 
     return {"processed": processed, "skipped": skipped, "failed": failed, "errors": errors}
 

@@ -19,6 +19,7 @@ from app.db import get_db
 from app.services.priority_service import PriorityService
 from app.services.priority_llm_service import PriorityLLMService
 from app.models import Task
+from app.utils.safe_errors import internal_error
 
 router = APIRouter(tags=["priority"])
 
@@ -157,10 +158,7 @@ def run_prioritization(
         )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Prioritization failed: {str(e)}"
-        )
+        raise internal_error("priority_run", e, "Prioritization could not be completed.")
 
 
 @router.post("/backfill-task-scores", response_model=PriorityBackfillResponse)
@@ -186,10 +184,7 @@ def backfill_task_scores(
         )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"MTN backfill failed: {str(e)}"
-        )
+        raise internal_error("priority_mtn_backfill", e, "The MTN backfill could not be completed.")
 
 
 @router.get("/latest")
@@ -217,10 +212,7 @@ def get_latest_prioritization(
         }
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch latest prioritization: {str(e)}"
-        )
+        raise internal_error("priority_latest", e, "Prioritization data could not be loaded.")
 
 
 @router.post("/decision")
@@ -301,10 +293,7 @@ def record_decision(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to record decision: {str(e)}"
-        )
+        raise internal_error("priority_decision", e, "The decision could not be recorded.")
 
 
 @router.post("/feedback")
@@ -374,10 +363,7 @@ def record_priority_feedback(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to record MTN feedback: {str(e)}"
-        )
+        raise internal_error("priority_mtn_feedback", e, "The feedback could not be recorded.")
 
 
 @router.post("/apply", response_model=ApplyChangesResponse)
@@ -416,10 +402,7 @@ def apply_changes(
         )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to apply changes: {str(e)}"
-        )
+        raise internal_error("priority_apply", e, "The changes could not be applied.")
 
 
 @router.get("/history")
@@ -463,10 +446,7 @@ def get_prioritization_history(
         }
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch history: {str(e)}"
-        )
+        raise internal_error("priority_history", e, "Prioritization history could not be loaded.")
 
 
 @router.get("/learning-insights")
@@ -494,10 +474,7 @@ def get_learning_insights(
         return analytics
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch insights: {str(e)}"
-        )
+        raise internal_error("priority_insights", e, "Prioritization insights could not be loaded.")
 
 
 @router.get("/health")

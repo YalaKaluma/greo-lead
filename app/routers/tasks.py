@@ -10,6 +10,7 @@ from typing import Optional, List, Union
 from app.services.task_enrichment_service import enrich_task
 from app.services.timezone_service import get_user_timezone, today_for_timezone
 from app.services.task_mtn_trend_service import get_task_mtn_history, get_task_mtn_trends
+from app.utils.safe_errors import log_failure
 from app.services.onboarding_seed_service import ensure_starter_tasks_visible_today
 from app.services.audit_log_service import user_id_for_identifier, write_audit_log
 from app.security_dependencies import require_authenticated_user_identifier
@@ -339,7 +340,7 @@ def attach_today_mtn_metadata(db: Session, user_number: str, tasks: List[Task]) 
             task.mtn_recommendation_id = recommendation_by_context_id.get(score.context_id)
             task.mtn_prioritized_at = score.scored_at.isoformat() if score.scored_at else None
     except Exception as exc:
-        print(f"[TASKS API] Failed to attach MTN metadata: {exc}")
+        log_failure("task_mtn_metadata", exc)
 
 
 @router.get("", response_model=list[TaskResponse])
@@ -781,7 +782,7 @@ def create_follow_up_task(
         }
     except Exception as exc:
         db.rollback()
-        print(f"[TASKS API] Failed to create follow-up task: {exc}")
+        log_failure("task_follow_up_creation", exc)
         raise HTTPException(
             status_code=500,
             detail="Unable to create follow-up task. Please try again."

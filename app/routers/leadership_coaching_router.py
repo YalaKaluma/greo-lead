@@ -13,6 +13,7 @@ from app.models import User
 from app.services.language import normalize_language
 from typing import Optional
 from pydantic import BaseModel
+from app.utils.safe_errors import internal_error, log_failure
 
 router = APIRouter()
 
@@ -66,7 +67,11 @@ def start_session(
             "message": f"Started {quadrant_info['name']} coaching session"
         }
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        incident_id = log_failure("leadership_coaching_start", e)
+        raise HTTPException(
+            status_code=400,
+            detail=f"The coaching session could not be started. Reference: {incident_id}",
+        )
 
 
 @router.post("/message")
@@ -111,10 +116,11 @@ def process_message(
             "next_phase": result.get("next_phase")
         }
     except Exception as e:
-        print(f"❌ Error in leadership coaching: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error(
+            "leadership_coaching",
+            e,
+            "Leadership coaching could not be completed.",
+        )
 
 
 @router.get("/active")

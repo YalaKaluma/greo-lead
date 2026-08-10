@@ -22,6 +22,7 @@ from app.utils.security import (
     hash_password_reset_token,
     verify_password,
 )
+from app.utils.safe_errors import log_failure
 from app.utils.password_policy import password_policy_error
 from app.utils.session_cookie import SESSION_COOKIE_NAME, clear_session_cookie, set_session_cookie
 
@@ -253,9 +254,9 @@ async def register(payload: RegisterRequest, request: Request, response: Respons
     try:
         ensure_starter_examples_seeded(db, user)
         db.commit()
-    except Exception:
+    except Exception as exc:
         db.rollback()
-        logger.exception("Starter example seeding failed for user_id=%s", user.id)
+        log_failure("auth_starter_seed", exc)
         return {
             "success": False,
             "message": "Account setup failed. Please try again."
@@ -302,8 +303,8 @@ def _deliver_password_recovery_email(email: str, reset_url: str, user_id: int) -
                 "If you did not request this, you can ignore this message."
             ),
         )
-    except Exception:
-        logger.exception("Password recovery email delivery failed for user_id=%s", user_id)
+    except Exception as exc:
+        log_failure("auth_password_recovery_email", exc)
 
 
 @router.post("/password-recovery/request")

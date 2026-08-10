@@ -32,6 +32,7 @@ from app.models import (
 )
 from app.utils.security import generate_temporary_password, hash_password
 from app.services.admin_system_health_service import AdminSystemHealthService
+from app.utils.safe_errors import log_failure
 from app.services.admin_ai_briefing_service import AdminAIBriefingService
 from app.services.onboarding_seed_service import ensure_starter_examples_seeded
 from app.services.meeting_intelligence_service import (
@@ -226,7 +227,7 @@ def _run_leadership_reassessment(meeting_ids: list[int]) -> None:
             except Exception as error:
                 _leadership_reassessment_state["failed"] += 1
                 _leadership_reassessment_state["last_error"] = type(error).__name__
-                logger.exception("Historical leadership reassessment failed for meeting_id=%s", meeting_id)
+                log_failure("admin_historical_leadership_reassessment", error)
             else:
                 _leadership_reassessment_state["processed"] += 1
     finally:

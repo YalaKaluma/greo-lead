@@ -9,6 +9,7 @@ from app.services.journal_reflection_depth_service import backfill_recent_reflec
 from app.services.language import DEFAULT_LANGUAGE, normalize_language
 from app.services.timezone_service import DEFAULT_TIMEZONE, normalize_timezone
 from app.routers.auth import require_authenticated_user
+from app.utils.safe_errors import internal_error
 
 router = APIRouter()
 
@@ -87,9 +88,10 @@ def backfill_reflection_depth(request: ReflectionDepthBackfillRequest, db: Sessi
         )
     except Exception as error:
         db.rollback()
-        raise HTTPException(
-            status_code=502,
-            detail=f"Alfred could not score the recent journal messages yet: {error}",
+        raise internal_error(
+            "settings_reflection_depth_backfill",
+            error,
+            "Recent journal messages could not be scored.",
         ) from error
 
     return {

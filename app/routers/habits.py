@@ -19,6 +19,7 @@ from app.services.habit_coaching_service import (
     refresh_habit_coaching_review,
 )
 from app.services.habits.habit_trend_service import get_habit_trends
+from app.utils.safe_errors import internal_error
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -398,10 +399,10 @@ def refresh_coaching_review(user_number: str, db: Session = Depends(get_db)):
 
     try:
         return {"review": refresh_habit_coaching_review(db, user_number)}
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Habit coaching data not found")
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to refresh habit coaching: {exc}")
+        raise internal_error("habit_coaching_refresh", exc, "Habit coaching could not be refreshed.")
 
 
 @router.post("/{habit_id}/toggle_today")

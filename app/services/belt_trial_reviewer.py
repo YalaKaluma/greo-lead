@@ -7,6 +7,7 @@ from typing import Any, Optional
 import yaml
 
 from app.config import OPENAI_API_KEY, OPENAI_MODEL
+from app.utils.safe_errors import log_failure
 
 
 PASSING_SCORE = 3
@@ -224,12 +225,7 @@ def review_belt_trial(
         )
         return normalized
     except Exception as error:
-        logger.exception(
-            "[belt_trial_reviewer:%s] openai_failed_using_fallback attempt=%s error=%s",
-            trace_id or "no-trace",
-            attempt_number,
-            error,
-        )
+        log_failure("belt_trial_review", error)
         normalized = normalize_review(fallback_review(response_text, attempt_number), response_text, attempt_number)
         logger.info(
             "[belt_trial_reviewer:%s] fallback_complete attempt=%s status=%s score=%s feedback_len=%s",

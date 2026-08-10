@@ -1,5 +1,7 @@
 ﻿from app.services.journey_support import *
 
+from app.utils.safe_errors import log_failure
+
 router = APIRouter()
 
 @router.get("/trial-config")
@@ -228,7 +230,7 @@ def submit_belt_assessment(
         raw_text = response.choices[0].message.content or "{}"
         result = parse_assessment_response(raw_text)
     except Exception as error:
-        print(f"Error generating belt assessment: {error}")
+        log_failure("journey_belt_assessment", error)
         result = fallback_assessment_from_evidence(evidence)
     result = normalize_assessment_result(result, evidence, request.target_belt)
 
@@ -500,7 +502,7 @@ def submit_belt_trial(
     ).first()
 
     if not trial:
-        logger.warning("[belt_trial_submit:%s] not_found trial_id=%s user=%s", trace_id, trial_id, user_number)
+        logger.warning("[belt_trial_submit:%s] trial not found", trace_id)
         raise HTTPException(status_code=404, detail="Belt trial not found")
 
     logger.info(

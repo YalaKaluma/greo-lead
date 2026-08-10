@@ -15,6 +15,7 @@ from app.services.message_service import load_conversation_history
 from app.models import RelationshipReview, JourneyPerson
 from app.config import OPENAI_API_KEY, OPENAI_MODEL
 from app.services.language import normalize_language, response_language_instruction
+from app.utils.safe_errors import log_failure
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -219,7 +220,7 @@ def _start_selected_person_review(
             "state_context": state_context
         }
     except Exception as e:
-        print(f"❌ Error starting review: {e}")
+        log_failure("people_review_start", e)
         return {
             "response": "Sorry, I had trouble starting the review. Please try again.",
             "next_phase": "completed",
@@ -264,9 +265,7 @@ def _handle_reflection(
             preferred_language=state_context.get("preferred_language", "en")
         )
     except Exception as e:
-        print(f"❌ Error generating reflection question: {e}")
-        import traceback
-        traceback.print_exc()
+        log_failure("people_review_reflection", e)
         # Fallback to simple question
         text = f"What's the real issue underneath what you just shared about {person['name']}?"
     
@@ -319,9 +318,7 @@ def _handle_diagnostics(
             preferred_language=state_context.get("preferred_language", "en")
         )
     except Exception as e:
-        print(f"❌ Error generating diagnostics question: {e}")
-        import traceback
-        traceback.print_exc()
+        log_failure("people_review_diagnostics", e)
         text = f"What pattern have you noticed in how you and {person['name']} interact?"
     
     # Move to planning
@@ -376,9 +373,7 @@ def _handle_planning(
             preferred_language=state_context.get("preferred_language", "en")
         )
     except Exception as e:
-        print(f"❌ Error generating planning question: {e}")
-        import traceback
-        traceback.print_exc()
+        log_failure("people_review_planning", e)
         text = f"What's the ONE action you need to take with {person['name']} this week?"
     
     # Move to closure
@@ -439,9 +434,7 @@ def _handle_closure(
             preferred_language=state_context.get("preferred_language", "en")
         )
     except Exception as e:
-        print(f"❌ Error generating closure summary: {e}")
-        import traceback
-        traceback.print_exc()
+        log_failure("people_review_closure", e)
         # Fallback to simple summary
         strength_text = f"{review.relationship_strength}/5" if review.relationship_strength else "not rated"
         summary = f"We reviewed your relationship with {person['name']}:\n\n📊 Strength: {strength_text}\n✅ Next: {combined_plan[:100]}"

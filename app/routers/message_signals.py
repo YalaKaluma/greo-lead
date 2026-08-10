@@ -16,6 +16,7 @@ from app.services.message_signal_classifier import (
     mark_message_for_reclassification,
 )
 from app.routers.auth import require_authenticated_user
+from app.utils.safe_errors import internal_error
 
 router = APIRouter()
 
@@ -82,10 +83,10 @@ def classify_one_message(
         if force:
             mark_message_for_reclassification(db, message_id)
         return classify_message_signals(db, message_id, force=force)
-    except ValueError as error:
-        raise HTTPException(status_code=404, detail=str(error))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Message not found")
     except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error))
+        raise internal_error("message_signal_classification", error, "Message signals could not be classified.")
 
 
 @router.post("/backfill")

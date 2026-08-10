@@ -76,7 +76,7 @@ class PriorityLLMService:
             }
             
         except Exception as e:
-            raise Exception(f"LLM scoring failed: {str(e)}")
+            raise RuntimeError("LLM scoring failed") from e
     
     def _build_system_prompt(self) -> str:
         """

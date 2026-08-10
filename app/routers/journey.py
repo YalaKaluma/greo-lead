@@ -1,5 +1,6 @@
 ﻿from app.services.journey_support import *
 from app.routers import journey_belts
+from app.utils.safe_errors import internal_error, log_failure
 
 router = APIRouter()
 router.include_router(journey_belts.router)
@@ -225,10 +226,10 @@ Keep responses warm, direct, and actionable. No pleasantries needed."""
         }
     
     except Exception as e:
-        print(f"Error generating coaching feedback: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to generate coaching feedback"
+        raise internal_error(
+            "journey_coaching_feedback",
+            e,
+            "Coaching feedback could not be generated.",
         )
 
 
@@ -243,8 +244,7 @@ def get_people_review_candidates(
         result = PeopleReviewService.get_review_candidates(db, user_number, include_all)
         return result
     except Exception as e:
-        print(f"Error getting review candidates: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error("people_review_candidates", e, "Review candidates could not be loaded.")
 
 
 @router.post("/people/{person_id}/start-review")
@@ -258,11 +258,10 @@ def start_people_review(
     try:
         result = PeopleReviewService.start_review(db, user_number, person_id, review_type)
         return result
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Review subject not found")
     except Exception as e:
-        print(f"Error starting review: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error("people_review_start", e, "The review could not be started.")
 
 
 @router.get("/people/{person_id}/review-history")
@@ -276,8 +275,7 @@ def get_people_review_history(
         result = PeopleReviewService.get_review_history(db, person_id, user_number)
         return result
     except Exception as e:
-        print(f"Error getting review history: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error("people_review_history", e, "Review history could not be loaded.")
 
 
 @router.put("/people/reviews/{review_id}")
@@ -291,11 +289,10 @@ def update_people_review(
     try:
         review = PeopleReviewService.update_review(db, review_id, user_number, updates)
         return {"success": True, "review_id": review.id}
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Review not found")
     except Exception as e:
-        print(f"Error updating review: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error("people_review_update", e, "The review could not be updated.")
 
 
 @router.post("/people/reviews/{review_id}/complete")
@@ -308,11 +305,10 @@ def complete_people_review(
     try:
         result = PeopleReviewService.complete_review(db, review_id, user_number)
         return result
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Review not found")
     except Exception as e:
-        print(f"Error completing review: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error("people_review_complete", e, "The review could not be completed.")
 
 
 @router.get("/people/active-review")
@@ -328,8 +324,7 @@ def get_active_people_review(
         else:
             return {"active": False}
     except Exception as e:
-        print(f"Error getting active review: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise internal_error("people_review_active", e, "The active review could not be loaded.")
 
 
 # Add this to app/routers/journey.py
@@ -463,9 +458,7 @@ REVIEWS:
         }
         
     except Exception as e:
-        print(f"âŒ Error generating synthesis: {e}")
-        import traceback
-        traceback.print_exc()
+        log_failure("journey_synthesis", e)
         
         # Fallback to simple extraction
         return {

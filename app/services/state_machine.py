@@ -74,7 +74,7 @@ def get_or_create_state(db: Session, user_number: str) -> ConversationState:
         db.add(state)
         db.commit()
         db.refresh(state)
-        print(f"✨ Created new conversation state for {user_number}")
+        print("Created new conversation state")
     
     return state
 

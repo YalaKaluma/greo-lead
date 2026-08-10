@@ -30,7 +30,7 @@ class OnboardingConversation:
     @staticmethod
     def get_user_or_create(db: Session, phone_number: str) -> Tuple[User, bool]:
         """Get existing user or create new one. Returns: (user, is_new)"""
-        print(f"🔍 DEBUG [get_user_or_create]: Looking for user with phone={phone_number}")
+        print("DEBUG [get_user_or_create]: Looking up user")
 
         user = db.query(User).filter(User.phone_number == phone_number).first()
         is_new = False
@@ -48,9 +48,9 @@ class OnboardingConversation:
             db.commit()
             db.refresh(user)
             is_new = True
-            print(f"✅ DEBUG [get_user_or_create]: User created with id={user.id}")
+            print("DEBUG [get_user_or_create]: User created")
         else:
-            print(f"♻️ DEBUG [get_user_or_create]: Existing user found with id={user.id}")
+            print("DEBUG [get_user_or_create]: Existing user found")
 
         return user, is_new
 
@@ -59,7 +59,6 @@ class OnboardingConversation:
         """Process a message during onboarding and return Alfred's response."""
         step = user.onboarding_step
         print(f"\n🔍 DEBUG [process_onboarding_message]:")
-        print(f"   User ID: {user.id}")
         print(f"   Current step: {step}")
         print(f"   Message length: {len(message or '')}")
         print(f"   Onboarding data present: {bool(user.onboarding_data)}")
@@ -310,7 +309,7 @@ See you inside."""
     @staticmethod
     def complete_onboarding(db: Session, user: User):
         """Mark onboarding as completed"""
-        print(f"🏁 DEBUG [complete_onboarding]: Marking user {user.id} as completed")
+        print("DEBUG [complete_onboarding]: Marking user completed")
         user.onboarding_completed = True
         user.onboarding_step = 'COMPLETED'
         db.commit()
@@ -323,72 +322,8 @@ See you inside."""
         Process onboarding_data and create actual tasks and goals in their respective tables.
         This is called automatically at the end of WhatsApp onboarding.
         """
-        print(f"INFO [process_data]: Deprecated onboarding prefill skipped for user {user.id}")
+        print("INFO [process_data]: Deprecated onboarding prefill skipped")
         return
-
-        from app.services import journey_service
-        from app.models import Task
-
-        data = user.onboarding_data
-        if not data:
-            print(f"⚠️ DEBUG [process_data]: No onboarding_data found")
-            return
-
-        print(f"📊 DEBUG [process_data]: Processing data with keys: {list(data.keys())}")
-        user_number = user.phone_number
-
-        # 1. Create goal in journey_goals table
-        if 'first_goal' in data:
-            goal_text = data['first_goal']
-            why = data.get('goal_why', '')
-
-            print(f"🎯 DEBUG [process_data]: Creating goal length={len(goal_text)}")
-            try:
-                goal = journey_service.add_goal(
-                    db,
-                    user_number,
-                    goal_text=goal_text,
-                    why=why,
-                    time_horizon='vision'
-                )
-                print(f"✅ DEBUG [process_data]: Goal created with ID={goal.id}")
-            except Exception as e:
-                print(f"❌ DEBUG [process_data]: Failed to create goal: {e}")
-
-        # 2. Create tasks in tasks table
-        if 'tasks_raw' in data:
-            tasks_text = data['tasks_raw']
-            quick_win = data.get('quick_win', '')
-
-            print(f"📝 DEBUG [process_data]: Extracting tasks from input length={len(tasks_text)}")
-            tasks = extract_tasks_from_onboarding(tasks_text)
-            print(f"✅ DEBUG [process_data]: Extracted {len(tasks)} tasks")
-
-            for task_text in tasks:
-                is_quick_win = quick_win.lower() in task_text.lower() if quick_win else False
-
-                try:
-                    # ✅ Set due_date to today so tasks appear in default "Tasks due today" view
-                    from datetime import date
-                    today = date.today()
-
-                    task = Task(
-                        user_number=user_number,
-                        title=task_text,
-                        priority='High' if is_quick_win else 'Medium',
-                        status='open',
-                        due_date=today,  # ✅ NEW: Set to today so they show up immediately
-                        notes=f"Added during onboarding" + (f" - Quick win!" if is_quick_win else "")
-                    )
-                    db.add(task)
-                    print(f"  ✓ Task queued (priority: {task.priority}, due: {today})")
-                except Exception as e:
-                    print(f"  ✗ Failed to create task: {type(e).__name__}")
-
-            db.commit()
-            print(f"✅ DEBUG [process_data]: All tasks committed to database!")
-
-        print(f"🎉 DEBUG [process_data]: Onboarding data processing complete!")
 
 
 class EmailVerificationService:
