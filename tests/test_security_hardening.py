@@ -80,6 +80,43 @@ def test_rate_limited_endpoint_returns_429_after_excessive_requests():
     assert response.headers["Retry-After"] == "60"
 
 
+def test_auth_rate_limit_is_shared_across_application_replicas():
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from app.models import RateLimitBucket
+    from app.security_middleware import DatabaseRateLimitStore
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    RateLimitBucket.__table__.create(engine)
+    shared_store = DatabaseRateLimitStore(sessionmaker(bind=engine))
+
+    def make_replica():
+        replica = FastAPI()
+        replica.add_middleware(
+            RateLimitMiddleware,
+            auth_limit=RateLimitRule(2, 60),
+            ai_limit=RateLimitRule(20, 60),
+            general_limit=RateLimitRule(100, 60),
+            shared_store=shared_store,
+        )
+
+        @replica.post("/api/auth/login")
+        def login():
+            return {"success": False}
+
+        return TestClient(replica)
+
+    first_replica = make_replica()
+    second_replica = make_replica()
+    assert first_replica.post("/api/auth/login").status_code == 200
+    assert second_replica.post("/api/auth/login").status_code == 200
+    assert first_replica.post("/api/auth/login").status_code == 429
+
+
 def test_ai_rate_limit_uses_signed_identity_and_shared_scope(monkeypatch):
     from app.utils.security import create_session_token
 
