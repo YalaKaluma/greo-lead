@@ -19,6 +19,7 @@ import threading
 from app.email_poller import run_email_loop
 from app.security_middleware import (
     CsrfProtectionMiddleware,
+    DatabaseRateLimitStore,
     RateLimitMiddleware,
     SecurityHeadersMiddleware,
     trusted_application_origins,
@@ -141,7 +142,10 @@ logger.info("✓ CORS middleware configured for trusted application origins")
 # --------------------------------------
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(CsrfProtectionMiddleware)
-app.add_middleware(RateLimitMiddleware)
+app.add_middleware(
+    RateLimitMiddleware,
+    shared_store=DatabaseRateLimitStore(SessionLocal),
+)
 logger.info("✓ Security headers and rate limiting configured")
 
 

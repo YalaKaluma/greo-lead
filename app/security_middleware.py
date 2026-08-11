@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import time
+import logging
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlsplit
 from collections import defaultdict, deque
 from dataclasses import dataclass
@@ -12,6 +14,59 @@ from starlette.responses import JSONResponse, Response
 
 from app.utils.session_cookie import SESSION_COOKIE_NAME
 from app.utils.security import decode_session_token
+
+
+logger = logging.getLogger(__name__)
+
+
+class DatabaseRateLimitStore:
+    """Fixed-window counters shared by every application replica."""
+
+    def __init__(self, session_factory):
+        self.session_factory = session_factory
+
+    def hit(self, key: str, rule: "RateLimitRule", now: float) -> tuple[bool, int, int]:
+        from app.models import RateLimitBucket
+
+        window_started_at = int(now) - (int(now) % rule.window_seconds)
+        retry_after = max(1, rule.window_seconds - (int(now) - window_started_at))
+        db = self.session_factory()
+        try:
+            bucket = (
+                db.query(RateLimitBucket)
+                .filter(RateLimitBucket.bucket_key == key)
+                .with_for_update()
+                .first()
+            )
+            if bucket is None:
+                bucket = RateLimitBucket(
+                    bucket_key=key,
+                    window_started_at=window_started_at,
+                    request_count=0,
+                )
+                db.add(bucket)
+            elif bucket.window_started_at != window_started_at:
+                bucket.window_started_at = window_started_at
+                bucket.request_count = 0
+
+            if bucket.request_count >= rule.requests:
+                db.commit()
+                return False, 0, retry_after
+            bucket.request_count += 1
+            bucket.updated_at = datetime.now(timezone.utc)
+            if int(now) % 300 == 0:
+                db.query(RateLimitBucket).filter(
+                    RateLimitBucket.updated_at < datetime.now(timezone.utc) - timedelta(days=1)
+                ).delete(synchronize_session=False)
+            remaining = max(rule.requests - bucket.request_count, 0)
+            db.commit()
+            return True, remaining, retry_after
+        except Exception:
+            db.rollback()
+            logger.error("Shared rate-limit store unavailable; request denied")
+            return False, 0, retry_after
+        finally:
+            db.close()
 
 
 SECURITY_HEADERS = {
@@ -148,11 +203,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         auth_limit: RateLimitRule = RateLimitRule(5),
         ai_limit: RateLimitRule = RateLimitRule(20),
         general_limit: RateLimitRule = RateLimitRule(100),
+        shared_store: DatabaseRateLimitStore | None = None,
     ):
         super().__init__(app)
         self.auth_limit = auth_limit
         self.ai_limit = ai_limit
         self.general_limit = general_limit
+        self.shared_store = shared_store
         self._buckets: dict[str, deque[float]] = defaultdict(deque)
 
     async def dispatch(self, request: Request, call_next):
@@ -160,8 +217,21 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if rule is None:
             return await call_next(request)
 
-        now = time.monotonic()
+        now = time.time()
         key = self._rate_limit_key(request, rule)
+        if self.shared_store is not None and rule in (self.auth_limit, self.ai_limit):
+            allowed, remaining, retry_after = self.shared_store.hit(key, rule, now)
+            if not allowed:
+                response = JSONResponse({"detail": "Rate limit exceeded"}, status_code=429)
+                response.headers["X-RateLimit-Limit"] = str(rule.requests)
+                response.headers["X-RateLimit-Remaining"] = "0"
+                response.headers["Retry-After"] = str(retry_after)
+                return apply_security_headers(response)
+            response = await call_next(request)
+            response.headers.setdefault("X-RateLimit-Limit", str(rule.requests))
+            response.headers.setdefault("X-RateLimit-Remaining", str(remaining))
+            return response
+
         bucket = self._buckets[key]
         while bucket and now - bucket[0] >= rule.window_seconds:
             bucket.popleft()

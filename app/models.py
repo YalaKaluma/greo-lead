@@ -11,6 +11,15 @@ import secrets
 from app.utils.security import hash_password
 
 
+class RateLimitBucket(Base):
+    __tablename__ = "rate_limit_buckets"
+
+    bucket_key = Column(String(255), primary_key=True)
+    window_started_at = Column(Integer, nullable=False)
+    request_count = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 # from app.database import Base
 # from database import Base
 
