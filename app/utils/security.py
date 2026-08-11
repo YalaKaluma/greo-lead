@@ -49,6 +49,18 @@ def verify_password(password: str, stored_value: str | None) -> bool:
     return hmac.compare_digest(actual_digest, expected_digest)
 
 
+def password_hash_needs_upgrade(stored_value: str | None) -> bool:
+    """Return whether a verified password should be re-hashed after login."""
+
+    if not stored_value or not stored_value.startswith(f"{PASSWORD_HASH_PREFIX}$"):
+        return True
+    try:
+        _, iterations_text, _, _ = stored_value.split("$", 3)
+        return int(iterations_text) < PASSWORD_HASH_ITERATIONS
+    except (ValueError, TypeError):
+        return True
+
+
 def generate_temporary_password(length: int = 10) -> str:
     alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!#$%&*?"
     return "".join(secrets.choice(alphabet) for _ in range(length))

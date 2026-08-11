@@ -20,6 +20,7 @@ from app.utils.security import (
     generate_password_reset_token,
     hash_password,
     hash_password_reset_token,
+    password_hash_needs_upgrade,
     verify_password,
 )
 from app.utils.safe_errors import log_failure
@@ -180,6 +181,9 @@ async def login(credentials: LoginRequest, request: Request, response: Response,
 
     # Check permanent password (returning users)
     if user.password_hash and verify_password(credentials.password, user.password_hash):
+        password_storage_upgraded = password_hash_needs_upgrade(user.password_hash)
+        if password_storage_upgraded:
+            user.password_hash = hash_password(credentials.password)
         user.last_login_at = datetime.utcnow()
         user.last_active_at = user.last_login_at
         db.commit()
@@ -189,7 +193,10 @@ async def login(credentials: LoginRequest, request: Request, response: Response,
             event_type="user_login_success",
             object_type="user",
             object_id=user.id,
-            metadata={"credential_type": "password"},
+            metadata={
+                "credential_type": "password",
+                "password_storage_upgraded": password_storage_upgraded,
+            },
             request=request,
         )
         return {
