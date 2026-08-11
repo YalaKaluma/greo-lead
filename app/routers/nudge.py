@@ -48,6 +48,7 @@ from app.models import (
 from app.services.habit_coaching_service import refresh_habit_coaching_review
 from app.services.habits.habit_trend_service import calculate_streak as calculate_habit_streak
 from app.services.notifications import send_notification
+from app.services.account_erasure_service import purge_due_account_deletions
 from app.services.vision_progress_review_service import VisionProgressReviewService
 from app.services.operations_director.health_events import (
     record_external_service_failure_with_new_session,
@@ -1224,6 +1225,7 @@ def morning_nudge(
     Prompt loaded from nudge_prompts.yaml
     """
     nudge_type = "morning"
+    erasure_result = purge_due_account_deletions(db)
     logger.info(f"🌅 {nudge_type.upper()} nudge endpoint invoked")
 
     requested_user_number = get_requested_nudge_user_number(user_number, request, nudge_type)
@@ -1237,6 +1239,7 @@ def morning_nudge(
     return {
         "nudge_type": nudge_type,
         "timestamp": datetime.utcnow().isoformat(),
+        "account_erasure": erasure_result,
         **result
     }
 
@@ -1255,6 +1258,7 @@ def evening_nudge(
     Prompt loaded from nudge_prompts.yaml
     """
     nudge_type = "evening"
+    erasure_result = purge_due_account_deletions(db)
     logger.info(f"🌙 {nudge_type.upper()} nudge endpoint invoked")
 
     requested_user_number = get_requested_nudge_user_number(user_number, request, nudge_type)
@@ -1268,6 +1272,7 @@ def evening_nudge(
     return {
         "nudge_type": nudge_type,
         "timestamp": datetime.utcnow().isoformat(),
+        "account_erasure": erasure_result,
         **result
     }
 
