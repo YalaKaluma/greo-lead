@@ -1493,6 +1493,13 @@ def test_supply_chain_inputs_are_immutable_and_hash_locked():
     assert "FROM node:20-bookworm-slim@sha256:" in dockerfile
     assert "FROM python:3.11-slim@sha256:" in dockerfile
     assert "--hash=sha256:" in production_lock
+    assert "pnpm audit --prod --audit-level high" in workflows
+    assert "aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8" in workflows
+    assert "docker build --tag alfred-security-scan:" in workflows
+
+    dependabot = Path(".github/dependabot.yml").read_text(encoding="utf-8")
+    for ecosystem in ("pip", "npm", "docker", "github-actions"):
+        assert f"package-ecosystem: {ecosystem}" in dependabot
 
     tracked_venv = subprocess.run(
         ["git", "ls-files", "venv"],
