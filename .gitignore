@@ -12,6 +12,8 @@ venv/
 node_modules/
 app/frontend/node_modules/
 .pnpm-store/
+app/frontend/playwright-report/
+app/frontend/test-results/
 
 dist/
 build/
