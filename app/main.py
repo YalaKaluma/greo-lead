@@ -401,6 +401,7 @@ def health():
         "status": "ok" if db_status == "connected" else "error",
         "service": "Leadership OS",
         "version": "3.0",
+        "commit": os.getenv("RAILWAY_GIT_COMMIT_SHA") or os.getenv("GIT_COMMIT_SHA") or "unknown",
         "timestamp": datetime.now().isoformat(),
         "database": db_status,
         "database_test": db_test,
