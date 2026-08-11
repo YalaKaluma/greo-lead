@@ -1211,7 +1211,7 @@ def get_requested_nudge_user_number(
 # Single User Nudge Endpoints
 # -------------------------------------------------
 
-@router.get("/nudge/morning")
+@router.post("/nudge/morning")
 def morning_nudge(
         request: Request,
         user_number: Optional[str] = Query(None, description="User identifier (legacy phone-based identifiers are supported)"),
@@ -1244,7 +1244,7 @@ def morning_nudge(
     }
 
 
-@router.get("/nudge/evening")
+@router.post("/nudge/evening")
 def evening_nudge(
         request: Request,
         user_number: Optional[str] = Query(None, description="User identifier"),
@@ -1277,7 +1277,7 @@ def evening_nudge(
     }
 
 
-@router.get("/nudge/weekly")
+@router.post("/nudge/weekly")
 def weekly_nudge(
         request: Request,
         user_number: Optional[str] = Query(None, description="User identifier"),
@@ -1308,7 +1308,7 @@ def weekly_nudge(
     }
 
 
-@router.get("/nudge/sunday_review")
+@router.post("/nudge/sunday_review")
 def sunday_review_nudge(
         request: Request,
         user_number: Optional[str] = Query(None, description="User identifier"),
@@ -1339,7 +1339,7 @@ def sunday_review_nudge(
     }
 
 
-@router.get("/nudge/cto_weekend_review")
+@router.post("/nudge/cto_weekend_review")
 def cto_weekend_review(
         _authorized=Depends(require_scheduler_or_admin),
         db: Session = Depends(get_db),
@@ -1357,7 +1357,7 @@ def cto_weekend_review(
 # Batch Endpoints (Multi-User)
 # -------------------------------------------------
 
-@router.get("/nudge/morning/batch")
+@router.post("/nudge/morning/batch")
 def morning_nudge_batch(
         _authorized=Depends(require_scheduler_or_admin),
         db: Session = Depends(get_db),
@@ -1388,7 +1388,7 @@ def morning_nudge_batch(
     }
 
 
-@router.get("/nudge/evening/batch")
+@router.post("/nudge/evening/batch")
 def evening_nudge_batch(
         _authorized=Depends(require_scheduler_or_admin),
         db: Session = Depends(get_db),
@@ -1419,7 +1419,7 @@ def evening_nudge_batch(
     }
 
 
-@router.get("/nudge/weekly/batch")
+@router.post("/nudge/weekly/batch")
 def weekly_batch(
         _authorized=Depends(require_scheduler_or_admin),
         db: Session = Depends(get_db),
@@ -1450,7 +1450,7 @@ def weekly_batch(
     }
 
 
-@router.get("/nudge/sunday_review/batch")
+@router.post("/nudge/sunday_review/batch")
 def sunday_review_batch(
         _authorized=Depends(require_scheduler_or_admin),
         db: Session = Depends(get_db),
@@ -1485,7 +1485,7 @@ def sunday_review_batch(
 # Utility Endpoints
 # -------------------------------------------------
 
-@router.get("/nudge/reload_config")
+@router.post("/nudge/reload_config")
 def reload_config(_authorized=Depends(require_admin)):
     """
     Reload nudge prompts from YAML file.
