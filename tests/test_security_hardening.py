@@ -1044,6 +1044,43 @@ class LoginDb:
         self.commits += 1
 
 
+def test_legacy_plaintext_password_is_transparently_rehashed_on_login(monkeypatch):
+    from fastapi import Response
+    from app.models import User
+    from app.routers.auth import LoginRequest, login
+    from app.utils.security import PASSWORD_HASH_PREFIX, verify_password
+
+    monkeypatch.setenv("APP_SESSION_SECRET", "test-session-secret-that-is-long-enough-123")
+    user = User(
+        id=30,
+        phone_number="legacy-user",
+        is_active=True,
+        session_version=0,
+        password_hash="simple",
+    )
+    db = LoginDb(user)
+
+    result = asyncio.run(login(
+        credentials=LoginRequest(username="legacy-user", password="simple"),
+        request=_request_with_query(""),
+        response=Response(),
+        db=db,
+    ))
+
+    assert result["success"] is True
+    assert user.password_hash.startswith(f"{PASSWORD_HASH_PREFIX}$")
+    assert user.password_hash != "simple"
+    assert verify_password("simple", user.password_hash)
+    assert db.commits >= 1
+
+
+def test_current_password_hash_does_not_need_upgrade():
+    from app.utils.security import hash_password, password_hash_needs_upgrade
+
+    assert password_hash_needs_upgrade("legacy-value") is True
+    assert password_hash_needs_upgrade(hash_password("simple")) is False
+
+
 def test_temporary_password_can_create_only_one_session(monkeypatch):
     from datetime import datetime, timedelta
     from fastapi import Response
