@@ -261,7 +261,7 @@ def test_admin_permission_required_for_cto_tools():
     db.user = User(id=1, email="user@example.com", is_admin=False, is_active=True, created_at=datetime.utcnow())
 
     with pytest.raises(Exception) as exc_info:
-        require_admin(db.user)
+        require_admin(request=None, user=db.user)
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Admin access required"

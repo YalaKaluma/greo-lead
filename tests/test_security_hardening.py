@@ -343,17 +343,53 @@ def test_db_health_check_prints_counts_without_sensitive_content(tmp_path):
     assert sensitive_text not in result.stdout
 
 
-def test_admin_dependency_uses_authenticated_user_role_not_query_identity():
+def test_admin_dependency_uses_authenticated_user_role_not_query_identity(monkeypatch):
     from app.models import User
     from app.routers.admin import require_admin
+    from app.utils.security import create_session_token
 
+    monkeypatch.setenv("APP_SESSION_SECRET", "test-session-secret-that-is-long-enough-123")
     admin = User(id=1, phone_number="admin@example.com", is_active=True, is_admin=True)
     ordinary_user = User(id=2, phone_number="admin@example.com", is_active=True, is_admin=False)
+    admin_token = create_session_token(admin.id, admin.phone_number)
+    ordinary_token = create_session_token(ordinary_user.id, ordinary_user.phone_number)
+    admin_request = _identity_request(headers=[
+        (b"authorization", f"Bearer {admin_token}".encode("ascii")),
+    ])
+    ordinary_request = _identity_request(headers=[
+        (b"authorization", f"Bearer {ordinary_token}".encode("ascii")),
+    ])
 
-    assert require_admin(user=admin) is admin
+    assert require_admin(request=admin_request, user=admin) is admin
     with pytest.raises(HTTPException) as exc_info:
-        require_admin(user=ordinary_user)
+        require_admin(request=ordinary_request, user=ordinary_user)
     assert exc_info.value.status_code == 403
+
+
+def test_expired_admin_session_requires_fresh_sign_in(monkeypatch):
+    from app.models import User
+    from app.routers import admin as admin_router
+    from app.routers.admin import require_admin
+    from app.utils import security
+
+    monkeypatch.setenv("APP_SESSION_SECRET", "test-session-secret-that-is-long-enough-123")
+    issued_at = 1_000_000
+    monkeypatch.setattr(security.time, "time", lambda: issued_at)
+    user = User(id=1, phone_number="admin@example.com", is_active=True, is_admin=True)
+    token = security.create_session_token(user.id, user.phone_number)
+    request = _identity_request(headers=[
+        (b"authorization", f"Bearer {token}".encode("ascii")),
+    ])
+
+    monkeypatch.setattr(
+        admin_router.time,
+        "time",
+        lambda: issued_at + security.ADMIN_SESSION_TOKEN_TTL_SECONDS + 1,
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        require_admin(request=request, user=user)
+
+    assert exc_info.value.status_code == 401
 
 
 def test_legacy_password_replacement_endpoint_is_disabled():

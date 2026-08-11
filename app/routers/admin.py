@@ -2,10 +2,11 @@ import os
 import json
 import logging
 import threading
+import time
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -30,7 +31,13 @@ from app.models import (
     User,
     AdminAIBriefing,
 )
-from app.utils.security import generate_temporary_password, hash_password
+from app.utils.security import (
+    ADMIN_SESSION_TOKEN_TTL_SECONDS,
+    decode_session_token,
+    generate_temporary_password,
+    hash_password,
+)
+from app.utils.session_cookie import SESSION_COOKIE_NAME
 from app.services.admin_system_health_service import AdminSystemHealthService
 from app.utils.safe_errors import log_failure
 from app.services.admin_ai_briefing_service import AdminAIBriefingService
@@ -193,12 +200,26 @@ def _display_priority_feedback(decision: TaskPriorityDecision, task: Task | None
 
 
 def require_admin(
+    request: Request,
     user: User = Depends(require_authenticated_user),
 ) -> User:
     if user_requires_password_change(user):
         raise HTTPException(status_code=403, detail="Password change required")
     if not getattr(user, "is_admin", False):
         raise HTTPException(status_code=403, detail="Admin access required")
+
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    authorization = request.headers.get("authorization", "")
+    if authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+    payload = decode_session_token(token) if token else None
+    issued_at = int(payload.get("iat", 0)) if payload else 0
+    if (
+        not payload
+        or int(payload.get("sub", -1)) != int(user.id)
+        or issued_at <= int(time.time()) - ADMIN_SESSION_TOKEN_TTL_SECONDS
+    ):
+        raise HTTPException(status_code=401, detail="Administrator session expired; sign in again")
     return user
 
 
