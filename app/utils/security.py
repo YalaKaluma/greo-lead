@@ -10,6 +10,7 @@ import time
 PASSWORD_HASH_PREFIX = "pbkdf2_sha256"  # nosec B105 - algorithm marker, not a password.
 PASSWORD_HASH_ITERATIONS = 260000
 SESSION_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30
+ADMIN_SESSION_TOKEN_TTL_SECONDS = 60 * 60 * 8
 
 
 def hash_password(password: str) -> str:
@@ -82,14 +83,20 @@ def _decode_token_part(value: str) -> bytes:
     return base64.urlsafe_b64decode(f"{value}{padding}".encode("ascii"))
 
 
-def create_session_token(user_id: int, user_number: str, session_version: int = 0) -> str:
+def create_session_token(
+    user_id: int,
+    user_number: str,
+    session_version: int = 0,
+    *,
+    ttl_seconds: int = SESSION_TOKEN_TTL_SECONDS,
+) -> str:
     now = int(time.time())
     payload = {
         "sub": int(user_id),
         "usr": user_number,
         "ver": int(session_version),
         "iat": now,
-        "exp": now + SESSION_TOKEN_TTL_SECONDS,
+        "exp": now + int(ttl_seconds),
         "nonce": secrets.token_urlsafe(12),
     }
     payload_text = _encode_token_part(

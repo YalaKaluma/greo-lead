@@ -15,6 +15,7 @@ from app.config import PUBLIC_APP_URL
 from app.services.audit_log_service import write_audit_log
 from app.services.onboarding_seed_service import ensure_starter_examples_seeded
 from app.utils.security import (
+    ADMIN_SESSION_TOKEN_TTL_SECONDS,
     create_session_token,
     decode_session_token,
     generate_password_reset_token,
@@ -62,7 +63,18 @@ class ChangePasswordRequest(BaseModel):
 
 
 def _session_response(user: User, response: Response) -> dict:
-    token = create_session_token(user.id, user.phone_number, user.session_version)
+    ttl_seconds = (
+        ADMIN_SESSION_TOKEN_TTL_SECONDS
+        if bool(getattr(user, "is_admin", False))
+        else None
+    )
+    token_kwargs = {"ttl_seconds": ttl_seconds} if ttl_seconds is not None else {}
+    token = create_session_token(
+        user.id,
+        user.phone_number,
+        user.session_version,
+        **token_kwargs,
+    )
     set_session_cookie(response, token)
     return {
         "access_token": token,

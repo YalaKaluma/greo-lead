@@ -288,7 +288,7 @@ def test_admin_permission_required_for_operations_tools():
     non_admin = User(id=1, email="user@example.com", is_admin=False, is_active=True, created_at=datetime.utcnow())
 
     with pytest.raises(Exception) as exc_info:
-        require_admin(non_admin)
+        require_admin(request=None, user=non_admin)
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Admin access required"
