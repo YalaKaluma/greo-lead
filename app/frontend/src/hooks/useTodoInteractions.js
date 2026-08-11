@@ -23,7 +23,6 @@ export function useTodoOpportunities({ apiUrl, userNumber, fetchTasks, fetchFilt
 
     try {
       const response = await axios.post(`${apiUrl}/api/opportunities/generate`, {
-        user_number: userNumber,
         surface: 'task_page',
         type: 'task',
         limit: 3
@@ -51,9 +50,7 @@ export function useTodoOpportunities({ apiUrl, userNumber, fetchTasks, fetchFilt
   const acceptOpportunity = async (opportunityId) => {
     setOpportunityActions(prev => ({ ...prev, [opportunityId]: 'working' }));
     try {
-      await axios.post(`${apiUrl}/api/opportunities/${opportunityId}/accept`, {
-        user_number: userNumber
-      });
+      await axios.post(`${apiUrl}/api/opportunities/${opportunityId}/accept`, {});
       await fetchTasks();
       await fetchFilters();
       updateOpportunityAction(opportunityId, 'accepted');
@@ -72,7 +69,6 @@ export function useTodoOpportunities({ apiUrl, userNumber, fetchTasks, fetchFilt
     setOpportunityActions(prev => ({ ...prev, [opportunityId]: 'working' }));
     try {
       await axios.post(`${apiUrl}/api/opportunities/${opportunityId}/decline`, {
-        user_number: userNumber,
         reason: 'Declined from task page'
       });
       updateOpportunityAction(opportunityId, 'declined');

@@ -12,10 +12,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: dev-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   dev-ci:
     name: Lightweight checks
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       PYTHONPATH: ${{ github.workspace }}
       DATABASE_URL: sqlite:///./ci.db
@@ -75,3 +80,21 @@ jobs:
       - name: Build frontend
         working-directory: app/frontend
         run: pnpm build
+
+      - name: Install Playwright browser
+        working-directory: app/frontend
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run end-to-end browser tests
+        working-directory: app/frontend
+        run: pnpm test:e2e
+
+      - name: Upload end-to-end diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: main-e2e-diagnostics
+          path: |
+            app/frontend/playwright-report
+            app/frontend/test-results
+          retention-days: 14

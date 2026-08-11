@@ -49,7 +49,7 @@ export function getNotificationSupport() {
 }
 
 export async function getNotificationStatus(apiUrl, userNumber) {
-  const response = await fetch(`${apiUrl}/api/notifications/status?user_number=${encodeURIComponent(userNumber)}`);
+  const response = await fetch(`${apiUrl}/api/notifications/status`);
   if (!response.ok) {
     throw new Error(await readError(response, 'Could not load notification status.'));
   }
@@ -90,7 +90,6 @@ export async function enableNotifications(apiUrl, userNumber, deviceLabel) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      user_number: userNumber,
       endpoint: payload.endpoint,
       keys: {
         p256dh: payload.keys?.p256dh,
@@ -116,7 +115,6 @@ export async function disableNotifications(apiUrl, userNumber) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        user_number: userNumber,
         endpoint
       })
     });
@@ -143,7 +141,6 @@ export async function disableNotifications(apiUrl, userNumber) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      user_number: userNumber,
       endpoint
     })
   });
@@ -160,7 +157,6 @@ export async function updateNotificationPreferences(apiUrl, userNumber, updates)
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      user_number: userNumber,
       ...updates
     })
   });
@@ -177,7 +173,6 @@ export async function sendTestNotification(apiUrl, userNumber) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      user_number: userNumber,
       title: 'Alfred notifications are ready',
       body: 'Tap to open your Alfred settings.',
       url: '/settings',
@@ -239,7 +234,6 @@ async function enableNativeNotifications(apiUrl, userNumber, deviceLabel) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      user_number: userNumber,
       endpoint,
       keys: {
         p256dh: 'native-fcm',

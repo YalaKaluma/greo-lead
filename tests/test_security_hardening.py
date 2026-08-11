@@ -386,8 +386,21 @@ def test_scheduler_dependency_accepts_dedicated_secret(monkeypatch):
     ) is None
 
 
+def test_scheduler_secret_cannot_access_nudge_administration():
+    source = Path("app/routers/nudge.py").read_text(encoding="utf-8")
+
+    for function_name in (
+        "reload_config",
+        "download_nudge_log",
+        "get_log_summary",
+    ):
+        assert f"def {function_name}(_authorized=Depends(require_admin))" in source
+    assert "def health_check(\n        db: Session = Depends(get_db),\n        _authorized=Depends(require_admin)," in source
+
+
 def _identity_request(
     *,
+    path: str = "/api/tasks",
     query: str = "",
     path_params: dict | None = None,
     headers: list[tuple[bytes, bytes]] | None = None,
@@ -398,8 +411,8 @@ def _identity_request(
         "method": "POST" if body else "GET",
         "scheme": "https",
         "server": ("alfred.example.com", 443),
-        "path": "/api/tasks",
-        "raw_path": b"/api/tasks",
+        "path": path,
+        "raw_path": path.encode("ascii"),
         "query_string": query.encode("ascii"),
         "headers": headers or [],
         "client": ("127.0.0.1", 1234),
@@ -468,6 +481,78 @@ def test_authenticated_identity_accepts_matching_path_and_header_claims():
     assert asyncio.run(require_authenticated_identity(request, user=user)) is user
 
 
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("/api/notifications/subscribe", b'{"user_number":"user-b"}'),
+        ("/api/notifications/preferences", b'{"user_number":"user-b"}'),
+        ("/api/opportunities/generate", b'{"user_number":"user-b"}'),
+        ("/api/opportunities/10/accept", b'{"user_number":"user-b"}'),
+        ("/api/settings/language", b'{"user_number":"user-b"}'),
+        ("/api/usage-events", b'{"user_number":"user-b"}'),
+    ],
+)
+def test_sensitive_surfaces_reject_another_users_identity_before_handler(path, body):
+    from app.models import User
+    from app.security_dependencies import require_authenticated_identity
+
+    authenticated_user = User(id=1, phone_number="user-a", email="a@example.com", is_active=True)
+    request = _identity_request(
+        path=path,
+        headers=[(b"content-type", b"application/json")],
+        body=body,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(require_authenticated_identity(request, user=authenticated_user))
+    assert exc_info.value.status_code == 403
+
+
+def test_sensitive_surfaces_remain_registered_as_authenticated():
+    main_source = Path("app/main.py").read_text(encoding="utf-8")
+
+    for registration in (
+        '(settings.router, "/api", "Settings", "authenticated")',
+        '(notifications.router, "/api", "Notifications", "authenticated")',
+        '(usage.router, "/api", "Usage", "authenticated")',
+        '(opportunities.router, "/api/opportunities", "Opportunities", "authenticated")',
+    ):
+        assert registration in main_source
+
+
+def test_notifications_and_opportunities_derive_ownership_from_session():
+    from app.routers.notifications import (
+        PreferencesRequest,
+        SubscribeRequest,
+        TestNotificationRequest,
+        UnsubscribeRequest,
+    )
+    from app.routers.opportunities import (
+        AcceptOpportunityRequest,
+        DeclineOpportunityRequest,
+        GenerateOpportunitiesRequest,
+    )
+
+    request_models = (
+        PreferencesRequest,
+        SubscribeRequest,
+        TestNotificationRequest,
+        UnsubscribeRequest,
+        AcceptOpportunityRequest,
+        DeclineOpportunityRequest,
+        GenerateOpportunitiesRequest,
+    )
+    for request_model in request_models:
+        assert "user_number" not in request_model.model_fields
+
+    notifications_source = Path("app/routers/notifications.py").read_text(encoding="utf-8")
+    opportunities_source = Path("app/routers/opportunities.py").read_text(encoding="utf-8")
+    assert "Depends(require_authenticated_user_identifier)" in notifications_source
+    assert "current_user.id" in opportunities_source
+    assert "request.user_number" not in notifications_source
+    assert "request.user_number" not in opportunities_source
+
+
 def _dependency_names(route: APIRoute) -> set[str]:
     names: set[str] = set()
     pending = list(route.dependant.dependencies)
@@ -492,7 +577,6 @@ def test_every_api_route_has_an_explicit_access_boundary():
         "/api/auth/password-recovery/reset",
         "/api/onboarding/login",
         "/api/onboarding/set-permanent-password",
-        "/api/nudge/health",
     }
     accepted_dependencies = {
         "require_authenticated_identity",
@@ -723,6 +807,21 @@ def test_client_credentials_are_not_backed_up_and_cors_is_not_wildcarded():
     assert 'allow_origins=["*"]' not in main_source
     assert "credentials: 'include'" in transport
     assert "getSessionToken" in transport
+
+
+def test_android_webview_origin_is_trusted():
+    import json
+
+    from app.security_middleware import trusted_application_origins
+
+    repository_root = Path(__file__).resolve().parents[1]
+    capacitor_config = json.loads(
+        (repository_root / "app" / "frontend" / "capacitor.config.json").read_text(encoding="utf-8")
+    )
+    android_origin = f"{capacitor_config['server']['androidScheme']}://localhost"
+
+    assert android_origin == "https://localhost"
+    assert android_origin in trusted_application_origins()
 
 
 def test_cookie_authenticated_writes_require_trusted_origin(monkeypatch):
@@ -1270,6 +1369,17 @@ def test_static_catch_all_rejects_paths_outside_static_root():
     assert "file_path.is_relative_to(static_root)" in source
 
 
+def test_temporary_onboarding_diagnostics_are_not_exposed():
+    from app import main
+
+    route_paths = {getattr(route, "path", None) for route in main.app.routes}
+    onboarding_source = Path("app/routers/onboarding.py").read_text(encoding="utf-8")
+
+    assert "/api/onboarding/debug/user-data" not in route_paths
+    assert '@router.get("/debug/user-data")' not in onboarding_source
+    assert '"temp_password": user.temp_password' not in onboarding_source
+
+
 def test_failure_logging_and_client_errors_do_not_persist_exception_text(caplog):
     import logging
     import re
@@ -1303,6 +1413,29 @@ def test_failure_logging_and_client_errors_do_not_persist_exception_text(caplog)
         assert not re.search(pattern, source), pattern
     assert "system_prompt[:500]" not in source
     assert "Raw response:" not in source
+
+
+def test_sensitive_diagnostics_do_not_log_user_identifiers_or_onboarding_shape():
+    nudge_source = Path("app/routers/nudge.py").read_text(encoding="utf-8")
+    onboarding_source = Path("app/routers/onboarding.py").read_text(encoding="utf-8")
+
+    for forbidden in (
+        "Built task context for {user_number}",
+        "Built habit context for {user_number}",
+        "Validated user_number: {normalized}",
+        "Message saved to database for {user_number}",
+        'return {"summary": f"Error: {e}"}',
+    ):
+        assert forbidden not in nudge_source
+
+    for forbidden in (
+        "User found - id={user.id}, name={user.name}",
+        "onboarding_completed: {user.onboarding_completed}",
+        "onboarding_step: {user.onboarding_step}",
+        "Keys: {list(data.keys())}",
+        "Available keys: {list(data.keys())}",
+    ):
+        assert forbidden not in onboarding_source
 
 
 def test_supply_chain_inputs_are_immutable_and_hash_locked():

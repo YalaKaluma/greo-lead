@@ -31,7 +31,6 @@ describe('useTodoOpportunities', () => {
     });
 
     expect(axios.post).toHaveBeenCalledWith('https://api.example/api/opportunities/generate', {
-      user_number: 'u1',
       surface: 'task_page',
       type: 'task',
       limit: 3,
@@ -79,9 +78,7 @@ describe('useTodoOpportunities', () => {
       await result.current.acceptOpportunity(4);
     });
 
-    expect(axios.post).toHaveBeenLastCalledWith('https://api.example/api/opportunities/4/accept', {
-      user_number: 'u1',
-    });
+    expect(axios.post).toHaveBeenLastCalledWith('https://api.example/api/opportunities/4/accept', {});
     expect(fetchTasks).toHaveBeenCalledTimes(1);
     expect(fetchFilters).toHaveBeenCalledTimes(1);
     expect(result.current.opportunityActions[4]).toBe('accepted');
