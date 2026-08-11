@@ -392,6 +392,69 @@ def test_expired_admin_session_requires_fresh_sign_in(monkeypatch):
     assert exc_info.value.status_code == 401
 
 
+def test_account_erasure_removes_only_files_inside_managed_storage(tmp_path):
+    from app.services.account_erasure_service import _remove_stored_file
+
+    storage_root = tmp_path / "managed"
+    storage_root.mkdir()
+    managed_file = storage_root / "recording.webm"
+    managed_file.write_bytes(b"private recording")
+    outside_file = tmp_path / "outside.webm"
+    outside_file.write_bytes(b"must remain")
+
+    assert _remove_stored_file(str(managed_file), storage_root) is True
+    assert not managed_file.exists()
+    assert _remove_stored_file(str(outside_file), storage_root) is False
+    assert outside_file.exists()
+
+
+def test_account_erasure_anonymizes_user_and_discovers_owned_tables(monkeypatch):
+    from app.models import User
+    from app.services import account_erasure_service
+
+    class Result:
+        rowcount = 1
+
+    class FakeDb:
+        def execute(self, _statement):
+            return Result()
+
+    monkeypatch.setattr(account_erasure_service, "_remove_user_files", lambda *_args: 2)
+    user = User(
+        id=77,
+        phone_number="private@example.com",
+        email="private@example.com",
+        name="Private Person",
+        profession="Executive",
+        is_active=False,
+        is_admin=True,
+        session_version=3,
+        onboarding_data={"private": "answer"},
+        voice_reference_data_url="data:audio/webm;base64,private",
+    )
+
+    result = account_erasure_service.erase_user_data(FakeDb(), user)
+
+    assert result["rows_removed"] > 0
+    assert result["files_removed"] == 2
+    assert user.phone_number == "deleted-77@deleted.invalid"
+    assert user.email is None
+    assert user.name == "Deleted user"
+    assert user.profession is None
+    assert user.is_admin is False
+    assert user.session_version == 4
+    assert user.onboarding_data == {}
+    assert user.voice_reference_data_url is None
+
+    service_source = Path("app/services/account_erasure_service.py").read_text(encoding="utf-8")
+    assert "Base.metadata.sorted_tables" in service_source
+    assert 'foreign_key.target_fullname == "users.id"' in service_source
+    assert '"user_number" in table.c' in service_source
+
+    nudge_source = Path("app/routers/nudge.py").read_text(encoding="utf-8")
+    assert nudge_source.count("purge_due_account_deletions(db)") == 2
+
+
 def test_legacy_password_replacement_endpoint_is_disabled():
     from app.routers.onboarding import set_permanent_password
 
