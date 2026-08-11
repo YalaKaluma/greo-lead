@@ -119,6 +119,8 @@ Known vulnerabilities should fail CI unless the ignore has a documented reason. 
 
 Cron URLs stay environment-level. When no `user_number` is supplied, each endpoint sends a tailored nudge to every active user in that environment:
 
+Every job must use `POST` and send `X-Alfred-Scheduler-Secret` as a request header. Never put the secret in the URL.
+
 ```text
 https://<prod-domain>/api/nudge/morning
 ```
@@ -140,7 +142,7 @@ Set `APP_ENV`, `ENVIRONMENT`, or `RAILWAY_ENVIRONMENT_NAME` to `production`, `de
 
 ## Database
 
-`app/main.py` calls `Base.metadata.create_all(bind=engine)` at startup so declared tables are verified. Alembic is now the source of truth for new schema changes after the baseline migration. Historical SQL migrations remain in `db_migrations/` as reference.
+Alembic is the sole owner of deployed schema changes. Railway runs `alembic upgrade head` as its pre-deploy command; application startup verifies schema readiness without mutating it. Historical SQL migrations remain in `db_migrations/` as reference.
 
 Use `DIRECT_DATABASE_URL` when running migrations against Neon:
 

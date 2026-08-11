@@ -61,6 +61,7 @@ def verify(base_url: str, expected_commit: str, timeout_seconds: int) -> dict:
     )
     scheduler_status, _ = _request(
         f"{base_url}/api/nudge/morning",
+        method="POST",
         headers={"X-Alfred-Scheduler-Secret": "invalid-deployment-probe-secret"},
     )
     if login_status != 401:

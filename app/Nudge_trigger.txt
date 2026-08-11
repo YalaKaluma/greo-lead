@@ -1,13 +1,16 @@
-curl "https://greo-lead-production.up.railway.app/api/nudge/morning"
-curl "https://greo-lead-production.up.railway.app/api/nudge/evening"
-curl "https://greo-lead-production.up.railway.app/api/nudge/weekly"
-curl "https://greo-lead-production.up.railway.app/api/nudge/sunday_review"
+All scheduled nudge actions require POST plus the X-Alfred-Scheduler-Secret header.
+Never place the secret in the URL or this file.
+
+curl -X POST -H "X-Alfred-Scheduler-Secret: <secret>" "https://greo-lead-production.up.railway.app/api/nudge/morning"
+curl -X POST -H "X-Alfred-Scheduler-Secret: <secret>" "https://greo-lead-production.up.railway.app/api/nudge/evening"
+curl -X POST -H "X-Alfred-Scheduler-Secret: <secret>" "https://greo-lead-production.up.railway.app/api/nudge/weekly"
+curl -X POST -H "X-Alfred-Scheduler-Secret: <secret>" "https://greo-lead-production.up.railway.app/api/nudge/sunday_review"
 
 Dev/staging examples use the same clean endpoint against their own Railway/database environment:
-curl "https://<dev-domain>/api/nudge/morning"
-curl "https://<staging-domain>/api/nudge/morning"
+curl -X POST -H "X-Alfred-Scheduler-Secret: <secret>" "https://<dev-domain>/api/nudge/morning"
+curl -X POST -H "X-Alfred-Scheduler-Secret: <secret>" "https://<staging-domain>/api/nudge/morning"
 
 When no user_number is supplied, the nudge endpoint targets active users in that environment. Use a user_number query parameter only for a deliberate single-user test:
-curl "https://<dev-domain>/api/nudge/morning?user_number=synthetic%3Aexecutive_alex"
+curl -X POST -H "X-Alfred-Scheduler-Secret: <secret>" "https://<dev-domain>/api/nudge/morning?user_number=synthetic%3Aexecutive_alex"
 
 Before production nudge testing, confirm APP_ENV, ENVIRONMENT, or RAILWAY_ENVIRONMENT_NAME identifies the intended environment.

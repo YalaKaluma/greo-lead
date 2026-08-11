@@ -534,6 +534,24 @@ def test_scheduler_secret_cannot_access_nudge_administration():
     assert "def health_check(\n        db: Session = Depends(get_db),\n        _authorized=Depends(require_admin)," in source
 
 
+def test_state_changing_nudge_routes_are_post_only():
+    source = Path("app/routers/nudge.py").read_text(encoding="utf-8")
+    for path in (
+        "morning",
+        "evening",
+        "weekly",
+        "sunday_review",
+        "cto_weekend_review",
+        "morning/batch",
+        "evening/batch",
+        "weekly/batch",
+        "sunday_review/batch",
+        "reload_config",
+    ):
+        assert f'@router.post("/nudge/{path}")' in source
+        assert f'@router.get("/nudge/{path}")' not in source
+
+
 def _identity_request(
     *,
     path: str = "/api/tasks",
