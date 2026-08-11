@@ -1611,3 +1611,40 @@ def test_supply_chain_inputs_are_immutable_and_hash_locked():
         text=True,
     )
     assert tracked_venv.stdout.strip() == ""
+
+
+def test_production_verifier_matches_commit_and_checks_auth_boundaries(monkeypatch):
+    from scripts import verify_production_deployment
+
+    responses = iter([
+        (200, {"status": "ok", "database": "connected", "commit": "abc123def"}),
+        (401, {"detail": "Invalid credentials"}),
+        (401, {"detail": "Scheduler or administrator authentication required"}),
+    ])
+    monkeypatch.setattr(
+        verify_production_deployment,
+        "_request",
+        lambda *_args, **_kwargs: next(responses),
+    )
+
+    evidence = verify_production_deployment.verify(
+        "https://alfred.example.com",
+        "abc123",
+        30,
+    )
+
+    assert evidence["deployed_commit"] == "abc123def"
+    assert evidence["invalid_login_status"] == 401
+    assert evidence["invalid_scheduler_status"] == 401
+
+
+def test_production_release_requires_post_deploy_verification():
+    workflow = Path(".github/workflows/release-prod.yml").read_text(encoding="utf-8")
+    health_source = Path("app/main.py").read_text(encoding="utf-8")
+
+    assert "production-smoke:" in workflow
+    assert "needs: release-ci" in workflow
+    assert "vars.PRODUCTION_APP_URL" in workflow
+    assert "verify_production_deployment.py" in workflow
+    assert "production-smoke-evidence" in workflow
+    assert 'os.getenv("RAILWAY_GIT_COMMIT_SHA")' in health_source

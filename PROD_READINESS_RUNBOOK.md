@@ -229,6 +229,14 @@ Review these in Railway production service variables before launch and after any
 - [ ] Variable changes have been reviewed and deployed in Railway.
 - [ ] After variable changes, `/api/health` returns HTTP 200.
 
+### GitHub post-deploy verification
+
+- [ ] In the GitHub `production` environment, set the non-secret variable `PRODUCTION_APP_URL` to Alfred's canonical production HTTPS origin.
+- [ ] Keep the production branch workflow enabled. After a push to `prod`, it waits for Railway to expose the exact Git commit through `/api/health`.
+- [ ] Confirm the `Verify Railway production` job passes. It verifies database connectivity and confirms invalid login and scheduler credentials return HTTP 401.
+- [ ] Retain the generated `production-smoke-evidence-<commit>` artifact with the release record. GitHub retains it for 30 days.
+- [ ] Treat a timeout or boundary-check failure as a failed release and follow the rollback procedure.
+
 Railway variable reference:
 - https://docs.railway.com/variables
 
