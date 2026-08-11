@@ -1496,6 +1496,10 @@ def test_supply_chain_inputs_are_immutable_and_hash_locked():
     assert "pnpm audit --prod --audit-level high" in workflows
     assert "aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8" in workflows
     assert "docker build --tag alfred-security-scan:" in workflows
+    assert "pip uninstall -y pip setuptools wheel" in dockerfile
+
+    frontend_manifest = Path("app/frontend/package.json").read_text(encoding="utf-8")
+    assert '"axios": "^1.18.0"' in frontend_manifest
 
     dependabot = Path(".github/dependabot.yml").read_text(encoding="utf-8")
     for ecosystem in ("pip", "npm", "docker", "github-actions"):
