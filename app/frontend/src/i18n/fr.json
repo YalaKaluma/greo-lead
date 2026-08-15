@@ -341,6 +341,7 @@
   "optimizeToday.moveTo": "Déplacer au",
   "optimizeToday.noMoves": "Aucun déplacement de tâche n'a été sélectionné.",
   "optimizeToday.considering": "Alfred examine",
+  "optimizeToday.editTask": "Modifier la tâche",
   "optimizeToday.mtnUnavailable": "MTN indisponible",
   "optimizeToday.noRoomThisWeek": "Il ne reste aucune capacité pendant les jours ouvrables de cette semaine. Alfred recommande le",
   "optimizeToday.acceptDate": "Accepter la date proposée",

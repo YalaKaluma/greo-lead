@@ -341,6 +341,7 @@
   "optimizeToday.moveTo": "Move to",
   "optimizeToday.noMoves": "No task movements were selected.",
   "optimizeToday.considering": "Alfred is considering",
+  "optimizeToday.editTask": "Edit task",
   "optimizeToday.mtnUnavailable": "MTN unavailable",
   "optimizeToday.noRoomThisWeek": "There is no capacity on the remaining workdays this week. Alfred recommends",
   "optimizeToday.acceptDate": "Accept proposed date",

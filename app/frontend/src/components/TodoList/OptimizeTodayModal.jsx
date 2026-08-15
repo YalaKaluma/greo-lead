@@ -11,6 +11,7 @@ export default function OptimizeTodayModal({
   onCancel,
   onApplyMove,
   onMarkDone,
+  onEditTask = () => {},
   isSelectedDay = false,
   t = (key, fallback) => fallback || key,
 }) {
@@ -165,7 +166,12 @@ export default function OptimizeTodayModal({
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="rounded-lg border border-slate-200 p-4">
+              <button
+                type="button"
+                onClick={() => onEditTask(current.task)}
+                className="w-full rounded-lg border border-slate-200 p-4 text-left transition-colors hover:border-blue-300 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                aria-label={`${t('optimizeToday.editTask', 'Edit task')}: ${current.task.title}`}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t('optimizeToday.considering', 'Alfred is considering')}</p>
@@ -176,7 +182,7 @@ export default function OptimizeTodayModal({
                   </span>
                 </div>
                 {current.task.due_date && <p className="mt-2 text-xs text-slate-600">{t('calendar.currentDueDate', 'Current due date')}: {formatShortDate(current.task.due_date)}</p>}
-              </div>
+              </button>
 
               {conversation ? (
                 <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-slate-700">
