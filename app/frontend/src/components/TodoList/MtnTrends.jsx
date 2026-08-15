@@ -342,7 +342,7 @@ function TaskMtnHeatmap({ data }) {
   );
 }
 
-export function TaskMtnTrendsTab({ trends, loading, error }) {
+export function TaskMtnTrendsTab({ trends, loading, error, t = (key, fallback) => fallback || key }) {
   if (loading) {
     return (
       <div className="rounded-lg border bg-white p-6 text-sm text-slate-500">
@@ -400,15 +400,15 @@ export function TaskMtnTrendsTab({ trends, loading, error }) {
       <TaskMtnHeatmap data={extractTrendChart(trends)} />
 
       <div className="relative rounded-lg border bg-white p-4">
-        <KpiInfoButton label="About 90-day total">
-          The cumulative MTN score from completed tasks over the last 90 days.
+        <KpiInfoButton label={t('taskTrends.ninetyDayAverageInfoLabel', 'About the 90-day daily average')}>
+          {t('taskTrends.ninetyDayAverageInfo', 'The average MTN score per calendar day over the last 90 days.')}
         </KpiInfoButton>
-        <h2 className="text-lg font-semibold text-slate-800">90-Day Total</h2>
+        <h2 className="text-lg font-semibold text-slate-800">{t('taskTrends.ninetyDayAverageTitle', '90-Day Daily Average')}</h2>
         <div className="mt-2 text-3xl font-semibold text-slate-900">
-          {formatMtnNumber(last90.total_score)}
+          {formatMtnNumber(last90.average_score)}
         </div>
         <p className="mt-1 text-sm text-slate-500">
-          {last90.completed_tasks || 0} completed task(s) contributed to this score.
+          {last90.completed_tasks || 0} {t('taskTrends.ninetyDayAverageDetail', 'completed task(s) contributed during this period.')}
         </p>
       </div>
 

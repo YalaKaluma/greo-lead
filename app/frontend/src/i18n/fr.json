@@ -653,5 +653,9 @@
   "recovery.resetSuccess": "Votre mot de passe a été réinitialisé. Vous pouvez maintenant vous connecter.",
   "recovery.requestError": "Alfred n’a pas pu traiter la demande de récupération. Veuillez réessayer.",
   "recovery.invalidToken": "Ce lien de récupération est invalide ou expiré. Demandez un nouveau lien.",
-  "recovery.backToSignIn": "Retour à la connexion"
+  "recovery.backToSignIn": "Retour à la connexion",
+  "taskTrends.ninetyDayAverageInfoLabel": "À propos de la moyenne quotidienne sur 90 jours",
+  "taskTrends.ninetyDayAverageInfo": "La moyenne du score MTN par jour civil au cours des 90 derniers jours.",
+  "taskTrends.ninetyDayAverageTitle": "Moyenne quotidienne sur 90 jours",
+  "taskTrends.ninetyDayAverageDetail": "tâche(s) terminée(s) ont contribué pendant cette période."
 }

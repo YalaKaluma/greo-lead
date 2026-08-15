@@ -653,5 +653,9 @@
   "recovery.resetSuccess": "Your password has been reset. You can now sign in.",
   "recovery.requestError": "Alfred could not process the recovery request. Please try again.",
   "recovery.invalidToken": "This recovery link is invalid or expired. Request a new link.",
-  "recovery.backToSignIn": "Back to sign in"
+  "recovery.backToSignIn": "Back to sign in",
+  "taskTrends.ninetyDayAverageInfoLabel": "About the 90-day daily average",
+  "taskTrends.ninetyDayAverageInfo": "The average MTN score per calendar day over the last 90 days.",
+  "taskTrends.ninetyDayAverageTitle": "90-Day Daily Average",
+  "taskTrends.ninetyDayAverageDetail": "completed task(s) contributed during this period."
 }
