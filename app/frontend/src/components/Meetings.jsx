@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { useLanguage } from '../i18n/LanguageContext';
 import { getLongTermGoals, getMtnLabel, getMtnStyle } from '../utils/taskHelpers';
+import { sortMeetingTasks } from '../utils/meetingTaskLogic';
 
 const NativeMeetingRecorder = registerPlugin('MeetingRecorder');
 
@@ -844,11 +845,10 @@ function MeetingTasks({ apiUrl, userNumber }) {
     } catch (err) { setError(err.message); return false; } finally { setBusyId(null); }
   };
   const meetingOptions = useMemo(() => Array.from(new Map(tasks.map((task) => [task.meeting_id, task.meeting_title])).entries()).sort((a, b) => String(a[1]).localeCompare(String(b[1]))), [tasks]);
-  const visibleTasks = useMemo(() => tasks.filter((task) => !selectedMeeting || String(task.meeting_id) === selectedMeeting).sort((a, b) => {
-    const scoreA = a.mtn_score == null ? -1 : Number(a.mtn_score);
-    const scoreB = b.mtn_score == null ? -1 : Number(b.mtn_score);
-    return sortDirection === 'desc' ? scoreB - scoreA : scoreA - scoreB;
-  }), [tasks, selectedMeeting, sortDirection]);
+  const visibleTasks = useMemo(() => sortMeetingTasks(
+    tasks.filter((task) => !selectedMeeting || String(task.meeting_id) === selectedMeeting),
+    sortDirection
+  ), [tasks, selectedMeeting, sortDirection]);
   if (loading) return <p className="mt-10 text-center text-slate-500">{t('meetings.tasks.loading')}</p>;
   return <div className="mt-6">{error && <p className="mb-4 rounded-lg bg-red-50 p-4 text-red-700">{error}</p>}<div className="mb-6 rounded-lg border border-slate-200 bg-white"><button type="button" onClick={() => setFiltersCollapsed((value) => !value)} className="flex w-full items-center justify-between rounded-lg px-4 py-3 text-slate-700 hover:bg-slate-50" aria-expanded={!filtersCollapsed}><span className="font-semibold">{t('meetings.tasks.filters')}</span><span aria-hidden="true">{filtersCollapsed ? '⌄' : '⌃'}</span></button>{!filtersCollapsed && <div className="grid gap-4 border-t border-slate-200 p-4 sm:grid-cols-2"><label className="text-xs font-medium text-slate-600">{t('meetings.tasks.meetingFilter')}<select value={selectedMeeting} onChange={(event) => setSelectedMeeting(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="">{t('meetings.tasks.allMeetings')}</option>{meetingOptions.map(([id, title]) => <option key={id} value={id}>{title}</option>)}</select></label><label className="text-xs font-medium text-slate-600">{t('meetings.tasks.sortBy')}<select value={sortDirection} onChange={(event) => setSortDirection(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"><option value="desc">{t('meetings.tasks.mtnHighFirst')}</option><option value="asc">{t('meetings.tasks.mtnLowFirst')}</option></select></label></div>}</div>{tasks.length === 0 ? <div className="rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center"><h2 className="text-xl font-semibold text-slate-900">{t('meetings.tasks.emptyTitle')}</h2><p className="mt-2 text-slate-600">{t('meetings.tasks.emptyBody')}</p></div> : visibleTasks.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-600">{t('meetings.tasks.noFilterResults')}</div> : <div className="space-y-2">{visibleTasks.map((task) => <MeetingTaskCard key={task.id} task={task} busy={busyId === task.id} onAdd={addToList} onComplete={completeTask} onIgnore={(item) => updateTask(item, { ignored: true })} onEdit={setEditingTask} />)}</div>}<p className="mt-4 text-center text-xs text-slate-500 sm:hidden">{t('meetings.tasks.swipeHint')}</p>{editingTask && <MeetingTaskModal task={editingTask} goals={getLongTermGoals(goals)} saving={busyId === editingTask.id} onClose={() => setEditingTask(null)} onSave={async (changes) => { if (await updateTask(editingTask, changes)) setEditingTask(null); }} />}</div>;
 }

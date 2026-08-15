@@ -271,6 +271,7 @@ def list_meeting_action_items(user_number: str = Depends(require_authenticated_u
         "description": action.description,
         "meeting_id": meeting.id,
         "meeting_title": meeting.title,
+        "meeting_started_at": meeting.started_at or meeting.created_at,
         "owner_name": action.owner_name,
         "notes": action.notes,
         "due_date": action.due_date,
