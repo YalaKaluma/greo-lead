@@ -2,19 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { isVision, isPillar, isOutcome } from '../../utils/goalTaxonomy';
+import OutcomeEditModal from './OutcomeEditModal';
 
 const STATUS_OPTIONS = [
   { value: 'not_started', label: 'Not started' },
   { value: 'active', label: 'Active' },
   { value: 'completed', label: 'Completed' }
-];
-
-const OUTCOME_STATUS_OPTIONS = [
-  { value: 'not_started', label: 'Not started' },
-  { value: 'done', label: 'Done' },
-  { value: 'ongoing', label: 'Ongoing' },
-  { value: 'at_risk', label: 'At risk' },
-  { value: 'blocked', label: 'Blocking issue' }
 ];
 
 const OUTCOME_STATUS_STYLES = {
@@ -82,7 +75,8 @@ export default function TransformationRoadmap({
   onWaveModalRequestHandled,
   roadmapGenerateRequest = 0,
   onRoadmapGenerateRequestHandled,
-  onRoadmapChanged
+  onRoadmapChanged,
+  t = key => key,
 }) {
   const visions = useMemo(() => goals.filter(isVision), [goals]);
   const [selectedVisionId, setSelectedVisionId] = useState('');
@@ -93,7 +87,6 @@ export default function TransformationRoadmap({
   const [editingWaveTitle, setEditingWaveTitle] = useState('');
   const [outcomeModalWave, setOutcomeModalWave] = useState(null);
   const [editingOutcomeLink, setEditingOutcomeLink] = useState(null);
-  const [editingOutcomeForm, setEditingOutcomeForm] = useState({ title: '', goal_text: '', status: 'not_started' });
   const [selectedOutcomeId, setSelectedOutcomeId] = useState('');
   const [newOutcomeForm, setNewOutcomeForm] = useState({ title: '', description: '' });
   const [draft, setDraft] = useState(null);
@@ -356,34 +349,28 @@ export default function TransformationRoadmap({
       params: { user_number: userNumber }
     });
     setEditingOutcomeLink(null);
-    setEditingOutcomeForm({ title: '', goal_text: '', status: 'not_started' });
     await fetchRoadmap();
     onRoadmapChanged?.();
   };
 
   const editOutcome = (wave, link) => {
     setEditingOutcomeLink({ wave, link });
-    setEditingOutcomeForm({
-      title: link.goal?.title || '',
-      goal_text: link.goal?.goal_text || '',
-      status: link.status || 'not_started'
-    });
   };
 
-  const saveOutcome = async () => {
-    if (!editingOutcomeLink?.link?.goal_id || !editingOutcomeForm.title.trim()) return;
+  const saveOutcome = async (updates) => {
+    if (!editingOutcomeLink?.link?.goal_id) return;
     await Promise.all([
       axios.put(`${apiUrl}/api/journey/goals/${editingOutcomeLink.link.goal_id}`, {
-        title: editingOutcomeForm.title,
-        goal_text: editingOutcomeForm.goal_text || editingOutcomeForm.title
+        title: updates.title,
+        goal_text: updates.goal_text,
       }, { params: { user_number: userNumber } }),
       axios.patch(`${apiUrl}/api/journey/waves/${editingOutcomeLink.wave.id}/goals/${editingOutcomeLink.link.goal_id}`, {
-        status: editingOutcomeForm.status || 'not_started'
+        status: updates.status,
       }, { params: { user_number: userNumber } })
     ]);
     setEditingOutcomeLink(null);
-    setEditingOutcomeForm({ title: '', goal_text: '', status: 'not_started' });
     await fetchRoadmap();
+    onRoadmapChanged?.();
   };
 
   const generateRoadmap = async () => {
@@ -804,84 +791,14 @@ export default function TransformationRoadmap({
       )}
 
       {editingOutcomeLink && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              setEditingOutcomeLink(null);
-              setEditingOutcomeForm({ title: '', goal_text: '', status: 'not_started' });
-            }
-          }}
-        >
-          <div className="bg-white rounded-xl max-w-xl w-full shadow-2xl">
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-              <h3 className="text-xl font-semibold text-slate-800">Edit Outcome</h3>
-              <button
-                onClick={() => {
-                  setEditingOutcomeLink(null);
-                  setEditingOutcomeForm({ title: '', goal_text: '', status: 'not_started' });
-                }}
-                className="text-slate-400 hover:text-slate-600 transition-colors p-1"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <input
-                value={editingOutcomeForm.title}
-                onChange={(event) => setEditingOutcomeForm(prev => ({ ...prev, title: event.target.value }))}
-                placeholder="Outcome title"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                autoFocus
-              />
-              <textarea
-                value={editingOutcomeForm.goal_text}
-                onChange={(event) => setEditingOutcomeForm(prev => ({ ...prev, goal_text: event.target.value }))}
-                placeholder="Description"
-                rows={4}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg resize-none"
-              />
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Status</label>
-                <select
-                  value={editingOutcomeForm.status}
-                  onChange={(event) => setEditingOutcomeForm(prev => ({ ...prev, status: event.target.value }))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                >
-                  {OUTCOME_STATUS_OPTIONS.map(option => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="px-6 py-4 border-t border-slate-200 flex gap-3">
-              <button
-                onClick={() => {
-                  setEditingOutcomeLink(null);
-                  setEditingOutcomeForm({ title: '', goal_text: '', status: 'not_started' });
-                }}
-                className="flex-1 px-4 py-3 border-2 border-slate-300 hover:border-slate-400 text-slate-700 rounded-lg font-medium transition-colors"
-              >
-                Cancel
-              </button>
-              <button onClick={saveOutcome} className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium">
-                Save Outcome
-              </button>
-            </div>
-            <div className="px-6 pb-4">
-              <button
-                onClick={() => removeOutcomeFromWave(editingOutcomeLink.wave.id, editingOutcomeLink.link.goal_id)}
-                className="w-full px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-medium transition-colors border border-red-200"
-              >
-                Remove from Wave
-              </button>
-            </div>
-          </div>
-        </div>
+        <OutcomeEditModal
+          outcome={editingOutcomeLink.link.goal}
+          status={editingOutcomeLink.link.status}
+          onClose={() => setEditingOutcomeLink(null)}
+          onSave={saveOutcome}
+          onRemove={() => removeOutcomeFromWave(editingOutcomeLink.wave.id, editingOutcomeLink.link.goal_id)}
+          t={t}
+        />
       )}
     </div>
   );

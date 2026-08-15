@@ -13,10 +13,8 @@ export default function GoalsList({
   onReorderGoals,
   onMoveGoalAcrossParents,
   onCreateChildGoal,
+  onOutcomeClick,
   outcomeStatusByGoalId = {},
-  outcomeRoadmapLinkByGoalId = {},
-  onOutcomeStatusChange,
-  t = (key, fallback) => fallback || key,
   expandedGoalId
 }) {
   const [recentlyDraggedId, setRecentlyDraggedId] = useState(null);
@@ -202,8 +200,17 @@ export default function GoalsList({
                       {...provided.dragHandleProps}
                       onClick={(event) => {
                         event.stopPropagation();
-                        onCardClick(outcome);
+                        (onOutcomeClick || onCardClick)(outcome);
                       }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          (onOutcomeClick || onCardClick)(outcome);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
                       className={`rounded border ${statusStyle.card} p-3 cursor-grab active:cursor-grabbing ${
                         snapshot.isDragging || recentlyDraggedId === `outcome-${outcome.id}`
                           ? 'shadow-lg ring-2 ring-blue-200'
@@ -216,24 +223,7 @@ export default function GoalsList({
                           <div className="font-medium text-slate-800 break-words">
                             {getGoalTitle(outcome)}
                           </div>
-                          {outcomeRoadmapLinkByGoalId[outcome.id] ? (
-                            <select
-                              value={outcomeStatusByGoalId[outcome.id] || 'not_started'}
-                              onClick={(event) => event.stopPropagation()}
-                              onChange={(event) => {
-                                event.stopPropagation();
-                                onOutcomeStatusChange?.(outcome.id, event.target.value);
-                              }}
-                              className={`mt-1 rounded border border-transparent bg-transparent text-xs font-medium focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 ${statusStyle.badge}`}
-                              aria-label={`${t('goals.outcomeStatus', 'Outcome status')}: ${getGoalTitle(outcome)}`}
-                            >
-                              {Object.entries(outcomeStatusStyles).map(([value, style]) => (
-                                <option key={value} value={value}>{style.label}</option>
-                              ))}
-                            </select>
-                          ) : (
-                            <div className={`mt-1 text-xs ${statusStyle.badge}`}>{statusStyle.label}</div>
-                          )}
+                          <div className={`mt-1 text-xs ${statusStyle.badge}`}>{statusStyle.label}</div>
                         </div>
                       </div>
                     </div>
