@@ -124,7 +124,7 @@ export default function OptimizeTodayModal({
             <div>
               <h2 id="optimize-today-title" className="text-lg font-semibold text-slate-900">{isSelectedDay ? t('optimizeDay.title', 'Optimize selected day') : t('optimizeToday.title', 'Optimize Today')}</h2>
               <p className="mt-1 text-sm text-slate-600">
-                {decisions.length}/{tasks.length} {t('optimizeToday.prioritizedProgress', 'tasks prioritized')} · {keptToday} {isSelectedDay ? t('optimizeDay.approvedForSelected', 'approved for the selected day') : t('optimizeToday.approvedForToday', 'approved for today')}
+                {decisions.length}/{candidates.length} {t('optimizeToday.prioritizedProgress', 'tasks prioritized')} · {keptToday} {isSelectedDay ? t('optimizeDay.approvedForSelected', 'approved for the selected day') : t('optimizeToday.approvedForToday', 'approved for today')}
               </p>
             </div>
             <button type="button" onClick={onCancel} disabled={loading} className="text-xl text-slate-400 hover:text-slate-700" aria-label={t('common.close', 'Close')}>×</button>
