@@ -11,6 +11,7 @@ import TransformationRoadmap from './TransformationRoadmap';
 import MyCoachingSessions from '../MyCoachingSessions';
 import { normalizeGoalLevel, isVision } from '../../utils/goalTaxonomy';
 import { useYellowBeltUnlock } from '../../hooks/useYellowBeltUnlock';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 /* =========================================================
    HELPER FUNCTIONS
@@ -47,6 +48,7 @@ const GOAL_COACHING_EMPTY_STATE = 'Start a goal coaching session for this vision
 
 export default function MyGoals({ apiUrl, userNumber }) {
   const { isYellowBeltOrAbove } = useYellowBeltUnlock(apiUrl, userNumber);
+  const { t } = useLanguage();
   // Core data
   const [goals, setGoals] = useState([]);
   const [linkedTasks, setLinkedTasks] = useState({});
@@ -67,6 +69,8 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const [roadmapGenerateRequest, setRoadmapGenerateRequest] = useState(0);
   const [reorderError, setReorderError] = useState('');
   const [outcomeStatusByGoalId, setOutcomeStatusByGoalId] = useState({});
+  const [outcomeRoadmapLinkByGoalId, setOutcomeRoadmapLinkByGoalId] = useState({});
+  const [outcomeStatusError, setOutcomeStatusError] = useState('');
 
   /* ---------------- DATA FETCHING ---------------- */
 
@@ -141,6 +145,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const fetchGoalRoadmapStatuses = async (visionGoalId = expandedGoalId) => {
     if (!visionGoalId) {
       setOutcomeStatusByGoalId({});
+      setOutcomeRoadmapLinkByGoalId({});
       return;
     }
 
@@ -149,17 +154,48 @@ export default function MyGoals({ apiUrl, userNumber }) {
         params: { user_number: userNumber }
       });
       const nextStatuses = {};
+      const nextLinks = {};
       (res.data?.waves || []).forEach(wave => {
         (wave.goals || []).forEach(link => {
           if (link.goal_id) {
             nextStatuses[link.goal_id] = link.status || 'not_started';
+            nextLinks[link.goal_id] = { waveId: wave.id, status: link.status || 'not_started' };
           }
         });
       });
       setOutcomeStatusByGoalId(nextStatuses);
+      setOutcomeRoadmapLinkByGoalId(nextLinks);
     } catch (err) {
       console.error('Error fetching roadmap statuses:', err);
       setOutcomeStatusByGoalId({});
+      setOutcomeRoadmapLinkByGoalId({});
+    }
+  };
+
+  const updateOutcomeStatus = async (goalId, status) => {
+    const roadmapLink = outcomeRoadmapLinkByGoalId[goalId];
+    if (!roadmapLink?.waveId) return;
+
+    const previousStatus = outcomeStatusByGoalId[goalId] || 'not_started';
+    setOutcomeStatusError('');
+    setOutcomeStatusByGoalId(previous => ({ ...previous, [goalId]: status }));
+    setOutcomeRoadmapLinkByGoalId(previous => ({
+      ...previous,
+      [goalId]: { ...previous[goalId], status }
+    }));
+
+    try {
+      await axios.patch(`${apiUrl}/api/journey/waves/${roadmapLink.waveId}/goals/${goalId}`, {
+        status
+      }, { params: { user_number: userNumber } });
+    } catch (err) {
+      console.error('Error updating outcome status:', err);
+      setOutcomeStatusByGoalId(previous => ({ ...previous, [goalId]: previousStatus }));
+      setOutcomeRoadmapLinkByGoalId(previous => ({
+        ...previous,
+        [goalId]: { ...previous[goalId], status: previousStatus }
+      }));
+      setOutcomeStatusError(t('goals.outcomeStatusUpdateFailed'));
     }
   };
 
@@ -539,6 +575,11 @@ export default function MyGoals({ apiUrl, userNumber }) {
                   {reorderError}
                 </div>
               )}
+              {outcomeStatusError && (
+                <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {outcomeStatusError}
+                </div>
+              )}
               <GoalsList 
                 goals={organizedGoals}
                 expandedGoalId={expandedGoalId}
@@ -548,6 +589,9 @@ export default function MyGoals({ apiUrl, userNumber }) {
                 onMoveGoalAcrossParents={handleMoveGoalAcrossParents}
                 onCreateChildGoal={handleCreateChildGoal}
                 outcomeStatusByGoalId={outcomeStatusByGoalId}
+                outcomeRoadmapLinkByGoalId={outcomeRoadmapLinkByGoalId}
+                onOutcomeStatusChange={updateOutcomeStatus}
+                t={t}
                 taskCounts={taskCounts}
               />
               </>

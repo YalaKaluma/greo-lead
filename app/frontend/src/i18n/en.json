@@ -286,6 +286,8 @@
   "goals.addVision": "+ Vision",
   "goals.addWave": "+ Wave",
   "goals.addPillar": "+ Pillar",
+  "goals.outcomeStatus": "Outcome status",
+  "goals.outcomeStatusUpdateFailed": "Failed to update the outcome status.",
   "calendar.sevenDayPlan": "Seven-day plan",
   "calendar.dailySummary": "Daily planning summary",
   "calendar.expectedMtn": "Expected MTN",
