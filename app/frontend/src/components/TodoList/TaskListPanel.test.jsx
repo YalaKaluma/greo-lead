@@ -93,7 +93,7 @@ describe('TaskListPanel', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '3. Important' }));
+    fireEvent.click(screen.getAllByRole('button', { name: '3. Important' })[0]);
     fireEvent.click(screen.getByRole('button', { name: '2. Strategic' }));
     fireEvent.click(screen.getByRole('button', { name: '4 stars' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save Feedback' }));
