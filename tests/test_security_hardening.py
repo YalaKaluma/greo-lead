@@ -963,6 +963,32 @@ def test_client_credentials_are_not_backed_up_and_cors_is_not_wildcarded():
     assert "getSessionToken" in transport
 
 
+def test_android_session_credentials_are_encrypted_and_restored_before_startup():
+    repository_root = Path(__file__).resolve().parents[1]
+    frontend = repository_root / "app" / "frontend"
+    credentials = (frontend / "src" / "sessionCredentials.js").read_text(encoding="utf-8")
+    startup = (frontend / "src" / "main.jsx").read_text(encoding="utf-8")
+    native_plugin = (
+        frontend
+        / "android"
+        / "app"
+        / "src"
+        / "main"
+        / "java"
+        / "com"
+        / "AlfredTheChiefOfStaff"
+        / "myapp"
+        / "SessionCredentialsPlugin.java"
+    ).read_text(encoding="utf-8")
+
+    assert "sessionStorage.setItem(ACCESS_TOKEN_KEY" not in credentials
+    assert "SessionCredentials.get()" in credentials
+    assert "await hydrateSessionCredentials()" in startup
+    assert "await import('./authenticatedTransport.js')" in startup
+    assert 'KeyStore.getInstance("AndroidKeyStore")' in native_plugin
+    assert 'Cipher.getInstance("AES/GCM/NoPadding")' in native_plugin
+
+
 def test_android_webview_origin_is_trusted():
     import json
 
