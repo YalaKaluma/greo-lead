@@ -23,6 +23,7 @@ from app.config import OPENAI_API_KEY
 from app.db import SessionLocal
 from app.utils.safe_errors import log_failure
 from app.services.meeting_task_extraction_service import extract_action_items
+from app.services.meeting_task_priority_service import score_pending_meeting_action_items
 from app.utils.ai_safety import UNTRUSTED_CONTEXT_POLICY, parse_bounded_json_object, wrap_untrusted_context
 from app.models import (
     BeltAssessment,
@@ -987,6 +988,7 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
         "projects": [{"id": p.id, "title": p.project_name, "description": (p.description or p.goal or "")[:400]} for p in projects],
     }
     return {
+        "user_number": meeting.user_number,
         "title": meeting.title,
         "recording_storage_key": meeting.recording_storage_key,
         "recording_filename": meeting.recording_filename,
@@ -1254,6 +1256,26 @@ def process_meeting(meeting_id: int) -> None:
             meeting_id=meeting_id,
             attempt_id=attempt_id,
         )
+        try:
+            _with_fresh_session(
+                lambda db: score_pending_meeting_action_items(
+                    db,
+                    snapshot["user_number"],
+                    meeting_id=meeting_id,
+                ),
+                "score_meeting_tasks",
+                meeting_id=meeting_id,
+                attempt_id=attempt_id,
+            )
+        except Exception as scoring_error:
+            _meeting_log(
+                logging.WARNING,
+                "meeting_task_scoring_deferred",
+                meeting_id=meeting_id,
+                attempt_id=attempt_id,
+                stage="score_meeting_tasks",
+                **_safe_error_fields(scoring_error),
+            )
         _meeting_log(
             logging.INFO,
             "processing_completed",
