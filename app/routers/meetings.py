@@ -21,8 +21,7 @@ from app.services.meeting_intelligence_service import answer_meeting_question, p
 from app.services.leadership_trends_service import get_leadership_trends
 from app.services.journey_support import goal_level_variants, normalize_goal_level
 from app.services.timezone_service import get_user_timezone, today_for_timezone
-from app.services.priority_service import PriorityService
-from app.services.priority_llm_service import PriorityLLMService
+from app.services.meeting_task_priority_service import score_pending_meeting_action_items
 from app.routers.auth import require_authenticated_user
 from app.security_dependencies import authenticated_user_identifier, ensure_user_identity, require_authenticated_user_identifier
 from app.utils.safe_storage import stored_path_within_root
@@ -288,42 +287,9 @@ def list_meeting_action_items(user_number: str = Depends(require_authenticated_u
 @router.post("/action-items/tasks/prepare")
 def prepare_meeting_action_items(payload: ActionConversion, db: Session = Depends(get_db)):
     """Score pending commitments without turning them into to-do tasks."""
-    actions = db.query(MeetingActionItem).join(Meeting).filter(
-        Meeting.user_number == payload.user_number,
-        MeetingActionItem.created_task_id.is_(None),
-        MeetingActionItem.ignored_at.is_(None),
-        MeetingActionItem.mtn_score.is_(None),
-    ).limit(50).all()
-    if not actions:
-        return {"scored": 0}
-
-    priority_service = PriorityService(db)
-    context = priority_service.create_context_snapshot(payload.user_number)
-    temporary_tasks = [Task(
-        id=-action.id,
-        user_number=payload.user_number,
-        title=action.description,
-        notes=f"Meeting: {action.meeting.title}\nOwner: {action.owner_name or 'Unclear'}",
-        due_date=datetime.combine(action.due_date or today_for_timezone(get_user_timezone(db, payload.user_number)), datetime.min.time()),
-        priority=action.priority or "Medium",
-        status="open",
-        goal_id=action.goal_id,
-        delegated_to=action.delegated_to or action.owner_name,
-        created_at=action.created_at or datetime.now(timezone.utc),
-    ) for action in actions]
-    result = PriorityLLMService().score_tasks(temporary_tasks, context)
-    score_by_action_id = {-int(item["task_id"]): item for item in result["scores"]}
-    scored_at = datetime.now(timezone.utc)
-    for action in actions:
-        score = score_by_action_id.get(action.id)
-        if not score:
-            continue
-        action.mtn_score = score["top10_likelihood"]
-        action.mtn_reason = score.get("primary_reason")
-        action.mtn_risk_if_ignored = score.get("risk_if_ignored")
-        action.mtn_scored_at = scored_at
+    scored = score_pending_meeting_action_items(db, payload.user_number)
     db.commit()
-    return {"scored": len(score_by_action_id)}
+    return {"scored": scored}
 
 
 @router.get("/leadership-trends")
