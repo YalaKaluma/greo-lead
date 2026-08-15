@@ -14,6 +14,9 @@ export default function GoalsList({
   onMoveGoalAcrossParents,
   onCreateChildGoal,
   outcomeStatusByGoalId = {},
+  outcomeRoadmapLinkByGoalId = {},
+  onOutcomeStatusChange,
+  t = (key, fallback) => fallback || key,
   expandedGoalId
 }) {
   const [recentlyDraggedId, setRecentlyDraggedId] = useState(null);
@@ -213,7 +216,24 @@ export default function GoalsList({
                           <div className="font-medium text-slate-800 break-words">
                             {getGoalTitle(outcome)}
                           </div>
-                          <div className={`mt-1 text-xs ${statusStyle.badge}`}>{statusStyle.label}</div>
+                          {outcomeRoadmapLinkByGoalId[outcome.id] ? (
+                            <select
+                              value={outcomeStatusByGoalId[outcome.id] || 'not_started'}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={(event) => {
+                                event.stopPropagation();
+                                onOutcomeStatusChange?.(outcome.id, event.target.value);
+                              }}
+                              className={`mt-1 rounded border border-transparent bg-transparent text-xs font-medium focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 ${statusStyle.badge}`}
+                              aria-label={`${t('goals.outcomeStatus', 'Outcome status')}: ${getGoalTitle(outcome)}`}
+                            >
+                              {Object.entries(outcomeStatusStyles).map(([value, style]) => (
+                                <option key={value} value={value}>{style.label}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <div className={`mt-1 text-xs ${statusStyle.badge}`}>{statusStyle.label}</div>
+                          )}
                         </div>
                       </div>
                     </div>
