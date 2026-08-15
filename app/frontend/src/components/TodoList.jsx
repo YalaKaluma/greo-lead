@@ -841,6 +841,7 @@ export default function TodoList({ apiUrl, userNumber }) {
               trends={mtnTrends}
               loading={mtnTrendsLoading}
               error={mtnTrendsError}
+              t={t}
             />
           </TrendsErrorBoundary>
         )}
