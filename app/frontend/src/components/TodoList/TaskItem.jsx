@@ -242,7 +242,6 @@ function TaskCard({
 
     setMtnSaving(true);
     const result = await onMtnFeedback(
-      task.id,
       mtnRating,
       mtnFeedback.trim() || null,
       activeMtnTag,

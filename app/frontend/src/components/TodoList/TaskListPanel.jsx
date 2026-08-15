@@ -78,7 +78,9 @@ export default function TaskListPanel({
                     goals={goals}
                     priorityMode={priorityMode || Boolean(scoreData)}
                     priorityScore={scoreData}
-                    onMtnFeedback={(rating, feedback, tag, recommendationId) => onMtnFeedback(task.id, rating, feedback, tag, recommendationId)}
+                    onMtnFeedback={(rating, feedback, tag, recommendationId, scoreId, adjustedScore) => (
+                      onMtnFeedback(task.id, rating, feedback, tag, recommendationId, scoreId, adjustedScore)
+                    )}
                     timezone={timezone}
                   />
                 );
