@@ -8,6 +8,7 @@ import GoalViewPanel from './GoalViewPanel';
 import GoalEditPanel from './GoalEditPanel';
 import GoalCreateModal from './GoalCreateModal';
 import TransformationRoadmap from './TransformationRoadmap';
+import OutcomeEditModal from './OutcomeEditModal';
 import MyCoachingSessions from '../MyCoachingSessions';
 import { normalizeGoalLevel, isVision } from '../../utils/goalTaxonomy';
 import { useYellowBeltUnlock } from '../../hooks/useYellowBeltUnlock';
@@ -71,6 +72,8 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const [outcomeStatusByGoalId, setOutcomeStatusByGoalId] = useState({});
   const [outcomeRoadmapLinkByGoalId, setOutcomeRoadmapLinkByGoalId] = useState({});
   const [outcomeStatusError, setOutcomeStatusError] = useState('');
+  const [editingOutcome, setEditingOutcome] = useState(null);
+  const [savingOutcome, setSavingOutcome] = useState(false);
 
   /* ---------------- DATA FETCHING ---------------- */
 
@@ -172,30 +175,37 @@ export default function MyGoals({ apiUrl, userNumber }) {
     }
   };
 
-  const updateOutcomeStatus = async (goalId, status) => {
+  const saveOutcomeFromPillar = async (updates) => {
+    if (!editingOutcome) return;
+    const goalId = editingOutcome.id;
     const roadmapLink = outcomeRoadmapLinkByGoalId[goalId];
     if (!roadmapLink?.waveId) return;
 
-    const previousStatus = outcomeStatusByGoalId[goalId] || 'not_started';
     setOutcomeStatusError('');
-    setOutcomeStatusByGoalId(previous => ({ ...previous, [goalId]: status }));
-    setOutcomeRoadmapLinkByGoalId(previous => ({
-      ...previous,
-      [goalId]: { ...previous[goalId], status }
-    }));
+    setSavingOutcome(true);
 
     try {
-      await axios.patch(`${apiUrl}/api/journey/waves/${roadmapLink.waveId}/goals/${goalId}`, {
-        status
-      }, { params: { user_number: userNumber } });
-    } catch (err) {
-      console.error('Error updating outcome status:', err);
-      setOutcomeStatusByGoalId(previous => ({ ...previous, [goalId]: previousStatus }));
+      await Promise.all([
+        axios.put(`${apiUrl}/api/journey/goals/${goalId}`, {
+          title: updates.title,
+          goal_text: updates.goal_text,
+        }, { params: { user_number: userNumber } }),
+        axios.patch(`${apiUrl}/api/journey/waves/${roadmapLink.waveId}/goals/${goalId}`, {
+          status: updates.status,
+        }, { params: { user_number: userNumber } }),
+      ]);
+      setOutcomeStatusByGoalId(previous => ({ ...previous, [goalId]: updates.status }));
       setOutcomeRoadmapLinkByGoalId(previous => ({
         ...previous,
-        [goalId]: { ...previous[goalId], status: previousStatus }
+        [goalId]: { ...previous[goalId], status: updates.status },
       }));
-      setOutcomeStatusError(t('goals.outcomeStatusUpdateFailed'));
+      await fetchGoals();
+      setEditingOutcome(null);
+    } catch (err) {
+      console.error('Error updating outcome:', err);
+      setOutcomeStatusError(t('goals.outcomeUpdateFailed'));
+    } finally {
+      setSavingOutcome(false);
     }
   };
 
@@ -588,10 +598,8 @@ export default function MyGoals({ apiUrl, userNumber }) {
                 onReorderGoals={handleReorderGoals}
                 onMoveGoalAcrossParents={handleMoveGoalAcrossParents}
                 onCreateChildGoal={handleCreateChildGoal}
+                onOutcomeClick={setEditingOutcome}
                 outcomeStatusByGoalId={outcomeStatusByGoalId}
-                outcomeRoadmapLinkByGoalId={outcomeRoadmapLinkByGoalId}
-                onOutcomeStatusChange={updateOutcomeStatus}
-                t={t}
                 taskCounts={taskCounts}
               />
               </>
@@ -609,6 +617,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
                 roadmapGenerateRequest={roadmapGenerateRequest}
                 onRoadmapGenerateRequestHandled={() => setRoadmapGenerateRequest(0)}
                 onRoadmapChanged={() => fetchGoalRoadmapStatuses(expandedGoalId)}
+                t={t}
               />
             )}
 
@@ -672,6 +681,17 @@ export default function MyGoals({ apiUrl, userNumber }) {
             onClose={handleClosePanel}
             onSave={handleUpdateGoal}
             onDelete={handleDeleteGoal}
+          />
+        )}
+
+        {editingOutcome && (
+          <OutcomeEditModal
+            outcome={editingOutcome}
+            status={outcomeStatusByGoalId[editingOutcome.id] || 'not_started'}
+            saving={savingOutcome}
+            onClose={() => setEditingOutcome(null)}
+            onSave={saveOutcomeFromPillar}
+            t={t}
           />
         )}
       </div>
