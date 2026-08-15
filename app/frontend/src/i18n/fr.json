@@ -291,7 +291,7 @@
   "goals.outcomeUpdateFailed": "Impossible de mettre à jour le résultat.",
   "goals.editOutcome": "Modifier le résultat",
   "goals.outcomeTitle": "Titre du résultat",
-  "goals.outcomeDescription": "Description",
+  "goals.outcomeDescription": "Description du résultat",
   "goals.saveOutcome": "Enregistrer le résultat",
   "goals.removeOutcomeFromWave": "Retirer de la vague",
   "goals.outcomeStatus.notStarted": "Non commencé",
