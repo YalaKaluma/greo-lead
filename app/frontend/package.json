@@ -24,7 +24,7 @@
     "@capacitor/ios": "^8.4.1",
     "@capacitor/push-notifications": "^8.0.0",
     "alfred-session-credentials": "file:plugins/session-credentials",
-    "axios": "^1.18.0",
+    "axios": "^1.19.0",
     "react": "^18.2.0",
     "react-beautiful-dnd": "^13.1.1",
     "react-dom": "^18.2.0"
