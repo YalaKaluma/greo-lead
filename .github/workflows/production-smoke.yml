@@ -1,0 +1,87 @@
+name: Production Smoke Verification
+
+on:
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      expected_commit:
+        description: "Optional commit SHA to verify. Defaults to the current prod branch head."
+        required: false
+        type: string
+      production_url:
+        description: "Optional production URL override. Defaults to the production environment variable."
+        required: false
+        type: string
+  schedule:
+    - cron: "17,47 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-smoke-${{ github.event.deployment.sha || inputs.expected_commit || 'prod' }}
+  cancel-in-progress: true
+
+jobs:
+  production-smoke:
+    name: Verify Railway production
+    if: >-
+      github.event_name != 'deployment_status' ||
+      (
+        github.event.deployment_status.state == 'success' &&
+        github.event.deployment.environment == 'production'
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+
+      - name: Resolve production target
+        id: target
+        env:
+          DEPLOYMENT_SHA: ${{ github.event.deployment.sha }}
+          INPUT_EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          INPUT_PRODUCTION_URL: ${{ inputs.production_url }}
+          DEFAULT_PRODUCTION_URL: ${{ vars.PRODUCTION_APP_URL }}
+        run: |
+          expected_commit="$INPUT_EXPECTED_COMMIT"
+          if [ -z "$expected_commit" ]; then
+            expected_commit="$DEPLOYMENT_SHA"
+          fi
+          if [ -z "$expected_commit" ]; then
+            expected_commit="$(git ls-remote origin refs/heads/prod | awk '{print $1}')"
+          fi
+
+          production_url="$INPUT_PRODUCTION_URL"
+          if [ -z "$production_url" ]; then
+            production_url="$DEFAULT_PRODUCTION_URL"
+          fi
+
+          test -n "$expected_commit"
+          test -n "$production_url"
+
+          {
+            echo "expected_commit=$expected_commit"
+            echo "production_url=$production_url"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify deployed commit and security boundaries
+        run: |
+          python scripts/verify_production_deployment.py \
+            --url "${{ steps.target.outputs.production_url }}" \
+            --commit "${{ steps.target.outputs.expected_commit }}" \
+            --timeout 900 \
+            --evidence production-smoke-evidence.json
+
+      - name: Upload deployment evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: production-smoke-evidence-${{ steps.target.outputs.expected_commit || github.run_id }}
+          path: production-smoke-evidence.json
+          if-no-files-found: warn
+          retention-days: 30

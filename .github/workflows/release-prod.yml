@@ -106,38 +106,3 @@ jobs:
             app/frontend/playwright-report
             app/frontend/test-results
           retention-days: 14
-
-  production-smoke:
-    name: Verify Railway production
-    if: github.event_name == 'push'
-    needs: release-ci
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    environment: production
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-
-      - name: Require production URL
-        env:
-          PRODUCTION_APP_URL: ${{ vars.PRODUCTION_APP_URL }}
-        run: test -n "$PRODUCTION_APP_URL"
-
-      - name: Verify deployed commit and security boundaries
-        env:
-          PRODUCTION_APP_URL: ${{ vars.PRODUCTION_APP_URL }}
-        run: |
-          python scripts/verify_production_deployment.py \
-            --url "$PRODUCTION_APP_URL" \
-            --commit "${{ github.sha }}" \
-            --timeout 900 \
-            --evidence production-smoke-evidence.json
-
-      - name: Upload deployment evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: production-smoke-evidence-${{ github.sha }}
-          path: production-smoke-evidence.json
-          if-no-files-found: warn
-          retention-days: 30
