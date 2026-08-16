@@ -1,0 +1,18 @@
+{
+  "name": "alfred-session-credentials",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Alfred iOS Keychain-backed session credential storage",
+  "files": [
+    "ios/Sources",
+    "Package.swift"
+  ],
+  "peerDependencies": {
+    "@capacitor/core": ">=8.0.0"
+  },
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    }
+  }
+}
