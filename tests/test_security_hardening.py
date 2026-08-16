@@ -989,6 +989,31 @@ def test_android_session_credentials_are_encrypted_and_restored_before_startup()
     assert 'Cipher.getInstance("AES/GCM/NoPadding")' in native_plugin
 
 
+def test_ios_session_credentials_use_keychain_and_missing_bridge_does_not_block_login():
+    repository_root = Path(__file__).resolve().parents[1]
+    frontend = repository_root / "app" / "frontend"
+    credentials = (frontend / "src" / "sessionCredentials.js").read_text(encoding="utf-8")
+    package = (frontend / "plugins" / "session-credentials" / "package.json").read_text(encoding="utf-8")
+    native_plugin = (
+        frontend
+        / "plugins"
+        / "session-credentials"
+        / "ios"
+        / "Sources"
+        / "SessionCredentialsPlugin"
+        / "SessionCredentialsPlugin.swift"
+    ).read_text(encoding="utf-8")
+
+    assert "Capacitor.isPluginAvailable('SessionCredentials')" in credentials
+    assert "if (!hasSecureNativeStorage()) return;" in credentials
+    assert '"ios"' in package
+    assert 'public let jsName = "SessionCredentials"' in native_plugin
+    assert "SecItemAdd" in native_plugin
+    assert "SecItemCopyMatching" in native_plugin
+    assert "SecItemDelete" in native_plugin
+    assert "kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly" in native_plugin
+
+
 def test_android_webview_origin_is_trusted():
     import json
 
