@@ -7,13 +7,17 @@ Use this before a deliberate production release, typically Sunday.
 - [ ] Review commits since the last production release.
 - [ ] Review Alembic migrations included in the release.
 - [ ] Confirm production backup and restore readiness.
+- [ ] Remind the user to set GitHub `PRODUCTION_APP_URL` and Railway production `PUBLIC_APP_URL`.
+- [ ] Remind the user to update production cron jobs to `POST` immediately before or after deploying, using the existing production scheduler secret.
+- [ ] Remind the user to verify historical credentials, disable Twilio/Mailgun, and review Neon security directly in the production/provider accounts.
 - [ ] Open or update a PR from `main` into `prod`.
 - [ ] Confirm Production Release CI passes.
 - [ ] Confirm backend tests, frontend tests, i18n check, frontend build, Gitleaks, Bandit, and pip-audit have passed or have documented exceptions.
+- [ ] Confirm Railway is not configured to wait for the post-deploy `Production Smoke Verification` workflow.
 - [ ] If migrations are included, run the `Production DB Migration` GitHub Actions workflow on the PR head branch/ref before merging.
 - [ ] Merge or push to `prod`.
 - [ ] Confirm Railway production deployment succeeds.
-- [ ] Run a production smoke test, including `/api/health`.
+- [ ] Confirm `Production Smoke Verification` passes, including `/api/health.commit` for the merged `prod` commit.
 - [ ] Smoke test Home, Goals, Tasks (list and calendar), Meetings, Journey, Journal, Habits, Settings, notifications status, and admin System Health.
 - [ ] Build/upload/test Play Store internal testing app if this release includes Android.
 - [ ] Review Railway production logs.

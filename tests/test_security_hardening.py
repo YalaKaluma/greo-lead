@@ -1720,12 +1720,17 @@ def test_production_verifier_matches_commit_and_checks_auth_boundaries(monkeypat
 
 
 def test_production_release_requires_post_deploy_verification():
-    workflow = Path(".github/workflows/release-prod.yml").read_text(encoding="utf-8")
+    release_workflow = Path(".github/workflows/release-prod.yml").read_text(encoding="utf-8")
+    smoke_workflow = Path(".github/workflows/production-smoke.yml").read_text(encoding="utf-8")
     health_source = Path("app/main.py").read_text(encoding="utf-8")
 
-    assert "production-smoke:" in workflow
-    assert "needs: release-ci" in workflow
-    assert "vars.PRODUCTION_APP_URL" in workflow
-    assert "verify_production_deployment.py" in workflow
-    assert "production-smoke-evidence" in workflow
+    assert "production-smoke:" not in release_workflow
+    assert "Verify Railway production" not in release_workflow
+    assert "production-smoke:" in smoke_workflow
+    assert "deployment_status:" in smoke_workflow
+    assert "workflow_dispatch:" in smoke_workflow
+    assert "needs: release-ci" not in smoke_workflow
+    assert "vars.PRODUCTION_APP_URL" in smoke_workflow
+    assert "verify_production_deployment.py" in smoke_workflow
+    assert "production-smoke-evidence" in smoke_workflow
     assert 'os.getenv("RAILWAY_GIT_COMMIT_SHA")' in health_source

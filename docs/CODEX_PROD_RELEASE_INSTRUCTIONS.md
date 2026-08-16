@@ -20,6 +20,8 @@ Please release Alfred to production. I backed up Neon. Promote latest main to pr
 - `prod` is stable production and deploys to Railway production.
 - GitHub Actions runs checks.
 - Railway performs deployment after `prod` changes.
+- `Production Release CI` is the pre-deploy gate Railway may wait for.
+- `Production Smoke Verification` is the post-deploy smoke check. It must not be a required pre-deploy check in Railway, because it verifies the deployment after Railway has activated it.
 - Do not force-push or overwrite `prod`.
 - Do not bypass GitHub CI unless the user explicitly accepts the risk.
 
@@ -50,7 +52,15 @@ git diff --stat origin/prod..main
 
 If local Git metadata is blocked or stale, use the GitHub connector to compare `main` and `prod`.
 
-4. Run local checks when the local environment supports them.
+4. Remind the user about production-only account and configuration steps.
+
+Before the next production deployment, explicitly remind the user to handle these production-only items:
+
+- Set GitHub `PRODUCTION_APP_URL` and Railway production `PUBLIC_APP_URL`. These are production-specific and cannot meaningfully be tested in development.
+- Update production cron jobs to `POST`. Do this immediately before or after deploying the new code to avoid a short compatibility mismatch. Use the existing production scheduler secret; do not copy the development secret.
+- Verify historical credentials, disable Twilio/Mailgun, and review Neon security. These are account/provider controls, not application deployments, and must be handled directly in the relevant production accounts.
+
+5. Run local checks when the local environment supports them.
 
 Backend:
 
@@ -69,7 +79,7 @@ npm run build
 
 If local checks cannot run because tooling is missing or blocked, do not hide it. Continue only if GitHub CI will run the equivalent checks.
 
-5. Confirm Alembic state.
+6. Confirm Alembic state.
 
 ```bash
 alembic heads
@@ -95,14 +105,14 @@ DIRECT_DATABASE_URL="postgresql://..." alembic upgrade head
 
 Never print database URLs or secrets.
 
-6. Open a GitHub PR from `main` into `prod`.
+7. Open a GitHub PR from `main` into `prod`.
 
 - Title: `Production release: promote main to prod`
 - Base: `prod`
 - Head: `main`
 - Include notes about backup, local checks, migration status, and post-deploy verification.
 
-7. Wait for GitHub CI to pass.
+8. Wait for GitHub CI to pass.
 
 Required checks usually include:
 
@@ -117,17 +127,19 @@ Required checks usually include:
 
 If any check fails, stop and fix or report the failure. Do not merge a failing release PR without explicit user approval.
 
-8. If the release includes Alembic migrations, run the `Production DB Migration` workflow before merging.
+9. If the release includes Alembic migrations, run the `Production DB Migration` workflow before merging.
 
 Use the PR head branch/ref so the workflow has the migration files that are about to be released. Do not merge if the migration workflow fails or cannot be verified.
 
-9. Merge the PR only when it is mergeable, CI is green, and required production migrations are complete.
+10. Merge the PR only when it is mergeable, CI is green, and required production migrations are complete.
 
 Use a normal merge commit unless the user or repo policy says otherwise.
 
-10. Verify Railway production deployment.
+11. Verify Railway production deployment.
 
 Check the merge commit status. Railway should move from pending to success.
+
+If Railway shows a skipped deployment with `CI check suite failed`, confirm Railway is waiting only for pre-deploy gates such as `Production Release CI` and `Security CI`. Railway must not wait for the post-deploy `Production Smoke Verification` workflow, or it will create a circular dependency.
 
 Then verify production health:
 
@@ -140,11 +152,27 @@ The response must show:
 - HTTP 200
 - `status` is `ok`
 - `database` is `connected`
-- `deployment.commit` matches the new `prod` merge commit
+- `commit` matches the new `prod` merge commit
 
 If PowerShell or curl has local TLS issues, use another available HTTP client such as Node `fetch`.
 
-11. Trigger the Android AAB workflow for Play Store upload.
+12. Confirm post-deploy smoke verification.
+
+The `Production Smoke Verification` workflow runs independently from the pre-deploy gate. It can be triggered by Railway deployment success events, by its scheduled backstop, or manually with:
+
+- Workflow file: `.github/workflows/production-smoke.yml`
+- Expected commit: the merged `prod` commit SHA
+- Production URL: usually leave blank so the workflow uses GitHub `PRODUCTION_APP_URL`
+
+Wait for it to verify:
+
+- the production URL uses HTTPS
+- `/api/health` is healthy
+- `/api/health.commit` matches the expected `prod` commit
+- invalid login attempts are rejected
+- invalid scheduler credentials are rejected
+
+13. Trigger the Android AAB workflow for Play Store upload.
 
 Run the `Android AAB` GitHub Actions workflow on the `prod` branch after production health is verified.
 
@@ -156,7 +184,7 @@ Use:
 
 Wait for the workflow to finish. If it succeeds, report the workflow run URL and artifact name `alfred-release-aab`. If Codex cannot trigger the workflow because the available GitHub connector lacks workflow-dispatch support or the browser/CLI is not authenticated, report that clearly and ask the user to either sign in to GitHub in the browser or provide an authenticated workflow-dispatch route.
 
-12. Report the result to the user.
+14. Report the result to the user.
 
 Include:
 
