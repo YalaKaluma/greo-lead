@@ -13,6 +13,7 @@ export default function GoalsList({
   onReorderGoals,
   onMoveGoalAcrossParents,
   onCreateChildGoal,
+  onOutcomeClick,
   outcomeStatusByGoalId = {},
   expandedGoalId
 }) {
@@ -199,8 +200,17 @@ export default function GoalsList({
                       {...provided.dragHandleProps}
                       onClick={(event) => {
                         event.stopPropagation();
-                        onCardClick(outcome);
+                        (onOutcomeClick || onCardClick)(outcome);
                       }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          (onOutcomeClick || onCardClick)(outcome);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
                       className={`rounded border ${statusStyle.card} p-3 cursor-grab active:cursor-grabbing ${
                         snapshot.isDragging || recentlyDraggedId === `outcome-${outcome.id}`
                           ? 'shadow-lg ring-2 ring-blue-200'

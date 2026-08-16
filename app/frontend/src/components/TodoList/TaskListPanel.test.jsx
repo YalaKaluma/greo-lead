@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import TaskListPanel from './TaskListPanel';
 
@@ -66,5 +66,47 @@ describe('TaskListPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Do later' }));
     expect(onDoLater).toHaveBeenCalledWith(task);
+  });
+
+  it('submits MTN tag feedback with the task id in the expected argument position', async () => {
+    const onMtnFeedback = vi.fn(async () => ({ success: true }));
+    const task = {
+      id: 167,
+      title: 'Retag this task',
+      status: 'open',
+      priority: 'Medium',
+      due_date: '2026-07-20',
+    };
+
+    render(
+      <TaskListPanel
+        {...baseProps}
+        sortedTasks={[task]}
+        priorityMode
+        getVisibleTaskScore={() => ({
+          score: 0.6,
+          score_id: 44,
+          recommendation_id: 55,
+          reason: 'Important work',
+        })}
+        onMtnFeedback={onMtnFeedback}
+      />
+    );
+
+    fireEvent.click(screen.getAllByRole('button', { name: '3. Important' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: '2. Strategic' }));
+    fireEvent.click(screen.getByRole('button', { name: '4 stars' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Feedback' }));
+
+    await waitFor(() => expect(onMtnFeedback).toHaveBeenCalled());
+    expect(onMtnFeedback.mock.calls[0]).toEqual([
+      167,
+      4,
+      null,
+      '2. Strategic',
+      55,
+      44,
+      0.775,
+    ]);
   });
 });

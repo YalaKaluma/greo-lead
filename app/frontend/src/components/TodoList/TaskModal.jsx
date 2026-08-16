@@ -230,7 +230,6 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
                 onChange={(e) => setEditData({ ...editData, title: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
                 placeholder="What needs to be done?"
-                autoFocus
               />
             </div>
 

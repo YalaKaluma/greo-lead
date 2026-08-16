@@ -80,6 +80,43 @@ def test_rate_limited_endpoint_returns_429_after_excessive_requests():
     assert response.headers["Retry-After"] == "60"
 
 
+def test_auth_rate_limit_is_shared_across_application_replicas():
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from app.models import RateLimitBucket
+    from app.security_middleware import DatabaseRateLimitStore
+
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    RateLimitBucket.__table__.create(engine)
+    shared_store = DatabaseRateLimitStore(sessionmaker(bind=engine))
+
+    def make_replica():
+        replica = FastAPI()
+        replica.add_middleware(
+            RateLimitMiddleware,
+            auth_limit=RateLimitRule(2, 60),
+            ai_limit=RateLimitRule(20, 60),
+            general_limit=RateLimitRule(100, 60),
+            shared_store=shared_store,
+        )
+
+        @replica.post("/api/auth/login")
+        def login():
+            return {"success": False}
+
+        return TestClient(replica)
+
+    first_replica = make_replica()
+    second_replica = make_replica()
+    assert first_replica.post("/api/auth/login").status_code == 200
+    assert second_replica.post("/api/auth/login").status_code == 200
+    assert first_replica.post("/api/auth/login").status_code == 429
+
+
 def test_ai_rate_limit_uses_signed_identity_and_shared_scope(monkeypatch):
     from app.utils.security import create_session_token
 
@@ -343,17 +380,116 @@ def test_db_health_check_prints_counts_without_sensitive_content(tmp_path):
     assert sensitive_text not in result.stdout
 
 
-def test_admin_dependency_uses_authenticated_user_role_not_query_identity():
+def test_admin_dependency_uses_authenticated_user_role_not_query_identity(monkeypatch):
     from app.models import User
     from app.routers.admin import require_admin
+    from app.utils.security import create_session_token
 
+    monkeypatch.setenv("APP_SESSION_SECRET", "test-session-secret-that-is-long-enough-123")
     admin = User(id=1, phone_number="admin@example.com", is_active=True, is_admin=True)
     ordinary_user = User(id=2, phone_number="admin@example.com", is_active=True, is_admin=False)
+    admin_token = create_session_token(admin.id, admin.phone_number)
+    ordinary_token = create_session_token(ordinary_user.id, ordinary_user.phone_number)
+    admin_request = _identity_request(headers=[
+        (b"authorization", f"Bearer {admin_token}".encode("ascii")),
+    ])
+    ordinary_request = _identity_request(headers=[
+        (b"authorization", f"Bearer {ordinary_token}".encode("ascii")),
+    ])
 
-    assert require_admin(user=admin) is admin
+    assert require_admin(request=admin_request, user=admin) is admin
     with pytest.raises(HTTPException) as exc_info:
-        require_admin(user=ordinary_user)
+        require_admin(request=ordinary_request, user=ordinary_user)
     assert exc_info.value.status_code == 403
+
+
+def test_expired_admin_session_requires_fresh_sign_in(monkeypatch):
+    from app.models import User
+    from app.routers import admin as admin_router
+    from app.routers.admin import require_admin
+    from app.utils import security
+
+    monkeypatch.setenv("APP_SESSION_SECRET", "test-session-secret-that-is-long-enough-123")
+    issued_at = 1_000_000
+    monkeypatch.setattr(security.time, "time", lambda: issued_at)
+    user = User(id=1, phone_number="admin@example.com", is_active=True, is_admin=True)
+    token = security.create_session_token(user.id, user.phone_number)
+    request = _identity_request(headers=[
+        (b"authorization", f"Bearer {token}".encode("ascii")),
+    ])
+
+    monkeypatch.setattr(
+        admin_router.time,
+        "time",
+        lambda: issued_at + security.ADMIN_SESSION_TOKEN_TTL_SECONDS + 1,
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        require_admin(request=request, user=user)
+
+    assert exc_info.value.status_code == 401
+
+
+def test_account_erasure_removes_only_files_inside_managed_storage(tmp_path):
+    from app.services.account_erasure_service import _remove_stored_file
+
+    storage_root = tmp_path / "managed"
+    storage_root.mkdir()
+    managed_file = storage_root / "recording.webm"
+    managed_file.write_bytes(b"private recording")
+    outside_file = tmp_path / "outside.webm"
+    outside_file.write_bytes(b"must remain")
+
+    assert _remove_stored_file(str(managed_file), storage_root) is True
+    assert not managed_file.exists()
+    assert _remove_stored_file(str(outside_file), storage_root) is False
+    assert outside_file.exists()
+
+
+def test_account_erasure_anonymizes_user_and_discovers_owned_tables(monkeypatch):
+    from app.models import User
+    from app.services import account_erasure_service
+
+    class Result:
+        rowcount = 1
+
+    class FakeDb:
+        def execute(self, _statement):
+            return Result()
+
+    monkeypatch.setattr(account_erasure_service, "_remove_user_files", lambda *_args: 2)
+    user = User(
+        id=77,
+        phone_number="private@example.com",
+        email="private@example.com",
+        name="Private Person",
+        profession="Executive",
+        is_active=False,
+        is_admin=True,
+        session_version=3,
+        onboarding_data={"private": "answer"},
+        voice_reference_data_url="data:audio/webm;base64,private",
+    )
+
+    result = account_erasure_service.erase_user_data(FakeDb(), user)
+
+    assert result["rows_removed"] > 0
+    assert result["files_removed"] == 2
+    assert user.phone_number == "deleted-77@deleted.invalid"
+    assert user.email is None
+    assert user.name == "Deleted user"
+    assert user.profession is None
+    assert user.is_admin is False
+    assert user.session_version == 4
+    assert user.onboarding_data == {}
+    assert user.voice_reference_data_url is None
+
+    service_source = Path("app/services/account_erasure_service.py").read_text(encoding="utf-8")
+    assert "Base.metadata.sorted_tables" in service_source
+    assert 'foreign_key.target_fullname == "users.id"' in service_source
+    assert '"user_number" in table.c' in service_source
+
+    nudge_source = Path("app/routers/nudge.py").read_text(encoding="utf-8")
+    assert nudge_source.count("purge_due_account_deletions(db)") == 2
 
 
 def test_legacy_password_replacement_endpoint_is_disabled():
@@ -396,6 +532,24 @@ def test_scheduler_secret_cannot_access_nudge_administration():
     ):
         assert f"def {function_name}(_authorized=Depends(require_admin))" in source
     assert "def health_check(\n        db: Session = Depends(get_db),\n        _authorized=Depends(require_admin)," in source
+
+
+def test_state_changing_nudge_routes_are_post_only():
+    source = Path("app/routers/nudge.py").read_text(encoding="utf-8")
+    for path in (
+        "morning",
+        "evening",
+        "weekly",
+        "sunday_review",
+        "cto_weekend_review",
+        "morning/batch",
+        "evening/batch",
+        "weekly/batch",
+        "sunday_review/batch",
+        "reload_config",
+    ):
+        assert f'@router.post("/nudge/{path}")' in source
+        assert f'@router.get("/nudge/{path}")' not in source
 
 
 def _identity_request(
@@ -809,6 +963,32 @@ def test_client_credentials_are_not_backed_up_and_cors_is_not_wildcarded():
     assert "getSessionToken" in transport
 
 
+def test_android_session_credentials_are_encrypted_and_restored_before_startup():
+    repository_root = Path(__file__).resolve().parents[1]
+    frontend = repository_root / "app" / "frontend"
+    credentials = (frontend / "src" / "sessionCredentials.js").read_text(encoding="utf-8")
+    startup = (frontend / "src" / "main.jsx").read_text(encoding="utf-8")
+    native_plugin = (
+        frontend
+        / "android"
+        / "app"
+        / "src"
+        / "main"
+        / "java"
+        / "com"
+        / "AlfredTheChiefOfStaff"
+        / "myapp"
+        / "SessionCredentialsPlugin.java"
+    ).read_text(encoding="utf-8")
+
+    assert "sessionStorage.setItem(ACCESS_TOKEN_KEY" not in credentials
+    assert "SessionCredentials.get()" in credentials
+    assert "await hydrateSessionCredentials()" in startup
+    assert "await import('./authenticatedTransport.js')" in startup
+    assert 'KeyStore.getInstance("AndroidKeyStore")' in native_plugin
+    assert 'Cipher.getInstance("AES/GCM/NoPadding")' in native_plugin
+
+
 def test_android_webview_origin_is_trusted():
     import json
 
@@ -1042,6 +1222,43 @@ class LoginDb:
 
     def commit(self):
         self.commits += 1
+
+
+def test_legacy_plaintext_password_is_transparently_rehashed_on_login(monkeypatch):
+    from fastapi import Response
+    from app.models import User
+    from app.routers.auth import LoginRequest, login
+    from app.utils.security import PASSWORD_HASH_PREFIX, verify_password
+
+    monkeypatch.setenv("APP_SESSION_SECRET", "test-session-secret-that-is-long-enough-123")
+    user = User(
+        id=30,
+        phone_number="legacy-user",
+        is_active=True,
+        session_version=0,
+        password_hash="simple",
+    )
+    db = LoginDb(user)
+
+    result = asyncio.run(login(
+        credentials=LoginRequest(username="legacy-user", password="simple"),
+        request=_request_with_query(""),
+        response=Response(),
+        db=db,
+    ))
+
+    assert result["success"] is True
+    assert user.password_hash.startswith(f"{PASSWORD_HASH_PREFIX}$")
+    assert user.password_hash != "simple"
+    assert verify_password("simple", user.password_hash)
+    assert db.commits >= 1
+
+
+def test_current_password_hash_does_not_need_upgrade():
+    from app.utils.security import hash_password, password_hash_needs_upgrade
+
+    assert password_hash_needs_upgrade("legacy-value") is True
+    assert password_hash_needs_upgrade(hash_password("simple")) is False
 
 
 def test_temporary_password_can_create_only_one_session(monkeypatch):
@@ -1456,6 +1673,17 @@ def test_supply_chain_inputs_are_immutable_and_hash_locked():
     assert "FROM node:20-bookworm-slim@sha256:" in dockerfile
     assert "FROM python:3.11-slim@sha256:" in dockerfile
     assert "--hash=sha256:" in production_lock
+    assert "pnpm audit --prod --audit-level high" in workflows
+    assert "aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8" in workflows
+    assert "docker build --tag alfred-security-scan:" in workflows
+    assert "pip uninstall -y pip setuptools wheel" in dockerfile
+
+    frontend_manifest = Path("app/frontend/package.json").read_text(encoding="utf-8")
+    assert '"axios": "^1.18.0"' in frontend_manifest
+
+    dependabot = Path(".github/dependabot.yml").read_text(encoding="utf-8")
+    for ecosystem in ("pip", "npm", "docker", "github-actions"):
+        assert f"package-ecosystem: {ecosystem}" in dependabot
 
     tracked_venv = subprocess.run(
         ["git", "ls-files", "venv"],
@@ -1464,3 +1692,40 @@ def test_supply_chain_inputs_are_immutable_and_hash_locked():
         text=True,
     )
     assert tracked_venv.stdout.strip() == ""
+
+
+def test_production_verifier_matches_commit_and_checks_auth_boundaries(monkeypatch):
+    from scripts import verify_production_deployment
+
+    responses = iter([
+        (200, {"status": "ok", "database": "connected", "commit": "abc123def"}),
+        (401, {"detail": "Invalid credentials"}),
+        (401, {"detail": "Scheduler or administrator authentication required"}),
+    ])
+    monkeypatch.setattr(
+        verify_production_deployment,
+        "_request",
+        lambda *_args, **_kwargs: next(responses),
+    )
+
+    evidence = verify_production_deployment.verify(
+        "https://alfred.example.com",
+        "abc123",
+        30,
+    )
+
+    assert evidence["deployed_commit"] == "abc123def"
+    assert evidence["invalid_login_status"] == 401
+    assert evidence["invalid_scheduler_status"] == 401
+
+
+def test_production_release_requires_post_deploy_verification():
+    workflow = Path(".github/workflows/release-prod.yml").read_text(encoding="utf-8")
+    health_source = Path("app/main.py").read_text(encoding="utf-8")
+
+    assert "production-smoke:" in workflow
+    assert "needs: release-ci" in workflow
+    assert "vars.PRODUCTION_APP_URL" in workflow
+    assert "verify_production_deployment.py" in workflow
+    assert "production-smoke-evidence" in workflow
+    assert 'os.getenv("RAILWAY_GIT_COMMIT_SHA")' in health_source

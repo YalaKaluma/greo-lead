@@ -8,9 +8,11 @@ import GoalViewPanel from './GoalViewPanel';
 import GoalEditPanel from './GoalEditPanel';
 import GoalCreateModal from './GoalCreateModal';
 import TransformationRoadmap from './TransformationRoadmap';
+import OutcomeEditModal from './OutcomeEditModal';
 import MyCoachingSessions from '../MyCoachingSessions';
 import { normalizeGoalLevel, isVision } from '../../utils/goalTaxonomy';
 import { useYellowBeltUnlock } from '../../hooks/useYellowBeltUnlock';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 /* =========================================================
    HELPER FUNCTIONS
@@ -47,6 +49,7 @@ const GOAL_COACHING_EMPTY_STATE = 'Start a goal coaching session for this vision
 
 export default function MyGoals({ apiUrl, userNumber }) {
   const { isYellowBeltOrAbove } = useYellowBeltUnlock(apiUrl, userNumber);
+  const { t } = useLanguage();
   // Core data
   const [goals, setGoals] = useState([]);
   const [linkedTasks, setLinkedTasks] = useState({});
@@ -67,6 +70,10 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const [roadmapGenerateRequest, setRoadmapGenerateRequest] = useState(0);
   const [reorderError, setReorderError] = useState('');
   const [outcomeStatusByGoalId, setOutcomeStatusByGoalId] = useState({});
+  const [outcomeRoadmapLinkByGoalId, setOutcomeRoadmapLinkByGoalId] = useState({});
+  const [outcomeStatusError, setOutcomeStatusError] = useState('');
+  const [editingOutcome, setEditingOutcome] = useState(null);
+  const [savingOutcome, setSavingOutcome] = useState(false);
 
   /* ---------------- DATA FETCHING ---------------- */
 
@@ -141,6 +148,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
   const fetchGoalRoadmapStatuses = async (visionGoalId = expandedGoalId) => {
     if (!visionGoalId) {
       setOutcomeStatusByGoalId({});
+      setOutcomeRoadmapLinkByGoalId({});
       return;
     }
 
@@ -149,17 +157,55 @@ export default function MyGoals({ apiUrl, userNumber }) {
         params: { user_number: userNumber }
       });
       const nextStatuses = {};
+      const nextLinks = {};
       (res.data?.waves || []).forEach(wave => {
         (wave.goals || []).forEach(link => {
           if (link.goal_id) {
             nextStatuses[link.goal_id] = link.status || 'not_started';
+            nextLinks[link.goal_id] = { waveId: wave.id, status: link.status || 'not_started' };
           }
         });
       });
       setOutcomeStatusByGoalId(nextStatuses);
+      setOutcomeRoadmapLinkByGoalId(nextLinks);
     } catch (err) {
       console.error('Error fetching roadmap statuses:', err);
       setOutcomeStatusByGoalId({});
+      setOutcomeRoadmapLinkByGoalId({});
+    }
+  };
+
+  const saveOutcomeFromPillar = async (updates) => {
+    if (!editingOutcome) return;
+    const goalId = editingOutcome.id;
+    const roadmapLink = outcomeRoadmapLinkByGoalId[goalId];
+    if (!roadmapLink?.waveId) return;
+
+    setOutcomeStatusError('');
+    setSavingOutcome(true);
+
+    try {
+      await Promise.all([
+        axios.put(`${apiUrl}/api/journey/goals/${goalId}`, {
+          title: updates.title,
+          goal_text: updates.goal_text,
+        }, { params: { user_number: userNumber } }),
+        axios.patch(`${apiUrl}/api/journey/waves/${roadmapLink.waveId}/goals/${goalId}`, {
+          status: updates.status,
+        }, { params: { user_number: userNumber } }),
+      ]);
+      setOutcomeStatusByGoalId(previous => ({ ...previous, [goalId]: updates.status }));
+      setOutcomeRoadmapLinkByGoalId(previous => ({
+        ...previous,
+        [goalId]: { ...previous[goalId], status: updates.status },
+      }));
+      await fetchGoals();
+      setEditingOutcome(null);
+    } catch (err) {
+      console.error('Error updating outcome:', err);
+      setOutcomeStatusError(t('goals.outcomeUpdateFailed'));
+    } finally {
+      setSavingOutcome(false);
     }
   };
 
@@ -539,6 +585,11 @@ export default function MyGoals({ apiUrl, userNumber }) {
                   {reorderError}
                 </div>
               )}
+              {outcomeStatusError && (
+                <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {outcomeStatusError}
+                </div>
+              )}
               <GoalsList 
                 goals={organizedGoals}
                 expandedGoalId={expandedGoalId}
@@ -547,6 +598,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
                 onReorderGoals={handleReorderGoals}
                 onMoveGoalAcrossParents={handleMoveGoalAcrossParents}
                 onCreateChildGoal={handleCreateChildGoal}
+                onOutcomeClick={setEditingOutcome}
                 outcomeStatusByGoalId={outcomeStatusByGoalId}
                 taskCounts={taskCounts}
               />
@@ -565,6 +617,7 @@ export default function MyGoals({ apiUrl, userNumber }) {
                 roadmapGenerateRequest={roadmapGenerateRequest}
                 onRoadmapGenerateRequestHandled={() => setRoadmapGenerateRequest(0)}
                 onRoadmapChanged={() => fetchGoalRoadmapStatuses(expandedGoalId)}
+                t={t}
               />
             )}
 
@@ -628,6 +681,17 @@ export default function MyGoals({ apiUrl, userNumber }) {
             onClose={handleClosePanel}
             onSave={handleUpdateGoal}
             onDelete={handleDeleteGoal}
+          />
+        )}
+
+        {editingOutcome && (
+          <OutcomeEditModal
+            outcome={editingOutcome}
+            status={outcomeStatusByGoalId[editingOutcome.id] || 'not_started'}
+            saving={savingOutcome}
+            onClose={() => setEditingOutcome(null)}
+            onSave={saveOutcomeFromPillar}
+            t={t}
           />
         )}
       </div>

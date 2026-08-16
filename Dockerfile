@@ -22,7 +22,8 @@ RUN apt-get update && \
 
 WORKDIR /app
 COPY requirements.txt ./
-RUN pip install --no-cache-dir --require-hashes -r requirements.txt
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt && \
+    pip uninstall -y pip setuptools wheel
 
 COPY --chown=alfred:alfred app/ ./app
 COPY --chown=alfred:alfred alembic.ini ./alembic.ini

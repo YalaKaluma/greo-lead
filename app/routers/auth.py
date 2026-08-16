@@ -15,11 +15,13 @@ from app.config import PUBLIC_APP_URL
 from app.services.audit_log_service import write_audit_log
 from app.services.onboarding_seed_service import ensure_starter_examples_seeded
 from app.utils.security import (
+    ADMIN_SESSION_TOKEN_TTL_SECONDS,
     create_session_token,
     decode_session_token,
     generate_password_reset_token,
     hash_password,
     hash_password_reset_token,
+    password_hash_needs_upgrade,
     verify_password,
 )
 from app.utils.safe_errors import log_failure
@@ -61,7 +63,18 @@ class ChangePasswordRequest(BaseModel):
 
 
 def _session_response(user: User, response: Response) -> dict:
-    token = create_session_token(user.id, user.phone_number, user.session_version)
+    ttl_seconds = (
+        ADMIN_SESSION_TOKEN_TTL_SECONDS
+        if bool(getattr(user, "is_admin", False))
+        else None
+    )
+    token_kwargs = {"ttl_seconds": ttl_seconds} if ttl_seconds is not None else {}
+    token = create_session_token(
+        user.id,
+        user.phone_number,
+        user.session_version,
+        **token_kwargs,
+    )
     set_session_cookie(response, token)
     return {
         "access_token": token,
@@ -180,6 +193,9 @@ async def login(credentials: LoginRequest, request: Request, response: Response,
 
     # Check permanent password (returning users)
     if user.password_hash and verify_password(credentials.password, user.password_hash):
+        password_storage_upgraded = password_hash_needs_upgrade(user.password_hash)
+        if password_storage_upgraded:
+            user.password_hash = hash_password(credentials.password)
         user.last_login_at = datetime.utcnow()
         user.last_active_at = user.last_login_at
         db.commit()
@@ -189,7 +205,10 @@ async def login(credentials: LoginRequest, request: Request, response: Response,
             event_type="user_login_success",
             object_type="user",
             object_id=user.id,
-            metadata={"credential_type": "password"},
+            metadata={
+                "credential_type": "password",
+                "password_storage_upgraded": password_storage_upgraded,
+            },
             request=request,
         )
         return {

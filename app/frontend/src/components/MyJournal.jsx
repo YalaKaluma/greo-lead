@@ -688,7 +688,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
       {/* Input Area */}
       {activeTab === 'journal' && (
       <div className="shrink-0 border-t border-gray-200 bg-white px-4 py-4 md:px-10">
-        <form onSubmit={sendMessage} className="flex w-full min-w-0 items-end gap-2 md:gap-3">
+        <form onSubmit={sendMessage} className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-2 md:gap-3">
           <textarea
             ref={inputRef}
             rows={1}
@@ -696,11 +696,11 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
             onChange={(e) => setInputMessage(e.target.value)}
             placeholder={activeSession ? t('coaching.sharePlaceholder') : JOURNAL_EMPTY_PROMPT}
             disabled={isLoading}
-            className="min-h-12 min-w-0 flex-1 resize-none overflow-x-hidden rounded-lg border border-gray-300 px-4 py-3 leading-6 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100"
+            className="row-span-2 min-h-12 min-w-0 resize-none overflow-x-hidden rounded-lg border border-gray-300 px-4 py-3 leading-6 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-gray-100"
             style={{ maxHeight: '160px' }}
           />
 
-          <div className="shrink-0">
+          <div className="col-start-2 row-start-1 flex justify-end">
             <VoiceRecorder
               apiUrl={apiUrl}
               disabled={isLoading}
@@ -712,7 +712,7 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
           <button
             type="submit"
             disabled={!inputMessage.trim() || isLoading}
-            className="shrink-0 rounded-lg bg-blue-600 px-4 py-3 font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 md:px-6"
+            className="col-start-2 row-start-2 rounded-lg bg-blue-600 px-4 py-3 font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 md:px-6"
           >
             {t('chat.send')}
           </button>

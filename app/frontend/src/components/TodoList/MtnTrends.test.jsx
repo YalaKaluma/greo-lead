@@ -103,7 +103,7 @@ describe('TaskMtnTrendsTab', () => {
           trend: { label: 'Rising', delta_vs_30: 1.2 },
         },
         last_30_days: { total_score: 120, average_score: 4, active_days: 18 },
-        last_90_days: { total_score: 300, completed_tasks: 80 },
+        last_90_days: { total_score: 300, average_score: 3.3, completed_tasks: 80 },
         procrastination_ranking: [{
           id: 10,
           title: 'Deferred task',
@@ -129,7 +129,8 @@ describe('TaskMtnTrendsTab', () => {
     expect(screen.getByText('120.0 total MTN, 18 active day(s)')).toBeInTheDocument();
     expect(screen.getByText('Rising')).toBeInTheDocument();
     expect(screen.getByText('+1.2 vs 30-day avg')).toBeInTheDocument();
-    expect(screen.getByText('90-Day Total')).toBeInTheDocument();
+    expect(screen.getByText('90-Day Daily Average')).toBeInTheDocument();
+    expect(screen.getByText('3.3')).toBeInTheDocument();
     expect(screen.getByText('Deferred task')).toBeInTheDocument();
     expect(screen.getByText('3x')).toBeInTheDocument();
   });

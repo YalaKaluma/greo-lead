@@ -499,6 +499,7 @@ export default function TodoList({ apiUrl, userNumber }) {
     try {
       await axios.delete(`${apiUrl}/api/tasks/${taskId}`);
       setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
+      setOptimizationTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
       setSortOrder(sortOrder.filter(id => id !== taskId));
     } catch (err) {
       console.error('Error deleting task:', err);
@@ -512,6 +513,9 @@ export default function TodoList({ apiUrl, userNumber }) {
         `${apiUrl}/api/tasks/${taskId}`,
         updates
       );
+      setOptimizationTasks(prevTasks => prevTasks.map(task => (
+        task.id === taskId ? { ...task, ...updates } : task
+      )));
       await fetchTasks();
       setShowTaskModal(false);
       setEditingTask(null);
@@ -841,6 +845,7 @@ export default function TodoList({ apiUrl, userNumber }) {
               trends={mtnTrends}
               loading={mtnTrendsLoading}
               error={mtnTrendsError}
+              t={t}
             />
           </TrendsErrorBoundary>
         )}
@@ -994,7 +999,7 @@ export default function TodoList({ apiUrl, userNumber }) {
         </div>
       )}
 
-      {showDeferModal && (
+      {showDeferModal && !showTaskModal && (
         <OptimizeTodayModal
           tasks={optimizationTasks}
           todayKey={optimizationDate}
@@ -1005,6 +1010,10 @@ export default function TodoList({ apiUrl, userNumber }) {
           onCancel={finishTodayOptimization}
           onApplyMove={applyTodayOptimizationMove}
           onMarkDone={completeTodayOptimizationTask}
+          onEditTask={(task) => {
+            setEditingTask(task);
+            setShowTaskModal(true);
+          }}
           t={t}
         />
       )}
