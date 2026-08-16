@@ -1699,7 +1699,7 @@ def test_production_verifier_matches_commit_and_checks_auth_boundaries(monkeypat
 
     responses = iter([
         (200, {"status": "ok", "database": "connected", "commit": "abc123def"}),
-        (401, {"detail": "Invalid credentials"}),
+        (200, {"success": False, "message": "Invalid credentials"}),
         (401, {"detail": "Scheduler or administrator authentication required"}),
     ])
     monkeypatch.setattr(
@@ -1715,7 +1715,8 @@ def test_production_verifier_matches_commit_and_checks_auth_boundaries(monkeypat
     )
 
     assert evidence["deployed_commit"] == "abc123def"
-    assert evidence["invalid_login_status"] == 401
+    assert evidence["invalid_login_status"] == 200
+    assert evidence["invalid_login_rejected"] is True
     assert evidence["invalid_scheduler_status"] == 401
 
 
