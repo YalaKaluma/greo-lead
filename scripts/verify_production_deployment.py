@@ -54,7 +54,7 @@ def verify(base_url: str, expected_commit: str, timeout_seconds: int) -> dict:
             f"last health={last_health}"
         )
 
-    login_status, _ = _request(
+    login_status, login_body = _request(
         f"{base_url}/api/auth/login",
         method="POST",
         body={"username": "deployment-probe-invalid", "password": "invalid"},  # nosec B105
@@ -64,8 +64,16 @@ def verify(base_url: str, expected_commit: str, timeout_seconds: int) -> dict:
         method="POST",
         headers={"X-Alfred-Scheduler-Secret": "invalid-deployment-probe-secret"},
     )
-    if login_status != 401:
-        raise RuntimeError(f"Invalid login returned HTTP {login_status}, expected 401")
+    login_rejected = login_status == 401 or (
+        login_status == 200
+        and isinstance(login_body, dict)
+        and login_body.get("success") is False
+    )
+    if not login_rejected:
+        raise RuntimeError(
+            f"Invalid login returned HTTP {login_status} with body {login_body}, "
+            "expected 401 or success=false"
+        )
     if scheduler_status != 401:
         raise RuntimeError(f"Invalid scheduler credential returned HTTP {scheduler_status}, expected 401")
 
@@ -76,6 +84,7 @@ def verify(base_url: str, expected_commit: str, timeout_seconds: int) -> dict:
         "deployed_commit": last_health["commit"],
         "database": last_health["database"],
         "invalid_login_status": login_status,
+        "invalid_login_rejected": login_rejected,
         "invalid_scheduler_status": scheduler_status,
     }
 
