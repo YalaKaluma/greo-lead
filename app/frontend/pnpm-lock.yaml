@@ -20,6 +20,9 @@ importers:
       '@capacitor/push-notifications':
         specifier: ^8.0.0
         version: 8.1.2(@capacitor/core@8.4.1)
+      alfred-session-credentials:
+        specifier: file:plugins/session-credentials
+        version: link:plugins/session-credentials
       axios:
         specifier: ^1.18.0
         version: 1.18.0(debug@4.4.3)
