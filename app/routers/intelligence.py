@@ -13,6 +13,40 @@ from app.services.intelligence_core_service import IntelligenceCoreService
 
 
 router = APIRouter()
+ACTIVE_BACKFILL_STATUSES = ("queued", "ingesting", "synthesizing")
+BACKFILL_STALE_AFTER = timedelta(minutes=5)
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+def _run_is_stale(run: IntelligenceBackfillRun, now: datetime | None = None) -> bool:
+    if run.status not in ACTIVE_BACKFILL_STATUSES:
+        return False
+    last_activity = _as_utc(run.heartbeat_at or run.started_at or run.created_at)
+    return bool(last_activity and last_activity < (now or datetime.now(timezone.utc)) - BACKFILL_STALE_AFTER)
+
+
+def _mark_run_stalled(run: IntelligenceBackfillRun) -> None:
+    run.status = "failed"
+    run.error_message = (
+        "The model update stopped before it completed. Retry to resume safely; "
+        "your source data was not changed."
+    )
+    run.failure_stage = "worker_interrupted"
+    run.progress_stage = "failed"
+    run.completed_at = datetime.now(timezone.utc)
+
+
+def _refresh_stalled_run(db: Session, run: IntelligenceBackfillRun | None) -> IntelligenceBackfillRun | None:
+    if run is not None and _run_is_stale(run):
+        _mark_run_stalled(run)
+        db.commit()
+        db.refresh(run)
+    return run
 
 
 def _backfill_response(run: IntelligenceBackfillRun | None):
@@ -31,6 +65,9 @@ def _backfill_response(run: IntelligenceBackfillRun | None):
         "progress_stage": run.progress_stage,
         "progress_current": run.progress_current,
         "progress_total": run.progress_total,
+        "heartbeat_at": run.heartbeat_at,
+        "activity_log": list(run.activity_log or []),
+        "can_resume": run.status == "failed",
         "source_counts": run.source_counts or {},
         "error_message": run.error_message,
         "failure_stage": run.failure_stage,
@@ -80,32 +117,50 @@ def start_historical_backfill(
         db.query(IntelligenceBackfillRun)
         .filter(
             IntelligenceBackfillRun.user_id == current_user.id,
-            IntelligenceBackfillRun.status.in_(("queued", "ingesting", "synthesizing")),
-            IntelligenceBackfillRun.created_at >= datetime.now(timezone.utc) - timedelta(hours=1),
+            IntelligenceBackfillRun.status.in_(ACTIVE_BACKFILL_STATUSES),
         )
         .order_by(IntelligenceBackfillRun.created_at.desc())
         .first()
     )
     if active is not None:
-        active_since = active.started_at or active.created_at
-        if active_since.tzinfo is None:
-            active_since = active_since.replace(tzinfo=timezone.utc)
-        if active_since >= datetime.now(timezone.utc) - timedelta(minutes=30):
+        if not _run_is_stale(active):
             return _backfill_response(active)
-        active.status = "failed"
-        active.error_message = "The model update timed out. Your source data was not changed; start the update again."
-        active.failure_stage = "timeout"
-        active.progress_stage = "failed"
-        active.completed_at = datetime.now(timezone.utc)
+        _mark_run_stalled(active)
         db.commit()
 
-    run = IntelligenceBackfillRun(
-        user_id=current_user.id,
-        status="queued",
-        prompt_version=PROMPT_VERSION,
-        model_version=OPENAI_MODEL,
+    run = (
+        db.query(IntelligenceBackfillRun)
+        .filter(
+            IntelligenceBackfillRun.user_id == current_user.id,
+            IntelligenceBackfillRun.status == "failed",
+            IntelligenceBackfillRun.prompt_version == PROMPT_VERSION,
+            IntelligenceBackfillRun.model_version == OPENAI_MODEL,
+        )
+        .order_by(IntelligenceBackfillRun.created_at.desc())
+        .first()
     )
-    db.add(run)
+    if run is None:
+        run = IntelligenceBackfillRun(
+            user_id=current_user.id,
+            status="queued",
+            prompt_version=PROMPT_VERSION,
+            model_version=OPENAI_MODEL,
+        )
+        db.add(run)
+    else:
+        checkpoint = run.checkpoint_data or {}
+        completed_count = int(checkpoint.get("completed_count") or 0)
+        batch_total = int(checkpoint.get("batch_total") or 0)
+        run.status = "queued"
+        run.progress_stage = "queued"
+        run.progress_current = completed_count
+        run.progress_total = batch_total
+        run.progress_percent = 20 + int(60 * completed_count / max(1, batch_total)) if batch_total else 0
+        run.error_message = None
+        run.failure_stage = None
+        run.failure_reference = None
+        run.completed_at = None
+        run.heartbeat_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(run)
     background_tasks.add_task(execute_backfill_run, run.id, current_user.id)
@@ -123,6 +178,7 @@ def latest_historical_backfill(
         .order_by(IntelligenceBackfillRun.created_at.desc())
         .first()
     )
+    run = _refresh_stalled_run(db, run)
     return {"run": _backfill_response(run)}
 
 
@@ -258,6 +314,7 @@ def get_executive_model(
         .order_by(IntelligenceBackfillRun.created_at.desc())
         .first()
     )
+    run = _refresh_stalled_run(db, run)
     return {
         "stage": context["stage"],
         "evidence_count": context["evidence_count"],
