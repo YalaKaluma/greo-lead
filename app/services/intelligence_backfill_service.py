@@ -54,6 +54,7 @@ from app.models import (
     TaskPriorityDecision,
     User,
 )
+from app.utils.safe_errors import log_failure
 
 logger = logging.getLogger(__name__)
 
@@ -494,8 +495,8 @@ def execute_backfill_run(run_id: int, user_id: int) -> None:
         run.status = "completed"
         run.completed_at = datetime.now(timezone.utc)
         db.commit()
-    except Exception:
-        logger.exception("Historical intelligence backfill failed for run %s", run_id)
+    except Exception as error:
+        log_failure(f"intelligence_backfill_run_{run_id}", error)
         db.rollback()
         run = db.query(IntelligenceBackfillRun).filter(IntelligenceBackfillRun.id == run_id).first()
         if run is not None:

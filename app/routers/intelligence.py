@@ -166,7 +166,7 @@ def create_claim(
     try:
         claim = IntelligenceCoreService(db).record_claim(user=current_user, **request.model_dump())
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+        raise HTTPException(status_code=400, detail="Claim evidence is invalid or unavailable.") from error
     return _claim_response(claim)
 
 
@@ -201,7 +201,7 @@ def review_claim(
     except LookupError as error:
         raise HTTPException(status_code=404, detail="Claim not found") from error
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+        raise HTTPException(status_code=400, detail="Claim review request is invalid.") from error
     return _claim_response(claim)
 
 
