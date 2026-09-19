@@ -899,6 +899,14 @@ def synthesize_claims(
         })
     if progress_callback:
         progress_callback(20, "analyzing_history", 0, len(batches))
+
+    # Evidence preparation above starts a read transaction on the request's
+    # SQLAlchemy session. Historical analysis can spend many minutes waiting on
+    # OpenAI, long enough for Neon or a proxy to retire an otherwise idle
+    # connection. End the read transaction before the network-bound phase so
+    # the next database operation checks out a fresh connection.
+    db.commit()
+
     for index, batch in enumerate(batches):
         completed = index + 1
         current_batch_hash = batch_content_hash(batch)
@@ -953,14 +961,15 @@ def synthesize_claims(
             .filter(IntelligenceClaimEvidence.evidence_id.in_(changed_existing_ids))
             .all()
         }
-    for old in old_claims:
+    expirable_claim_ids = [
+        old.id
+        for old in old_claims
         if (
             old.id in impacted_ids
             and (old.metadata_json or {}).get("origin") == "historical_backfill"
             and old.review_status == "active"
-        ):
-            old.review_status = "expired"
-            old.valid_to = now
+        )
+    ]
 
     existing_context = [
         {
@@ -977,6 +986,13 @@ def synthesize_claims(
         for row in old_claims
         if row.review_status in {"active", "confirmed"}
     ][:60]
+
+    # Do not hold this read transaction open through hierarchical
+    # consolidation, which may involve dozens of model calls. Expiration is
+    # deliberately deferred until after synthesis succeeds so a failed run
+    # cannot change the user's existing model.
+    db.rollback()
+
     final_claims = _consolidate_all_claims(
         client,
         candidates,
@@ -995,6 +1011,17 @@ def synthesize_claims(
         progress_callback(92, "saving_model", 0, 0)
     if activity_callback:
         activity_callback("saving_model", {"assertion_count": len(final_claims[:MAX_FINAL_CLAIMS])})
+
+    if expirable_claim_ids:
+        expirable_claims = db.query(IntelligenceClaim).filter(
+            IntelligenceClaim.id.in_(expirable_claim_ids),
+            IntelligenceClaim.user_id == user.id,
+            IntelligenceClaim.review_status == "active",
+        ).all()
+        for old in expirable_claims:
+            old.review_status = "expired"
+            old.valid_to = now
+
     existing_statements = {row["statement"].strip().casefold() for row in existing_context}
 
     created: list[IntelligenceClaim] = []
