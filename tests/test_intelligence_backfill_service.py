@@ -108,6 +108,9 @@ def test_synthesis_restores_completed_batch_without_calling_openai(monkeypatch):
         def commit(self):
             return None
 
+        def rollback(self):
+            return None
+
     monkeypatch.setattr(service_module, "OpenAI", lambda **kwargs: object())
     monkeypatch.setattr(
         service_module,
