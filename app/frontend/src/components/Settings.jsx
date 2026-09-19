@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 31078)
-Total output lines: 2719
-
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { Capacitor, registerPlugin } from '@capacitor/core';
@@ -1373,7 +1370,99 @@ function AdminFeedbackPanel({ apiUrl, userNumber }) {
 
       {error && (
         <div className="mb-6 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          {er…1078 tokens truncated…admin/analytics`, { params: adminParams });
+          {error}
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-4 py-3">User</th>
+              <th className="px-4 py-3">Date</th>
+              <th className="px-4 py-3">Source Page</th>
+              <th className="px-4 py-3">Feedback Type</th>
+              <th className="px-4 py-3">Rating</th>
+              <th className="px-4 py-3">Comment</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 bg-white">
+            {loading ? (
+              <tr>
+                <td className="px-4 py-6 text-slate-500" colSpan="8">Loading feedback...</td>
+              </tr>
+            ) : visibleFeedback.length === 0 ? (
+              <tr>
+                <td className="px-4 py-6 text-slate-500" colSpan="8">No feedback found.</td>
+              </tr>
+            ) : visibleFeedback.map((item) => (
+              <tr key={item.id}>
+                <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">{item.user}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(item.date)}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-600 capitalize">{item.source_page || '-'}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-600">{item.feedback_type}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-600">{item.rating ? `${item.rating}/5` : '-'}</td>
+                <td className="min-w-72 max-w-xl px-4 py-3 text-slate-700">
+                  <div>{item.comment || '-'}</div>
+                  {item.message_excerpt && (
+                    <div className="mt-1 line-clamp-2 text-xs text-slate-400">{item.message_excerpt}</div>
+                  )}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                    {item.status || 'New'}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateStatus(item.id, 'Reviewed')}
+                      disabled={updatingId === item.id}
+                      className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Mark Reviewed
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateStatus(item.id, 'Resolved')}
+                      disabled={updatingId === item.id}
+                      className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Mark Resolved
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateStatus(item.id, 'Ignored')}
+                      disabled={updatingId === item.id}
+                      className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Ignore
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function AdminAnalyticsPanel({ apiUrl, userNumber }) {
+  const [analytics, setAnalytics] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const adminParams = { user_number: userNumber };
+
+  const loadAnalytics = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await axios.get(`${apiUrl}/api/admin/analytics`, { params: adminParams });
       setAnalytics(response.data);
     } catch (err) {
       setError(err.response?.data?.detail || 'Analytics could not be loaded.');
