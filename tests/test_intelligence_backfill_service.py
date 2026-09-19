@@ -8,6 +8,9 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 from app.services.intelligence_backfill_service import (  # noqa: E402
     EvidenceCandidate,
+    MAX_CONSOLIDATION_INPUT_CLAIMS,
+    MAX_FINAL_CLAIMS,
+    MAX_INTERMEDIATE_CLAIMS,
     _batches,
     _consolidate_all_claims,
     _request_claims,
@@ -175,10 +178,10 @@ def test_structured_output_retries_truncated_response():
 
     class Completions:
         def __init__(self):
-            self.call_count = 0
+            self.calls = []
 
         def create(self, **kwargs):
-            self.call_count += 1
+            self.calls.append(kwargs)
             return responses.pop(0)
 
     completions = Completions()
@@ -192,7 +195,36 @@ def test_structured_output_retries_truncated_response():
         max_tokens=100,
         operation="test",
     ) == []
-    assert completions.call_count == 2
+    assert len(completions.calls) == 2
+    first_limit = completions.calls[0]["response_format"]["json_schema"]["schema"]["properties"]["claims"]["maxItems"]
+    second_limit = completions.calls[1]["response_format"]["json_schema"]["schema"]["properties"]["claims"]["maxItems"]
+    assert first_limit == 10
+    assert second_limit == 8
+
+
+def test_consolidation_bounds_each_model_request(monkeypatch):
+    candidates = [
+        {"statement": f"Candidate {index}", "evidence_ids": [index]}
+        for index in range(45)
+    ]
+    calls = []
+
+    def fake_consolidate(client, group, rejected, existing, *, max_claims, operation):
+        calls.append((len(group), max_claims, operation))
+        return group[:max_claims]
+
+    monkeypatch.setattr(service_module, "_consolidate_claims", fake_consolidate)
+
+    result = _consolidate_all_claims(object(), candidates, [], [])
+
+    assert result
+    assert all(group_size <= MAX_CONSOLIDATION_INPUT_CLAIMS for group_size, _, _ in calls)
+    assert all(
+        max_claims == MAX_INTERMEDIATE_CLAIMS
+        for _, max_claims, operation in calls
+        if operation.startswith("model_consolidation_round_")
+    )
+    assert calls[-1][1:] == (MAX_FINAL_CLAIMS, "model_consolidation_final")
 
 
 def test_consolidation_restores_checkpoint_without_calling_openai(monkeypatch):

@@ -64,11 +64,14 @@ logger = logging.getLogger(__name__)
 PROMPT_VERSION = "executive-model-v4-longitudinal-dossiers"
 MAX_BATCH_CHARACTERS = 60_000
 MAX_BATCH_CLAIMS = 10
-MAX_FINAL_CLAIMS = 30
+MAX_FINAL_CLAIMS = 12
+MAX_CONSOLIDATION_INPUT_CLAIMS = 20
+MAX_INTERMEDIATE_CLAIMS = 8
+CONSOLIDATION_STRATEGY_VERSION = 2
 OPENAI_REQUEST_TIMEOUT_SECONDS = 90.0
 OPENAI_MAX_RETRIES = 1
 STRUCTURED_OUTPUT_ATTEMPTS = 3
-MAX_CONSOLIDATION_OUTPUT_TOKENS = 7000
+MAX_CONSOLIDATION_OUTPUT_TOKENS = 9000
 
 ProgressCallback = Callable[[int, str, int, int], None]
 CheckpointCallback = Callable[[str, str, list[dict], int, int], None]
@@ -442,11 +445,15 @@ def _request_claims(
     """Retry invalid or truncated model content, which HTTP-level retries cannot fix."""
     last_error: Exception | None = None
     for attempt in range(1, STRUCTURED_OUTPUT_ATTEMPTS + 1):
+        # Rich pattern dossiers can exceed the output budget even when the model
+        # follows the schema. Preserve depth by first trying the requested limit,
+        # then trade breadth for a complete, usable response on later attempts.
+        attempt_max_claims = max(1, round(max_claims * (1 - 0.25 * (attempt - 1))))
         response = client.chat.completions.create(
             model=OPENAI_MODEL,
             temperature=0,
             max_tokens=max_tokens,
-            response_format=_claims_response_format(max_claims),
+            response_format=_claims_response_format(attempt_max_claims),
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
@@ -465,10 +472,12 @@ def _request_claims(
         except (json.JSONDecodeError, TypeError, ValueError) as error:
             last_error = error
             logger.warning(
-                "Invalid structured output operation=%s attempt=%s/%s finish_reason=%s error_type=%s",
+                "Invalid structured output operation=%s attempt=%s/%s max_claims=%s "
+                "finish_reason=%s error_type=%s",
                 operation,
                 attempt,
                 STRUCTURED_OUTPUT_ATTEMPTS,
+                attempt_max_claims,
                 finish_reason,
                 type(error).__name__,
             )
@@ -593,14 +602,17 @@ def _consolidate_claims(
     candidates: list[dict],
     rejected: list[str],
     existing: list[dict] | None = None,
+    *,
+    max_claims: int = MAX_FINAL_CLAIMS,
+    operation: str = "model_consolidation",
 ) -> list[dict]:
     return _request_claims(
         client,
-        max_claims=MAX_FINAL_CLAIMS,
+        max_claims=max_claims,
         max_tokens=MAX_CONSOLIDATION_OUTPUT_TOKENS,
-        operation="model_consolidation",
+        operation=operation,
         system_prompt=f"""Consolidate candidate patterns into an inspectable longitudinal model of the user for Alfred, their coach.
-Return at most {MAX_FINAL_CLAIMS} claims.
+Return at most {max_claims} claims.
 Alfred is the coach, never the subject. Every statement must describe "The user"; never call the user Alfred.
 Merge duplicates, preserve evidence links and their roles, and remove shallow restatements, transient details, and unsupported claims.
 Each final item is a pattern dossier: interpretation, trajectory, contexts, counterevidence or qualifications, alternative explanation, and coaching implication.
@@ -624,10 +636,16 @@ def consolidation_content_hash(
     candidates: list[dict],
     rejected: list[str],
     existing: list[dict] | None = None,
+    *,
+    max_claims: int = MAX_FINAL_CLAIMS,
+    operation: str = "model_consolidation_final",
 ) -> str:
     material = json.dumps({
         "prompt_version": PROMPT_VERSION,
         "model": OPENAI_MODEL,
+        "strategy_version": CONSOLIDATION_STRATEGY_VERSION,
+        "max_claims": max_claims,
+        "operation": operation,
         "candidates": candidates,
         "rejected": rejected,
         "existing": existing or [],
@@ -650,24 +668,46 @@ def _consolidate_all_claims(
     current = candidates
     checkpoints = consolidation_checkpoints or {}
 
-    def consolidate(group: list[dict], restored_event: str) -> tuple[list[dict], bool]:
-        checkpoint_hash = consolidation_content_hash(group, rejected, existing)
+    def consolidate(
+        group: list[dict],
+        restored_event: str,
+        *,
+        max_claims: int,
+        operation: str,
+    ) -> tuple[list[dict], bool]:
+        checkpoint_hash = consolidation_content_hash(
+            group,
+            rejected,
+            existing,
+            max_claims=max_claims,
+            operation=operation,
+        )
         cached = checkpoints.get(checkpoint_hash)
         if isinstance(cached, list):
             if activity_callback:
                 activity_callback(restored_event, {"candidate_count": len(cached)})
             return cached, True
-        result = _consolidate_claims(client, group, rejected, existing)
+        result = _consolidate_claims(
+            client,
+            group,
+            rejected,
+            existing,
+            max_claims=max_claims,
+            operation=operation,
+        )
         checkpoints[checkpoint_hash] = result
         if consolidation_checkpoint_callback:
             consolidation_checkpoint_callback(checkpoint_hash, result)
         return result, False
 
     round_number = 0
-    while len(current) > 60:
+    while len(current) > MAX_CONSOLIDATION_INPUT_CLAIMS:
         round_number += 1
         reduced = []
-        chunks = [current[index:index + 60] for index in range(0, len(current), 60)]
+        chunks = [
+            current[index:index + MAX_CONSOLIDATION_INPUT_CLAIMS]
+            for index in range(0, len(current), MAX_CONSOLIDATION_INPUT_CLAIMS)
+        ]
         for index, chunk in enumerate(chunks):
             if activity_callback:
                 activity_callback("consolidation_batch_started", {
@@ -676,7 +716,12 @@ def _consolidate_all_claims(
                     "total": len(chunks),
                     "candidate_count": len(chunk),
                 })
-            consolidated, restored = consolidate(chunk, "consolidation_batch_restored")
+            consolidated, restored = consolidate(
+                chunk,
+                "consolidation_batch_restored",
+                max_claims=MAX_INTERMEDIATE_CLAIMS,
+                operation=f"model_consolidation_round_{round_number}",
+            )
             reduced.extend(consolidated)
             if activity_callback:
                 activity_callback("consolidation_batch_completed", {
@@ -689,7 +734,12 @@ def _consolidate_all_claims(
         current = reduced
     if activity_callback:
         activity_callback("consolidation_final", {"candidate_count": len(current)})
-    final_claims, _ = consolidate(current, "consolidation_final_restored")
+    final_claims, _ = consolidate(
+        current,
+        "consolidation_final_restored",
+        max_claims=MAX_FINAL_CLAIMS,
+        operation="model_consolidation_final",
+    )
     return final_claims
 
 
