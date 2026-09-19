@@ -412,8 +412,12 @@ function ExecutiveModelPanel({ apiUrl, t }) {
         return `${t('settings.executiveModel.activity.consolidationBatch')} ${details.current || 0}/${details.total || 0} · ${t('settings.executiveModel.activity.round')} ${details.round || 0}`;
       case 'consolidation_batch_completed':
         return `${t('settings.executiveModel.activity.consolidationBatchCompleted')} ${details.current || 0}/${details.total || 0} · ${details.candidate_count || 0} ${t('settings.executiveModel.activity.candidates')}`;
+      case 'consolidation_batch_restored':
+        return `${t('settings.executiveModel.activity.consolidationBatchRestored')} · ${details.candidate_count || 0} ${t('settings.executiveModel.activity.candidates')}`;
       case 'consolidation_final':
         return `${t('settings.executiveModel.activity.finalConsolidation')} ${details.candidate_count || 0} ${t('settings.executiveModel.activity.candidates')}`;
+      case 'consolidation_final_restored':
+        return `${t('settings.executiveModel.activity.finalConsolidationRestored')} · ${details.candidate_count || 0} ${t('settings.executiveModel.activity.candidates')}`;
       case 'saving_model':
         return `${t('settings.executiveModel.activity.saving')} ${details.assertion_count || 0} ${t('settings.executiveModel.activity.assertionCandidates')}`;
       case 'run_completed':
