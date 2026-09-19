@@ -178,10 +178,10 @@ def test_structured_output_retries_truncated_response():
 
     class Completions:
         def __init__(self):
-            self.call_count = 0
+            self.calls = []
 
         def create(self, **kwargs):
-            self.call_count += 1
+            self.calls.append(kwargs)
             return responses.pop(0)
 
     completions = Completions()
@@ -195,7 +195,7 @@ def test_structured_output_retries_truncated_response():
         max_tokens=100,
         operation="test",
     ) == []
-    assert completions.call_count == 2
+    assert len(completions.calls) == 2
     first_limit = completions.calls[0]["response_format"]["json_schema"]["schema"]["properties"]["claims"]["maxItems"]
     second_limit = completions.calls[1]["response_format"]["json_schema"]["schema"]["properties"]["claims"]["maxItems"]
     assert first_limit == 10
