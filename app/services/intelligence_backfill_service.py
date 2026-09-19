@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 from collections import Counter
 from dataclasses import dataclass
@@ -58,8 +59,8 @@ from app.utils.safe_errors import log_failure
 
 logger = logging.getLogger(__name__)
 
-PROMPT_VERSION = "longitudinal-beliefs-v1"
-MAX_BATCH_CHARACTERS = 24_000
+PROMPT_VERSION = "executive-model-v2"
+MAX_BATCH_CHARACTERS = 18_000
 MAX_BATCH_CLAIMS = 10
 MAX_FINAL_CLAIMS = 30
 
@@ -146,9 +147,12 @@ def collect_historical_evidence(db: Session, user: User) -> list[EvidenceCandida
             MeetingParticipant.meeting_id.in_(meeting_ids),
             MeetingParticipant.is_current_user.is_(True),
         ).all():
-            current_user_labels.setdefault(participant.meeting_id, set()).add(participant.speaker_label)
+            if participant.speaker_label:
+                current_user_labels.setdefault(participant.meeting_id, set()).add(participant.speaker_label)
         for row in db.query(MeetingTranscriptSegment).filter(MeetingTranscriptSegment.meeting_id.in_(meeting_ids)).all():
-            is_current_user = row.speaker_label in current_user_labels.get(row.meeting_id, set())
+            is_current_user = bool(
+                row.speaker_label and row.speaker_label in current_user_labels.get(row.meeting_id, set())
+            )
             _append(items, _candidate("meeting_transcript", row.id, "segment",
                                       "user_statement" if is_current_user else "observation", row.created_at, row.text,
                                       payload={"meeting_id": row.meeting_id, "speaker": row.speaker_label,
@@ -240,30 +244,68 @@ def collect_historical_evidence(db: Session, user: User) -> list[EvidenceCandida
     return items
 
 
-def upsert_evidence(db: Session, user: User, candidates: Iterable[EvidenceCandidate]) -> tuple[list[IntelligenceEvidence], dict]:
+def candidate_content_hash(item: EvidenceCandidate) -> str:
+    """Stable fingerprint used to keep repeat model refreshes token-free."""
+    material = {
+        "evidence_type": item.evidence_type,
+        "excerpt": item.excerpt,
+        "occurred_at": _utc(item.occurred_at).isoformat(),
+        "payload": item.payload or {},
+    }
+    serialized = json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def upsert_evidence(
+    db: Session,
+    user: User,
+    candidates: Iterable[EvidenceCandidate],
+) -> tuple[list[IntelligenceEvidence], list[IntelligenceEvidence], dict, dict]:
     existing = {
         (row.source_type, row.source_id, row.evidence_key): row
         for row in db.query(IntelligenceEvidence).filter(IntelligenceEvidence.user_id == user.id).all()
     }
     saved: list[IntelligenceEvidence] = []
+    pending: list[IntelligenceEvidence] = []
     counts = Counter()
+    delta = {"new": 0, "changed": 0, "unchanged": 0, "changed_existing_ids": []}
     for item in candidates:
         key = (item.source_type, item.source_id, item.evidence_key)
         row = existing.get(key)
+        is_new = row is None
         if row is None:
             row = IntelligenceEvidence(user_id=user.id, user_number=user.phone_number,
                                        source_type=item.source_type, source_id=item.source_id,
                                        evidence_key=item.evidence_key)
             db.add(row)
             existing[key] = row
+        fingerprint = candidate_content_hash(item)
+        if is_new:
+            delta["new"] += 1
+            pending.append(row)
+        elif row.synthesized_content_hash != fingerprint:
+            delta["changed"] += 1
+            delta["changed_existing_ids"].append(row.id)
+            pending.append(row)
+        else:
+            delta["unchanged"] += 1
         row.evidence_type = item.evidence_type
         row.excerpt = item.excerpt[:2000]
         row.payload = item.payload
         row.occurred_at = item.occurred_at
+        row.content_hash = fingerprint
         saved.append(row)
         counts[item.source_type] += 1
     db.commit()
-    return saved, dict(sorted(counts.items()))
+    return saved, pending, dict(sorted(counts.items())), delta
+
+
+def mark_evidence_synthesized(db: Session, evidence: Iterable[IntelligenceEvidence]) -> None:
+    completed_at = datetime.now(timezone.utc)
+    for row in evidence:
+        row.synthesized_content_hash = row.content_hash
+        row.synthesized_at = completed_at
+    db.commit()
 
 
 def _parse_json(raw: str) -> dict:
@@ -327,17 +369,26 @@ Rules:
 - Separate facts and user statements from observations and hypotheses.
 - Use tentative language for hypotheses. Never diagnose mental health or infer protected/sensitive traits.
 - Do not turn temporary workload, emotion, or energy into a permanent trait.
+- Model the person, their current world, recurring behavior, relationships, development, and what helps them succeed—not personality labels.
+- object_type must be one of intent, attribute, state, relationship, pattern, capability.
 - claim_type must be one of identity, value, goal, preference, communication, relationship, commitment, priority, pattern, state, constraint, strength, development_area.
+- stability must be one of current, recurring, stable. Temporary workload, emotion, and energy are current.
+- scope should be a concise context such as general, work, family, health, relationship, or a project name.
 - confidence_score must be conservative from 0 to 1.
 
-Return {{"claims":[{{"statement":"...","claim_type":"pattern","epistemic_status":"hypothesis","confidence_score":0.72,"evidence_ids":[1,2]}}]}}."""},
+Return {{"claims":[{{"statement":"...","object_type":"pattern","claim_type":"pattern","scope":"work","stability":"recurring","epistemic_status":"hypothesis","confidence_score":0.72,"evidence_ids":[1,2]}}]}}."""},
             {"role": "user", "content": "Historical evidence:\n" + "\n".join(lines)},
         ],
     )
     return list((_parse_json(response.choices[0].message.content or "{}").get("claims") or []))
 
 
-def _consolidate_claims(client: OpenAI, candidates: list[dict], rejected: list[str]) -> list[dict]:
+def _consolidate_claims(
+    client: OpenAI,
+    candidates: list[dict],
+    rejected: list[str],
+    existing: list[dict] | None = None,
+) -> list[dict]:
     response = client.chat.completions.create(
         model=OPENAI_MODEL,
         temperature=0,
@@ -348,16 +399,28 @@ def _consolidate_claims(client: OpenAI, candidates: list[dict], rejected: list[s
 Return JSON only, with at most {MAX_FINAL_CLAIMS} claims.
 Merge duplicates, preserve evidence IDs, and remove contradictions, shallow restatements, transient details, and unsupported claims.
 Do not reproduce a previously rejected belief. Keep confidence conservative. A hypothesis supported by only one event should normally be below 0.65 and therefore excluded from personalization.
+Existing assertions are context only: do not reproduce them unless the new evidence materially changes or contradicts them.
 Allowed epistemic_status: fact, user_statement, observation, hypothesis, validated_pattern.
 Allowed claim_type: identity, value, goal, preference, communication, relationship, commitment, priority, pattern, state, constraint, strength, development_area.
-Return {{"claims":[{{"statement":"...","claim_type":"pattern","epistemic_status":"hypothesis","confidence_score":0.72,"evidence_ids":[1,2]}}]}}."""},
-            {"role": "user", "content": json.dumps({"candidate_claims": candidates, "previously_rejected": rejected}, ensure_ascii=False)},
+Allowed object_type: intent, attribute, state, relationship, pattern, capability.
+Allowed stability: current, recurring, stable.
+Return {{"claims":[{{"statement":"...","object_type":"pattern","claim_type":"pattern","scope":"work","stability":"recurring","epistemic_status":"hypothesis","confidence_score":0.72,"evidence_ids":[1,2]}}]}}."""},
+            {"role": "user", "content": json.dumps({
+                "candidate_claims": candidates,
+                "existing_assertions": existing or [],
+                "previously_rejected": rejected,
+            }, ensure_ascii=False)},
         ],
     )
     return list((_parse_json(response.choices[0].message.content or "{}").get("claims") or []))
 
 
-def _consolidate_all_claims(client: OpenAI, candidates: list[dict], rejected: list[str]) -> list[dict]:
+def _consolidate_all_claims(
+    client: OpenAI,
+    candidates: list[dict],
+    rejected: list[str],
+    existing: list[dict] | None = None,
+) -> list[dict]:
     """Reduce large histories hierarchically so every evidence batch is considered."""
     if not candidates:
         return []
@@ -365,9 +428,9 @@ def _consolidate_all_claims(client: OpenAI, candidates: list[dict], rejected: li
     while len(current) > 60:
         reduced = []
         for index in range(0, len(current), 60):
-            reduced.extend(_consolidate_claims(client, current[index:index + 60], rejected))
+            reduced.extend(_consolidate_claims(client, current[index:index + 60], rejected, existing))
         current = reduced
-    return _consolidate_claims(client, current, rejected)
+    return _consolidate_claims(client, current, rejected, existing)
 
 
 def normalize_generated_claim(item: dict, evidence_by_id: dict[int, IntelligenceEvidence]) -> dict | None:
@@ -418,16 +481,37 @@ def normalize_generated_claim(item: dict, evidence_by_id: dict[int, Intelligence
     claim_type = str(item.get("claim_type") or "pattern")
     if claim_type not in allowed_types:
         claim_type = "pattern"
+    object_type = str(item.get("object_type") or {
+        "goal": "intent", "commitment": "intent", "priority": "intent",
+        "state": "state", "relationship": "relationship", "pattern": "pattern",
+        "strength": "capability", "development_area": "capability",
+    }.get(claim_type, "attribute"))
+    if object_type not in {"intent", "attribute", "state", "relationship", "pattern", "capability"}:
+        object_type = "attribute"
+    stability = str(item.get("stability") or ("current" if object_type == "state" else "recurring"))
+    if stability not in {"current", "recurring", "stable"}:
+        stability = "recurring"
+    scope = str(item.get("scope") or "general").strip()[:80] or "general"
     return {
         "statement": statement[:4000],
         "evidence_ids": evidence_ids[:8],
         "epistemic_status": status,
         "confidence_score": confidence,
         "claim_type": claim_type,
+        "object_type": object_type,
+        "scope": scope,
+        "stability": stability,
     }
 
 
-def synthesize_claims(db: Session, user: User, evidence: list[IntelligenceEvidence]) -> list[IntelligenceClaim]:
+def synthesize_claims(
+    db: Session,
+    user: User,
+    evidence: list[IntelligenceEvidence],
+    *,
+    processing_mode: str,
+    changed_existing_ids: list[int] | None = None,
+) -> list[IntelligenceClaim]:
     client = OpenAI(api_key=OPENAI_API_KEY)
     evidence_by_id = {row.id: row for row in evidence}
     candidates: list[dict] = []
@@ -436,24 +520,60 @@ def synthesize_claims(db: Session, user: User, evidence: list[IntelligenceEviden
 
     old_claims = db.query(IntelligenceClaim).filter(IntelligenceClaim.user_id == user.id).all()
     rejected = [row.statement for row in old_claims if row.review_status == "rejected"]
-    final_claims = _consolidate_all_claims(client, candidates, rejected)
 
     now = datetime.now(timezone.utc)
+    impacted_ids: set[int] = set()
+    if processing_mode == "initial":
+        impacted_ids = {row.id for row in old_claims}
+    elif changed_existing_ids:
+        impacted_ids = {
+            row.claim_id
+            for row in db.query(IntelligenceClaimEvidence)
+            .filter(IntelligenceClaimEvidence.evidence_id.in_(changed_existing_ids))
+            .all()
+        }
     for old in old_claims:
-        if (old.metadata_json or {}).get("origin") == "historical_backfill" and old.review_status == "active":
+        if (
+            old.id in impacted_ids
+            and (old.metadata_json or {}).get("origin") == "historical_backfill"
+            and old.review_status == "active"
+        ):
             old.review_status = "expired"
             old.valid_to = now
+
+    existing_context = [
+        {
+            "id": row.id,
+            "statement": row.statement,
+            "object_type": row.object_type,
+            "claim_type": row.claim_type,
+            "scope": row.scope,
+            "stability": row.stability,
+            "epistemic_status": row.epistemic_status,
+            "confidence_score": float(row.confidence_score),
+            "review_status": row.review_status,
+        }
+        for row in old_claims
+        if row.review_status in {"active", "confirmed"}
+    ][:60]
+    final_claims = _consolidate_all_claims(client, candidates, rejected, existing_context)
+    existing_statements = {row["statement"].strip().casefold() for row in existing_context}
 
     created: list[IntelligenceClaim] = []
     for item in final_claims[:MAX_FINAL_CLAIMS]:
         normalized = normalize_generated_claim(item, evidence_by_id)
         if normalized is None:
             continue
+        if normalized["statement"].strip().casefold() in existing_statements:
+            continue
         evidence_ids = normalized["evidence_ids"]
         claim = IntelligenceClaim(
             user_id=user.id,
             user_number=user.phone_number,
             claim_type=normalized["claim_type"],
+            object_type=normalized["object_type"],
+            scope=normalized["scope"],
+            stability=normalized["stability"],
             statement=normalized["statement"],
             epistemic_status=normalized["epistemic_status"],
             confidence_score=normalized["confidence_score"],
@@ -474,6 +594,7 @@ def synthesize_claims(db: Session, user: User, evidence: list[IntelligenceEviden
 def execute_backfill_run(run_id: int, user_id: int) -> None:
     """Execute outside the request session so Railway can return immediately."""
     db = SessionLocal()
+    stage = "initializing"
     try:
         run = db.query(IntelligenceBackfillRun).filter(IntelligenceBackfillRun.id == run_id,
                                                        IntelligenceBackfillRun.user_id == user_id).first()
@@ -484,24 +605,52 @@ def execute_backfill_run(run_id: int, user_id: int) -> None:
         run.started_at = datetime.now(timezone.utc)
         db.commit()
 
-        evidence, source_counts = upsert_evidence(db, user, collect_historical_evidence(db, user))
+        stage = "collecting_evidence"
+        candidates = collect_historical_evidence(db, user)
+        stage = "upserting_evidence"
+        has_synthesized_evidence = db.query(IntelligenceEvidence.id).filter(
+            IntelligenceEvidence.user_id == user.id,
+            IntelligenceEvidence.synthesized_content_hash.isnot(None),
+        ).first() is not None
+        evidence, pending, source_counts, delta = upsert_evidence(db, user, candidates)
+        run.processing_mode = "incremental" if has_synthesized_evidence else "initial"
         run.evidence_count = len(evidence)
+        run.new_evidence_count = int(delta["new"])
+        run.changed_evidence_count = int(delta["changed"])
+        run.unchanged_evidence_count = int(delta["unchanged"])
         run.source_counts = source_counts
+        if not pending:
+            run.claims_created = 0
+            run.status = "completed"
+            run.completed_at = datetime.now(timezone.utc)
+            db.commit()
+            return
         run.status = "synthesizing"
         db.commit()
 
-        claims = synthesize_claims(db, user, evidence)
+        stage = "synthesizing_model"
+        claims = synthesize_claims(
+            db,
+            user,
+            pending,
+            processing_mode=run.processing_mode,
+            changed_existing_ids=delta["changed_existing_ids"],
+        )
+        stage = "finalizing"
+        mark_evidence_synthesized(db, pending)
         run.claims_created = len(claims)
         run.status = "completed"
         run.completed_at = datetime.now(timezone.utc)
         db.commit()
     except Exception as error:
-        log_failure(f"intelligence_backfill_run_{run_id}", error)
+        incident_id = log_failure(f"intelligence_backfill_run_{run_id}_{stage}", error)
         db.rollback()
         run = db.query(IntelligenceBackfillRun).filter(IntelligenceBackfillRun.id == run_id).first()
         if run is not None:
             run.status = "failed"
             run.error_message = "Alfred could not complete the historical analysis. No existing source data was changed."
+            run.failure_stage = stage
+            run.failure_reference = incident_id
             run.completed_at = datetime.now(timezone.utc)
             db.commit()
     finally:

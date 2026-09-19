@@ -7,7 +7,9 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 from app.services.intelligence_backfill_service import (  # noqa: E402
+    EvidenceCandidate,
     _batches,
+    candidate_content_hash,
     normalize_generated_claim,
 )
 
@@ -99,3 +101,40 @@ def test_cross_source_pattern_can_remain_validated():
         },
     )
     assert result["epistemic_status"] == "validated_pattern"
+
+
+def test_evidence_fingerprint_is_stable_and_changes_with_content():
+    original = EvidenceCandidate(
+        source_type="journal",
+        source_id="1",
+        evidence_key="entry",
+        evidence_type="user_statement",
+        excerpt="I protect mornings for focused work.",
+        occurred_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+        payload={"topic": "focus"},
+    )
+    same = EvidenceCandidate(**original.__dict__)
+    changed = EvidenceCandidate(**{**original.__dict__, "excerpt": "I now protect afternoons for focused work."})
+
+    assert candidate_content_hash(original) == candidate_content_hash(same)
+    assert candidate_content_hash(original) != candidate_content_hash(changed)
+
+
+def test_generated_claim_keeps_executive_model_dimensions():
+    result = normalize_generated_claim(
+        {
+            "statement": "The user is currently protecting time for a product launch.",
+            "object_type": "state",
+            "claim_type": "state",
+            "scope": "product launch",
+            "stability": "current",
+            "epistemic_status": "user_statement",
+            "confidence_score": 0.9,
+            "evidence_ids": [1],
+        },
+        {1: evidence(1)},
+    )
+
+    assert result["object_type"] == "state"
+    assert result["scope"] == "product launch"
+    assert result["stability"] == "current"

@@ -23,8 +23,14 @@ def _backfill_response(run: IntelligenceBackfillRun | None):
         "status": run.status,
         "evidence_count": run.evidence_count,
         "claims_created": run.claims_created,
+        "processing_mode": run.processing_mode,
+        "new_evidence_count": run.new_evidence_count,
+        "changed_evidence_count": run.changed_evidence_count,
+        "unchanged_evidence_count": run.unchanged_evidence_count,
         "source_counts": run.source_counts or {},
         "error_message": run.error_message,
+        "failure_stage": run.failure_stage,
+        "failure_reference": run.failure_reference,
         "started_at": run.started_at,
         "completed_at": run.completed_at,
         "created_at": run.created_at,
@@ -43,6 +49,9 @@ class EvidenceCreate(BaseModel):
 
 class ClaimCreate(BaseModel):
     claim_type: str = Field(min_length=1, max_length=40)
+    object_type: Literal["intent", "attribute", "state", "relationship", "pattern", "capability"] = "attribute"
+    scope: str | None = Field(default="general", max_length=80)
+    stability: Literal["current", "recurring", "stable"] = "recurring"
     statement: str = Field(min_length=1, max_length=4000)
     epistemic_status: Literal["fact", "user_statement", "observation", "hypothesis", "validated_pattern"]
     confidence_score: float = Field(ge=0, le=1)
@@ -114,6 +123,7 @@ def _evidence_response(evidence):
         "payload": evidence.payload,
         "occurred_at": evidence.occurred_at,
         "observed_at": evidence.observed_at,
+        "synthesized_at": evidence.synthesized_at,
     }
 
 
@@ -121,6 +131,9 @@ def _claim_response(claim):
     return {
         "id": claim.id,
         "claim_type": claim.claim_type,
+        "object_type": claim.object_type,
+        "scope": claim.scope,
+        "stability": claim.stability,
         "subject_type": claim.subject_type,
         "subject_id": claim.subject_id,
         "statement": claim.statement,
@@ -183,6 +196,64 @@ def list_claims(
         limit=limit,
     )
     return [_claim_response(claim) for claim in claims]
+
+
+MODEL_SECTIONS = ("direction", "current_context", "how_i_operate", "relationships", "growth")
+
+
+def model_section(claim) -> str:
+    object_type = str(getattr(claim, "object_type", "") or "")
+    claim_type = str(getattr(claim, "claim_type", "") or "")
+    if object_type == "state" or claim_type == "state":
+        return "current_context"
+    if object_type == "relationship" or claim_type == "relationship":
+        return "relationships"
+    if object_type == "capability" or claim_type in {"strength", "development_area"}:
+        return "growth"
+    if object_type == "intent" or claim_type in {"identity", "value", "goal", "commitment", "priority"}:
+        return "direction"
+    return "how_i_operate"
+
+
+@router.get("/model")
+def get_executive_model(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_authenticated_user),
+):
+    service = IntelligenceCoreService(db)
+    claims = service.list_claims(current_user.id, limit=200)
+    context = service.compile_context(user=current_user, surface="general", limit=12)
+    sections = {section: [] for section in MODEL_SECTIONS}
+    review_queue = []
+    for claim in claims:
+        payload = _claim_response(claim)
+        sections[model_section(claim)].append(payload)
+        if claim.review_status == "active":
+            review_queue.append(payload)
+    review_queue.sort(
+        key=lambda item: (
+            item["object_type"] == "state",
+            item["epistemic_status"] == "hypothesis",
+            item["updated_at"],
+        ),
+        reverse=True,
+    )
+    run = (
+        db.query(IntelligenceBackfillRun)
+        .filter(IntelligenceBackfillRun.user_id == current_user.id)
+        .order_by(IntelligenceBackfillRun.created_at.desc())
+        .first()
+    )
+    return {
+        "stage": context["stage"],
+        "evidence_count": context["evidence_count"],
+        "source_count": context["source_count"],
+        "assertion_count": len(claims),
+        "needs_review": len(review_queue),
+        "sections": sections,
+        "review_queue": review_queue[:30],
+        "last_run": _backfill_response(run),
+    }
 
 
 @router.patch("/claims/{claim_id}")
