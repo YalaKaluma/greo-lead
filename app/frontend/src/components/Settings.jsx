@@ -328,9 +328,21 @@ function ExecutiveModelPanel({ apiUrl, t }) {
   useEffect(() => {
     const run = model?.last_run;
     if (!run || !['queued', 'ingesting', 'synthesizing'].includes(run.status)) return undefined;
-    const timer = window.setInterval(load, 3000);
+    const pollRun = async () => {
+      try {
+        const response = await axios.get(`${apiUrl}/api/intelligence/backfill/latest`);
+        const latestRun = response.data?.run || null;
+        setModel((current) => ({ ...(current || {}), last_run: latestRun }));
+        if (latestRun && !['queued', 'ingesting', 'synthesizing'].includes(latestRun.status)) {
+          await load();
+        }
+      } catch (requestError) {
+        setError(requestError.response?.data?.detail || t('settings.executiveModel.loadError'));
+      }
+    };
+    const timer = window.setInterval(pollRun, 3000);
     return () => window.clearInterval(timer);
-  }, [model?.last_run?.status, apiUrl]);
+  }, [model?.last_run?.status, apiUrl, t]);
 
   const startBackfill = async () => {
     setStarting(true);
@@ -374,6 +386,45 @@ function ExecutiveModelPanel({ apiUrl, t }) {
   const displayStatus = (value) => t(`settings.executiveModel.status.${value || 'hypothesis'}`);
   const displayStability = (value) => t(`settings.executiveModel.stability.${value || 'recurring'}`);
 
+  const formatActivity = (item) => {
+    const details = item?.details || {};
+    const sources = (details.source_types || []).map((value) => value.replaceAll('_', ' ')).join(', ');
+    switch (item?.event) {
+      case 'run_started':
+        return details.resuming
+          ? t('settings.executiveModel.activity.runResumed')
+          : t('settings.executiveModel.activity.runStarted');
+      case 'evidence_collected':
+        return `${t('settings.executiveModel.activity.collected')} ${details.evidence_count || 0} ${t('settings.executiveModel.activity.dataPoints')}`;
+      case 'evidence_upserted':
+        return `${t('settings.executiveModel.activity.prepared')} ${details.evidence_count || 0} ${t('settings.executiveModel.activity.dataPoints')} · ${details.source_count || 0} ${t('settings.executiveModel.activity.sourceTypes')}`;
+      case 'analysis_prepared':
+        return `${t('settings.executiveModel.activity.analysisPrepared')} ${details.included || 0} ${t('settings.executiveModel.activity.primaryPoints')} · ${details.skipped || 0} ${t('settings.executiveModel.activity.contextExcluded')} · ${details.batch_total || 0} ${t('settings.executiveModel.activity.batches')}`;
+      case 'batch_started':
+        return `${t('settings.executiveModel.activity.batchStarted')} ${details.current || 0}/${details.total || 0} · ${details.evidence_count || 0} ${t('settings.executiveModel.activity.dataPoints')}${sources ? ` · ${sources}` : ''}${details.date_from && details.date_to ? ` · ${details.date_from} → ${details.date_to}` : ''}`;
+      case 'batch_completed':
+        return `${t('settings.executiveModel.activity.batchCompleted')} ${details.current || 0}/${details.total || 0} · ${details.claims_found || 0} ${t('settings.executiveModel.activity.candidates')}`;
+      case 'batch_restored':
+        return `${t('settings.executiveModel.activity.batchRestored')} ${details.current || 0}/${details.total || 0} · ${details.claims_found || 0} ${t('settings.executiveModel.activity.candidates')}`;
+      case 'consolidation_started':
+        return `${t('settings.executiveModel.activity.consolidating')} ${details.candidate_count || 0} ${t('settings.executiveModel.activity.candidates')}`;
+      case 'consolidation_batch_started':
+        return `${t('settings.executiveModel.activity.consolidationBatch')} ${details.current || 0}/${details.total || 0} · ${t('settings.executiveModel.activity.round')} ${details.round || 0}`;
+      case 'consolidation_batch_completed':
+        return `${t('settings.executiveModel.activity.consolidationBatchCompleted')} ${details.current || 0}/${details.total || 0} · ${details.candidate_count || 0} ${t('settings.executiveModel.activity.candidates')}`;
+      case 'consolidation_final':
+        return `${t('settings.executiveModel.activity.finalConsolidation')} ${details.candidate_count || 0} ${t('settings.executiveModel.activity.candidates')}`;
+      case 'saving_model':
+        return `${t('settings.executiveModel.activity.saving')} ${details.assertion_count || 0} ${t('settings.executiveModel.activity.assertionCandidates')}`;
+      case 'run_completed':
+        return `${t('settings.executiveModel.activity.completed')} ${details.claims_created || 0} ${t('settings.executiveModel.activity.assertionsCreated')}`;
+      case 'run_failed':
+        return `${t('settings.executiveModel.activity.stopped')} ${details.stage || ''}`.trim();
+      default:
+        return t('settings.executiveModel.activity.processing');
+    }
+  };
+
   return (
     <section className="py-8">
       <div className="max-w-5xl">
@@ -392,9 +443,11 @@ function ExecutiveModelPanel({ apiUrl, t }) {
               ? t('settings.executiveModel.running')
               : starting
                 ? t('settings.executiveModel.starting')
-                : hasModel
-                  ? t('settings.executiveModel.refresh')
-                  : t('settings.executiveModel.build')}
+                : run?.can_resume
+                  ? t('settings.executiveModel.resume')
+                  : hasModel
+                    ? t('settings.executiveModel.refresh')
+                    : t('settings.executiveModel.build')}
           </button>
         </div>
 
@@ -439,6 +492,44 @@ function ExecutiveModelPanel({ apiUrl, t }) {
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
+          </div>
+        )}
+
+        {(run?.activity_log || []).length > 0 && (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-between gap-4">
+              <h3 className="text-sm font-semibold text-slate-950">
+                {t('settings.executiveModel.activity.title')}
+              </h3>
+              {run.heartbeat_at && (
+                <span className="text-xs text-slate-500">
+                  {t('settings.executiveModel.activity.lastUpdate')} {new Intl.DateTimeFormat(undefined, {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    second: '2-digit'
+                  }).format(new Date(run.heartbeat_at))}
+                </span>
+              )}
+            </div>
+            <ol className="mt-3 max-h-72 space-y-3 overflow-y-auto" aria-live="polite">
+              {[...(run.activity_log || [])].slice(-12).reverse().map((item, index) => (
+                <li key={`${item.at || 'activity'}-${index}`} className="flex gap-3 text-sm">
+                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${index === 0 && isRunning ? 'bg-blue-600' : 'bg-slate-300'}`} />
+                  <div>
+                    <p className="text-slate-700">{formatActivity(item)}</p>
+                    {item.at && (
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        {new Intl.DateTimeFormat(undefined, {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          second: '2-digit'
+                        }).format(new Date(item.at))}
+                      </p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ol>
           </div>
         )}
 

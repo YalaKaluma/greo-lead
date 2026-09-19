@@ -59,12 +59,16 @@ from app.utils.safe_errors import log_failure
 
 logger = logging.getLogger(__name__)
 
-PROMPT_VERSION = "executive-model-v2"
-MAX_BATCH_CHARACTERS = 18_000
+PROMPT_VERSION = "executive-model-v3-resumable"
+MAX_BATCH_CHARACTERS = 60_000
 MAX_BATCH_CLAIMS = 10
 MAX_FINAL_CLAIMS = 30
+OPENAI_REQUEST_TIMEOUT_SECONDS = 90.0
+OPENAI_MAX_RETRIES = 1
 
 ProgressCallback = Callable[[int, str, int, int], None]
+CheckpointCallback = Callable[[str, str, list[dict], int, int], None]
+ActivityCallback = Callable[[str, dict], None]
 
 
 @dataclass(frozen=True)
@@ -321,20 +325,37 @@ def _parse_json(raw: str) -> dict:
     return json.loads(cleaned.strip())
 
 
-def _evidence_lines(evidence: Iterable[IntelligenceEvidence]) -> list[str]:
+def prepare_analysis_lines(evidence: Iterable[IntelligenceEvidence]) -> tuple[list[str], dict]:
+    """Prepare primary user evidence while keeping excluded records stored and traceable."""
     lines = []
     seen_content = set()
+    stats = Counter()
     for row in evidence:
         secondary = bool((row.payload or {}).get("secondary_ai_derived"))
         context_only = bool((row.payload or {}).get("context_only"))
-        label = "SECONDARY_AI" if secondary else "CONTEXT_ONLY" if context_only else "PRIMARY"
+        if context_only:
+            stats["context_only_skipped"] += 1
+            continue
+        if secondary:
+            stats["secondary_ai_skipped"] += 1
+            continue
         excerpt = " ".join((row.excerpt or "").split())
         content_key = excerpt.casefold()
-        if not excerpt or content_key in seen_content:
+        if not excerpt:
+            stats["empty_skipped"] += 1
+            continue
+        if content_key in seen_content:
+            stats["duplicate_skipped"] += 1
             continue
         seen_content.add(content_key)
-        lines.append(f"[E{row.id}|{row.source_type}|{row.occurred_at.date()}|{label}] {excerpt}")
-    return lines
+        lines.append(f"[E{row.id}|{row.source_type}|{row.occurred_at.date()}|PRIMARY] {excerpt}")
+        stats["included"] += 1
+    stats["skipped"] = sum(value for key, value in stats.items() if key.endswith("_skipped"))
+    return lines, dict(stats)
+
+
+def _evidence_lines(evidence: Iterable[IntelligenceEvidence]) -> list[str]:
+    return prepare_analysis_lines(evidence)[0]
 
 
 def _batches(lines: list[str], max_characters: int = MAX_BATCH_CHARACTERS) -> list[list[str]]:
@@ -351,6 +372,34 @@ def _batches(lines: list[str], max_characters: int = MAX_BATCH_CHARACTERS) -> li
     if current:
         result.append(current)
     return result
+
+
+def batch_content_hash(lines: list[str]) -> str:
+    return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
+
+
+def batch_plan_hash(batches: list[list[str]]) -> str:
+    material = "\n".join(batch_content_hash(batch) for batch in batches)
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def batch_activity_details(batch: list[str], current: int, total: int) -> dict:
+    sources = set()
+    dates = []
+    for line in batch:
+        header = line.split("]", 1)[0].lstrip("[")
+        parts = header.split("|")
+        if len(parts) >= 3:
+            sources.add(parts[1])
+            dates.append(parts[2])
+    return {
+        "current": current,
+        "total": total,
+        "evidence_count": len(batch),
+        "source_types": sorted(sources)[:8],
+        "date_from": min(dates) if dates else None,
+        "date_to": max(dates) if dates else None,
+    }
 
 
 def _extract_batch_claims(client: OpenAI, lines: list[str]) -> list[dict]:
@@ -422,16 +471,37 @@ def _consolidate_all_claims(
     candidates: list[dict],
     rejected: list[str],
     existing: list[dict] | None = None,
+    activity_callback: ActivityCallback | None = None,
 ) -> list[dict]:
     """Reduce large histories hierarchically so every evidence batch is considered."""
     if not candidates:
         return []
     current = candidates
+    round_number = 0
     while len(current) > 60:
+        round_number += 1
         reduced = []
-        for index in range(0, len(current), 60):
-            reduced.extend(_consolidate_claims(client, current[index:index + 60], rejected, existing))
+        chunks = [current[index:index + 60] for index in range(0, len(current), 60)]
+        for index, chunk in enumerate(chunks):
+            if activity_callback:
+                activity_callback("consolidation_batch_started", {
+                    "round": round_number,
+                    "current": index + 1,
+                    "total": len(chunks),
+                    "candidate_count": len(chunk),
+                })
+            consolidated = _consolidate_claims(client, chunk, rejected, existing)
+            reduced.extend(consolidated)
+            if activity_callback:
+                activity_callback("consolidation_batch_completed", {
+                    "round": round_number,
+                    "current": index + 1,
+                    "total": len(chunks),
+                    "candidate_count": len(consolidated),
+                })
         current = reduced
+    if activity_callback:
+        activity_callback("consolidation_final", {"candidate_count": len(current)})
     return _consolidate_claims(client, current, rejected, existing)
 
 
@@ -514,22 +584,74 @@ def synthesize_claims(
     processing_mode: str,
     changed_existing_ids: list[int] | None = None,
     progress_callback: ProgressCallback | None = None,
+    checkpoint_data: dict | None = None,
+    checkpoint_callback: CheckpointCallback | None = None,
+    activity_callback: ActivityCallback | None = None,
 ) -> list[IntelligenceClaim]:
-    client = OpenAI(api_key=OPENAI_API_KEY)
+    client = OpenAI(
+        api_key=OPENAI_API_KEY,
+        timeout=OPENAI_REQUEST_TIMEOUT_SECONDS,
+        max_retries=OPENAI_MAX_RETRIES,
+    )
     evidence_by_id = {row.id: row for row in evidence}
     candidates: list[dict] = []
-    batches = _batches(_evidence_lines(sorted(evidence, key=lambda item: _utc(item.occurred_at))))
+    lines, preparation_stats = prepare_analysis_lines(
+        sorted(evidence, key=lambda item: _utc(item.occurred_at))
+    )
+    batches = _batches(lines)
+    plan_hash = batch_plan_hash(batches)
+    stored_checkpoint = checkpoint_data or {}
+    checkpoint_batches = (
+        dict(stored_checkpoint.get("batches") or {})
+        if stored_checkpoint.get("plan_hash") == plan_hash
+        else {}
+    )
+    if activity_callback:
+        activity_callback("analysis_prepared", {
+            **preparation_stats,
+            "batch_total": len(batches),
+        })
     if progress_callback:
         progress_callback(20, "analyzing_history", 0, len(batches))
     for index, batch in enumerate(batches):
-        candidates.extend(_extract_batch_claims(client, batch))
+        completed = index + 1
+        current_batch_hash = batch_content_hash(batch)
+        batch_details = batch_activity_details(batch, completed, len(batches))
+        cached_claims = checkpoint_batches.get(current_batch_hash)
+        if isinstance(cached_claims, list):
+            batch_claims = cached_claims
+            if activity_callback:
+                activity_callback("batch_restored", {
+                    **batch_details,
+                    "claims_found": len(batch_claims),
+                })
+        else:
+            if activity_callback:
+                activity_callback("batch_started", batch_details)
+            batch_claims = _extract_batch_claims(client, batch)
+            checkpoint_batches[current_batch_hash] = batch_claims
+            if checkpoint_callback:
+                checkpoint_callback(
+                    plan_hash,
+                    current_batch_hash,
+                    batch_claims,
+                    completed,
+                    len(batches),
+                )
+            if activity_callback:
+                activity_callback("batch_completed", {
+                    **batch_details,
+                    "claims_found": len(batch_claims),
+                })
+        candidates.extend(batch_claims)
         if progress_callback:
-            completed = index + 1
             progress_callback(20 + int(60 * completed / max(1, len(batches))),
                               "analyzing_history", completed, len(batches))
 
     if progress_callback:
         progress_callback(85, "consolidating_model", 0, 0)
+    if activity_callback:
+        activity_callback("consolidation_started", {"candidate_count": len(candidates)})
 
     old_claims = db.query(IntelligenceClaim).filter(IntelligenceClaim.user_id == user.id).all()
     rejected = [row.statement for row in old_claims if row.review_status == "rejected"]
@@ -569,9 +691,17 @@ def synthesize_claims(
         for row in old_claims
         if row.review_status in {"active", "confirmed"}
     ][:60]
-    final_claims = _consolidate_all_claims(client, candidates, rejected, existing_context)
+    final_claims = _consolidate_all_claims(
+        client,
+        candidates,
+        rejected,
+        existing_context,
+        activity_callback=activity_callback,
+    )
     if progress_callback:
         progress_callback(92, "saving_model", 0, 0)
+    if activity_callback:
+        activity_callback("saving_model", {"assertion_count": len(final_claims[:MAX_FINAL_CLAIMS])})
     existing_statements = {row["statement"].strip().casefold() for row in existing_context}
 
     created: list[IntelligenceClaim] = []
@@ -625,9 +755,62 @@ def execute_backfill_run(run_id: int, user_id: int) -> None:
             progress_run.progress_stage = progress_stage
             progress_run.progress_current = max(0, int(current))
             progress_run.progress_total = max(0, int(total))
+            progress_run.heartbeat_at = datetime.now(timezone.utc)
             progress_db.commit()
         finally:
             progress_db.close()
+
+    def append_activity(event: str, details: dict | None = None) -> None:
+        activity_db = SessionLocal()
+        try:
+            activity_run = activity_db.query(IntelligenceBackfillRun).filter(
+                IntelligenceBackfillRun.id == run_id,
+                IntelligenceBackfillRun.user_id == user_id,
+            ).first()
+            if activity_run is None:
+                return
+            activity = list(activity_run.activity_log or [])[-39:]
+            activity.append({
+                "at": datetime.now(timezone.utc).isoformat(),
+                "event": event,
+                "details": details or {},
+            })
+            activity_run.activity_log = activity
+            activity_run.heartbeat_at = datetime.now(timezone.utc)
+            activity_db.commit()
+        finally:
+            activity_db.close()
+
+    def save_batch_checkpoint(
+        plan_hash: str,
+        current_batch_hash: str,
+        batch_claims: list[dict],
+        current: int,
+        total: int,
+    ) -> None:
+        checkpoint_db = SessionLocal()
+        try:
+            checkpoint_run = checkpoint_db.query(IntelligenceBackfillRun).filter(
+                IntelligenceBackfillRun.id == run_id,
+                IntelligenceBackfillRun.user_id == user_id,
+            ).first()
+            if checkpoint_run is None:
+                return
+            checkpoint = dict(checkpoint_run.checkpoint_data or {})
+            if checkpoint.get("plan_hash") != plan_hash:
+                checkpoint = {"plan_hash": plan_hash, "batches": {}}
+            completed_batches = dict(checkpoint.get("batches") or {})
+            completed_batches[current_batch_hash] = batch_claims
+            checkpoint["batches"] = completed_batches
+            checkpoint["completed_count"] = len(completed_batches)
+            checkpoint["batch_total"] = total
+            checkpoint_run.checkpoint_data = checkpoint
+            checkpoint_run.progress_current = current
+            checkpoint_run.progress_total = total
+            checkpoint_run.heartbeat_at = datetime.now(timezone.utc)
+            checkpoint_db.commit()
+        finally:
+            checkpoint_db.close()
 
     try:
         run = db.query(IntelligenceBackfillRun).filter(IntelligenceBackfillRun.id == run_id,
@@ -637,11 +820,20 @@ def execute_backfill_run(run_id: int, user_id: int) -> None:
             return
         run.status = "ingesting"
         run.started_at = datetime.now(timezone.utc)
+        run.completed_at = None
+        run.error_message = None
+        run.failure_stage = None
+        run.failure_reference = None
+        run.heartbeat_at = datetime.now(timezone.utc)
         db.commit()
+        append_activity("run_started", {
+            "resuming": bool((run.checkpoint_data or {}).get("completed_count")),
+        })
 
         stage = "collecting_evidence"
         report_progress(5, stage)
         candidates = collect_historical_evidence(db, user)
+        append_activity("evidence_collected", {"evidence_count": len(candidates)})
         stage = "upserting_evidence"
         report_progress(12, stage)
         has_synthesized_evidence = db.query(IntelligenceEvidence.id).filter(
@@ -655,13 +847,24 @@ def execute_backfill_run(run_id: int, user_id: int) -> None:
         run.changed_evidence_count = int(delta["changed"])
         run.unchanged_evidence_count = int(delta["unchanged"])
         run.source_counts = source_counts
+        run.heartbeat_at = datetime.now(timezone.utc)
+        db.commit()
+        append_activity("evidence_upserted", {
+            "evidence_count": len(evidence),
+            "source_count": len(source_counts),
+            "new_count": int(delta["new"]),
+            "changed_count": int(delta["changed"]),
+            "unchanged_count": int(delta["unchanged"]),
+        })
         if not pending:
             run.claims_created = 0
             run.status = "completed"
             run.progress_percent = 100
             run.progress_stage = "completed"
             run.completed_at = datetime.now(timezone.utc)
+            run.heartbeat_at = datetime.now(timezone.utc)
             db.commit()
+            append_activity("run_completed", {"claims_created": 0, "no_changes": True})
             return
         run.status = "synthesizing"
         db.commit()
@@ -674,6 +877,9 @@ def execute_backfill_run(run_id: int, user_id: int) -> None:
             processing_mode=run.processing_mode,
             changed_existing_ids=delta["changed_existing_ids"],
             progress_callback=report_progress,
+            checkpoint_data=run.checkpoint_data,
+            checkpoint_callback=save_batch_checkpoint,
+            activity_callback=append_activity,
         )
         stage = "finalizing"
         report_progress(96, stage)
@@ -685,7 +891,9 @@ def execute_backfill_run(run_id: int, user_id: int) -> None:
         run.progress_current = 0
         run.progress_total = 0
         run.completed_at = datetime.now(timezone.utc)
+        run.heartbeat_at = datetime.now(timezone.utc)
         db.commit()
+        append_activity("run_completed", {"claims_created": len(claims), "no_changes": False})
     except Exception as error:
         incident_id = log_failure(f"intelligence_backfill_run_{run_id}_{stage}", error)
         db.rollback()
@@ -697,6 +905,8 @@ def execute_backfill_run(run_id: int, user_id: int) -> None:
             run.failure_reference = incident_id
             run.progress_stage = "failed"
             run.completed_at = datetime.now(timezone.utc)
+            run.heartbeat_at = datetime.now(timezone.utc)
             db.commit()
+            append_activity("run_failed", {"stage": stage, "reference": incident_id})
     finally:
         db.close()

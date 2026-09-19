@@ -9,9 +9,14 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 from app.services.intelligence_backfill_service import (  # noqa: E402
     EvidenceCandidate,
     _batches,
+    batch_content_hash,
+    batch_plan_hash,
     candidate_content_hash,
     normalize_generated_claim,
+    prepare_analysis_lines,
+    synthesize_claims,
 )
+from app.services import intelligence_backfill_service as service_module  # noqa: E402
 
 
 def evidence(evidence_id, *, source_type="journal", evidence_type="user_statement", secondary=False, context_only=False):
@@ -27,6 +32,94 @@ def evidence(evidence_id, *, source_type="journal", evidence_type="user_statemen
 def test_batching_considers_every_evidence_line_once():
     lines = ["a" * 8, "b" * 8, "c" * 8]
     assert _batches(lines, max_characters=10) == [[lines[0]], [lines[1]], [lines[2]]]
+
+
+def test_analysis_input_excludes_context_ai_and_duplicate_records():
+    rows = [
+        SimpleNamespace(id=1, source_type="journal", excerpt="I protect mornings.", payload={},
+                        occurred_at=datetime(2026, 9, 1, tzinfo=timezone.utc)),
+        SimpleNamespace(id=2, source_type="meeting_transcript", excerpt="A colleague's opinion.",
+                        payload={"context_only": True}, occurred_at=datetime(2026, 9, 2, tzinfo=timezone.utc)),
+        SimpleNamespace(id=3, source_type="meeting_observation", excerpt="AI interpretation.",
+                        payload={"secondary_ai_derived": True}, occurred_at=datetime(2026, 9, 3, tzinfo=timezone.utc)),
+        SimpleNamespace(id=4, source_type="message", excerpt="I protect mornings.", payload={},
+                        occurred_at=datetime(2026, 9, 4, tzinfo=timezone.utc)),
+    ]
+
+    lines, stats = prepare_analysis_lines(rows)
+
+    assert len(lines) == 1
+    assert "I protect mornings." in lines[0]
+    assert stats == {
+        "included": 1,
+        "context_only_skipped": 1,
+        "secondary_ai_skipped": 1,
+        "duplicate_skipped": 1,
+        "skipped": 3,
+    }
+
+
+def test_batch_plan_hash_is_stable_and_changes_with_input():
+    original = [["line one"], ["line two"]]
+
+    assert batch_content_hash(original[0]) == batch_content_hash(["line one"])
+    assert batch_plan_hash(original) == batch_plan_hash([["line one"], ["line two"]])
+    assert batch_plan_hash(original) != batch_plan_hash([["line one changed"], ["line two"]])
+
+
+def test_synthesis_restores_completed_batch_without_calling_openai(monkeypatch):
+    row = SimpleNamespace(
+        id=7,
+        source_type="journal",
+        evidence_type="user_statement",
+        excerpt="I protect mornings for focused work.",
+        payload={},
+        occurred_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+    )
+    lines, _ = prepare_analysis_lines([row])
+    batches = _batches(lines)
+    batch_hash = batch_content_hash(batches[0])
+    checkpoint = {
+        "plan_hash": batch_plan_hash(batches),
+        "batches": {batch_hash: []},
+        "completed_count": 1,
+        "batch_total": 1,
+    }
+    events = []
+
+    class EmptyQuery:
+        def filter(self, *args, **kwargs):
+            return self
+
+        def all(self):
+            return []
+
+    class FakeDb:
+        def query(self, *args, **kwargs):
+            return EmptyQuery()
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(service_module, "OpenAI", lambda **kwargs: object())
+    monkeypatch.setattr(
+        service_module,
+        "_extract_batch_claims",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("OpenAI should not be called")),
+    )
+    monkeypatch.setattr(service_module, "_consolidate_all_claims", lambda *args, **kwargs: [])
+
+    result = synthesize_claims(
+        FakeDb(),
+        SimpleNamespace(id=1, phone_number="test"),
+        [row],
+        processing_mode="initial",
+        checkpoint_data=checkpoint,
+        activity_callback=lambda event, details: events.append((event, details)),
+    )
+
+    assert result == []
+    assert any(event == "batch_restored" for event, _ in events)
 
 
 def test_ai_derived_evidence_cannot_create_a_belief_by_itself():
