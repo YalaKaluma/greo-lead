@@ -9,10 +9,14 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 from app.services.intelligence_backfill_service import (  # noqa: E402
     EvidenceCandidate,
     _batches,
+    _consolidate_all_claims,
+    _request_claims,
     batch_content_hash,
     batch_plan_hash,
     candidate_content_hash,
+    consolidation_content_hash,
     normalize_generated_claim,
+    normalize_subject_statement,
     prepare_analysis_lines,
     synthesize_claims,
 )
@@ -34,7 +38,7 @@ def test_batching_considers_every_evidence_line_once():
     assert _batches(lines, max_characters=10) == [[lines[0]], [lines[1]], [lines[2]]]
 
 
-def test_analysis_input_excludes_context_ai_and_duplicate_records():
+def test_analysis_input_includes_derived_meeting_observations_as_labeled_context():
     rows = [
         SimpleNamespace(id=1, source_type="journal", excerpt="I protect mornings.", payload={},
                         occurred_at=datetime(2026, 9, 1, tzinfo=timezone.utc)),
@@ -48,14 +52,14 @@ def test_analysis_input_excludes_context_ai_and_duplicate_records():
 
     lines, stats = prepare_analysis_lines(rows)
 
-    assert len(lines) == 1
+    assert len(lines) == 2
     assert "I protect mornings." in lines[0]
+    assert "DERIVED_OBSERVATION" in lines[1]
     assert stats == {
-        "included": 1,
+        "included": 2,
         "context_only_skipped": 1,
-        "secondary_ai_skipped": 1,
         "duplicate_skipped": 1,
-        "skipped": 3,
+        "skipped": 2,
     }
 
 
@@ -120,6 +124,100 @@ def test_synthesis_restores_completed_batch_without_calling_openai(monkeypatch):
 
     assert result == []
     assert any(event == "batch_restored" for event, _ in events)
+
+
+def test_structured_output_retries_malformed_content():
+    responses = [
+        SimpleNamespace(choices=[SimpleNamespace(
+            finish_reason="stop",
+            message=SimpleNamespace(content='{"claims":['),
+        )]),
+        SimpleNamespace(choices=[SimpleNamespace(
+            finish_reason="stop",
+            message=SimpleNamespace(content='{"claims":[]}'),
+        )]),
+    ]
+
+    class Completions:
+        def __init__(self):
+            self.calls = []
+
+        def create(self, **kwargs):
+            self.calls.append(kwargs)
+            return responses.pop(0)
+
+    completions = Completions()
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+
+    assert _request_claims(
+        client,
+        system_prompt="system",
+        user_content="user",
+        max_claims=10,
+        max_tokens=100,
+        operation="test",
+    ) == []
+    assert len(completions.calls) == 2
+    assert completions.calls[0]["response_format"]["type"] == "json_schema"
+
+
+def test_structured_output_retries_truncated_response():
+    responses = [
+        SimpleNamespace(choices=[SimpleNamespace(
+            finish_reason="length",
+            message=SimpleNamespace(content='{"claims":[]}'),
+        )]),
+        SimpleNamespace(choices=[SimpleNamespace(
+            finish_reason="stop",
+            message=SimpleNamespace(content='{"claims":[]}'),
+        )]),
+    ]
+
+    class Completions:
+        def __init__(self):
+            self.call_count = 0
+
+        def create(self, **kwargs):
+            self.call_count += 1
+            return responses.pop(0)
+
+    completions = Completions()
+    client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+
+    assert _request_claims(
+        client,
+        system_prompt="system",
+        user_content="user",
+        max_claims=10,
+        max_tokens=100,
+        operation="test",
+    ) == []
+    assert completions.call_count == 2
+
+
+def test_consolidation_restores_checkpoint_without_calling_openai(monkeypatch):
+    candidates = [{"statement": "Protects mornings", "evidence_ids": [1]}]
+    checkpoint_hash = consolidation_content_hash(candidates, [], [])
+    cached = [{"statement": "Protects focus time", "evidence_ids": [1]}]
+    events = []
+
+    monkeypatch.setattr(
+        service_module,
+        "_consolidate_claims",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("OpenAI should not be called")),
+    )
+
+    result = _consolidate_all_claims(
+        object(),
+        candidates,
+        [],
+        [],
+        activity_callback=lambda event, details: events.append((event, details)),
+        consolidation_checkpoints={checkpoint_hash: cached},
+    )
+
+    assert result == cached
+    assert any(event == "consolidation_final_restored" for event, _ in events)
 
 
 def test_ai_derived_evidence_cannot_create_a_belief_by_itself():
@@ -231,3 +329,15 @@ def test_generated_claim_keeps_executive_model_dimensions():
     assert result["object_type"] == "state"
     assert result["scope"] == "product launch"
     assert result["stability"] == "current"
+
+
+def test_alfred_is_never_mistaken_for_the_modeled_user():
+    assert normalize_subject_statement("Alfred is experiencing workload pressure.") == (
+        "The user is experiencing workload pressure."
+    )
+    assert normalize_subject_statement("Alfred has a recurring pattern of overcommitment.") == (
+        "The user has a recurring pattern of overcommitment."
+    )
+    assert normalize_subject_statement("Alfred should ask a coaching question.") == (
+        "Alfred should ask a coaching question."
+    )

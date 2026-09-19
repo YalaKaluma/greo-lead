@@ -409,17 +409,26 @@ class IntelligenceClaim(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     user_number = Column(String, nullable=True, index=True)
     claim_type = Column(String(40), nullable=False, index=True)
+    pattern_key = Column(String(120), nullable=True, index=True)
+    pattern_title = Column(String(240), nullable=True)
     object_type = Column(String(40), nullable=False, default="attribute", index=True)
     scope = Column(String(80), nullable=True, index=True)
     stability = Column(String(30), nullable=False, default="recurring", index=True)
     subject_type = Column(String(40), nullable=True, index=True)
     subject_id = Column(String(120), nullable=True, index=True)
     statement = Column(Text, nullable=False)
+    interpretation = Column(Text, nullable=True)
+    trajectory = Column(String(30), nullable=True, index=True)
+    context_summary = Column(Text, nullable=True)
+    alternative_explanation = Column(Text, nullable=True)
+    coaching_implication = Column(Text, nullable=True)
     epistemic_status = Column(String(40), nullable=False, default="hypothesis", index=True)
     confidence_score = Column(Float, nullable=False, default=0.0)
     review_status = Column(String(30), nullable=False, default="active", index=True)
     valid_from = Column(DateTime(timezone=True), nullable=True)
     valid_to = Column(DateTime(timezone=True), nullable=True)
+    first_seen_at = Column(DateTime(timezone=True), nullable=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
     confirmed_at = Column(DateTime(timezone=True), nullable=True)
     contradicted_at = Column(DateTime(timezone=True), nullable=True)
     superseded_by_id = Column(
@@ -434,6 +443,16 @@ class IntelligenceClaim(Base):
     user = relationship("User")
     evidence_links = relationship(
         "IntelligenceClaimEvidence",
+        back_populates="claim",
+        cascade="all, delete-orphan",
+    )
+    contexts = relationship(
+        "IntelligenceClaimContext",
+        back_populates="claim",
+        cascade="all, delete-orphan",
+    )
+    feedback_entries = relationship(
+        "IntelligencePatternFeedback",
         back_populates="claim",
         cascade="all, delete-orphan",
     )
@@ -463,10 +482,61 @@ class IntelligenceClaimEvidence(Base):
     )
     relationship_type = Column(String(20), nullable=False, default="supports")
     relevance_score = Column(Float, nullable=True)
+    rationale = Column(Text, nullable=True)
+    independence_group = Column(String(120), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     claim = relationship("IntelligenceClaim", back_populates="evidence_links")
     evidence = relationship("IntelligenceEvidence", back_populates="claim_links")
+
+
+class IntelligenceClaimContext(Base):
+    """A situation in which a longitudinal pattern applies, changes, or does not apply."""
+
+    __tablename__ = "intelligence_claim_contexts"
+    __table_args__ = (
+        Index("idx_intelligence_claim_contexts_claim", "claim_id"),
+        Index("idx_intelligence_claim_contexts_type", "context_type"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    claim_id = Column(
+        Integer,
+        ForeignKey("intelligence_claims.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    context_type = Column(String(40), nullable=False, default="general")
+    label = Column(String(240), nullable=False)
+    applicability = Column(String(30), nullable=False, default="applies")
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    claim = relationship("IntelligenceClaim", back_populates="contexts")
+
+
+class IntelligencePatternFeedback(Base):
+    """User calibration of a longitudinal pattern without erasing its history."""
+
+    __tablename__ = "intelligence_pattern_feedback"
+    __table_args__ = (
+        Index("idx_intelligence_pattern_feedback_claim", "claim_id"),
+        Index("idx_intelligence_pattern_feedback_user", "user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    claim_id = Column(
+        Integer,
+        ForeignKey("intelligence_claims.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    verdict = Column(String(30), nullable=False)
+    correction_text = Column(Text, nullable=True)
+    context_note = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    claim = relationship("IntelligenceClaim", back_populates="feedback_entries")
+    user = relationship("User")
 
 
 class IntelligenceBackfillRun(Base):
@@ -495,6 +565,9 @@ class IntelligenceBackfillRun(Base):
     checkpoint_data = Column(MutableDict.as_mutable(JSONB), nullable=True)
     activity_log = Column(JSONB, nullable=True)
     source_counts = Column(MutableDict.as_mutable(JSONB), nullable=True)
+    window_weeks = Column(Integer, nullable=True)
+    window_start = Column(DateTime(timezone=True), nullable=True)
+    window_end = Column(DateTime(timezone=True), nullable=True)
     prompt_version = Column(String(80), nullable=True)
     model_version = Column(String(80), nullable=True)
     error_message = Column(Text, nullable=True)
