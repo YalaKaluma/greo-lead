@@ -3,10 +3,11 @@ from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import IntelligenceBackfillRun, User
+from app.models import IntelligenceBackfillRun, IntelligenceEvidence, User
 from app.routers.auth import require_authenticated_user
 from app.services.intelligence_backfill_service import OPENAI_MODEL, PROMPT_VERSION, execute_backfill_run
 from app.services.intelligence_core_service import IntelligenceCoreService
@@ -69,6 +70,9 @@ def _backfill_response(run: IntelligenceBackfillRun | None):
         "activity_log": list(run.activity_log or []),
         "can_resume": run.status == "failed",
         "source_counts": run.source_counts or {},
+        "window_weeks": getattr(run, "window_weeks", None),
+        "window_start": getattr(run, "window_start", None),
+        "window_end": getattr(run, "window_end", None),
         "error_message": run.error_message,
         "failure_stage": run.failure_stage,
         "failure_reference": run.failure_reference,
@@ -107,12 +111,18 @@ class ClaimReview(BaseModel):
     corrected_statement: str | None = Field(default=None, max_length=4000)
 
 
+class BackfillStart(BaseModel):
+    weeks: int | None = Field(default=None, ge=1, le=520)
+
+
 @router.post("/backfill")
 def start_historical_backfill(
     background_tasks: BackgroundTasks,
+    request: BackfillStart | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_authenticated_user),
 ):
+    requested_weeks = request.weeks if request else None
     active = (
         db.query(IntelligenceBackfillRun)
         .filter(
@@ -128,7 +138,7 @@ def start_historical_backfill(
         _mark_run_stalled(active)
         db.commit()
 
-    run = (
+    resumable_runs = (
         db.query(IntelligenceBackfillRun)
         .filter(
             IntelligenceBackfillRun.user_id == current_user.id,
@@ -137,14 +147,27 @@ def start_historical_backfill(
             IntelligenceBackfillRun.model_version == OPENAI_MODEL,
         )
         .order_by(IntelligenceBackfillRun.created_at.desc())
-        .first()
+        .all()
     )
+    run = next((candidate for candidate in resumable_runs if candidate.window_weeks == requested_weeks), None)
     if run is None:
+        previous = (
+            db.query(IntelligenceBackfillRun)
+            .filter(
+                IntelligenceBackfillRun.user_id == current_user.id,
+                IntelligenceBackfillRun.prompt_version == PROMPT_VERSION,
+                IntelligenceBackfillRun.model_version == OPENAI_MODEL,
+            )
+            .order_by(IntelligenceBackfillRun.created_at.desc())
+            .first()
+        )
         run = IntelligenceBackfillRun(
             user_id=current_user.id,
             status="queued",
             prompt_version=PROMPT_VERSION,
             model_version=OPENAI_MODEL,
+            window_weeks=requested_weeks,
+            checkpoint_data=dict(previous.checkpoint_data or {}) if previous else None,
         )
         db.add(run)
     else:
@@ -216,11 +239,27 @@ def _claim_response(claim):
         "contradicted_at": claim.contradicted_at,
         "superseded_by_id": claim.superseded_by_id,
         "metadata": claim.metadata_json,
+        "pattern_key": claim.pattern_key,
+        "pattern_title": claim.pattern_title,
+        "interpretation": claim.interpretation,
+        "trajectory": claim.trajectory,
+        "context_summary": claim.context_summary,
+        "alternative_explanation": claim.alternative_explanation,
+        "coaching_implication": claim.coaching_implication,
+        "first_seen_at": claim.first_seen_at,
+        "last_seen_at": claim.last_seen_at,
+        "contexts": [
+            {"context_type": item.context_type, "label": item.label,
+             "applicability": item.applicability, "notes": item.notes}
+            for item in claim.contexts
+        ],
         "evidence": [
             {
                 **_evidence_response(link.evidence),
                 "relationship_type": link.relationship_type,
                 "relevance_score": link.relevance_score,
+                "rationale": link.rationale,
+                "independence_group": link.independence_group,
             }
             for link in claim.evidence_links
             if link.evidence is not None
@@ -315,6 +354,13 @@ def get_executive_model(
         .first()
     )
     run = _refresh_stalled_run(db, run)
+    history_start, history_end = db.query(
+        func.min(IntelligenceEvidence.occurred_at),
+        func.max(IntelligenceEvidence.occurred_at),
+    ).filter(IntelligenceEvidence.user_id == current_user.id).one()
+    history_weeks = None
+    if history_start and history_end:
+        history_weeks = max(1, ((history_end - history_start).days // 7) + 1)
     return {
         "stage": context["stage"],
         "evidence_count": context["evidence_count"],
@@ -324,6 +370,9 @@ def get_executive_model(
         "sections": sections,
         "review_queue": review_queue[:30],
         "last_run": _backfill_response(run),
+        "history_start": history_start,
+        "history_end": history_end,
+        "history_weeks": history_weeks,
     }
 
 

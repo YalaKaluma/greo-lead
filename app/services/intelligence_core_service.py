@@ -277,6 +277,7 @@ class IntelligenceCoreService:
         return (
             self.db.query(IntelligenceClaim)
             .options(selectinload(IntelligenceClaim.evidence_links).selectinload(IntelligenceClaimEvidence.evidence))
+            .options(selectinload(IntelligenceClaim.contexts))
             .filter(IntelligenceClaim.id == claim_id, IntelligenceClaim.user_id == user_id)
             .first()
         )
@@ -285,6 +286,7 @@ class IntelligenceCoreService:
         query = (
             self.db.query(IntelligenceClaim)
             .options(selectinload(IntelligenceClaim.evidence_links).selectinload(IntelligenceClaimEvidence.evidence))
+            .options(selectinload(IntelligenceClaim.contexts))
             .filter(IntelligenceClaim.user_id == user_id)
         )
         if not include_inactive:

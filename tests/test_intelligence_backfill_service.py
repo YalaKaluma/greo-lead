@@ -16,6 +16,7 @@ from app.services.intelligence_backfill_service import (  # noqa: E402
     candidate_content_hash,
     consolidation_content_hash,
     normalize_generated_claim,
+    normalize_subject_statement,
     prepare_analysis_lines,
     synthesize_claims,
 )
@@ -37,7 +38,7 @@ def test_batching_considers_every_evidence_line_once():
     assert _batches(lines, max_characters=10) == [[lines[0]], [lines[1]], [lines[2]]]
 
 
-def test_analysis_input_excludes_context_ai_and_duplicate_records():
+def test_analysis_input_includes_derived_meeting_observations_as_labeled_context():
     rows = [
         SimpleNamespace(id=1, source_type="journal", excerpt="I protect mornings.", payload={},
                         occurred_at=datetime(2026, 9, 1, tzinfo=timezone.utc)),
@@ -51,14 +52,14 @@ def test_analysis_input_excludes_context_ai_and_duplicate_records():
 
     lines, stats = prepare_analysis_lines(rows)
 
-    assert len(lines) == 1
+    assert len(lines) == 2
     assert "I protect mornings." in lines[0]
+    assert "DERIVED_OBSERVATION" in lines[1]
     assert stats == {
-        "included": 1,
+        "included": 2,
         "context_only_skipped": 1,
-        "secondary_ai_skipped": 1,
         "duplicate_skipped": 1,
-        "skipped": 3,
+        "skipped": 2,
     }
 
 
@@ -328,3 +329,15 @@ def test_generated_claim_keeps_executive_model_dimensions():
     assert result["object_type"] == "state"
     assert result["scope"] == "product launch"
     assert result["stability"] == "current"
+
+
+def test_alfred_is_never_mistaken_for_the_modeled_user():
+    assert normalize_subject_statement("Alfred is experiencing workload pressure.") == (
+        "The user is experiencing workload pressure."
+    )
+    assert normalize_subject_statement("Alfred has a recurring pattern of overcommitment.") == (
+        "The user has a recurring pattern of overcommitment."
+    )
+    assert normalize_subject_statement("Alfred should ask a coaching question.") == (
+        "Alfred should ask a coaching question."
+    )

@@ -307,6 +307,7 @@ function ExecutiveModelPanel({ apiUrl, t }) {
   const [activeSection, setActiveSection] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [analysisWeeks, setAnalysisWeeks] = useState(12);
   const [error, setError] = useState('');
 
   const load = async () => {
@@ -348,7 +349,7 @@ function ExecutiveModelPanel({ apiUrl, t }) {
     setStarting(true);
     setError('');
     try {
-      const response = await axios.post(`${apiUrl}/api/intelligence/backfill`);
+      const response = await axios.post(`${apiUrl}/api/intelligence/backfill`, { weeks: analysisWeeks });
       setModel((current) => ({ ...(current || {}), last_run: response.data }));
     } catch (requestError) {
       setError(requestError.response?.data?.detail || t('settings.executiveModel.startError'));
@@ -385,6 +386,9 @@ function ExecutiveModelPanel({ apiUrl, t }) {
   const displayType = (value) => t(`settings.executiveModel.type.${value || 'attribute'}`);
   const displayStatus = (value) => t(`settings.executiveModel.status.${value || 'hypothesis'}`);
   const displayStability = (value) => t(`settings.executiveModel.stability.${value || 'recurring'}`);
+  const displayStatement = (value) => String(value || '')
+    .replace(/^The user\b/i, t('settings.executiveModel.you'))
+    .replace(/^Alfred(?=\s+(?:is|has|shows|demonstrates|tends|appears|may|often|consistently)\b)/i, t('settings.executiveModel.you'));
 
   const formatActivity = (item) => {
     const details = item?.details || {};
@@ -437,12 +441,20 @@ function ExecutiveModelPanel({ apiUrl, t }) {
             <h2 className="text-lg font-semibold text-slate-950">{t('settings.executiveModel.title')}</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{t('settings.executiveModel.description')}</p>
           </div>
-          <button
-            type="button"
-            onClick={startBackfill}
-            disabled={starting || isRunning}
-            className="shrink-0 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300"
-          >
+          <div className="w-full shrink-0 sm:w-72">
+            <label className="block text-sm font-semibold text-slate-800">
+              {t('settings.executiveModel.analysisWindow')}: {analysisWeeks} {t('settings.executiveModel.weeks')}
+              <input type="range" min="1" max={Math.min(520, Math.max(analysisWeeks, model?.history_weeks || 52))} value={analysisWeeks}
+                onChange={(event) => setAnalysisWeeks(Number(event.target.value))}
+                disabled={starting || isRunning} className="mt-2 w-full" />
+            </label>
+            <p className="mt-1 text-xs text-slate-500">{t('settings.executiveModel.analysisWindowHint')}</p>
+            <button
+              type="button"
+              onClick={startBackfill}
+              disabled={starting || isRunning}
+              className="mt-3 w-full rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300"
+            >
             {isRunning
               ? t('settings.executiveModel.running')
               : starting
@@ -452,7 +464,8 @@ function ExecutiveModelPanel({ apiUrl, t }) {
                   : hasModel
                     ? t('settings.executiveModel.refresh')
                     : t('settings.executiveModel.build')}
-          </button>
+            </button>
+          </div>
         </div>
 
         {error && <p className="mt-4 text-sm text-rose-700">{error}</p>}
@@ -619,7 +632,18 @@ function ExecutiveModelPanel({ apiUrl, t }) {
                     <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-800">{t('settings.executiveModel.confirmed')}</span>
                   )}
                 </div>
-                <p className="mt-3 text-base leading-7 text-slate-900">{claim.statement}</p>
+                {claim.pattern_title && <h4 className="mt-3 text-lg font-semibold text-slate-950">{claim.pattern_title}</h4>}
+                <p className="mt-2 text-base leading-7 text-slate-900">{displayStatement(claim.statement)}</p>
+                {claim.interpretation && <p className="mt-3 text-sm leading-6 text-slate-600">{claim.interpretation}</p>}
+
+                {(claim.trajectory || claim.context_summary || claim.alternative_explanation || claim.coaching_implication) && (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    {claim.trajectory && <div className="rounded-lg bg-slate-50 p-3 text-sm"><span className="font-semibold">{t('settings.executiveModel.trajectory')}:</span> {claim.trajectory.replaceAll('_', ' ')}</div>}
+                    {claim.context_summary && <div className="rounded-lg bg-slate-50 p-3 text-sm"><span className="font-semibold">{t('settings.executiveModel.context')}:</span> {claim.context_summary}</div>}
+                    {claim.alternative_explanation && <div className="rounded-lg bg-amber-50 p-3 text-sm"><span className="font-semibold">{t('settings.executiveModel.alternative')}:</span> {claim.alternative_explanation}</div>}
+                    {claim.coaching_implication && <div className="rounded-lg bg-blue-50 p-3 text-sm"><span className="font-semibold">{t('settings.executiveModel.coaching')}:</span> {claim.coaching_implication}</div>}
+                  </div>
+                )}
 
                 <details className="mt-4">
                   <summary className="cursor-pointer text-sm font-medium text-slate-600">
@@ -628,8 +652,9 @@ function ExecutiveModelPanel({ apiUrl, t }) {
                   <div className="mt-3 space-y-3 border-l-2 border-slate-200 pl-4">
                     {(claim.evidence || []).map((item) => (
                       <div key={item.id} className="text-sm text-slate-600">
-                        <div className="font-medium capitalize text-slate-800">{item.source_type.replaceAll('_', ' ')}</div>
+                        <div className="font-medium capitalize text-slate-800">{t(`settings.executiveModel.evidenceRole.${item.relationship_type || 'supports'}`)} · {item.source_type.replaceAll('_', ' ')}</div>
                         <p className="mt-1 leading-6">{item.excerpt || t('settings.executiveModel.noExcerpt')}</p>
+                        {item.rationale && <p className="mt-1 text-xs italic text-slate-500">{item.rationale}</p>}
                       </div>
                     ))}
                   </div>
