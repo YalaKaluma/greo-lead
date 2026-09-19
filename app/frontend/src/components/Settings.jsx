@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 31078)
+Total output lines: 2719
+
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { Capacitor, registerPlugin } from '@capacitor/core';
@@ -277,7 +280,7 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
         )}
 
         {activeTab === 'beliefs' && (
-          <IntelligenceBeliefsPanel apiUrl={apiUrl} t={t} />
+          <ExecutiveModelPanel apiUrl={apiUrl} t={t} />
         )}
 
         {activeTab === 'privacy' && (
@@ -300,27 +303,22 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
   );
 }
 
-function IntelligenceBeliefsPanel({ apiUrl, t }) {
-  const [claims, setClaims] = useState([]);
-  const [context, setContext] = useState(null);
-  const [run, setRun] = useState(null);
+const EXECUTIVE_MODEL_SECTIONS = ['overview', 'direction', 'current_context', 'how_i_operate', 'relationships', 'growth'];
+
+function ExecutiveModelPanel({ apiUrl, t }) {
+  const [model, setModel] = useState(null);
+  const [activeSection, setActiveSection] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
 
   const load = async () => {
     try {
-      const [claimsResponse, contextResponse, runResponse] = await Promise.all([
-        axios.get(`${apiUrl}/api/intelligence/claims?limit=100`),
-        axios.get(`${apiUrl}/api/intelligence/context?surface=general&limit=12`),
-        axios.get(`${apiUrl}/api/intelligence/backfill/latest`)
-      ]);
-      setClaims(claimsResponse.data || []);
-      setContext(contextResponse.data || null);
-      setRun(runResponse.data?.run || null);
+      const response = await axios.get(`${apiUrl}/api/intelligence/model`);
+      setModel(response.data || null);
       setError('');
     } catch (requestError) {
-      setError(requestError.response?.data?.detail || t('settings.beliefs.loadError'));
+      setError(requestError.response?.data?.detail || t('settings.executiveModel.loadError'));
     } finally {
       setLoading(false);
     }
@@ -331,19 +329,20 @@ function IntelligenceBeliefsPanel({ apiUrl, t }) {
   }, [apiUrl]);
 
   useEffect(() => {
+    const run = model?.last_run;
     if (!run || !['queued', 'ingesting', 'synthesizing'].includes(run.status)) return undefined;
     const timer = window.setInterval(load, 3000);
     return () => window.clearInterval(timer);
-  }, [run?.status, apiUrl]);
+  }, [model?.last_run?.status, apiUrl]);
 
   const startBackfill = async () => {
     setStarting(true);
     setError('');
     try {
       const response = await axios.post(`${apiUrl}/api/intelligence/backfill`);
-      setRun(response.data);
+      setModel((current) => ({ ...(current || {}), last_run: response.data }));
     } catch (requestError) {
-      setError(requestError.response?.data?.detail || t('settings.beliefs.startError'));
+      setError(requestError.response?.data?.detail || t('settings.executiveModel.startError'));
     } finally {
       setStarting(false);
     }
@@ -352,7 +351,7 @@ function IntelligenceBeliefsPanel({ apiUrl, t }) {
   const reviewClaim = async (claim, action) => {
     let correctedStatement = null;
     if (action === 'correct') {
-      correctedStatement = window.prompt(t('settings.beliefs.correctPrompt'), claim.statement);
+      correctedStatement = window.prompt(t('settings.executiveModel.correctPrompt'), claim.statement);
       if (!correctedStatement || correctedStatement.trim() === claim.statement.trim()) return;
     }
     try {
@@ -362,19 +361,28 @@ function IntelligenceBeliefsPanel({ apiUrl, t }) {
       });
       await load();
     } catch (requestError) {
-      setError(requestError.response?.data?.detail || t('settings.beliefs.reviewError'));
+      setError(requestError.response?.data?.detail || t('settings.executiveModel.reviewError'));
     }
   };
 
+  const run = model?.last_run;
   const isRunning = run && ['queued', 'ingesting', 'synthesizing'].includes(run.status);
+  const visibleClaims = activeSection === 'overview'
+    ? (model?.review_queue || [])
+    : (model?.sections?.[activeSection] || []);
+  const hasModel = (model?.assertion_count || 0) > 0;
+
+  const displayType = (value) => t(`settings.executiveModel.type.${value || 'attribute'}`);
+  const displayStatus = (value) => t(`settings.executiveModel.status.${value || 'hypothesis'}`);
+  const displayStability = (value) => t(`settings.executiveModel.stability.${value || 'recurring'}`);
 
   return (
     <section className="py-8">
-      <div className="max-w-4xl">
+      <div className="max-w-5xl">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-950">{t('settings.beliefs.title')}</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{t('settings.beliefs.description')}</p>
+            <h2 className="text-lg font-semibold text-slate-950">{t('settings.executiveModel.title')}</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{t('settings.executiveModel.description')}</p>
           </div>
           <button
             type="button"
@@ -382,19 +390,35 @@ function IntelligenceBeliefsPanel({ apiUrl, t }) {
             disabled={starting || isRunning}
             className="shrink-0 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300"
           >
-            {isRunning ? t('settings.beliefs.running') : starting ? t('settings.beliefs.starting') : t('settings.beliefs.analyze')}
+            {isRunning
+              ? t('settings.executiveModel.running')
+              : starting
+                ? t('settings.executiveModel.starting')
+                : hasModel
+                  ? t('settings.executiveModel.refresh')
+                  : t('settings.executiveModel.build')}
           </button>
         </div>
 
         {error && <p className="mt-4 text-sm text-rose-700">{error}</p>}
-        {run?.status === 'failed' && <p className="mt-4 text-sm text-rose-700">{run.error_message}</p>}
+        {run?.status === 'failed' && (
+          <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+            <p>{run.error_message || t('settings.executiveModel.failed')}</p>
+            {run.failure_stage && (
+              <p className="mt-1 text-xs">
+                {t('settings.executiveModel.failureStage')}: {t(`settings.executiveModel.failure.${run.failure_stage}`)}
+                {run.failure_reference ? ` · ${t('settings.executiveModel.failureReference')}: ${run.failure_reference}` : ''}
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
-            [t('settings.beliefs.stage'), context?.stage || '—'],
-            [t('settings.beliefs.evidence'), context?.evidence_count ?? '—'],
-            [t('settings.beliefs.sources'), context?.source_count ?? '—'],
-            [t('settings.beliefs.claims'), claims.length]
+            [t('settings.executiveModel.stage'), model?.stage ? t(`settings.executiveModel.stage.${model.stage}`) : '—'],
+            [t('settings.executiveModel.evidence'), model?.evidence_count ?? '—'],
+            [t('settings.executiveModel.sources'), model?.source_count ?? '—'],
+            [t('settings.executiveModel.assertions'), model?.assertion_count ?? '—']
           ].map(([label, value]) => (
             <div key={label} className="rounded-lg border border-slate-200 p-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
@@ -404,43 +428,84 @@ function IntelligenceBeliefsPanel({ apiUrl, t }) {
         </div>
 
         {run && (
-          <p className="mt-4 text-xs text-slate-500">
-            {t('settings.beliefs.lastRun')}: {run.status}
-            {run.completed_at ? ` · ${formatDate(run.completed_at)}` : ''}
-          </p>
+          <div className="mt-4 text-xs text-slate-500">
+            <p>
+              {t('settings.executiveModel.lastRun')}: {t(`settings.executiveModel.run.${run.status}`)}
+              {run.completed_at ? ` · ${formatDate(run.completed_at)}` : ''}
+            </p>
+            {run.status === 'completed' && (
+              <p className="mt-1">
+                {t('settings.executiveModel.deltaNew')}: {run.new_evidence_count || 0}
+                {' · '}{t('settings.executiveModel.deltaChanged')}: {run.changed_evidence_count || 0}
+                {' · '}{t('settings.executiveModel.deltaUnchanged')}: {run.unchanged_evidence_count || 0}
+              </p>
+            )}
+          </div>
         )}
 
         {loading ? (
-          <p className="mt-8 text-sm text-slate-500">{t('settings.beliefs.loading')}</p>
-        ) : claims.length === 0 ? (
+          <p className="mt-8 text-sm text-slate-500">{t('settings.executiveModel.loading')}</p>
+        ) : !hasModel ? (
           <p className="mt-8 rounded-lg border border-dashed border-slate-300 p-6 text-sm text-slate-600">
-            {t('settings.beliefs.empty')}
+            {t('settings.executiveModel.empty')}
           </p>
         ) : (
-          <div className="mt-8 space-y-4">
-            {claims.map((claim) => (
+          <div className="mt-8">
+            <div className="flex flex-wrap gap-2 border-b border-slate-200" role="tablist" aria-label={t('settings.executiveModel.sectionsLabel')}>
+              {EXECUTIVE_MODEL_SECTIONS.map((section) => (
+                <button
+                  key={section}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSection === section}
+                  onClick={() => setActiveSection(section)}
+                  className={`border-b-2 px-3 py-2 text-sm font-semibold ${activeSection === section ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
+                >
+                  {t(`settings.executiveModel.section.${section}`)}
+                  {section === 'overview' && model.needs_review > 0 ? ` (${model.needs_review})` : ''}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-6">
+              <h3 className="text-base font-semibold text-slate-950">{t(`settings.executiveModel.section.${activeSection}`)}</h3>
+              <p className="mt-1 text-sm text-slate-500">{t(`settings.executiveModel.sectionDescription.${activeSection}`)}</p>
+            </div>
+
+            {visibleClaims.length === 0 ? (
+              <p className="mt-5 rounded-lg bg-slate-50 p-5 text-sm text-slate-600">
+                {activeSection === 'overview'
+                  ? t('settings.executiveModel.reviewedAll')
+                  : t('settings.executiveModel.sectionEmpty')}
+              </p>
+            ) : (
+              <div className="mt-5 space-y-4">
+              {visibleClaims.map((claim) => (
               <article key={claim.id} className="rounded-xl border border-slate-200 p-5">
                 <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <span>{claim.claim_type.replaceAll('_', ' ')}</span>
+                  <span>{displayType(claim.object_type)}</span>
                   <span>·</span>
-                  <span>{claim.epistemic_status.replaceAll('_', ' ')}</span>
+                  <span>{displayStatus(claim.epistemic_status)}</span>
                   <span>·</span>
-                  <span>{Math.round(claim.confidence_score * 100)}% {t('settings.beliefs.confidence')}</span>
+                  <span>{displayStability(claim.stability)}</span>
+                  {claim.scope && <><span>·</span><span>{claim.scope}</span></>}
+                  <span>·</span>
+                  <span>{Math.round(claim.confidence_score * 100)}% {t('settings.executiveModel.confidence')}</span>
                   {claim.review_status === 'confirmed' && (
-                    <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-800">{t('settings.beliefs.confirmed')}</span>
+                    <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-800">{t('settings.executiveModel.confirmed')}</span>
                   )}
                 </div>
                 <p className="mt-3 text-base leading-7 text-slate-900">{claim.statement}</p>
 
                 <details className="mt-4">
                   <summary className="cursor-pointer text-sm font-medium text-slate-600">
-                    {t('settings.beliefs.showEvidence')} ({claim.evidence?.length || 0})
+                    {t('settings.executiveModel.showEvidence')} ({claim.evidence?.length || 0})
                   </summary>
                   <div className="mt-3 space-y-3 border-l-2 border-slate-200 pl-4">
                     {(claim.evidence || []).map((item) => (
                       <div key={item.id} className="text-sm text-slate-600">
                         <div className="font-medium capitalize text-slate-800">{item.source_type.replaceAll('_', ' ')}</div>
-                        <p className="mt-1 leading-6">{item.excerpt || t('settings.beliefs.noExcerpt')}</p>
+                        <p className="mt-1 leading-6">{item.excerpt || t('settings.executiveModel.noExcerpt')}</p>
                       </div>
                     ))}
                   </div>
@@ -449,19 +514,21 @@ function IntelligenceBeliefsPanel({ apiUrl, t }) {
                 <div className="mt-5 flex flex-wrap gap-2">
                   <button type="button" onClick={() => reviewClaim(claim, 'confirm')}
                     className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-600">
-                    {t('settings.beliefs.confirm')}
+                    {t('settings.executiveModel.confirm')}
                   </button>
                   <button type="button" onClick={() => reviewClaim(claim, 'correct')}
                     className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                    {t('settings.beliefs.correct')}
+                    {t('settings.executiveModel.correct')}
                   </button>
                   <button type="button" onClick={() => reviewClaim(claim, 'reject')}
                     className="rounded-md border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50">
-                    {t('settings.beliefs.reject')}
+                    {t('settings.executiveModel.reject')}
                   </button>
                 </div>
               </article>
-            ))}
+              ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1306,99 +1373,7 @@ function AdminFeedbackPanel({ apiUrl, userNumber }) {
 
       {error && (
         <div className="mb-6 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          {error}
-        </div>
-      )}
-
-      <div className="overflow-x-auto rounded-lg border border-slate-200">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-4 py-3">User</th>
-              <th className="px-4 py-3">Date</th>
-              <th className="px-4 py-3">Source Page</th>
-              <th className="px-4 py-3">Feedback Type</th>
-              <th className="px-4 py-3">Rating</th>
-              <th className="px-4 py-3">Comment</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 bg-white">
-            {loading ? (
-              <tr>
-                <td className="px-4 py-6 text-slate-500" colSpan="8">Loading feedback...</td>
-              </tr>
-            ) : visibleFeedback.length === 0 ? (
-              <tr>
-                <td className="px-4 py-6 text-slate-500" colSpan="8">No feedback found.</td>
-              </tr>
-            ) : visibleFeedback.map((item) => (
-              <tr key={item.id}>
-                <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">{item.user}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(item.date)}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-600 capitalize">{item.source_page || '-'}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-600">{item.feedback_type}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-slate-600">{item.rating ? `${item.rating}/5` : '-'}</td>
-                <td className="min-w-72 max-w-xl px-4 py-3 text-slate-700">
-                  <div>{item.comment || '-'}</div>
-                  {item.message_excerpt && (
-                    <div className="mt-1 line-clamp-2 text-xs text-slate-400">{item.message_excerpt}</div>
-                  )}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3">
-                  <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
-                    {item.status || 'New'}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => updateStatus(item.id, 'Reviewed')}
-                      disabled={updatingId === item.id}
-                      className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                    >
-                      Mark Reviewed
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => updateStatus(item.id, 'Resolved')}
-                      disabled={updatingId === item.id}
-                      className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                    >
-                      Mark Resolved
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => updateStatus(item.id, 'Ignored')}
-                      disabled={updatingId === item.id}
-                      className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                    >
-                      Ignore
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function AdminAnalyticsPanel({ apiUrl, userNumber }) {
-  const [analytics, setAnalytics] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const adminParams = { user_number: userNumber };
-
-  const loadAnalytics = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const response = await axios.get(`${apiUrl}/api/admin/analytics`, { params: adminParams });
+          {er…1078 tokens truncated…admin/analytics`, { params: adminParams });
       setAnalytics(response.data);
     } catch (err) {
       setError(err.response?.data?.detail || 'Analytics could not be loaded.');
