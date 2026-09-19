@@ -27,6 +27,10 @@ def _backfill_response(run: IntelligenceBackfillRun | None):
         "new_evidence_count": run.new_evidence_count,
         "changed_evidence_count": run.changed_evidence_count,
         "unchanged_evidence_count": run.unchanged_evidence_count,
+        "progress_percent": run.progress_percent,
+        "progress_stage": run.progress_stage,
+        "progress_current": run.progress_current,
+        "progress_total": run.progress_total,
         "source_counts": run.source_counts or {},
         "error_message": run.error_message,
         "failure_stage": run.failure_stage,
@@ -83,7 +87,17 @@ def start_historical_backfill(
         .first()
     )
     if active is not None:
-        return _backfill_response(active)
+        active_since = active.started_at or active.created_at
+        if active_since.tzinfo is None:
+            active_since = active_since.replace(tzinfo=timezone.utc)
+        if active_since >= datetime.now(timezone.utc) - timedelta(minutes=30):
+            return _backfill_response(active)
+        active.status = "failed"
+        active.error_message = "The model update timed out. Your source data was not changed; start the update again."
+        active.failure_stage = "timeout"
+        active.progress_stage = "failed"
+        active.completed_at = datetime.now(timezone.utc)
+        db.commit()
 
     run = IntelligenceBackfillRun(
         user_id=current_user.id,

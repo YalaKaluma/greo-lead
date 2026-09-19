@@ -8,7 +8,7 @@ import logging
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
-from typing import Iterable
+from typing import Callable, Iterable
 
 from openai import OpenAI
 from sqlalchemy.orm import Session
@@ -63,6 +63,8 @@ PROMPT_VERSION = "executive-model-v2"
 MAX_BATCH_CHARACTERS = 18_000
 MAX_BATCH_CLAIMS = 10
 MAX_FINAL_CLAIMS = 30
+
+ProgressCallback = Callable[[int, str, int, int], None]
 
 
 @dataclass(frozen=True)
@@ -511,12 +513,23 @@ def synthesize_claims(
     *,
     processing_mode: str,
     changed_existing_ids: list[int] | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> list[IntelligenceClaim]:
     client = OpenAI(api_key=OPENAI_API_KEY)
     evidence_by_id = {row.id: row for row in evidence}
     candidates: list[dict] = []
-    for batch in _batches(_evidence_lines(sorted(evidence, key=lambda item: _utc(item.occurred_at)))):
+    batches = _batches(_evidence_lines(sorted(evidence, key=lambda item: _utc(item.occurred_at))))
+    if progress_callback:
+        progress_callback(20, "analyzing_history", 0, len(batches))
+    for index, batch in enumerate(batches):
         candidates.extend(_extract_batch_claims(client, batch))
+        if progress_callback:
+            completed = index + 1
+            progress_callback(20 + int(60 * completed / max(1, len(batches))),
+                              "analyzing_history", completed, len(batches))
+
+    if progress_callback:
+        progress_callback(85, "consolidating_model", 0, 0)
 
     old_claims = db.query(IntelligenceClaim).filter(IntelligenceClaim.user_id == user.id).all()
     rejected = [row.statement for row in old_claims if row.review_status == "rejected"]
@@ -557,6 +570,8 @@ def synthesize_claims(
         if row.review_status in {"active", "confirmed"}
     ][:60]
     final_claims = _consolidate_all_claims(client, candidates, rejected, existing_context)
+    if progress_callback:
+        progress_callback(92, "saving_model", 0, 0)
     existing_statements = {row["statement"].strip().casefold() for row in existing_context}
 
     created: list[IntelligenceClaim] = []
@@ -595,6 +610,25 @@ def execute_backfill_run(run_id: int, user_id: int) -> None:
     """Execute outside the request session so Railway can return immediately."""
     db = SessionLocal()
     stage = "initializing"
+
+    def report_progress(percent: int, progress_stage: str, current: int = 0, total: int = 0) -> None:
+        """Persist visible progress independently from the synthesis transaction."""
+        progress_db = SessionLocal()
+        try:
+            progress_run = progress_db.query(IntelligenceBackfillRun).filter(
+                IntelligenceBackfillRun.id == run_id,
+                IntelligenceBackfillRun.user_id == user_id,
+            ).first()
+            if progress_run is None:
+                return
+            progress_run.progress_percent = max(0, min(100, int(percent)))
+            progress_run.progress_stage = progress_stage
+            progress_run.progress_current = max(0, int(current))
+            progress_run.progress_total = max(0, int(total))
+            progress_db.commit()
+        finally:
+            progress_db.close()
+
     try:
         run = db.query(IntelligenceBackfillRun).filter(IntelligenceBackfillRun.id == run_id,
                                                        IntelligenceBackfillRun.user_id == user_id).first()
@@ -606,8 +640,10 @@ def execute_backfill_run(run_id: int, user_id: int) -> None:
         db.commit()
 
         stage = "collecting_evidence"
+        report_progress(5, stage)
         candidates = collect_historical_evidence(db, user)
         stage = "upserting_evidence"
+        report_progress(12, stage)
         has_synthesized_evidence = db.query(IntelligenceEvidence.id).filter(
             IntelligenceEvidence.user_id == user.id,
             IntelligenceEvidence.synthesized_content_hash.isnot(None),
@@ -622,6 +658,8 @@ def execute_backfill_run(run_id: int, user_id: int) -> None:
         if not pending:
             run.claims_created = 0
             run.status = "completed"
+            run.progress_percent = 100
+            run.progress_stage = "completed"
             run.completed_at = datetime.now(timezone.utc)
             db.commit()
             return
@@ -635,11 +673,17 @@ def execute_backfill_run(run_id: int, user_id: int) -> None:
             pending,
             processing_mode=run.processing_mode,
             changed_existing_ids=delta["changed_existing_ids"],
+            progress_callback=report_progress,
         )
         stage = "finalizing"
+        report_progress(96, stage)
         mark_evidence_synthesized(db, pending)
         run.claims_created = len(claims)
         run.status = "completed"
+        run.progress_percent = 100
+        run.progress_stage = "completed"
+        run.progress_current = 0
+        run.progress_total = 0
         run.completed_at = datetime.now(timezone.utc)
         db.commit()
     except Exception as error:
@@ -651,6 +695,7 @@ def execute_backfill_run(run_id: int, user_id: int) -> None:
             run.error_message = "Alfred could not complete the historical analysis. No existing source data was changed."
             run.failure_stage = stage
             run.failure_reference = incident_id
+            run.progress_stage = "failed"
             run.completed_at = datetime.now(timezone.utc)
             db.commit()
     finally:
