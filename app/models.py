@@ -352,6 +352,140 @@ class MessageSignalFlag(Base):
     user = relationship("User")
     message = relationship("Message")
 
+
+class IntelligenceEvidence(Base):
+    """Source-backed observation available to Alfred's longitudinal model."""
+
+    __tablename__ = "intelligence_evidence"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "source_type",
+            "source_id",
+            "evidence_key",
+            name="uq_intelligence_evidence_source_key",
+        ),
+        Index("idx_intelligence_evidence_user_occurred", "user_id", "occurred_at"),
+        Index("idx_intelligence_evidence_user_source", "user_id", "source_type"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_number = Column(String, nullable=True, index=True)
+    source_type = Column(String(40), nullable=False, index=True)
+    source_id = Column(String(120), nullable=False)
+    evidence_key = Column(String(120), nullable=False, default="primary")
+    evidence_type = Column(String(40), nullable=False, default="observation", index=True)
+    excerpt = Column(Text, nullable=True)
+    payload = Column(MutableDict.as_mutable(JSONB), nullable=True)
+    occurred_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    observed_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    user = relationship("User")
+    claim_links = relationship(
+        "IntelligenceClaimEvidence",
+        back_populates="evidence",
+        cascade="all, delete-orphan",
+    )
+
+
+class IntelligenceClaim(Base):
+    """A versionable fact, statement, observation, hypothesis, or validated pattern."""
+
+    __tablename__ = "intelligence_claims"
+    __table_args__ = (
+        CheckConstraint("confidence_score >= 0 AND confidence_score <= 1", name="ck_intelligence_claim_confidence"),
+        Index("idx_intelligence_claims_user_status", "user_id", "review_status"),
+        Index("idx_intelligence_claims_user_type", "user_id", "claim_type"),
+        Index("idx_intelligence_claims_user_updated", "user_id", "updated_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_number = Column(String, nullable=True, index=True)
+    claim_type = Column(String(40), nullable=False, index=True)
+    subject_type = Column(String(40), nullable=True, index=True)
+    subject_id = Column(String(120), nullable=True, index=True)
+    statement = Column(Text, nullable=False)
+    epistemic_status = Column(String(40), nullable=False, default="hypothesis", index=True)
+    confidence_score = Column(Float, nullable=False, default=0.0)
+    review_status = Column(String(30), nullable=False, default="active", index=True)
+    valid_from = Column(DateTime(timezone=True), nullable=True)
+    valid_to = Column(DateTime(timezone=True), nullable=True)
+    confirmed_at = Column(DateTime(timezone=True), nullable=True)
+    contradicted_at = Column(DateTime(timezone=True), nullable=True)
+    superseded_by_id = Column(
+        Integer,
+        ForeignKey("intelligence_claims.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    metadata_json = Column(MutableDict.as_mutable(JSONB), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User")
+    evidence_links = relationship(
+        "IntelligenceClaimEvidence",
+        back_populates="claim",
+        cascade="all, delete-orphan",
+    )
+    superseded_by = relationship("IntelligenceClaim", remote_side=[id])
+
+
+class IntelligenceClaimEvidence(Base):
+    """Traceability edge connecting an inference to supporting or contradicting evidence."""
+
+    __tablename__ = "intelligence_claim_evidence"
+    __table_args__ = (
+        UniqueConstraint("claim_id", "evidence_id", name="uq_intelligence_claim_evidence"),
+        Index("idx_intelligence_claim_evidence_claim", "claim_id"),
+        Index("idx_intelligence_claim_evidence_evidence", "evidence_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    claim_id = Column(
+        Integer,
+        ForeignKey("intelligence_claims.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    evidence_id = Column(
+        Integer,
+        ForeignKey("intelligence_evidence.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    relationship_type = Column(String(20), nullable=False, default="supports")
+    relevance_score = Column(Float, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    claim = relationship("IntelligenceClaim", back_populates="evidence_links")
+    evidence = relationship("IntelligenceEvidence", back_populates="claim_links")
+
+
+class IntelligenceBackfillRun(Base):
+    """Durable status for a per-user historical intelligence rebuild."""
+
+    __tablename__ = "intelligence_backfill_runs"
+    __table_args__ = (
+        Index("idx_intelligence_backfill_runs_user_created", "user_id", "created_at"),
+        Index("idx_intelligence_backfill_runs_status", "status"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(30), nullable=False, default="queued", index=True)
+    evidence_count = Column(Integer, nullable=False, default=0)
+    claims_created = Column(Integer, nullable=False, default=0)
+    source_counts = Column(MutableDict.as_mutable(JSONB), nullable=True)
+    prompt_version = Column(String(80), nullable=True)
+    model_version = Column(String(80), nullable=True)
+    error_message = Column(Text, nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    user = relationship("User")
+
 class Task(Base):
     __tablename__ = "tasks"
 

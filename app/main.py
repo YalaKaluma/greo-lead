@@ -12,7 +12,7 @@ import time
 from urllib.parse import parse_qsl, urlencode
 from datetime import datetime
 from app.db import engine, SessionLocal
-from app.routers import journal, tasks, nudge, journey, messages, habits, waitlist, onboarding, chat, priority, leadership_coaching_router, audio, meetings, projects, message_feedback, opportunities, message_signals, settings, admin, admin_operations, admin_cto, usage, home, notifications
+from app.routers import journal, tasks, nudge, journey, messages, habits, waitlist, onboarding, chat, priority, leadership_coaching_router, audio, meetings, projects, message_feedback, opportunities, message_signals, settings, admin, admin_operations, admin_cto, usage, home, notifications, intelligence
 from app.routers import auth
 from sqlalchemy import text
 import threading
@@ -360,6 +360,7 @@ routers_to_register = [
     (projects.router, "/api/projects", "Projects", "authenticated"),
     (message_feedback.router, "/api", "Message-Feedback", "authenticated"),
     (message_signals.router, "/api/message-signals", "Message-Signals", "authenticated"),
+    (intelligence.router, "/api/intelligence", "Intelligence", "authenticated"),
     (usage.router, "/api", "Usage", "authenticated"),
     (opportunities.router, "/api/opportunities", "Opportunities", "authenticated"),
     (priority.router, "/api/priority", "Priority", "authenticated"),
