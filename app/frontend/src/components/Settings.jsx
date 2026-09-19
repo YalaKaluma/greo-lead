@@ -364,6 +364,7 @@ function ExecutiveModelPanel({ apiUrl, t }) {
 
   const run = model?.last_run;
   const isRunning = run && ['queued', 'ingesting', 'synthesizing'].includes(run.status);
+  const progressPercent = Math.max(0, Math.min(100, run?.progress_percent || 0));
   const visibleClaims = activeSection === 'overview'
     ? (model?.review_queue || [])
     : (model?.sections?.[activeSection] || []);
@@ -407,6 +408,37 @@ function ExecutiveModelPanel({ apiUrl, t }) {
                 {run.failure_reference ? ` · ${t('settings.executiveModel.failureReference')}: ${run.failure_reference}` : ''}
               </p>
             )}
+          </div>
+        )}
+
+        {isRunning && (
+          <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4">
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <div>
+                <p className="font-semibold text-blue-950">
+                  {t(`settings.executiveModel.progress.${run.progress_stage || 'queued'}`)}
+                </p>
+                {run.progress_total > 0 && (
+                  <p className="mt-1 text-xs text-blue-700">
+                    {t('settings.executiveModel.progressBatch')} {run.progress_current} / {run.progress_total}
+                  </p>
+                )}
+              </div>
+              <span className="text-sm font-semibold tabular-nums text-blue-800">{progressPercent}%</span>
+            </div>
+            <div
+              className="mt-3 h-2.5 overflow-hidden rounded-full bg-blue-100"
+              role="progressbar"
+              aria-label={t('settings.executiveModel.progressLabel')}
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow={progressPercent}
+            >
+              <div
+                className="h-full rounded-full bg-blue-600 transition-all duration-500"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
           </div>
         )}
 
