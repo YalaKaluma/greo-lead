@@ -26,6 +26,8 @@ This folder contains Alfred's orchestration and business logic. Services are whe
 - `goal_progress_review_service.py` and `vision_progress_review_service.py` generate goal and vision review summaries.
 - `opportunity/` contains context building, generation, scoring, selection, feedback, and service entry points for opportunity suggestions.
 - `message_service.py` and `message_signal_classifier.py` support message history and signal classification.
+- `intelligence_core_service.py` stores source-backed evidence separately from claims, compiles confidence-aware longitudinal context, preserves default behavior for cold-start users, and supports user confirmation/correction of Alfred's model.
+- `intelligence_backfill_service.py` ingests a signed-in user's historical Alfred data idempotently, distinguishes primary evidence from AI-derived or context-only material, and synthesizes inspectable longitudinal beliefs in a durable background run.
 - `gmail_service.py` and `audio_service.py` wrap external Gmail/audio dependencies.
 - `morning_briefing_service.py` supports proactive briefing/nudge behavior.
 - `onboarding_service.py` supports onboarding data extraction and setup.
