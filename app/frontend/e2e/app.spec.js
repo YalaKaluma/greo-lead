@@ -107,7 +107,7 @@ test('frequently used pages load without a browser crash', async ({ page }) => {
     ['My Vision & Goals', 'My Vision and Goals'],
     ['My Projects', 'My Projects'],
     ['My Tasks', 'Your To-Do List'],
-    ['My Emails', 'Leadership Operating System'],
+    ['My Emails', 'My Emails'],
     ['My Habits', 'My Executive Habits'],
     ['My Team', 'My Leadership Ecosystem'],
     ['My Meetings', 'Meetings'],
