@@ -300,49 +300,8 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
   );
 }
 
-const EXECUTIVE_MODEL_SECTIONS = ['overview', 'direction', 'current_context', 'how_i_operate', 'relationships', 'growth'];
-const OPERATING_MODEL_AREAS = ['direction', 'strengths', 'operating_patterns', 'current_pressures', 'relationships', 'development_edges', 'coaching_priorities'];
+const TWIN_DIMENSIONS = ['identity_and_direction', 'leadership', 'operating_model', 'capabilities', 'leadership_world', 'track_record', 'current_reality', 'development'];
 const EVIDENCE_ROLES = ['supports', 'counters', 'qualifies'];
-
-function OperatingModelOverview({ operatingModel, onSelect, displayStatement, t }) {
-  const populatedAreas = OPERATING_MODEL_AREAS.filter((area) => (operatingModel?.[area] || []).length > 0);
-  if (populatedAreas.length === 0) return null;
-
-  return (
-    <div className="mb-8 mt-6">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-950">{t('settings.executiveModel.operatingModel.title')}</h3>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">{t('settings.executiveModel.operatingModel.description')}</p>
-        </div>
-      </div>
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
-        {populatedAreas.map((area) => (
-          <section key={area} className={`rounded-xl border p-4 ${area === 'coaching_priorities' ? 'border-blue-200 bg-blue-50' : 'border-slate-200 bg-white'}`}>
-            <h4 className="text-sm font-semibold text-slate-950">{t(`settings.executiveModel.operatingModel.${area}`)}</h4>
-            <div className="mt-3 space-y-3">
-              {(operatingModel[area] || []).map((item) => (
-                <button
-                  key={`${area}-${item.claim_id}`}
-                  type="button"
-                  onClick={() => onSelect(item.claim_id)}
-                  className="block w-full rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-blue-300 hover:shadow-sm"
-                >
-                  {item.title && <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{item.title}</span>}
-                  <span className="mt-1 block text-sm leading-6 text-slate-800">{displayStatement(item.statement)}</span>
-                  <span className="mt-2 block text-xs text-slate-500">
-                    {item.evidence_count} {t('settings.executiveModel.operatingModel.evidencePoints')}
-                    {item.counterevidence_count > 0 ? ` · ${item.counterevidence_count} ${t('settings.executiveModel.operatingModel.counterpoints')}` : ''}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </section>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function ClaimCard({ claim, onOpen, displayStatement, displayType, displayStatus, displayStability, t }) {
   const roleCount = (role) => (claim.evidence || []).filter((item) => (item.relationship_type || 'supports') === role).length;
@@ -353,9 +312,6 @@ function ClaimCard({ claim, onOpen, displayStatement, displayType, displayStatus
         <span>{displayStatus(claim.epistemic_status)}</span><span>·</span>
         <span>{displayStability(claim.stability)}</span>
         {claim.scope && <><span>·</span><span>{claim.scope}</span></>}
-        {claim.review_status === 'confirmed' && (
-          <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-800">{t('settings.executiveModel.confirmed')}</span>
-        )}
       </div>
       {claim.pattern_title && <h4 className="mt-3 text-lg font-semibold text-slate-950">{claim.pattern_title}</h4>}
       <p className="mt-2 text-base leading-7 text-slate-900">{displayStatement(claim.statement)}</p>
@@ -375,7 +331,7 @@ function ClaimCard({ claim, onOpen, displayStatement, displayType, displayStatus
   );
 }
 
-function ClaimDossier({ claim, onClose, onReview, displayStatement, displayType, displayStatus, displayStability, t }) {
+function ClaimDossier({ claim, onClose, displayStatement, displayType, displayStatus, displayStability, t }) {
   useEffect(() => {
     if (!claim) return undefined;
     const closeOnEscape = (event) => {
@@ -453,11 +409,6 @@ function ClaimDossier({ claim, onClose, onReview, displayStatement, displayType,
             {claim.coaching_implication && <div className="rounded-xl bg-blue-50 p-4"><h4 className="text-sm font-semibold text-blue-950">{t('settings.executiveModel.coaching')}</h4><p className="mt-2 text-sm leading-6 text-blue-900">{claim.coaching_implication}</p></div>}
           </section>}
 
-          <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-5">
-            <button type="button" onClick={() => onReview(claim, 'confirm')} className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-600">{t('settings.executiveModel.confirm')}</button>
-            <button type="button" onClick={() => onReview(claim, 'correct')} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">{t('settings.executiveModel.correct')}</button>
-            <button type="button" onClick={() => onReview(claim, 'reject')} className="rounded-md border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50">{t('settings.executiveModel.reject')}</button>
-          </div>
         </div>
       </div>
     </div>
@@ -466,7 +417,8 @@ function ClaimDossier({ claim, onClose, onReview, displayStatement, displayType,
 
 function ExecutiveModelPanel({ apiUrl, t }) {
   const [model, setModel] = useState(null);
-  const [activeSection, setActiveSection] = useState('overview');
+  const [activeView, setActiveView] = useState('core');
+  const [activeDimension, setActiveDimension] = useState('identity_and_direction');
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [analysisWeeks, setAnalysisWeeks] = useState(12);
@@ -521,40 +473,18 @@ function ExecutiveModelPanel({ apiUrl, t }) {
     }
   };
 
-  const reviewClaim = async (claim, action) => {
-    let correctedStatement = null;
-    if (action === 'correct') {
-      correctedStatement = window.prompt(t('settings.executiveModel.correctPrompt'), claim.statement);
-      if (!correctedStatement || correctedStatement.trim() === claim.statement.trim()) return;
-    }
-    try {
-      await axios.patch(`${apiUrl}/api/intelligence/claims/${claim.id}`, {
-        action,
-        corrected_statement: correctedStatement
-      });
-      setSelectedClaimId(null);
-      await load();
-    } catch (requestError) {
-      setError(requestError.response?.data?.detail || t('settings.executiveModel.reviewError'));
-    }
-  };
-
   const run = model?.last_run;
   const isRunning = run && ['queued', 'ingesting', 'synthesizing'].includes(run.status);
   const progressPercent = Math.max(0, Math.min(100, run?.progress_percent || 0));
-  const visibleClaims = activeSection === 'overview'
-    ? (model?.review_queue || [])
-    : (model?.sections?.[activeSection] || []);
-  const allClaims = Object.values(model?.sections || {}).flat();
+  const visibleClaims = model?.full_twin?.[activeDimension] || [];
+  const allClaims = Object.values(model?.full_twin || {}).flat();
   const selectedClaim = allClaims.find((claim) => claim.id === selectedClaimId) || null;
   const hasModel = (model?.assertion_count || 0) > 0;
 
   const displayType = (value) => t(`settings.executiveModel.type.${value || 'attribute'}`);
   const displayStatus = (value) => t(`settings.executiveModel.status.${value || 'hypothesis'}`);
   const displayStability = (value) => t(`settings.executiveModel.stability.${value || 'recurring'}`);
-  const displayStatement = (value) => String(value || '')
-    .replace(/^The user\b/i, t('settings.executiveModel.you'))
-    .replace(/^Alfred(?=\s+(?:is|has|shows|demonstrates|tends|appears|may|often|consistently)\b)/i, t('settings.executiveModel.you'));
+  const displayStatement = (value) => String(value || '');
 
   const formatActivity = (item) => {
     const details = item?.details || {};
@@ -590,6 +520,10 @@ function ExecutiveModelPanel({ apiUrl, t }) {
         return `${t('settings.executiveModel.activity.finalConsolidationRestored')} · ${details.candidate_count || 0} ${t('settings.executiveModel.activity.candidates')}`;
       case 'saving_model':
         return `${t('settings.executiveModel.activity.saving')} ${details.assertion_count || 0} ${t('settings.executiveModel.activity.assertionCandidates')}`;
+      case 'core_twin_started':
+        return t('settings.executiveModel.activity.coreTwinStarted');
+      case 'core_twin_completed':
+        return `${t('settings.executiveModel.activity.coreTwinCompleted')} ${details.assertion_count || 0} ${t('settings.executiveModel.activity.assertionCandidates')}`;
       case 'run_completed':
         return `${t('settings.executiveModel.activity.completed')} ${details.claims_created || 0} ${t('settings.executiveModel.activity.assertionsCreated')}`;
       case 'run_failed':
@@ -754,63 +688,57 @@ function ExecutiveModelPanel({ apiUrl, t }) {
           </p>
         ) : (
           <div className="mt-8">
-            <div className="flex flex-wrap gap-2 border-b border-slate-200" role="tablist" aria-label={t('settings.executiveModel.sectionsLabel')}>
-              {EXECUTIVE_MODEL_SECTIONS.map((section) => (
-                <button
-                  key={section}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeSection === section}
-                  onClick={() => setActiveSection(section)}
-                  className={`border-b-2 px-3 py-2 text-sm font-semibold ${activeSection === section ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
-                >
-                  {t(`settings.executiveModel.section.${section}`)}
-                  {section === 'overview' && model.needs_review > 0 ? ` (${model.needs_review})` : ''}
+            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1" role="tablist" aria-label={t('settings.executiveModel.twinViewsLabel')}>
+              {['core', 'full'].map((view) => (
+                <button key={view} type="button" role="tab" aria-selected={activeView === view}
+                  onClick={() => setActiveView(view)}
+                  className={`rounded-md px-4 py-2 text-sm font-semibold ${activeView === view ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}>
+                  {t(`settings.executiveModel.view.${view}`)}
                 </button>
               ))}
             </div>
 
-            <div className="mt-6">
-              <h3 className="text-base font-semibold text-slate-950">{t(`settings.executiveModel.section.${activeSection}`)}</h3>
-              <p className="mt-1 text-sm text-slate-500">{t(`settings.executiveModel.sectionDescription.${activeSection}`)}</p>
-            </div>
-
-            {activeSection === 'overview' && (
-              <OperatingModelOverview
-                operatingModel={model?.operating_model}
-                onSelect={setSelectedClaimId}
-                displayStatement={displayStatement}
-                t={t}
-              />
-            )}
-
-            {activeSection === 'overview' && visibleClaims.length > 0 && (
-              <div className="mt-8">
-                <h3 className="text-base font-semibold text-slate-950">{t('settings.executiveModel.reviewQueueTitle')}</h3>
-                <p className="mt-1 text-sm text-slate-500">{t('settings.executiveModel.reviewQueueDescription')}</p>
+            {activeView === 'core' ? (
+              <div className="mt-6">
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-5">
+                  <h3 className="text-lg font-semibold text-blue-950">{t('settings.executiveModel.core.title')}</h3>
+                  <p className="mt-2 text-sm leading-6 text-blue-900">{model?.core_twin?.overview || t('settings.executiveModel.core.empty')}</p>
+                </div>
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  {TWIN_DIMENSIONS.map((dimension) => (
+                    <section key={dimension} className="rounded-xl border border-slate-200 bg-white p-5">
+                      <h4 className="text-sm font-semibold text-slate-950">{t(`settings.executiveModel.dimension.${dimension}`)}</h4>
+                      <p className="mt-2 text-sm leading-6 text-slate-700">{model?.core_twin?.dimensions?.[dimension] || t('settings.executiveModel.core.noFinding')}</p>
+                    </section>
+                  ))}
+                </div>
               </div>
-            )}
-
-            {visibleClaims.length === 0 ? (
-              <p className="mt-5 rounded-lg bg-slate-50 p-5 text-sm text-slate-600">
-                {activeSection === 'overview'
-                  ? t('settings.executiveModel.reviewedAll')
-                  : t('settings.executiveModel.sectionEmpty')}
-              </p>
             ) : (
-              <div className="mt-5 space-y-4">
-              {visibleClaims.map((claim) => (
-                <ClaimCard
-                  key={claim.id}
-                  claim={claim}
-                  onOpen={setSelectedClaimId}
-                  displayStatement={displayStatement}
-                  displayType={displayType}
-                  displayStatus={displayStatus}
-                  displayStability={displayStability}
-                  t={t}
-                />
-              ))}
+              <div className="mt-6">
+                <div className="flex flex-wrap gap-2" role="tablist" aria-label={t('settings.executiveModel.dimensionsLabel')}>
+                  {TWIN_DIMENSIONS.map((dimension) => (
+                    <button key={dimension} type="button" role="tab" aria-selected={activeDimension === dimension}
+                      onClick={() => setActiveDimension(dimension)}
+                      className={`rounded-full border px-3 py-2 text-sm font-semibold ${activeDimension === dimension ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`}>
+                      {t(`settings.executiveModel.dimension.${dimension}`)} ({model?.full_twin?.[dimension]?.length || 0})
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-6">
+                  <h3 className="text-base font-semibold text-slate-950">{t(`settings.executiveModel.dimension.${activeDimension}`)}</h3>
+                  <p className="mt-1 text-sm text-slate-500">{t('settings.executiveModel.full.description')}</p>
+                </div>
+                {visibleClaims.length === 0 ? (
+                  <p className="mt-5 rounded-lg bg-slate-50 p-5 text-sm text-slate-600">{t('settings.executiveModel.sectionEmpty')}</p>
+                ) : (
+                  <div className="mt-5 space-y-4">
+                    {visibleClaims.map((claim) => (
+                      <ClaimCard key={claim.id} claim={claim} onOpen={setSelectedClaimId}
+                        displayStatement={displayStatement} displayType={displayType}
+                        displayStatus={displayStatus} displayStability={displayStability} t={t} />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -819,7 +747,6 @@ function ExecutiveModelPanel({ apiUrl, t }) {
       <ClaimDossier
         claim={selectedClaim}
         onClose={() => setSelectedClaimId(null)}
-        onReview={reviewClaim}
         displayStatement={displayStatement}
         displayType={displayType}
         displayStatus={displayStatus}
