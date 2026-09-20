@@ -7,6 +7,7 @@ from app.services.twin_context_service import TwinContext
 
 
 class EmailDraftingServiceTest(TestCase):
+    @patch("app.services.email_drafting_service.retrieve_evidence")
     @patch("app.services.email_drafting_service.client.chat.completions.create")
     @patch("app.services.email_drafting_service.load_conversation_history")
     @patch("app.services.email_drafting_service.get_twin_context")
@@ -15,7 +16,9 @@ class EmailDraftingServiceTest(TestCase):
         get_twin_context,
         load_history,
         create_completion,
+        retrieve_evidence,
     ):
+        retrieve_evidence.return_value = []
         get_twin_context.return_value = TwinContext(
             prompt_context="Prefers concise and direct communication.",
             applied=True,

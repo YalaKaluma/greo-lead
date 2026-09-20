@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db import get_db
-from app.models import JournalEntry, User
+from app.models import IntelligenceEvidence, JournalEntry, User
 from app.services.journal_reflection_depth_service import apply_reflection_depth, get_reflection_depth_trends
 from app.services.audit_log_service import write_audit_log
 from app.services.message_service import save_message
+from app.services.evidence_memory_service import sync_journal_entry
 from app.routers.auth import require_authenticated_user
 from app.utils.safe_errors import log_failure
 
@@ -48,6 +49,11 @@ def create_entry(text: str, user_id: int | None = None, db: Session = Depends(ge
         except Exception as error:
             db.rollback()
             log_failure("journal_signal_classification", error)
+    try:
+        sync_journal_entry(db, current_user, entry)
+    except Exception as error:
+        db.rollback()
+        log_failure("journal_evidence_memory", error)
     return {"status": "created", "entry": entry}
 
 
@@ -116,6 +122,11 @@ def update_entry(entry_id: int, text: str, user_id: int | None = None, db: Sessi
         log_failure("journal_reflection_scoring", error)
     db.commit()
     db.refresh(entry)
+    try:
+        sync_journal_entry(db, current_user, entry)
+    except Exception as error:
+        db.rollback()
+        log_failure("journal_evidence_memory", error)
     return {"status": "updated", "entry": entry}
 
 
@@ -135,6 +146,11 @@ def delete_entry(entry_id: int, user_id: int | None = None, db: Session = Depend
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
 
+    db.query(IntelligenceEvidence).filter(
+        IntelligenceEvidence.user_id == current_user.id,
+        IntelligenceEvidence.source_type == "journal",
+        IntelligenceEvidence.source_id == str(entry_id),
+    ).delete(synchronize_session=False)
     db.delete(entry)
     db.commit()
     write_audit_log(
