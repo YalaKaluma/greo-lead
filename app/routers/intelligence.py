@@ -7,9 +7,14 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import IntelligenceBackfillRun, IntelligenceEvidence, User
+from app.models import IntelligenceBackfillRun, IntelligenceEvidence, IntelligenceTwinSnapshot, User
 from app.routers.auth import require_authenticated_user
-from app.services.intelligence_backfill_service import OPENAI_MODEL, PROMPT_VERSION, execute_backfill_run
+from app.services.intelligence_backfill_service import (
+    OPENAI_MODEL,
+    PROMPT_VERSION,
+    TWIN_DIMENSIONS,
+    execute_backfill_run,
+)
 from app.services.intelligence_core_service import IntelligenceCoreService
 
 
@@ -104,11 +109,6 @@ class ClaimCreate(BaseModel):
     subject_type: str | None = Field(default=None, max_length=40)
     subject_id: str | None = Field(default=None, max_length=120)
     metadata: dict | None = None
-
-
-class ClaimReview(BaseModel):
-    action: Literal["confirm", "reject", "correct"]
-    corrected_statement: str | None = Field(default=None, max_length=4000)
 
 
 class BackfillStart(BaseModel):
@@ -221,6 +221,7 @@ def _evidence_response(evidence):
 
 
 def _claim_response(claim):
+    dimensions = list((claim.metadata_json or {}).get("twin_dimensions") or [])
     return {
         "id": claim.id,
         "claim_type": claim.claim_type,
@@ -239,6 +240,7 @@ def _claim_response(claim):
         "contradicted_at": claim.contradicted_at,
         "superseded_by_id": claim.superseded_by_id,
         "metadata": claim.metadata_json,
+        "dimensions": dimensions,
         "pattern_key": claim.pattern_key,
         "pattern_title": claim.pattern_title,
         "interpretation": claim.interpretation,
@@ -395,6 +397,31 @@ def build_operating_model(claims: list) -> dict:
     return {**areas, "coaching_priorities": coaching_priorities}
 
 
+def build_full_twin(claims: list) -> dict:
+    """Expose one characteristic through every dimension it informs."""
+    grouped = {dimension: [] for dimension in TWIN_DIMENSIONS}
+    for claim in claims:
+        payload = _claim_response(claim)
+        dimensions = [
+            dimension for dimension in payload["dimensions"]
+            if dimension in grouped
+        ]
+        if not dimensions:
+            dimensions = ["operating_model"]
+        for dimension in dimensions:
+            grouped[dimension].append(payload)
+    for items in grouped.values():
+        items.sort(
+            key=lambda item: (
+                item["confidence_score"],
+                len(item["evidence"]),
+                item["updated_at"],
+            ),
+            reverse=True,
+        )
+    return grouped
+
+
 @router.get("/model")
 def get_executive_model(
     db: Session = Depends(get_db),
@@ -403,20 +430,14 @@ def get_executive_model(
     service = IntelligenceCoreService(db)
     claims = service.list_claims(current_user.id, limit=200)
     context = service.compile_context(user=current_user, surface="general", limit=12)
-    sections = {section: [] for section in MODEL_SECTIONS}
-    review_queue = []
-    for claim in claims:
-        payload = _claim_response(claim)
-        sections[model_section(claim)].append(payload)
-        if claim.review_status == "active":
-            review_queue.append(payload)
-    review_queue.sort(
-        key=lambda item: (
-            item["object_type"] == "state",
-            item["epistemic_status"] == "hypothesis",
-            item["updated_at"],
-        ),
-        reverse=True,
+    core_snapshot = (
+        db.query(IntelligenceTwinSnapshot)
+        .filter(
+            IntelligenceTwinSnapshot.user_id == current_user.id,
+            IntelligenceTwinSnapshot.is_current.is_(True),
+        )
+        .order_by(IntelligenceTwinSnapshot.created_at.desc())
+        .first()
     )
     run = (
         db.query(IntelligenceBackfillRun)
@@ -437,35 +458,15 @@ def get_executive_model(
         "evidence_count": context["evidence_count"],
         "source_count": context["source_count"],
         "assertion_count": len(claims),
-        "needs_review": len(review_queue),
-        "sections": sections,
-        "operating_model": build_operating_model(claims),
-        "review_queue": review_queue[:30],
+        "needs_review": 0,
+        "core_twin": core_snapshot.core_twin if core_snapshot else None,
+        "core_twin_updated_at": core_snapshot.created_at if core_snapshot else None,
+        "full_twin": build_full_twin(claims),
         "last_run": _backfill_response(run),
         "history_start": history_start,
         "history_end": history_end,
         "history_weeks": history_weeks,
     }
-
-
-@router.patch("/claims/{claim_id}")
-def review_claim(
-    claim_id: int,
-    request: ClaimReview,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_authenticated_user),
-):
-    try:
-        claim = IntelligenceCoreService(db).review_claim(
-            user=current_user,
-            claim_id=claim_id,
-            **request.model_dump(),
-        )
-    except LookupError as error:
-        raise HTTPException(status_code=404, detail="Claim not found") from error
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail="Claim review request is invalid.") from error
-    return _claim_response(claim)
 
 
 @router.get("/context")
