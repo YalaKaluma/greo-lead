@@ -1087,6 +1087,17 @@ def _save_analysis(
     meeting.updated_at = datetime.now(timezone.utc)
 
 
+def _sync_meeting_memory(db: Session, meeting_id: int) -> None:
+    from app.services.evidence_memory_service import sync_meeting_evidence
+
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if meeting is None:
+        return
+    user = db.query(User).filter(User.phone_number == meeting.user_number).first()
+    if user is not None:
+        sync_meeting_evidence(db, user, meeting.id)
+
+
 def _mark_processing_failed(meeting_id: int, exc: Exception, stage: str, attempt_id: str) -> None:
     reference = f"MTG-{meeting_id}-{attempt_id}"
     stage_label = stage.replace("_", " ")
@@ -1272,6 +1283,22 @@ def process_meeting(meeting_id: int) -> None:
             meeting_id=meeting_id,
             attempt_id=attempt_id,
         )
+        try:
+            _with_fresh_session(
+                lambda db: _sync_meeting_memory(db, meeting_id),
+                "sync_meeting_memory",
+                meeting_id=meeting_id,
+                attempt_id=attempt_id,
+            )
+        except Exception as memory_error:
+            _meeting_log(
+                logging.WARNING,
+                "meeting_evidence_memory_deferred",
+                meeting_id=meeting_id,
+                attempt_id=attempt_id,
+                stage="sync_meeting_memory",
+                **_safe_error_fields(memory_error),
+            )
         try:
             _with_fresh_session(
                 lambda db: score_pending_meeting_action_items(

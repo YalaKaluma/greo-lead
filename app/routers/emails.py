@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import User
 from app.services.email_drafting_service import draft_email
+from app.services.evidence_memory_service import sync_email_context
 from app.services.message_service import save_message
 from app.utils.safe_errors import log_failure
 
@@ -45,6 +46,12 @@ def create_email_draft(request: EmailDraftRequest, db: Session = Depends(get_db)
     except Exception as exc:
         log_failure("email_draft", exc)
         raise HTTPException(status_code=503, detail="Alfred could not draft the email right now.") from exc
+
+    try:
+        sync_email_context(db, user, user_message.id, context)
+    except Exception as exc:
+        db.rollback()
+        log_failure("email_evidence_memory", exc)
 
     return {
         "draft": draft,

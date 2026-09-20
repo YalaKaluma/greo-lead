@@ -6,6 +6,7 @@ from app.config import OPENAI_MODEL
 from app.services.message_service import load_conversation_history
 from app.services.openai_service import client
 from app.services.twin_context_service import get_twin_context
+from app.services.evidence_memory_service import format_evidence_context, retrieve_evidence
 
 
 EMAIL_SYSTEM_PROMPT = """You are Alfred, an executive email drafting partner.
@@ -31,9 +32,12 @@ def draft_email(db: Session, user_number: str, request: str) -> str:
         conversation_type="email",
         limit=12,
     )
+    evidence_context = format_evidence_context(retrieve_evidence(db, user_number, request, limit=8))
     system_prompt = EMAIL_SYSTEM_PROMPT
     if twin.applied and twin.prompt_context:
         system_prompt += f"\n\nPERSONALIZATION CONTEXT:\n{twin.prompt_context}"
+    if evidence_context:
+        system_prompt += f"\n\n{evidence_context}\nUse only relevant evidence. Prefer current source evidence over generalized Twin patterns when they differ."
 
     response = client.chat.completions.create(
         model=OPENAI_MODEL,

@@ -392,6 +392,53 @@ class IntelligenceEvidence(Base):
         back_populates="evidence",
         cascade="all, delete-orphan",
     )
+    tag_links = relationship(
+        "IntelligenceEvidenceTag",
+        back_populates="evidence",
+        cascade="all, delete-orphan",
+    )
+
+
+class IntelligenceMemoryTag(Base):
+    """A normalized person, project, workstream, or theme attached to raw evidence."""
+
+    __tablename__ = "intelligence_memory_tags"
+    __table_args__ = (
+        UniqueConstraint("user_id", "tag_type", "normalized_value", name="uq_intelligence_memory_tag"),
+        Index("idx_intelligence_memory_tags_user_type", "user_id", "tag_type"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    tag_type = Column(String(30), nullable=False, index=True)
+    normalized_value = Column(String(240), nullable=False)
+    display_value = Column(String(240), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User")
+    evidence_links = relationship("IntelligenceEvidenceTag", back_populates="tag", cascade="all, delete-orphan")
+
+
+class IntelligenceEvidenceTag(Base):
+    """Association between raw evidence and a normalized memory tag."""
+
+    __tablename__ = "intelligence_evidence_tags"
+    __table_args__ = (
+        UniqueConstraint("evidence_id", "tag_id", name="uq_intelligence_evidence_tag"),
+        Index("idx_intelligence_evidence_tags_evidence", "evidence_id"),
+        Index("idx_intelligence_evidence_tags_tag", "tag_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    evidence_id = Column(Integer, ForeignKey("intelligence_evidence.id", ondelete="CASCADE"), nullable=False)
+    tag_id = Column(Integer, ForeignKey("intelligence_memory_tags.id", ondelete="CASCADE"), nullable=False)
+    confidence_score = Column(Float, nullable=False, default=1.0)
+    source = Column(String(30), nullable=False, default="automatic")
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    evidence = relationship("IntelligenceEvidence", back_populates="tag_links")
+    tag = relationship("IntelligenceMemoryTag", back_populates="evidence_links")
 
 
 class IntelligenceClaim(Base):

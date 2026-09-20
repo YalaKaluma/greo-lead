@@ -13,6 +13,7 @@ from app.models import (
     IntelligenceClaimContext,
     IntelligenceClaimEvidence,
     IntelligenceEvidence,
+    IntelligenceEvidenceTag,
     IntelligencePatternFeedback,
     IntelligenceTwinSnapshot,
     User,
@@ -25,6 +26,7 @@ from app.services.intelligence_backfill_service import (
     execute_backfill_run,
 )
 from app.services.intelligence_core_service import IntelligenceCoreService
+from app.services.evidence_memory_service import retrieve_evidence, set_evidence_tags
 
 
 router = APIRouter()
@@ -122,6 +124,71 @@ class ClaimCreate(BaseModel):
 
 class BackfillStart(BaseModel):
     weeks: int | None = Field(default=None, ge=1, le=520)
+
+
+class MemoryTagInput(BaseModel):
+    tag_type: Literal["person", "project", "workstream", "theme"]
+    value: str = Field(min_length=1, max_length=240)
+
+
+class MemoryTagsUpdate(BaseModel):
+    tags: list[MemoryTagInput] = Field(default_factory=list, max_length=30)
+
+
+@router.get("/memory/search")
+def search_evidence_memory(
+    q: str = Query(min_length=1, max_length=1000),
+    limit: int = Query(default=12, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_authenticated_user),
+):
+    return {
+        "results": [
+            {
+                "evidence_id": item.evidence_id,
+                "source_type": item.source_type,
+                "source_id": item.source_id,
+                "excerpt": item.excerpt,
+                "occurred_at": item.occurred_at,
+                "tags": item.tags,
+                "score": round(item.score, 4),
+            }
+            for item in retrieve_evidence(db, current_user.phone_number, q, limit=limit)
+        ]
+    }
+
+
+@router.put("/memory/evidence/{evidence_id}/tags")
+def replace_manual_evidence_tags(
+    evidence_id: int,
+    request: MemoryTagsUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_authenticated_user),
+):
+    evidence = db.query(IntelligenceEvidence).filter(
+        IntelligenceEvidence.id == evidence_id,
+        IntelligenceEvidence.user_id == current_user.id,
+    ).first()
+    if evidence is None:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    set_evidence_tags(
+        db,
+        evidence,
+        [(item.tag_type, item.value, 1.0) for item in request.tags],
+        source="manual",
+    )
+    db.commit()
+    db.refresh(evidence)
+    links = db.query(IntelligenceEvidenceTag).filter(
+        IntelligenceEvidenceTag.evidence_id == evidence.id,
+    ).all()
+    return {
+        "evidence_id": evidence.id,
+        "tags": [
+            {"type": link.tag.tag_type, "value": link.tag.display_value, "source": link.source}
+            for link in links
+        ],
+    }
 
 
 def _reset_legacy_twin_for_user(db: Session, user_id: int) -> None:
