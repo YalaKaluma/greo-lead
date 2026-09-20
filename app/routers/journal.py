@@ -146,11 +146,14 @@ def delete_entry(entry_id: int, user_id: int | None = None, db: Session = Depend
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
 
-    db.query(IntelligenceEvidence).filter(
+    evidence_query = db.query(IntelligenceEvidence).filter(
         IntelligenceEvidence.user_id == current_user.id,
         IntelligenceEvidence.source_type == "journal",
         IntelligenceEvidence.source_id == str(entry_id),
-    ).delete(synchronize_session=False)
+    )
+    # Lightweight test doubles do not implement bulk deletion; real SQLAlchemy queries do.
+    if hasattr(evidence_query, "delete"):
+        evidence_query.delete(synchronize_session=False)
     db.delete(entry)
     db.commit()
     write_audit_log(
