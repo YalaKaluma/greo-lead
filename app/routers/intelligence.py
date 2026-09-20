@@ -7,7 +7,16 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import IntelligenceBackfillRun, IntelligenceEvidence, IntelligenceTwinSnapshot, User
+from app.models import (
+    IntelligenceBackfillRun,
+    IntelligenceClaim,
+    IntelligenceClaimContext,
+    IntelligenceClaimEvidence,
+    IntelligenceEvidence,
+    IntelligencePatternFeedback,
+    IntelligenceTwinSnapshot,
+    User,
+)
 from app.routers.auth import require_authenticated_user
 from app.services.intelligence_backfill_service import (
     OPENAI_MODEL,
@@ -115,6 +124,37 @@ class BackfillStart(BaseModel):
     weeks: int | None = Field(default=None, ge=1, le=520)
 
 
+def _reset_legacy_twin_for_user(db: Session, user_id: int) -> None:
+    """Delete one user's generated twin while preserving every source record."""
+    claim_ids = [
+        row[0]
+        for row in db.query(IntelligenceClaim.id).filter(IntelligenceClaim.user_id == user_id).all()
+    ]
+    if claim_ids:
+        db.query(IntelligenceClaimContext).filter(
+            IntelligenceClaimContext.claim_id.in_(claim_ids)
+        ).delete(synchronize_session=False)
+        db.query(IntelligenceClaimEvidence).filter(
+            IntelligenceClaimEvidence.claim_id.in_(claim_ids)
+        ).delete(synchronize_session=False)
+    db.query(IntelligencePatternFeedback).filter(
+        IntelligencePatternFeedback.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(IntelligenceClaim).filter(
+        IntelligenceClaim.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(IntelligenceEvidence).filter(
+        IntelligenceEvidence.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(IntelligenceTwinSnapshot).filter(
+        IntelligenceTwinSnapshot.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(IntelligenceBackfillRun).filter(
+        IntelligenceBackfillRun.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.commit()
+
+
 @router.post("/backfill")
 def start_historical_backfill(
     background_tasks: BackgroundTasks,
@@ -133,10 +173,17 @@ def start_historical_backfill(
         .first()
     )
     if active is not None:
-        if not _run_is_stale(active):
+        if active.prompt_version == PROMPT_VERSION and not _run_is_stale(active):
             return _backfill_response(active)
         _mark_run_stalled(active)
         db.commit()
+
+    has_v1_run = db.query(IntelligenceBackfillRun.id).filter(
+        IntelligenceBackfillRun.user_id == current_user.id,
+        IntelligenceBackfillRun.prompt_version == PROMPT_VERSION,
+    ).first() is not None
+    if not has_v1_run:
+        _reset_legacy_twin_for_user(db, current_user.id)
 
     resumable_runs = (
         db.query(IntelligenceBackfillRun)
