@@ -579,6 +579,26 @@ class IntelligenceBackfillRun(Base):
 
     user = relationship("User")
 
+
+class IntelligenceTwinSnapshot(Base):
+    """A compact Core Twin derived from the evidence-linked Full Twin."""
+
+    __tablename__ = "intelligence_twin_snapshots"
+    __table_args__ = (
+        Index("idx_intelligence_twin_snapshots_user_current", "user_id", "is_current"),
+        Index("idx_intelligence_twin_snapshots_user_created", "user_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    core_twin = Column(MutableDict.as_mutable(JSONB), nullable=False)
+    prompt_version = Column(String(80), nullable=False)
+    model_version = Column(String(80), nullable=False)
+    is_current = Column(Boolean, nullable=False, default=True, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    user = relationship("User")
+
 class Task(Base):
     __tablename__ = "tasks"
 
