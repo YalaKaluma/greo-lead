@@ -7,6 +7,7 @@ personal context only when the available claims clear confidence thresholds.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -18,6 +19,7 @@ from app.models import (
     IntelligenceClaim,
     IntelligenceClaimEvidence,
     IntelligenceEvidence,
+    IntelligenceTwinSnapshot,
     User,
 )
 from app.utils.ai_safety import UNTRUSTED_CONTEXT_POLICY, wrap_untrusted_context
@@ -366,6 +368,15 @@ class IntelligenceCoreService:
         evidence_count = len(primary_evidence)
         source_count = len({row.source_type for row in primary_evidence})
         selected = select_context_claims(claims, surface=surface, query=query, limit=limit)
+        core_snapshot = (
+            self.db.query(IntelligenceTwinSnapshot)
+            .filter(
+                IntelligenceTwinSnapshot.user_id == user.id,
+                IntelligenceTwinSnapshot.is_current.is_(True),
+            )
+            .order_by(IntelligenceTwinSnapshot.created_at.desc())
+            .first()
+        )
         compiled = [
             CompiledClaim(
                 id=claim.id,
@@ -388,6 +399,15 @@ class IntelligenceCoreService:
             f"Intelligence stage: {stage}",
             f"Default behavior: {DEFAULT_SURFACE_GUIDANCE[surface]}",
         ]
+        if core_snapshot is not None:
+            lines.append("Core Digital Twin (use as general orientation, never as infallible fact):")
+            lines.append(
+                wrap_untrusted_context(
+                    "CORE_DIGITAL_TWIN",
+                    json.dumps(core_snapshot.core_twin, ensure_ascii=False, default=str),
+                    8000,
+                )
+            )
         if not compiled:
             lines.append("No reliable personal claims are available. Use default behavior only.")
         else:
@@ -405,7 +425,8 @@ class IntelligenceCoreService:
             "stage": stage,
             "surface": surface,
             "default_guidance": DEFAULT_SURFACE_GUIDANCE[surface],
-            "personalization_applied": bool(compiled),
+            "personalization_applied": bool(compiled or core_snapshot),
+            "core_twin_applied": core_snapshot is not None,
             "evidence_count": int(evidence_count),
             "source_count": int(source_count),
             "claims": [item.__dict__ for item in compiled],

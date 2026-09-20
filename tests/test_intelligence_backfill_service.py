@@ -368,10 +368,13 @@ def test_generated_claim_keeps_executive_model_dimensions():
 
 def test_alfred_is_never_mistaken_for_the_modeled_user():
     assert normalize_subject_statement("Alfred is experiencing workload pressure.") == (
-        "The user is experiencing workload pressure."
+        "You are experiencing workload pressure."
     )
     assert normalize_subject_statement("Alfred has a recurring pattern of overcommitment.") == (
-        "The user has a recurring pattern of overcommitment."
+        "You have a recurring pattern of overcommitment."
+    )
+    assert normalize_subject_statement("The user demonstrates creative problem-solving.") == (
+        "You demonstrate creative problem-solving."
     )
     assert normalize_subject_statement("Alfred should ask a coaching question.") == (
         "Alfred should ask a coaching question."
