@@ -23,6 +23,7 @@ from app.models import (
     VisionRoadmapWave,
 )
 from app.services.goal_progress_review_service import GoalProgressReviewService
+from app.services.twin_context_service import TwinContext, append_twin_context, get_twin_context
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -128,6 +129,14 @@ class VisionProgressReviewService:
             OpportunitySuggestion.linked_goal_id.in_(scoped_goal_ids),
         ).order_by(desc(OpportunitySuggestion.mtn_score), desc(OpportunitySuggestion.created_at)).limit(8).all()
 
+        twin_context = get_twin_context(
+            db,
+            user_number,
+            surface="coaching",
+            query=f"vision progress {vision.title or vision.goal_text or ''}",
+            limit=6,
+        )
+
         return {
             "user": {"id": user.id, "user_number": user_number, "name": user.name, "profession": user.profession},
             "review_period": {
@@ -153,6 +162,8 @@ class VisionProgressReviewService:
             "previous_progress_review": cls._saved_summary(latest_review) if latest_review else None,
             "mechanical_snapshot": mechanical,
             "scoped_goal_ids": scoped_goal_ids,
+            "_digital_twin_prompt_context": twin_context.prompt_context,
+            "_digital_twin_trace": twin_context.metadata(),
         }
 
     @classmethod
@@ -194,11 +205,22 @@ Answer these questions inside the report:
 - Why are these MTN actions the right next moves?
 - What should the user focus on this week?"""
 
+        twin_prompt_context = str(context.get("_digital_twin_prompt_context") or "")
+        if twin_prompt_context:
+            system_prompt = append_twin_context(
+                system_prompt,
+                TwinContext(prompt_context=twin_prompt_context, applied=True, surface="coaching"),
+            )
+        model_context = {
+            key: value for key, value in context.items()
+            if not key.startswith("_digital_twin_")
+        }
+
         response = client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": json.dumps(context, default=cls._json_default, ensure_ascii=False)},
+                {"role": "user", "content": json.dumps(model_context, default=cls._json_default, ensure_ascii=False)},
             ],
             response_format={"type": "json_object"},
             temperature=0.35,

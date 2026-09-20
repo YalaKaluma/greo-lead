@@ -16,6 +16,7 @@ from app.models import RelationshipReview, JourneyPerson
 from app.config import OPENAI_API_KEY, OPENAI_MODEL
 from app.services.language import normalize_language, response_language_instruction
 from app.utils.safe_errors import log_failure
+from app.services.twin_context_service import build_context_with_twin
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -252,7 +253,10 @@ def _handle_reflection(
     state_context['user_reflection'] = user_message
     
     # Generate ONE adaptive question using GPT
-    journey_context = build_journey_context(db, user_number)
+    journey_context = build_context_with_twin(
+        db, user_number, surface="coaching", query=user_message,
+        base_context=build_journey_context(db, user_number),
+    )
     history = load_conversation_history(db, user_number, conversation_type="team_coaching")
     
     try:
@@ -303,7 +307,10 @@ def _handle_diagnostics(
     state_context['diagnosis_input'] = user_message
     
     # Generate ONE diagnostic question using GPT
-    journey_context = build_journey_context(db, user_number)
+    journey_context = build_context_with_twin(
+        db, user_number, surface="coaching", query=user_message,
+        base_context=build_journey_context(db, user_number),
+    )
     history = load_conversation_history(db, user_number, conversation_type="team_coaching")
     reflection_summary = state_context.get('user_reflection', '')
     
@@ -356,7 +363,10 @@ def _handle_planning(
     state_context['planning_input'] = user_message
     
     # Generate ONE planning question using GPT
-    journey_context = build_journey_context(db, user_number)
+    journey_context = build_context_with_twin(
+        db, user_number, surface="coaching", query=user_message,
+        base_context=build_journey_context(db, user_number),
+    )
     history = load_conversation_history(db, user_number, conversation_type="team_coaching")
     reflection_summary = state_context.get('user_reflection', '')
     diagnosis_summary = state_context.get('diagnosis_input', '')
@@ -424,6 +434,14 @@ def _handle_closure(
     
     # Generate smart summary with GPT
     try:
+        closure_twin_context = build_context_with_twin(
+            db,
+            user_number,
+            surface="coaching",
+            query=f"{person['name']} {state_context.get('diagnosis_input', '')}",
+            base_context="",
+            limit=6,
+        )
         summary = _generate_closure_summary(
             person_name=person['name'],
             relation=person.get('relation', 'colleague'),
@@ -431,6 +449,7 @@ def _handle_closure(
             diagnostics=state_context.get('diagnosis_input', ''),
             planning=combined_plan,
             relationship_strength=review.relationship_strength,
+            twin_context=closure_twin_context,
             preferred_language=state_context.get("preferred_language", "en")
         )
     except Exception as e:
@@ -659,6 +678,7 @@ def _generate_closure_summary(
     diagnostics: str,
     planning: str,
     relationship_strength: Optional[int],
+    twin_context: str = "",
     preferred_language: str = "en"
 ) -> str:
     """Generate a concise, insightful closure summary"""
@@ -671,6 +691,9 @@ CONVERSATION SUMMARY:
 - Reflection: {reflection[:300]}
 - Diagnostics: {diagnostics[:300]}
 - Planning: {planning[:300]}
+
+RELEVANT DIGITAL TWIN CONTEXT:
+{twin_context[:7000] or 'No reliable Twin context available.'}
 
 Your task: Create a structured summary with:
 1. Overall assessment (infer strength 1-5 based on conversation tone)

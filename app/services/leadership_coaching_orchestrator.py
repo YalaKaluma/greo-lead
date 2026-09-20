@@ -16,6 +16,7 @@ from app.services.message_service import load_conversation_history
 from app.models import LeadershipCoachingSession, JourneyDevelopmentArea
 from app.config import OPENAI_API_KEY, OPENAI_MODEL
 from app.services.language import normalize_language, response_language_instruction
+from app.services.twin_context_service import build_context_with_twin
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -146,7 +147,10 @@ Reply with the number or name."""
     quadrant_info = LEADERSHIP_QUADRANTS[quadrant_selected]
     
     # Build context-based thought starters
-    journey_context = build_journey_context(db, user_number)
+    journey_context = build_context_with_twin(
+        db, user_number, surface="coaching", query=user_message,
+        base_context=build_journey_context(db, user_number),
+    )
     thought_starters = _generate_thought_starters(
         quadrant=quadrant_selected,
         journey_context=journey_context,
@@ -187,7 +191,10 @@ def _handle_situation(
     })
     
     # Generate first reflection question based on what they said
-    journey_context = build_journey_context(db, user_number)
+    journey_context = build_context_with_twin(
+        db, user_number, surface="coaching", query=user_message,
+        base_context=build_journey_context(db, user_number),
+    )
     recent_history = load_conversation_history(db, user_number, conversation_type="leadership_coaching", limit=5)
     
     reflection_question = _generate_reflection_question(
@@ -227,7 +234,10 @@ def _handle_reflection(
     })
     
     # Generate diagnostics question
-    journey_context = build_journey_context(db, user_number)
+    journey_context = build_context_with_twin(
+        db, user_number, surface="coaching", query=user_message,
+        base_context=build_journey_context(db, user_number),
+    )
     
     diagnostics_question = _generate_diagnostics_question(
         quadrant=session.quadrant,
@@ -258,7 +268,10 @@ def _handle_diagnostics(
     print(f"📍 PHASE: DIAGNOSTICS - Identifying Pattern")
     
     # Extract the pattern from the conversation
-    journey_context = build_journey_context(db, user_number)
+    journey_context = build_context_with_twin(
+        db, user_number, surface="coaching", query=user_message,
+        base_context=build_journey_context(db, user_number),
+    )
     
     pattern_analysis = _identify_pattern(
         quadrant=session.quadrant,
@@ -315,7 +328,10 @@ def _handle_planning(
     })
     
     # Generate closure summary
-    journey_context = build_journey_context(db, user_number)
+    journey_context = build_context_with_twin(
+        db, user_number, surface="coaching", query=user_message,
+        base_context=build_journey_context(db, user_number),
+    )
     
     closure = _generate_closure_summary(
         quadrant=session.quadrant,
@@ -797,6 +813,9 @@ SESSION SUMMARY:
 - Pattern: {pattern}
 - Belief: {belief}
 - Experiment: {experiment[:200]}
+
+RELEVANT DIGITAL TWIN AND JOURNEY CONTEXT:
+{journey_context[:9000]}
 
 Your task: Create a powerful closing summary.
 

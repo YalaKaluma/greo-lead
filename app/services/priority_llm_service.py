@@ -220,6 +220,13 @@ Evaluate each task independently and return absolute MTN scores in JSON format a
                 if example.get("feedback"):
                     context_str += f" — {example['feedback']}"
                 context_str += "\n"
+
+        twin_prompt_context = getattr(context, "twin_prompt_context", None)
+        if twin_prompt_context:
+            context_str += (
+                "\nDigital Twin context (orientation only; current task and goal evidence wins):\n"
+                f"{twin_prompt_context}\n"
+            )
         
         return context_str
     

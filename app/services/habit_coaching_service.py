@@ -22,6 +22,7 @@ from app.models import (
 )
 from app.services.habits.habit_trend_service import get_habit_trends
 from app.services.timezone_service import get_user_timezone, today_for_timezone
+from app.services.twin_context_service import append_twin_context, get_twin_context
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -85,6 +86,14 @@ def build_habit_coaching_context(db: Session, user_number: str) -> dict[str, Any
         Message.timestamp >= journal_start,
     ).order_by(desc(Message.timestamp)).limit(10).all()
 
+    twin_context = get_twin_context(
+        db,
+        user_number,
+        surface="coaching",
+        query="habit consistency discipline momentum weekly focus",
+        limit=6,
+    )
+
     return {
         "user": {
             "id": user.id,
@@ -123,6 +132,8 @@ def build_habit_coaching_context(db: Session, user_number: str) -> dict[str, Any
             "linked_goals": [_goal_to_dict(goal) for goal in goals_by_id.values()],
             "linked_tasks": [_task_to_dict(task, goals_by_id.get(task.goal_id)) for task in tasks],
         },
+        "_digital_twin_prompt_context": twin_context.prompt_context,
+        "_digital_twin_trace": twin_context.metadata(),
     }
 
 
@@ -160,11 +171,23 @@ Answer these questions inside the review:
 - What should I focus on this week?
 - What are the top 3 habit MTN actions?"""
 
+    twin_prompt_context = str(context.get("_digital_twin_prompt_context") or "")
+    if twin_prompt_context:
+        from app.services.twin_context_service import TwinContext
+        system_prompt = append_twin_context(
+            system_prompt,
+            TwinContext(prompt_context=twin_prompt_context, applied=True, surface="coaching"),
+        )
+    model_context = {
+        key: value for key, value in context.items()
+        if not key.startswith("_digital_twin_")
+    }
+
     response = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": json.dumps(context, default=_json_default, ensure_ascii=False)},
+            {"role": "user", "content": json.dumps(model_context, default=_json_default, ensure_ascii=False)},
         ],
         response_format={"type": "json_object"},
         temperature=0.35,
