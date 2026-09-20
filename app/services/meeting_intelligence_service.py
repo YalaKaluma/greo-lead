@@ -24,6 +24,7 @@ from app.db import SessionLocal
 from app.utils.safe_errors import log_failure
 from app.services.meeting_task_extraction_service import extract_action_items
 from app.services.meeting_task_priority_service import score_pending_meeting_action_items
+from app.services.twin_context_service import get_twin_context
 from app.utils.ai_safety import UNTRUSTED_CONTEXT_POLICY, parse_bounded_json_object, wrap_untrusted_context
 from app.models import (
     BeltAssessment,
@@ -977,6 +978,21 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
                 "horizon": goal.time_horizon,
             } for goal in goals], default=str)[:4000]
         )
+    if user:
+        twin_context = get_twin_context(
+            db,
+            meeting.user_number,
+            surface="meeting",
+            query=f"{meeting.title or ''}\n{meeting.meeting_type or ''}",
+            limit=8,
+        )
+        if twin_context.applied:
+            # Keep the compact Twin ahead of verbose recent-history context so
+            # the final prompt bound cannot truncate it away.
+            leadership_context_parts.insert(0,
+                "Digital Twin orientation (use to test patterns against this meeting; current transcript evidence wins):\n"
+                + twin_context.prompt_context
+            )
     people = db.query(JourneyPerson).filter(JourneyPerson.user_number == meeting.user_number).all()
     projects = db.query(JourneyProject).filter(
         JourneyProject.user_number == meeting.user_number,

@@ -62,6 +62,7 @@ from app.config import (
     OPENAI_MODEL,
     DEFAULT_USER_NUMBER,
 )
+from app.services.twin_context_service import append_twin_context, get_twin_context
 
 # -------------------------------------------------
 # Setup
@@ -958,6 +959,14 @@ def send_nudge_for_user(
             sunday_refresh=sunday_refresh_context,
             max_length=config["max_length"]
         )
+        twin_context = get_twin_context(
+            db,
+            user_number,
+            surface="nudge",
+            query=f"{nudge_type}\n{context_text}"[:12000],
+            limit=6,
+        )
+        system_prompt = append_twin_context(system_prompt, twin_context)
 
         # DEBUG: Log the actual prompt being sent
         logger.info("Generating nudge with conversation_count=%s", len(conversation_history))

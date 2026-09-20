@@ -35,6 +35,7 @@ from app.services.timezone_service import get_user_timezone, today_for_timezone
 from app.config import OPENAI_MODEL
 from app.services.openai_service import client
 from app.services.opportunity.opportunity_service import get_best_opportunities
+from app.services.twin_context_service import TwinContext, append_twin_context, get_twin_context
 
 
 DOMAIN_LABELS = {
@@ -162,6 +163,7 @@ def _operating_system_commentary(
     journal_messages: list[Message],
     meeting_feedback: list[MeetingLeadershipDomainAssessment],
     language: str = "en",
+    twin_context: TwinContext | None = None,
 ) -> str:
     context = {
         "indexes": metrics,
@@ -176,20 +178,23 @@ def _operating_system_commentary(
             for item in meeting_feedback[:12]
         ],
     }
+    system_prompt = (
+        "You are Alfred, an executive chief of staff. Write one concise operating-system observation "
+        "of 90-140 words in second person. Synthesize the indexes, their recent direction, the last few "
+        "days of journal context, open work, and meeting leadership feedback. Identify the central pattern, "
+        "name one tension or risk, and end with one practical focus for today. Be warm, direct, and specific. "
+        "Do not invent evidence, list every input, or use headings."
+        + (" Write in French." if language == "fr" else " Write in English.")
+    )
+    if twin_context is not None:
+        system_prompt = append_twin_context(system_prompt, twin_context)
     response = client.chat.completions.create(
         model=OPENAI_MODEL,
         temperature=0.25,
         messages=[
             {
                 "role": "system",
-                "content": (
-                    "You are Alfred, an executive chief of staff. Write one concise operating-system observation "
-                    "of 90-140 words in second person. Synthesize the indexes, their recent direction, the last few "
-                    "days of journal context, open work, and meeting leadership feedback. Identify the central pattern, "
-                    "name one tension or risk, and end with one practical focus for today. Be warm, direct, and specific. "
-                    "Do not invent evidence, list every input, or use headings."
-                    + (" Write in French." if language == "fr" else " Write in English.")
-                ),
+                "content": system_prompt,
             },
             {"role": "user", "content": json.dumps(context, default=str, ensure_ascii=False)[:60000]},
         ],
@@ -649,6 +654,13 @@ class HomeDashboardService:
                     recent_journal,
                     recent_meeting_feedback,
                     (user.language_preference if user else "en"),
+                    get_twin_context(
+                        self.db,
+                        user_number,
+                        surface="general",
+                        query="today operating pattern priorities energy leadership",
+                        limit=6,
+                    ),
                 )
             except Exception as exc:
                 log_failure("home_operating_commentary", exc, level=logging.WARNING)
