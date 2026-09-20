@@ -5,7 +5,13 @@ from types import SimpleNamespace
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
-from app.routers.intelligence import _backfill_response, _run_is_stale, model_section  # noqa: E402
+from app.routers.intelligence import (  # noqa: E402
+    _backfill_response,
+    _run_is_stale,
+    build_operating_model,
+    model_section,
+    operating_model_area,
+)
 
 
 def test_model_section_routes_the_broader_user_model():
@@ -14,6 +20,44 @@ def test_model_section_routes_the_broader_user_model():
     assert model_section(SimpleNamespace(object_type="pattern", claim_type="pattern")) == "how_i_operate"
     assert model_section(SimpleNamespace(object_type="relationship", claim_type="relationship")) == "relationships"
     assert model_section(SimpleNamespace(object_type="capability", claim_type="strength")) == "growth"
+
+
+def _claim(claim_id, object_type, claim_type, *, confirmed=False, coaching=None, counters=0):
+    links = [SimpleNamespace(relationship_type="supports")]
+    links.extend(SimpleNamespace(relationship_type="counters") for _ in range(counters))
+    return SimpleNamespace(
+        id=claim_id,
+        object_type=object_type,
+        claim_type=claim_type,
+        statement=f"Statement {claim_id}",
+        pattern_title=f"Pattern {claim_id}",
+        interpretation=f"Interpretation {claim_id}",
+        trajectory="stable",
+        scope="work",
+        confidence_score=0.8,
+        epistemic_status="validated_pattern" if confirmed else "hypothesis",
+        review_status="confirmed" if confirmed else "active",
+        evidence_links=links,
+        coaching_implication=coaching,
+    )
+
+
+def test_operating_model_routes_claims_and_keeps_dossier_links():
+    claims = [
+        _claim(1, "intent", "goal", confirmed=True),
+        _claim(2, "capability", "strength"),
+        _claim(3, "pattern", "pattern", counters=1),
+        _claim(4, "attribute", "development_area", coaching="Protect recovery time."),
+    ]
+
+    model = build_operating_model(claims)
+
+    assert operating_model_area(claims[0]) == "direction"
+    assert model["direction"][0]["claim_id"] == 1
+    assert model["strengths"][0]["claim_id"] == 2
+    assert model["operating_patterns"][0]["counterevidence_count"] == 1
+    assert model["development_edges"][0]["claim_id"] == 4
+    assert model["coaching_priorities"][0]["statement"] == "Protect recovery time."
 
 
 def test_backfill_response_exposes_observable_progress():
