@@ -308,6 +308,14 @@ def list_claims(
 
 
 MODEL_SECTIONS = ("direction", "current_context", "how_i_operate", "relationships", "growth")
+OPERATING_MODEL_AREAS = (
+    "direction",
+    "strengths",
+    "operating_patterns",
+    "current_pressures",
+    "relationships",
+    "development_edges",
+)
 
 
 def model_section(claim) -> str:
@@ -322,6 +330,69 @@ def model_section(claim) -> str:
     if object_type == "intent" or claim_type in {"identity", "value", "goal", "commitment", "priority"}:
         return "direction"
     return "how_i_operate"
+
+
+def operating_model_area(claim) -> str:
+    """Place each assertion in one primary, user-facing operating-model area."""
+    object_type = str(getattr(claim, "object_type", "") or "")
+    claim_type = str(getattr(claim, "claim_type", "") or "")
+    if object_type == "state" or claim_type == "state":
+        return "current_pressures"
+    if object_type == "relationship" or claim_type == "relationship":
+        return "relationships"
+    if claim_type in {"development_area", "constraint"}:
+        return "development_edges"
+    if object_type == "capability" or claim_type == "strength":
+        return "strengths"
+    if object_type == "intent" or claim_type in {
+        "identity", "value", "goal", "commitment", "priority",
+    }:
+        return "direction"
+    return "operating_patterns"
+
+
+def _operating_model_item(claim, *, coaching: bool = False) -> dict:
+    links = list(getattr(claim, "evidence_links", []) or [])
+    statement = claim.coaching_implication if coaching else claim.statement
+    return {
+        "claim_id": claim.id,
+        "title": claim.pattern_title,
+        "statement": statement,
+        "interpretation": claim.interpretation,
+        "trajectory": claim.trajectory,
+        "scope": claim.scope,
+        "confidence_score": float(claim.confidence_score),
+        "review_status": claim.review_status,
+        "evidence_count": len(links),
+        "counterevidence_count": sum(
+            1 for link in links if link.relationship_type == "counters"
+        ),
+    }
+
+
+def build_operating_model(claims: list) -> dict:
+    """Create a concise map while keeping every summary linked to its dossier."""
+    ranked = sorted(
+        claims,
+        key=lambda claim: (
+            getattr(claim, "review_status", "") == "confirmed",
+            getattr(claim, "epistemic_status", "") == "validated_pattern",
+            float(getattr(claim, "confidence_score", 0) or 0),
+            len(getattr(claim, "evidence_links", []) or []),
+        ),
+        reverse=True,
+    )
+    areas = {area: [] for area in OPERATING_MODEL_AREAS}
+    for claim in ranked:
+        area = operating_model_area(claim)
+        if len(areas[area]) < 3:
+            areas[area].append(_operating_model_item(claim))
+    coaching_priorities = [
+        _operating_model_item(claim, coaching=True)
+        for claim in ranked
+        if getattr(claim, "coaching_implication", None)
+    ][:3]
+    return {**areas, "coaching_priorities": coaching_priorities}
 
 
 @router.get("/model")
@@ -368,6 +439,7 @@ def get_executive_model(
         "assertion_count": len(claims),
         "needs_review": len(review_queue),
         "sections": sections,
+        "operating_model": build_operating_model(claims),
         "review_queue": review_queue[:30],
         "last_run": _backfill_response(run),
         "history_start": history_start,
