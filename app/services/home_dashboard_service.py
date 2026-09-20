@@ -349,6 +349,15 @@ def _average_chart_value(rows: list[dict[str, Any]], key: str, days: int = 35) -
     return round(mean(values), 1) if values else 0
 
 
+def _average_weekday_chart_value(rows: list[dict[str, Any]], key: str, days: int = 35) -> float:
+    values = [
+        _as_float(item.get(key), 0)
+        for item in rows[-days:]
+        if datetime.fromisoformat(str(item.get("date"))).weekday() < 5
+    ]
+    return round(mean(values), 1) if values else 0
+
+
 def _five_week_wisdom_average(rows: list[dict[str, Any]]) -> float:
     daily_scores = [
         10 * _as_float(item.get("daily_average"), 0)
@@ -366,12 +375,18 @@ def _completed_days(rows: list[dict[str, Any]], today) -> list[dict[str, Any]]:
 
 def _mtn_period_stats(trend_chart: list[dict[str, Any]], days: int) -> dict[str, Any]:
     window = trend_chart[-days:]
+    weekday_window = [
+        item for item in window
+        if datetime.fromisoformat(str(item.get("date"))).weekday() < 5
+    ]
     total_score = round(sum(_as_float(item.get("mtn_score"), 0) for item in window), 2)
+    weekday_score = round(sum(_as_float(item.get("mtn_score"), 0) for item in weekday_window), 2)
     completed_tasks = sum(int(item.get("completed_tasks") or 0) for item in window)
     return {
         "days": days,
+        "eligible_weekdays": len(weekday_window),
         "total_score": total_score,
-        "average_score": round(total_score / days, 2),
+        "average_score": round(weekday_score / len(weekday_window), 2) if weekday_window else 0,
         "completed_tasks": completed_tasks,
     }
 
@@ -612,7 +627,7 @@ class HomeDashboardService:
                 "delta": _as_float((mtn_week.get("trend") or {}).get("delta_vs_30"), 0),
                 "status": (mtn_week.get("trend") or {}).get("label") or "Stable",
                 "sparkline": [item.get("rolling_average") for item in mtn_chart[-14:]],
-                "five_week_average": _average_chart_value(mtn_chart, "mtn_score"),
+                "five_week_average": _average_weekday_chart_value(mtn_chart, "mtn_score"),
             },
             "habits": {
                 "compliance_rate": int(habit_week.get("compliance_rate") or 0),
