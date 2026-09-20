@@ -301,6 +301,168 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
 }
 
 const EXECUTIVE_MODEL_SECTIONS = ['overview', 'direction', 'current_context', 'how_i_operate', 'relationships', 'growth'];
+const OPERATING_MODEL_AREAS = ['direction', 'strengths', 'operating_patterns', 'current_pressures', 'relationships', 'development_edges', 'coaching_priorities'];
+const EVIDENCE_ROLES = ['supports', 'counters', 'qualifies'];
+
+function OperatingModelOverview({ operatingModel, onSelect, displayStatement, t }) {
+  const populatedAreas = OPERATING_MODEL_AREAS.filter((area) => (operatingModel?.[area] || []).length > 0);
+  if (populatedAreas.length === 0) return null;
+
+  return (
+    <div className="mb-8 mt-6">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-semibold text-slate-950">{t('settings.executiveModel.operatingModel.title')}</h3>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">{t('settings.executiveModel.operatingModel.description')}</p>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        {populatedAreas.map((area) => (
+          <section key={area} className={`rounded-xl border p-4 ${area === 'coaching_priorities' ? 'border-blue-200 bg-blue-50' : 'border-slate-200 bg-white'}`}>
+            <h4 className="text-sm font-semibold text-slate-950">{t(`settings.executiveModel.operatingModel.${area}`)}</h4>
+            <div className="mt-3 space-y-3">
+              {(operatingModel[area] || []).map((item) => (
+                <button
+                  key={`${area}-${item.claim_id}`}
+                  type="button"
+                  onClick={() => onSelect(item.claim_id)}
+                  className="block w-full rounded-lg border border-slate-200 bg-white p-3 text-left transition hover:border-blue-300 hover:shadow-sm"
+                >
+                  {item.title && <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">{item.title}</span>}
+                  <span className="mt-1 block text-sm leading-6 text-slate-800">{displayStatement(item.statement)}</span>
+                  <span className="mt-2 block text-xs text-slate-500">
+                    {item.evidence_count} {t('settings.executiveModel.operatingModel.evidencePoints')}
+                    {item.counterevidence_count > 0 ? ` · ${item.counterevidence_count} ${t('settings.executiveModel.operatingModel.counterpoints')}` : ''}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ClaimCard({ claim, onOpen, displayStatement, displayType, displayStatus, displayStability, t }) {
+  const roleCount = (role) => (claim.evidence || []).filter((item) => (item.relationship_type || 'supports') === role).length;
+  return (
+    <article className="rounded-xl border border-slate-200 bg-white p-5">
+      <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <span>{displayType(claim.object_type)}</span><span>·</span>
+        <span>{displayStatus(claim.epistemic_status)}</span><span>·</span>
+        <span>{displayStability(claim.stability)}</span>
+        {claim.scope && <><span>·</span><span>{claim.scope}</span></>}
+        {claim.review_status === 'confirmed' && (
+          <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-800">{t('settings.executiveModel.confirmed')}</span>
+        )}
+      </div>
+      {claim.pattern_title && <h4 className="mt-3 text-lg font-semibold text-slate-950">{claim.pattern_title}</h4>}
+      <p className="mt-2 text-base leading-7 text-slate-900">{displayStatement(claim.statement)}</p>
+      <div className="mt-4 flex flex-wrap gap-2 text-xs">
+        {EVIDENCE_ROLES.map((role) => roleCount(role) > 0 && (
+          <span key={role} className={`rounded-full px-2.5 py-1 ${role === 'counters' ? 'bg-amber-100 text-amber-800' : role === 'qualifies' ? 'bg-violet-100 text-violet-800' : 'bg-slate-100 text-slate-700'}`}>
+            {t(`settings.executiveModel.evidenceRole.${role}`)}: {roleCount(role)}
+          </span>
+        ))}
+        {claim.trajectory && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">{t('settings.executiveModel.trajectory')}: {claim.trajectory.replaceAll('_', ' ')}</span>}
+      </div>
+      <button type="button" onClick={() => onOpen(claim.id)}
+        className="mt-4 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800">
+        {t('settings.executiveModel.inspectDossier')}
+      </button>
+    </article>
+  );
+}
+
+function ClaimDossier({ claim, onClose, onReview, displayStatement, displayType, displayStatus, displayStability, t }) {
+  useEffect(() => {
+    if (!claim) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [claim, onClose]);
+
+  if (!claim) return null;
+  const evidenceByRole = Object.fromEntries(EVIDENCE_ROLES.map((role) => [
+    role,
+    (claim.evidence || []).filter((item) => (item.relationship_type || 'supports') === role)
+  ]));
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40" role="dialog" aria-modal="true" aria-labelledby="claim-dossier-title">
+      <button type="button" className="absolute inset-0 cursor-default" onClick={onClose} aria-label={t('settings.executiveModel.closeDossier')} />
+      <div className="relative h-full w-full overflow-y-auto bg-white shadow-2xl sm:max-w-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">{t('settings.executiveModel.dossier')}</p>
+            <h3 id="claim-dossier-title" className="mt-1 text-lg font-semibold text-slate-950">{claim.pattern_title || t('settings.executiveModel.assertion')}</h3>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" aria-label={t('settings.executiveModel.closeDossier')}>
+            {t('settings.executiveModel.close')}
+          </button>
+        </div>
+
+        <div className="space-y-6 p-5 sm:p-7">
+          <section>
+            <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span>{displayType(claim.object_type)}</span><span>·</span><span>{displayStatus(claim.epistemic_status)}</span><span>·</span>
+              <span>{displayStability(claim.stability)}</span><span>·</span><span>{Math.round(claim.confidence_score * 100)}% {t('settings.executiveModel.confidence')}</span>
+            </div>
+            <p className="mt-3 text-xl leading-8 text-slate-950">{displayStatement(claim.statement)}</p>
+            {claim.interpretation && <div className="mt-4 rounded-xl bg-slate-50 p-4"><h4 className="text-sm font-semibold text-slate-900">{t('settings.executiveModel.interpretation')}</h4><p className="mt-2 text-sm leading-6 text-slate-700">{claim.interpretation}</p></div>}
+          </section>
+
+          <section className="grid gap-3 sm:grid-cols-2">
+            {claim.trajectory && <div className="rounded-lg border border-slate-200 p-3 text-sm"><span className="font-semibold">{t('settings.executiveModel.trajectory')}:</span> {claim.trajectory.replaceAll('_', ' ')}</div>}
+            {(claim.first_seen_at || claim.last_seen_at) && <div className="rounded-lg border border-slate-200 p-3 text-sm"><span className="font-semibold">{t('settings.executiveModel.observedAcross')}:</span> {claim.first_seen_at ? formatDate(claim.first_seen_at) : '—'} → {claim.last_seen_at ? formatDate(claim.last_seen_at) : '—'}</div>}
+          </section>
+
+          {(claim.context_summary || (claim.contexts || []).length > 0) && (
+            <section><h4 className="text-base font-semibold text-slate-950">{t('settings.executiveModel.context')}</h4>
+              {claim.context_summary && <p className="mt-2 text-sm leading-6 text-slate-700">{claim.context_summary}</p>}
+              <div className="mt-3 space-y-2">{(claim.contexts || []).map((context, index) => (
+                <div key={`${context.label}-${index}`} className="rounded-lg border border-slate-200 p-3 text-sm"><span className="font-semibold">{context.label}</span> · {t(`settings.executiveModel.applicability.${context.applicability || 'conditional'}`)}{context.notes ? <p className="mt-1 text-slate-600">{context.notes}</p> : null}</div>
+              ))}</div>
+            </section>
+          )}
+
+          <section>
+            <h4 className="text-base font-semibold text-slate-950">{t('settings.executiveModel.why')}</h4>
+            <p className="mt-1 text-sm text-slate-500">{t('settings.executiveModel.whyDescription')}</p>
+            <div className="mt-4 space-y-5">
+              {EVIDENCE_ROLES.map((role) => evidenceByRole[role].length > 0 && (
+                <div key={role}>
+                  <h5 className={`text-sm font-semibold ${role === 'counters' ? 'text-amber-800' : role === 'qualifies' ? 'text-violet-800' : 'text-slate-900'}`}>{t(`settings.executiveModel.evidenceRole.${role}`)} ({evidenceByRole[role].length})</h5>
+                  <div className="mt-2 space-y-3">{evidenceByRole[role].map((item) => (
+                    <article key={item.id} className="rounded-lg border border-slate-200 p-4 text-sm">
+                      <div className="flex flex-wrap justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500"><span>{item.source_type.replaceAll('_', ' ')}</span><span>{item.occurred_at ? formatDate(item.occurred_at) : ''}</span></div>
+                      <p className="mt-2 leading-6 text-slate-700">{item.excerpt || t('settings.executiveModel.noExcerpt')}</p>
+                      {item.rationale && <p className="mt-2 border-l-2 border-blue-200 pl-3 text-xs italic leading-5 text-slate-500">{item.rationale}</p>}
+                    </article>
+                  ))}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {(claim.alternative_explanation || claim.coaching_implication) && <section className="grid gap-3 sm:grid-cols-2">
+            {claim.alternative_explanation && <div className="rounded-xl bg-amber-50 p-4"><h4 className="text-sm font-semibold text-amber-950">{t('settings.executiveModel.alternative')}</h4><p className="mt-2 text-sm leading-6 text-amber-900">{claim.alternative_explanation}</p></div>}
+            {claim.coaching_implication && <div className="rounded-xl bg-blue-50 p-4"><h4 className="text-sm font-semibold text-blue-950">{t('settings.executiveModel.coaching')}</h4><p className="mt-2 text-sm leading-6 text-blue-900">{claim.coaching_implication}</p></div>}
+          </section>}
+
+          <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-5">
+            <button type="button" onClick={() => onReview(claim, 'confirm')} className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-600">{t('settings.executiveModel.confirm')}</button>
+            <button type="button" onClick={() => onReview(claim, 'correct')} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">{t('settings.executiveModel.correct')}</button>
+            <button type="button" onClick={() => onReview(claim, 'reject')} className="rounded-md border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50">{t('settings.executiveModel.reject')}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ExecutiveModelPanel({ apiUrl, t }) {
   const [model, setModel] = useState(null);
@@ -309,6 +471,7 @@ function ExecutiveModelPanel({ apiUrl, t }) {
   const [starting, setStarting] = useState(false);
   const [analysisWeeks, setAnalysisWeeks] = useState(12);
   const [error, setError] = useState('');
+  const [selectedClaimId, setSelectedClaimId] = useState(null);
 
   const load = async () => {
     try {
@@ -369,6 +532,7 @@ function ExecutiveModelPanel({ apiUrl, t }) {
         action,
         corrected_statement: correctedStatement
       });
+      setSelectedClaimId(null);
       await load();
     } catch (requestError) {
       setError(requestError.response?.data?.detail || t('settings.executiveModel.reviewError'));
@@ -381,6 +545,8 @@ function ExecutiveModelPanel({ apiUrl, t }) {
   const visibleClaims = activeSection === 'overview'
     ? (model?.review_queue || [])
     : (model?.sections?.[activeSection] || []);
+  const allClaims = Object.values(model?.sections || {}).flat();
+  const selectedClaim = allClaims.find((claim) => claim.id === selectedClaimId) || null;
   const hasModel = (model?.assertion_count || 0) > 0;
 
   const displayType = (value) => t(`settings.executiveModel.type.${value || 'attribute'}`);
@@ -609,6 +775,22 @@ function ExecutiveModelPanel({ apiUrl, t }) {
               <p className="mt-1 text-sm text-slate-500">{t(`settings.executiveModel.sectionDescription.${activeSection}`)}</p>
             </div>
 
+            {activeSection === 'overview' && (
+              <OperatingModelOverview
+                operatingModel={model?.operating_model}
+                onSelect={setSelectedClaimId}
+                displayStatement={displayStatement}
+                t={t}
+              />
+            )}
+
+            {activeSection === 'overview' && visibleClaims.length > 0 && (
+              <div className="mt-8">
+                <h3 className="text-base font-semibold text-slate-950">{t('settings.executiveModel.reviewQueueTitle')}</h3>
+                <p className="mt-1 text-sm text-slate-500">{t('settings.executiveModel.reviewQueueDescription')}</p>
+              </div>
+            )}
+
             {visibleClaims.length === 0 ? (
               <p className="mt-5 rounded-lg bg-slate-50 p-5 text-sm text-slate-600">
                 {activeSection === 'overview'
@@ -618,69 +800,32 @@ function ExecutiveModelPanel({ apiUrl, t }) {
             ) : (
               <div className="mt-5 space-y-4">
               {visibleClaims.map((claim) => (
-              <article key={claim.id} className="rounded-xl border border-slate-200 p-5">
-                <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <span>{displayType(claim.object_type)}</span>
-                  <span>·</span>
-                  <span>{displayStatus(claim.epistemic_status)}</span>
-                  <span>·</span>
-                  <span>{displayStability(claim.stability)}</span>
-                  {claim.scope && <><span>·</span><span>{claim.scope}</span></>}
-                  <span>·</span>
-                  <span>{Math.round(claim.confidence_score * 100)}% {t('settings.executiveModel.confidence')}</span>
-                  {claim.review_status === 'confirmed' && (
-                    <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-800">{t('settings.executiveModel.confirmed')}</span>
-                  )}
-                </div>
-                {claim.pattern_title && <h4 className="mt-3 text-lg font-semibold text-slate-950">{claim.pattern_title}</h4>}
-                <p className="mt-2 text-base leading-7 text-slate-900">{displayStatement(claim.statement)}</p>
-                {claim.interpretation && <p className="mt-3 text-sm leading-6 text-slate-600">{claim.interpretation}</p>}
-
-                {(claim.trajectory || claim.context_summary || claim.alternative_explanation || claim.coaching_implication) && (
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    {claim.trajectory && <div className="rounded-lg bg-slate-50 p-3 text-sm"><span className="font-semibold">{t('settings.executiveModel.trajectory')}:</span> {claim.trajectory.replaceAll('_', ' ')}</div>}
-                    {claim.context_summary && <div className="rounded-lg bg-slate-50 p-3 text-sm"><span className="font-semibold">{t('settings.executiveModel.context')}:</span> {claim.context_summary}</div>}
-                    {claim.alternative_explanation && <div className="rounded-lg bg-amber-50 p-3 text-sm"><span className="font-semibold">{t('settings.executiveModel.alternative')}:</span> {claim.alternative_explanation}</div>}
-                    {claim.coaching_implication && <div className="rounded-lg bg-blue-50 p-3 text-sm"><span className="font-semibold">{t('settings.executiveModel.coaching')}:</span> {claim.coaching_implication}</div>}
-                  </div>
-                )}
-
-                <details className="mt-4">
-                  <summary className="cursor-pointer text-sm font-medium text-slate-600">
-                    {t('settings.executiveModel.showEvidence')} ({claim.evidence?.length || 0})
-                  </summary>
-                  <div className="mt-3 space-y-3 border-l-2 border-slate-200 pl-4">
-                    {(claim.evidence || []).map((item) => (
-                      <div key={item.id} className="text-sm text-slate-600">
-                        <div className="font-medium capitalize text-slate-800">{t(`settings.executiveModel.evidenceRole.${item.relationship_type || 'supports'}`)} · {item.source_type.replaceAll('_', ' ')}</div>
-                        <p className="mt-1 leading-6">{item.excerpt || t('settings.executiveModel.noExcerpt')}</p>
-                        {item.rationale && <p className="mt-1 text-xs italic text-slate-500">{item.rationale}</p>}
-                      </div>
-                    ))}
-                  </div>
-                </details>
-
-                <div className="mt-5 flex flex-wrap gap-2">
-                  <button type="button" onClick={() => reviewClaim(claim, 'confirm')}
-                    className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-600">
-                    {t('settings.executiveModel.confirm')}
-                  </button>
-                  <button type="button" onClick={() => reviewClaim(claim, 'correct')}
-                    className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                    {t('settings.executiveModel.correct')}
-                  </button>
-                  <button type="button" onClick={() => reviewClaim(claim, 'reject')}
-                    className="rounded-md border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50">
-                    {t('settings.executiveModel.reject')}
-                  </button>
-                </div>
-              </article>
+                <ClaimCard
+                  key={claim.id}
+                  claim={claim}
+                  onOpen={setSelectedClaimId}
+                  displayStatement={displayStatement}
+                  displayType={displayType}
+                  displayStatus={displayStatus}
+                  displayStability={displayStability}
+                  t={t}
+                />
               ))}
               </div>
             )}
           </div>
         )}
       </div>
+      <ClaimDossier
+        claim={selectedClaim}
+        onClose={() => setSelectedClaimId(null)}
+        onReview={reviewClaim}
+        displayStatement={displayStatement}
+        displayType={displayType}
+        displayStatus={displayStatus}
+        displayStability={displayStability}
+        t={t}
+      />
     </section>
   );
 }
