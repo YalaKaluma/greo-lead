@@ -90,6 +90,8 @@ def message_types_for_conversation(conversation_type: str | None) -> list[str] |
         return ["leadership_coaching"]
     if normalized == "team_coaching":
         return ["team_coaching", "people_review"]
+    if normalized == "email":
+        return ["email_draft"]
     if normalized == "messages":
         return ["nudge", "notification"]
     return None

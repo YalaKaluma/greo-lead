@@ -83,14 +83,21 @@ def _task_mtn_score(
 
 def _period_stats(trend_chart: list[dict[str, Any]], days: int) -> dict[str, Any]:
     window = trend_chart[-days:]
+    weekday_window = [
+        item for item in window
+        if date.fromisoformat(item["date"]).weekday() < 5
+    ]
     total_score = round(sum(item["mtn_score"] for item in window), 2)
+    weekday_score = round(sum(item["mtn_score"] for item in weekday_window), 2)
     completed_tasks = sum(item["completed_tasks"] for item in window)
     active_days = len([item for item in window if item["mtn_score"] > 0])
+    eligible_days = len(weekday_window)
 
     return {
         "days": days,
+        "eligible_weekdays": eligible_days,
         "total_score": total_score,
-        "average_score": round(total_score / days, 2) if days else 0,
+        "average_score": round(weekday_score / eligible_days, 2) if eligible_days else 0,
         "completed_tasks": completed_tasks,
         "active_days": active_days,
     }
@@ -189,8 +196,8 @@ def get_task_mtn_trends(
     for day in _date_range(start_date, end_date):
         daily = by_day[day]
         score = round(daily["mtn_score"], 2)
-        scores.append(score)
-        rolling_values = scores[-7:]
+        scores.append((day, score))
+        rolling_values = [value for score_day, value in scores[-7:] if score_day.weekday() < 5]
         trend_chart.append({
             "date": _iso(day),
             "mtn_score": score,

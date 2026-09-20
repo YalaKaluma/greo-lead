@@ -10,6 +10,7 @@ import Projects from './components/Projects';
 import MyCoachingSessions from './components/MyCoachingSessions'; // NEW: Replace MyJournal
 import MyHabits from './components/MyHabits';
 import MyJournal from './components/MyJournal';
+import MyEmails from './components/MyEmails';
 import PageIntroBanner from './components/PageIntroBanner';
 import AlfredChat from './components/AlfredChat';
 import InAppOnboarding from './components/InAppOnboarding';
@@ -41,6 +42,7 @@ const VALID_PAGE_IDS = new Set([
   'my-habits',
   'coaching-sessions',
   'my-journal',
+  'my-emails',
   'alfred-story',
   TRUST_SECURITY_PAGE,
   'settings'
@@ -297,6 +299,7 @@ function MainAppShell({
     'my-habits': t('page.habits'),
     'coaching-sessions': t('page.coaching'),
     'my-journal': t('page.journal'),
+    'my-emails': t('page.emails'),
     'alfred-story': t('page.story'),
     [TRUST_SECURITY_PAGE]: t('trustSecurity.title'),
     settings: t('settings.title')
@@ -442,6 +445,9 @@ function MainAppShell({
 
         {currentPage === 'my-journal' && (
           <MyJournal apiUrl={API_URL} userNumber={userNumber} />
+        )}
+        {currentPage === 'my-emails' && (
+          <MyEmails apiUrl={API_URL} userNumber={userNumber} />
         )}
         {currentPage === 'alfred-story' && (
           <AlfredStory />
