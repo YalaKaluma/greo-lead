@@ -25,6 +25,7 @@ class MessageResponse(BaseModel):
     reflection_depth_label: Optional[str] = None
     reflection_depth_explanation: Optional[str] = None
     reflection_depth_recommendations: Optional[list[str]] = None
+    context_receipt: Optional[dict] = None
 
     class Config:
         from_attributes = True

@@ -918,6 +918,14 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
         for note in context_notes
     )
     leadership_context_parts = []
+    context_receipt = {
+        "version": 1,
+        "core_twin": {"used": False, "snapshot_id": None},
+        "full_twin": {"used": False, "claim_ids": []},
+        "evidence": [],
+    }
+    for name in attendee_names:
+        context_receipt["evidence"].append({"source_type": "person", "label": name})
     user_identifiers = {meeting.user_number}
     if user:
         user_identifiers.update(value for value in (user.phone_number, user.email) if value)
@@ -966,6 +974,12 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
             leadership_context_parts.append(
                 "Recent Growth Journal themes: " + json.dumps(journal_snapshot, default=str)[:7000]
             )
+            context_receipt["evidence"].extend({
+                "source_type": "journal",
+                "source_id": str(entry.id),
+                "occurred_at": entry.created_at.isoformat() if entry.created_at else None,
+                "excerpt": (entry.text or "")[:280],
+            } for entry in journal_entries)
     goals = db.query(JourneyGoal).filter(
         JourneyGoal.user_number.in_(user_identifiers),
         JourneyGoal.parent_goal_id.is_(None),
@@ -978,6 +992,11 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
                 "horizon": goal.time_horizon,
             } for goal in goals], default=str)[:4000]
         )
+        context_receipt["evidence"].extend({
+            "source_type": "goal",
+            "source_id": str(goal.id),
+            "label": goal.title or goal.goal_text,
+        } for goal in goals)
     if user:
         twin_context = get_twin_context(
             db,
@@ -993,6 +1012,14 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
                 "Digital Twin orientation (use to test patterns against this meeting; current transcript evidence wins):\n"
                 + twin_context.prompt_context
             )
+            context_receipt["core_twin"] = {
+                "used": twin_context.core_twin_applied,
+                "snapshot_id": twin_context.snapshot_id,
+            }
+            context_receipt["full_twin"] = {
+                "used": bool(twin_context.claim_ids),
+                "claim_ids": list(twin_context.claim_ids),
+            }
     people = db.query(JourneyPerson).filter(JourneyPerson.user_number == meeting.user_number).all()
     projects = db.query(JourneyProject).filter(
         JourneyProject.user_number == meeting.user_number,
@@ -1014,6 +1041,7 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
         "supplied_context": "\n".join(supplied_context_parts),
         "leadership_context": "\n".join(leadership_context_parts)[:22000],
         "matching_context": json.dumps(matching_context, default=str)[:22000],
+        "context_receipt": context_receipt,
     }
 
 
@@ -1060,6 +1088,7 @@ def _save_analysis(
     analysis: dict,
     tasks: dict,
     coaching: dict,
+    context_receipt: dict | None = None,
 ) -> None:
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
@@ -1085,6 +1114,7 @@ def _save_analysis(
     meeting.processing_status = "ready"
     meeting.processing_error = None
     meeting.updated_at = datetime.now(timezone.utc)
+    meeting.context_receipt = context_receipt
 
 
 def _sync_meeting_memory(db: Session, meeting_id: int) -> None:
@@ -1278,7 +1308,7 @@ def process_meeting(meeting_id: int) -> None:
         stage = "saving analysis"
         stage_started = time.monotonic()
         _with_fresh_session(
-            lambda db: _save_analysis(db, meeting_id, analysis, tasks, coaching),
+            lambda db: _save_analysis(db, meeting_id, analysis, tasks, coaching, snapshot.get("context_receipt")),
             "save_analysis",
             meeting_id=meeting_id,
             attempt_id=attempt_id,

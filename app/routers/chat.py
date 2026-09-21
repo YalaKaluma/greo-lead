@@ -334,6 +334,7 @@ async def get_chat_history(
                 "reflection_depth_label": getattr(msg, "reflection_depth_label", None),
                 "reflection_depth_explanation": getattr(msg, "reflection_depth_explanation", None),
                 "reflection_depth_recommendations": getattr(msg, "reflection_depth_recommendations", None),
+                "context_receipt": getattr(msg, "context_receipt", None),
                 "is_starter_example": is_starter_journal_example(msg),
             }
             for msg in messages

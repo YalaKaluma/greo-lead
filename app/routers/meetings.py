@@ -199,6 +199,7 @@ def _meeting_payload(meeting: Meeting, detail: bool = False):
             "related_goals": [{"id": link.goal.id, "title": link.goal.title or link.goal.goal_text} for link in meeting.goal_links],
             "related_projects": [{"id": link.project.id, "title": link.project.project_name} for link in meeting.project_links],
             "context_notes": [{"id": note.id, "note_text": note.note_text, "elapsed_seconds": note.elapsed_seconds, "created_at": note.created_at} for note in sorted(meeting.context_notes, key=lambda item: (item.elapsed_seconds, item.id))],
+            "context_receipt": meeting.context_receipt,
         })
     return payload
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from app.config import OPENAI_MODEL
@@ -18,7 +19,13 @@ When the user asks to revise a prior draft, revise it directly rather than discu
 Digital Twin findings are orientation, not facts. Current user instructions always win."""
 
 
-def draft_email(db: Session, user_number: str, request: str) -> str:
+@dataclass(frozen=True)
+class EmailDraftResult:
+    draft: str
+    context_receipt: dict
+
+
+def draft_email(db: Session, user_number: str, request: str) -> EmailDraftResult:
     twin = get_twin_context(
         db,
         user_number,
@@ -32,7 +39,8 @@ def draft_email(db: Session, user_number: str, request: str) -> str:
         conversation_type="email",
         limit=12,
     )
-    evidence_context = format_evidence_context(retrieve_evidence(db, user_number, request, limit=8))
+    evidence = retrieve_evidence(db, user_number, request, limit=8)
+    evidence_context = format_evidence_context(evidence)
     system_prompt = EMAIL_SYSTEM_PROMPT
     if twin.applied and twin.prompt_context:
         system_prompt += f"\n\nPERSONALIZATION CONTEXT:\n{twin.prompt_context}"
@@ -46,4 +54,28 @@ def draft_email(db: Session, user_number: str, request: str) -> str:
         ],
         temperature=0.35,
     )
-    return (response.choices[0].message.content or "").strip()
+    draft = (response.choices[0].message.content or "").strip()
+    receipt = {
+        "version": 1,
+        "core_twin": {
+            "used": twin.core_twin_applied,
+            "snapshot_id": twin.snapshot_id,
+        },
+        "full_twin": {
+            "used": bool(twin.claim_ids),
+            "claim_ids": list(twin.claim_ids),
+        },
+        "evidence": [
+            {
+                "evidence_id": item.evidence_id,
+                "source_type": item.source_type,
+                "source_id": item.source_id,
+                "occurred_at": item.occurred_at.isoformat(),
+                "tags": list(item.tags),
+                "excerpt": item.excerpt[:280],
+                "relevance_score": round(item.score, 4),
+            }
+            for item in evidence
+        ],
+    }
+    return EmailDraftResult(draft=draft, context_receipt=receipt)
