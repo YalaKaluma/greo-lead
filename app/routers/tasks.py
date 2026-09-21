@@ -14,6 +14,7 @@ from app.utils.safe_errors import log_failure
 from app.services.onboarding_seed_service import ensure_starter_tasks_visible_today
 from app.services.audit_log_service import user_id_for_identifier, write_audit_log
 from app.security_dependencies import require_authenticated_user_identifier
+from app.services.evidence_memory_service import sync_task_evidence
 
 router = APIRouter()
 
@@ -172,6 +173,18 @@ class TaskFollowUpResponse(BaseModel):
 
 # Priority order for sorting
 PRIORITY_ORDER = {"High": 1, "Medium": 2, "Low": 3}
+
+
+def _sync_task_memory(db: Session, user_number: str, task: Task) -> None:
+    try:
+        user = db.query(User).filter(
+            (User.phone_number == user_number) | (User.email == user_number)
+        ).first()
+        if user is not None:
+            sync_task_evidence(db, user, task)
+    except Exception as error:
+        db.rollback()
+        log_failure("task_evidence_memory", error)
 WEEKDAY_BY_NAME = {
     "monday": 0,
     "tuesday": 1,
@@ -536,6 +549,7 @@ def create_task(
     db.add(new_task)
     db.commit()
     db.refresh(new_task)
+    _sync_task_memory(db, user_number, new_task)
 
     return new_task
 
@@ -616,6 +630,7 @@ def update_task(
 
     db.commit()
     db.refresh(task)
+    _sync_task_memory(db, user_number, task)
 
     return task
 
@@ -863,4 +878,3 @@ async def enrich_task_endpoint(request: dict):
     result = await enrich_task(request)
 
     return result
-

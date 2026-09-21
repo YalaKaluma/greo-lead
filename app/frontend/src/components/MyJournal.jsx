@@ -204,7 +204,8 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
           reflection_depth_level: response.data.user_reflection_depth_level,
           reflection_depth_label: response.data.user_reflection_depth_label,
           reflection_depth_explanation: response.data.user_reflection_depth_explanation,
-          reflection_depth_recommendations: response.data.user_reflection_depth_recommendations
+          reflection_depth_recommendations: response.data.user_reflection_depth_recommendations,
+          memory_tags: response.data.user_memory_tags || []
         },
         newMessage
       ]);
@@ -315,7 +316,8 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
                 reflection_depth_level: response.data.user_reflection_depth_level,
                 reflection_depth_label: response.data.user_reflection_depth_label,
                 reflection_depth_explanation: response.data.user_reflection_depth_explanation,
-                reflection_depth_recommendations: response.data.user_reflection_depth_recommendations
+                reflection_depth_recommendations: response.data.user_reflection_depth_recommendations,
+                memory_tags: response.data.user_memory_tags || []
               }
             : message
         )),
@@ -617,6 +619,23 @@ const MyCoachingSessions = ({ apiUrl, userNumber }) => {
                   </div>
                 )}
                 <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
+                {msg.role === 'user' && (msg.memory_tags || []).length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1" aria-label={t('memoryTags.title')}>
+                    {msg.memory_tags.slice(0, 2).map((tag) => (
+                      <span
+                        key={`${tag.type}-${tag.value}`}
+                        className="rounded-full bg-white/15 px-2 py-0.5 text-[11px] text-blue-50 ring-1 ring-white/20"
+                      >
+                        {tag.value}
+                      </span>
+                    ))}
+                    {msg.memory_tags.length > 2 && (
+                      <span className="px-1 py-0.5 text-[11px] text-blue-100">
+                        +{msg.memory_tags.length - 2}
+                      </span>
+                    )}
+                  </div>
+                )}
                 <div className="mt-1 flex items-center justify-between gap-2">
                   <div className={`
                     text-xs 

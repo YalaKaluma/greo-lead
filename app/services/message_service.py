@@ -47,6 +47,18 @@ def save_message(
             db.rollback()
             log_failure("message_signal_classification", error)
 
+        if resolved_conversation_type == "journal":
+            try:
+                from app.models import User
+                from app.services.evidence_memory_service import sync_journal_message
+
+                user = db.query(User).filter(User.phone_number == user_number).first()
+                if user is not None:
+                    sync_journal_message(db, user, msg)
+            except Exception as error:
+                db.rollback()
+                log_failure("journal_message_evidence_memory", error)
+
     return msg
 
 def infer_conversation_type(message_type: str | None) -> str:

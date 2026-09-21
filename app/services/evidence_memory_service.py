@@ -17,6 +17,8 @@ from app.models import (
     JourneyPerson,
     JourneyProject,
     Meeting,
+    Message,
+    Task,
     User,
 )
 from app.services.intelligence_backfill_service import (
@@ -30,7 +32,7 @@ from app.utils.ai_safety import UNTRUSTED_CONTEXT_POLICY, wrap_untrusted_context
 TAG_TYPES = {"person", "project", "workstream", "theme"}
 MEMORY_SOURCE_TYPES = {
     "journal", "message", "meeting", "meeting_transcript", "meeting_decision",
-    "meeting_action", "meeting_observation",
+    "meeting_action", "meeting_observation", "task",
 }
 STOPWORDS = {
     "about", "after", "again", "also", "been", "being", "could", "from", "have", "into",
@@ -131,6 +133,10 @@ def tag_evidence(db: Session, user: User, evidence: IntelligenceEvidence) -> Non
         tags.append(("person", str(value), 1.0))
     for value in payload.get("projects", []) or []:
         tags.append(("project", str(value), 1.0))
+    for value in payload.get("people", []) or []:
+        tags.append(("person", str(value), 1.0))
+    for value in payload.get("workstreams", []) or []:
+        tags.append(("workstream", str(value), 0.9))
     set_evidence_tags(db, evidence, tags)
 
 
@@ -163,6 +169,52 @@ def sync_email_context(db: Session, user: User, message_id: int, context: str) -
         occurred_at=datetime.now(timezone.utc),
         payload={"conversation_type": "email", "message_type": "email_draft"},
     )])
+
+
+def sync_journal_message(db: Session, user: User, message: Message) -> None:
+    sync_candidates(db, user, [EvidenceCandidate(
+        source_type="message",
+        source_id=str(message.id),
+        evidence_key="content",
+        evidence_type="user_statement",
+        excerpt=(message.content or "")[:4000],
+        occurred_at=message.timestamp or datetime.now(timezone.utc),
+        payload={"conversation_type": "journal", "message_type": message.message_type},
+    )])
+
+
+def sync_task_evidence(db: Session, user: User, task: Task) -> None:
+    text = "\n".join(value for value in (task.title, task.notes, task.strategic_intent) if value)
+    payload = {
+        "status": task.status,
+        "projects": [task.project] if task.project else [],
+        "people": [task.delegated_to] if task.delegated_to else [],
+    }
+    sync_candidates(db, user, [EvidenceCandidate(
+        source_type="task",
+        source_id=str(task.id),
+        evidence_key="state",
+        evidence_type="outcome" if task.status == "completed" else "fact",
+        excerpt=text[:4000],
+        occurred_at=task.completed_at or task.updated_at or task.created_at or datetime.now(timezone.utc),
+        payload=payload,
+    )])
+
+
+def source_tags(db: Session, user_id: int, source_type: str, source_id: str) -> list[dict]:
+    evidence = db.query(IntelligenceEvidence).options(
+        selectinload(IntelligenceEvidence.tag_links).selectinload(IntelligenceEvidenceTag.tag)
+    ).filter(
+        IntelligenceEvidence.user_id == user_id,
+        IntelligenceEvidence.source_type == source_type,
+        IntelligenceEvidence.source_id == str(source_id),
+    ).first()
+    if evidence is None:
+        return []
+    return [
+        {"type": link.tag.tag_type, "value": link.tag.display_value, "source": link.source}
+        for link in sorted(evidence.tag_links, key=lambda item: (item.tag.tag_type, item.tag.display_value.lower()))
+    ]
 
 
 def sync_meeting_evidence(db: Session, user: User, meeting_id: int) -> None:
