@@ -179,7 +179,7 @@
   "settings.twinPipeline.review.loadError": "Alfred n'a pas pu charger le rapport d'étiquetage.",
   "settings.twinPipeline.review.withEntities": "Reliés à des personnes ou au travail",
   "settings.twinPipeline.review.untagged": "Données non étiquetées",
-  "settings.twinPipeline.review.source": "Source",
+  "settings.twinPipeline.review.source": "Origine",
   "settings.twinPipeline.review.records": "Données",
   "settings.twinPipeline.review.coverageHelp": "La couverture indique si une donnée a reçu une étiquette. La couverture des entités est plus stricte : elle exige une personne, un projet ou un chantier.",
   "settings.twinPipeline.review.tagTypesLabel": "Types d'étiquettes",
