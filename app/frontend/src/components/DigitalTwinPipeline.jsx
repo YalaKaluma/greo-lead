@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 
-const STAGE_KEYS = ['evidence_foundation', 'executive_world', 'behavioral_profile', 'dynamic_state'];
-const ENTITY_TYPES = ['person', 'team', 'project', 'workstream', 'goal'];
+const STAGE_KEYS = ['evidence_foundation', 'entity_directory', 'executive_world', 'behavioral_profile', 'dynamic_state', 'twin_assembly'];
+const ENTITY_TYPES = ['person', 'organization', 'initiative'];
 const ACTIVE_STATUSES = ['queued', 'running'];
 
 const translateWith = (t, key, variables) => Object.entries(variables).reduce(
@@ -150,7 +150,7 @@ function EvidenceFoundationReview({ apiUrl, t }) {
       {view === 'tags' && report && (
         <div className="mt-5">
           <div className="flex flex-wrap gap-2" aria-label={t('settings.twinPipeline.review.tagTypesLabel')}>
-            {['person', 'project', 'workstream', 'theme'].map((type) => <button key={type} type="button" onClick={() => chooseTagType(type)} className={`rounded-md border px-3 py-2 text-sm font-semibold ${tagType === type ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600'}`}>{t(`settings.twinPipeline.entity.${type}`)}</button>)}
+            {ENTITY_TYPES.map((type) => <button key={type} type="button" onClick={() => chooseTagType(type)} className={`rounded-md border px-3 py-2 text-sm font-semibold ${tagType === type ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600'}`}>{t(`settings.twinPipeline.entity.${type}`)}</button>)}
           </div>
           <label className="mt-4 block text-sm font-semibold text-slate-700">{t('settings.twinPipeline.review.searchTags')}<input type="search" value={tagSearch} onChange={(event) => setTagSearch(event.target.value)} placeholder={t('settings.twinPipeline.review.searchTagsPlaceholder')} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-normal" /></label>
           {tags.length === 0 ? <p className="mt-4 text-sm text-slate-500">{t('settings.twinPipeline.review.noTags')}</p> : (
@@ -214,15 +214,15 @@ function StageOutput({ stage, pipeline, model, activeEntityType, setActiveEntity
     );
   }
 
-  if (stage.stage_key === 'executive_world') {
+  if (stage.stage_key === 'entity_directory') {
     const entities = (pipeline?.executive_world?.entities || []).filter((item) => item.entity_type === activeEntityType);
     return (
       <div className="mt-6">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <MetricCard label={t('settings.twinPipeline.entity.person')} value={metrics.person_count || 0} />
-          <MetricCard label={t('settings.twinPipeline.entity.project')} value={(metrics.project_count || 0) + (metrics.workstream_count || 0)} />
-          <MetricCard label={t('settings.twinPipeline.entity.goal')} value={metrics.goal_count || 0} />
-          <MetricCard label={t('settings.twinPipeline.metric.relationships')} value={metrics.relationship_count || 0} />
+          <MetricCard label={t('settings.twinPipeline.entity.organization')} value={metrics.organization_count || 0} />
+          <MetricCard label={t('settings.twinPipeline.entity.initiative')} value={metrics.initiative_count || 0} />
+          <MetricCard label={t('settings.twinPipeline.metric.entities')} value={(metrics.person_count || 0) + (metrics.organization_count || 0) + (metrics.initiative_count || 0)} />
         </div>
         <div className="mt-5 flex flex-wrap gap-2" role="tablist" aria-label={t('settings.twinPipeline.world.tabsLabel')}>
           {ENTITY_TYPES.map((type) => (
@@ -242,6 +242,8 @@ function StageOutput({ stage, pipeline, model, activeEntityType, setActiveEntity
                   <div><h4 className="font-semibold text-slate-950">{entity.display_name}</h4><p className="mt-1 text-sm leading-6 text-slate-600">{entity.summary || t('settings.twinPipeline.world.noSummary')}</p></div>
                   <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{entity.evidence_count} {t('settings.twinPipeline.metric.evidence').toLowerCase()}</span>
                 </div>
+                {(entity.metadata?.aliases || []).length > 1 && <p className="mt-2 text-xs text-slate-500">{t('settings.twinPipeline.world.aliases')}: {entity.metadata.aliases.join(', ')}</p>}
+                {(entity.metadata?.source_types || []).length > 0 && <p className="mt-1 text-xs text-slate-500">{t('settings.twinPipeline.world.sources')}: {entity.metadata.source_types.map((value) => value.replaceAll('_', ' ')).join(', ')}</p>}
                 {(entity.first_seen_at || entity.last_seen_at) && <p className="mt-2 text-xs text-slate-400">{t('settings.twinPipeline.world.observed')}: {entity.first_seen_at ? new Date(entity.first_seen_at).toLocaleDateString() : '—'} → {entity.last_seen_at ? new Date(entity.last_seen_at).toLocaleDateString() : '—'}</p>}
               </article>
             ))}
@@ -251,21 +253,61 @@ function StageOutput({ stage, pipeline, model, activeEntityType, setActiveEntity
     );
   }
 
+  if (stage.stage_key === 'executive_world') {
+    const entityById = Object.fromEntries((pipeline?.executive_world?.entities || []).map((entity) => [entity.id, entity]));
+    const relationships = pipeline?.executive_world?.relationships || [];
+    return (
+      <div className="mt-6">
+        <div className="grid grid-cols-2 gap-3">
+          <MetricCard label={t('settings.twinPipeline.metric.entities')} value={metrics.entity_count || 0} />
+          <MetricCard label={t('settings.twinPipeline.metric.relationships')} value={metrics.relationship_count || 0} />
+        </div>
+        <div className="mt-5 space-y-3">
+          {relationships.length === 0 ? <p className="rounded-xl bg-slate-50 p-5 text-sm text-slate-600">{t('settings.twinPipeline.world.noRelationships')}</p> : relationships.slice(0, 40).map((relationship) => (
+            <article key={relationship.id} className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="font-semibold text-slate-950">{entityById[relationship.source_entity_id]?.display_name || '—'} <span className="font-normal text-slate-400">↔</span> {entityById[relationship.target_entity_id]?.display_name || '—'}</p>
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{relationship.evidence_count} {t('settings.twinPipeline.metric.evidence').toLowerCase()}</span>
+              </div>
+              {relationship.summary && <p className="mt-2 text-sm text-slate-600">{relationship.summary}</p>}
+            </article>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (stage.stage_key === 'behavioral_profile') {
-    const dimensions = model?.core_twin?.dimensions || output.core_twin?.dimensions || {};
+    const dimensions = model?.full_twin || {};
+    return (
+      <div className="mt-6">
+        <div className="grid grid-cols-2 gap-3">
+          <MetricCard label={t('settings.executiveModel.assertions')} value={metrics.assertion_count || 0} />
+          <MetricCard label={t('settings.twinPipeline.metric.newFindings')} value={metrics.new_assertion_count || 0} />
+        </div>
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          {Object.entries(dimensions).map(([key, claims]) => (
+            <section key={key} className="rounded-xl border border-slate-200 bg-white p-5">
+              <h4 className="text-sm font-semibold text-slate-950">{t(`settings.executiveModel.dimension.${key}`)}</h4>
+              <p className="mt-2 text-sm leading-6 text-slate-700">{claims.length} {t('settings.executiveModel.assertions').toLowerCase()}</p>
+              <ul className="mt-3 space-y-2 text-sm text-slate-600">{claims.slice(0, 3).map((claim) => <li key={claim.id}>{claim.statement}</li>)}</ul>
+            </section>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (stage.stage_key === 'twin_assembly') {
+    const coreTwin = model?.core_twin || output.core_twin || {};
     return (
       <div className="mt-6">
         <div className="rounded-xl border border-blue-100 bg-blue-50 p-5">
           <h4 className="font-semibold text-blue-950">{t('settings.executiveModel.core.title')}</h4>
-          <p className="mt-2 text-sm leading-6 text-blue-900">{model?.core_twin?.overview || output.core_twin?.overview || t('settings.executiveModel.core.noFinding')}</p>
+          <p className="mt-2 text-sm leading-6 text-blue-900">{coreTwin.overview || t('settings.executiveModel.core.noFinding')}</p>
         </div>
         <div className="mt-5 grid gap-4 md:grid-cols-2">
-          {Object.entries(dimensions).map(([key, value]) => (
-            <section key={key} className="rounded-xl border border-slate-200 bg-white p-5">
-              <h4 className="text-sm font-semibold text-slate-950">{t(`settings.executiveModel.dimension.${key}`)}</h4>
-              <p className="mt-2 text-sm leading-6 text-slate-700">{value}</p>
-            </section>
-          ))}
+          {Object.entries(coreTwin.dimensions || {}).map(([key, value]) => <section key={key} className="rounded-xl border border-slate-200 bg-white p-5"><h4 className="text-sm font-semibold text-slate-950">{t(`settings.executiveModel.dimension.${key}`)}</h4><p className="mt-2 text-sm leading-6 text-slate-700">{value}</p></section>)}
         </div>
       </div>
     );
@@ -356,7 +398,7 @@ export default function DigitalTwinPipeline({ apiUrl, t }) {
       <div className="max-w-6xl">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div><h2 className="text-lg font-semibold text-slate-950">{t('settings.executiveModel.title')}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{t('settings.twinPipeline.description')}</p></div>
-          <div className="w-full sm:w-60"><p className="text-sm font-semibold text-slate-800">{translateWith(t, 'settings.twinPipeline.overall', { completed: completedCount, total: STAGE_KEYS.length })}</p><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200" role="progressbar" aria-label={t('settings.twinPipeline.overallLabel')} aria-valuemin="0" aria-valuemax="4" aria-valuenow={completedCount}><div className="h-full bg-blue-600 transition-all" style={{ width: progressWidth }} /></div></div>
+          <div className="w-full sm:w-60"><p className="text-sm font-semibold text-slate-800">{translateWith(t, 'settings.twinPipeline.overall', { completed: completedCount, total: STAGE_KEYS.length })}</p><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200" role="progressbar" aria-label={t('settings.twinPipeline.overallLabel')} aria-valuemin="0" aria-valuemax={STAGE_KEYS.length} aria-valuenow={completedCount}><div className="h-full bg-blue-600 transition-all" style={{ width: progressWidth }} /></div></div>
         </div>
         {error && <p className="mt-4 text-sm text-rose-700">{error}</p>}
 

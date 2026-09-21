@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session, selectinload
+from openai import OpenAI
 
+from app.config import OPENAI_API_KEY, OPENAI_MODEL
 from app.models import (
     IntelligenceEvidence,
     IntelligenceEvidenceTag,
@@ -27,9 +30,10 @@ from app.services.intelligence_backfill_service import (
     upsert_evidence,
 )
 from app.utils.ai_safety import UNTRUSTED_CONTEXT_POLICY, wrap_untrusted_context
+from app.utils.ai_safety import parse_bounded_json_object
 
 
-TAG_TYPES = {"person", "project", "workstream", "theme"}
+TAG_TYPES = {"person", "organization", "initiative"}
 MEMORY_SOURCE_TYPES = {
     "journal", "message", "meeting", "meeting_transcript", "meeting_decision",
     "meeting_action", "meeting_observation", "task",
@@ -81,14 +85,8 @@ def _entity_tags(db: Session, user: User, text: str) -> list[tuple[str, str, flo
     for project in db.query(JourneyProject).filter(JourneyProject.user_number == user.phone_number).all():
         name = (project.project_name or "").strip()
         if name and f" {_normalize(name)} " in normalized:
-            tags.append(("project", name, 1.0))
+            tags.append(("initiative", name, 1.0))
     return tags
-
-
-def _theme_tags(text: str, limit: int = 6) -> list[tuple[str, str, float]]:
-    # Stable, explainable topical anchors provide a useful fallback before richer entities are known.
-    terms = sorted(_terms(text), key=lambda term: (-text.lower().count(term), term))
-    return [("theme", term, 0.65) for term in terms[:limit]]
 
 
 def set_evidence_tags(
@@ -134,16 +132,18 @@ def set_evidence_tags(
 
 def tag_evidence(db: Session, user: User, evidence: IntelligenceEvidence) -> None:
     text = evidence.excerpt or ""
-    tags = _entity_tags(db, user, text) + _theme_tags(text)
+    tags = _entity_tags(db, user, text)
     payload = evidence.payload or {}
     for value in payload.get("participants", []) or []:
         tags.append(("person", str(value), 1.0))
     for value in payload.get("projects", []) or []:
-        tags.append(("project", str(value), 1.0))
+        tags.append(("initiative", str(value), 1.0))
     for value in payload.get("people", []) or []:
         tags.append(("person", str(value), 1.0))
     for value in payload.get("workstreams", []) or []:
-        tags.append(("workstream", str(value), 0.9))
+        tags.append(("initiative", str(value), 0.9))
+    for value in payload.get("organizations", []) or []:
+        tags.append(("organization", str(value), 0.95))
     set_evidence_tags(db, evidence, tags)
 
 
@@ -184,20 +184,21 @@ def tag_evidence_batch(
                 if f" {normalized} " in normalized_text
             ]
             tags.extend(
-                ("project", display, 1.0)
+                ("initiative", display, 1.0)
                 for display, normalized in projects
                 if f" {normalized} " in normalized_text
             )
-            tags.extend(_theme_tags(text))
             payload = evidence.payload or {}
             for value in payload.get("participants", []) or []:
                 tags.append(("person", str(value), 1.0))
             for value in payload.get("projects", []) or []:
-                tags.append(("project", str(value), 1.0))
+                tags.append(("initiative", str(value), 1.0))
             for value in payload.get("people", []) or []:
                 tags.append(("person", str(value), 1.0))
             for value in payload.get("workstreams", []) or []:
-                tags.append(("workstream", str(value), 0.9))
+                tags.append(("initiative", str(value), 0.9))
+            for value in payload.get("organizations", []) or []:
+                tags.append(("organization", str(value), 0.95))
 
             seen = set()
             normalized_tags = []
@@ -249,6 +250,116 @@ def tag_evidence_batch(
         completed = min(offset + len(batch), total)
         if progress_callback:
             progress_callback(completed, total)
+
+
+def _entity_discovery_batches(
+    evidence_rows: list[IntelligenceEvidence],
+    *,
+    max_records: int = 120,
+    max_characters: int = 55_000,
+) -> list[list[IntelligenceEvidence]]:
+    batches: list[list[IntelligenceEvidence]] = []
+    current: list[IntelligenceEvidence] = []
+    size = 0
+    for row in evidence_rows:
+        row_size = len(row.excerpt or "") + 100
+        if current and (len(current) >= max_records or size + row_size > max_characters):
+            batches.append(current)
+            current = []
+            size = 0
+        current.append(row)
+        size += row_size
+    if current:
+        batches.append(current)
+    return batches
+
+
+def discover_evidence_entities(
+    db: Session,
+    user: User,
+    evidence_rows: list[IntelligenceEvidence],
+    *,
+    progress_callback=None,
+) -> None:
+    """Discover People, Organizations, and Initiatives across mixed evidence batches.
+
+    This intentionally runs only during the explicit Stage 1 historical build. Live
+    writes keep using the deterministic, inexpensive tagger above.
+    """
+    if not OPENAI_API_KEY or not evidence_rows:
+        return
+    client = OpenAI(api_key=OPENAI_API_KEY, timeout=90.0, max_retries=1)
+    batches = _entity_discovery_batches(evidence_rows)
+    allowed_ids = {row.id for row in evidence_rows}
+    for index, batch in enumerate(batches, start=1):
+        records = [
+            {
+                "evidence_id": row.id,
+                "source_type": row.source_type,
+                "occurred_at": row.occurred_at.date().isoformat(),
+                "text": (row.excerpt or "")[:5000],
+            }
+            for row in batch if (row.excerpt or "").strip()
+        ]
+        if not records:
+            continue
+        response = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            response_format={"type": "json_object"},
+            temperature=0,
+            max_tokens=6000,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        f"{UNTRUSTED_CONTEXT_POLICY}\n"
+                        "Identify only named People, Organizations, and Initiatives in each record. "
+                        "An Initiative is a named project, product, program, workstream, or major venture. "
+                        "Do not create generic themes, activities, emotions, goals, or behavioral traits. "
+                        "Use the clearest canonical name visible in the data. Do not invent identities. "
+                        "Return JSON: {\"records\":[{\"evidence_id\":1,\"entities\":["
+                        "{\"type\":\"person|organization|initiative\",\"name\":\"...\","
+                        "\"confidence\":0.0}]}]}."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": wrap_untrusted_context(
+                        "mixed_historical_evidence",
+                        json.dumps(records, ensure_ascii=False, default=str),
+                        70_000,
+                    ),
+                },
+            ],
+        )
+        parsed = parse_bounded_json_object(
+            response.choices[0].message.content,
+            max_characters=180_000,
+            max_nodes=12_000,
+        )
+        by_id = {row.id: row for row in batch}
+        for item in parsed.get("records", [])[: len(records) * 2]:
+            if not isinstance(item, dict):
+                continue
+            evidence_id = item.get("evidence_id")
+            if not isinstance(evidence_id, int) or evidence_id not in allowed_ids or evidence_id not in by_id:
+                continue
+            tags = []
+            for entity in item.get("entities", [])[:30]:
+                if not isinstance(entity, dict):
+                    continue
+                tag_type = str(entity.get("type") or "").strip().lower()
+                name = str(entity.get("name") or "").strip()
+                try:
+                    confidence = float(entity.get("confidence", 0.75))
+                except (TypeError, ValueError):
+                    confidence = 0.75
+                if tag_type in TAG_TYPES and 1 < len(name) <= 240:
+                    tags.append((tag_type, name, confidence))
+            set_evidence_tags(db, by_id[evidence_id], tags, source="model")
+        db.commit()
+        if progress_callback:
+            progress_callback(index, len(batches))
 
 
 def sync_candidates(db: Session, user: User, candidates: list[EvidenceCandidate]) -> list[IntelligenceEvidence]:
@@ -345,9 +456,9 @@ def sync_meeting_evidence(db: Session, user: User, meeting_id: int) -> None:
         return
     participants = [row.display_name for row in meeting.participants if row.display_name and not row.is_current_user]
     projects = [row.project.project_name for row in meeting.project_links if row.project and row.project.project_name]
-    contextual = [("person", name, 1.0) for name in participants] + [("project", name, 1.0) for name in projects]
+    contextual = [("person", name, 1.0) for name in participants] + [("initiative", name, 1.0) for name in projects]
     if meeting.title and meeting.title != "Untitled meeting":
-        contextual.append(("workstream", meeting.title, 0.8))
+        contextual.append(("initiative", meeting.title, 0.8))
     for evidence in saved:
         existing = [
             (link.tag.tag_type, link.tag.display_value, link.confidence_score)
@@ -385,12 +496,7 @@ def retrieve_evidence(db: Session, user_number: str, query: str, limit: int = 8)
     rows = load_rows()
     needs_retag = [
         row for row in rows
-        if not row.tag_links or any(
-            link.source == "automatic"
-            and link.tag.tag_type == "theme"
-            and link.tag.normalized_value in STOPWORDS
-            for link in row.tag_links
-        )
+        if not row.tag_links
     ]
     if needs_retag:
         for row in needs_retag:

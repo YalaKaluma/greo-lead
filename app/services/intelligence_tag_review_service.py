@@ -16,7 +16,7 @@ from app.models import (
 from app.services.intelligence_backfill_service import SEED_SOURCE_TYPES
 
 
-ENTITY_TAG_TYPES = ("person", "project", "workstream")
+ENTITY_TAG_TYPES = ("person", "organization", "initiative")
 QUALITY_FILTERS = {"all", "untagged", "no_entity", "low_confidence"}
 
 

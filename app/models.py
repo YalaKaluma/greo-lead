@@ -401,7 +401,7 @@ class IntelligenceEvidence(Base):
 
 
 class IntelligenceMemoryTag(Base):
-    """A normalized person, project, workstream, or theme attached to raw evidence."""
+    """A normalized person, organization, or initiative attached to raw evidence."""
 
     __tablename__ = "intelligence_memory_tags"
     __table_args__ = (
@@ -681,7 +681,7 @@ class IntelligenceTwinStage(Base):
 
 
 class IntelligenceWorldEntity(Base):
-    """A first-class person, team, project, goal, or workstream in the Executive World."""
+    """A canonical person, organization, or initiative in the Executive World."""
 
     __tablename__ = "intelligence_world_entities"
     __table_args__ = (
