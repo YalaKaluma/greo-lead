@@ -61,6 +61,7 @@ class Message(Base):
     reflection_depth_explanation = Column(Text, nullable=True)
     reflection_depth_recommendations = Column(JSON, nullable=True)
     reflection_depth_scored_at = Column(DateTime, nullable=True)
+    context_receipt = Column(MutableDict.as_mutable(JSONB), nullable=True)
 
 
 class MessageFeedback(Base):
@@ -352,6 +353,300 @@ class MessageSignalFlag(Base):
     user = relationship("User")
     message = relationship("Message")
 
+
+class IntelligenceEvidence(Base):
+    """Source-backed observation available to Alfred's longitudinal model."""
+
+    __tablename__ = "intelligence_evidence"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "source_type",
+            "source_id",
+            "evidence_key",
+            name="uq_intelligence_evidence_source_key",
+        ),
+        Index("idx_intelligence_evidence_user_occurred", "user_id", "occurred_at"),
+        Index("idx_intelligence_evidence_user_source", "user_id", "source_type"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_number = Column(String, nullable=True, index=True)
+    source_type = Column(String(40), nullable=False, index=True)
+    source_id = Column(String(120), nullable=False)
+    evidence_key = Column(String(120), nullable=False, default="primary")
+    evidence_type = Column(String(40), nullable=False, default="observation", index=True)
+    excerpt = Column(Text, nullable=True)
+    payload = Column(MutableDict.as_mutable(JSONB), nullable=True)
+    occurred_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    content_hash = Column(String(64), nullable=True, index=True)
+    synthesized_content_hash = Column(String(64), nullable=True)
+    synthesized_at = Column(DateTime(timezone=True), nullable=True)
+    observed_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User")
+    claim_links = relationship(
+        "IntelligenceClaimEvidence",
+        back_populates="evidence",
+        cascade="all, delete-orphan",
+    )
+    tag_links = relationship(
+        "IntelligenceEvidenceTag",
+        back_populates="evidence",
+        cascade="all, delete-orphan",
+    )
+
+
+class IntelligenceMemoryTag(Base):
+    """A normalized person, project, workstream, or theme attached to raw evidence."""
+
+    __tablename__ = "intelligence_memory_tags"
+    __table_args__ = (
+        UniqueConstraint("user_id", "tag_type", "normalized_value", name="uq_intelligence_memory_tag"),
+        Index("idx_intelligence_memory_tags_user_type", "user_id", "tag_type"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    tag_type = Column(String(30), nullable=False, index=True)
+    normalized_value = Column(String(240), nullable=False)
+    display_value = Column(String(240), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User")
+    evidence_links = relationship("IntelligenceEvidenceTag", back_populates="tag", cascade="all, delete-orphan")
+
+
+class IntelligenceEvidenceTag(Base):
+    """Association between raw evidence and a normalized memory tag."""
+
+    __tablename__ = "intelligence_evidence_tags"
+    __table_args__ = (
+        UniqueConstraint("evidence_id", "tag_id", name="uq_intelligence_evidence_tag"),
+        Index("idx_intelligence_evidence_tags_evidence", "evidence_id"),
+        Index("idx_intelligence_evidence_tags_tag", "tag_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    evidence_id = Column(Integer, ForeignKey("intelligence_evidence.id", ondelete="CASCADE"), nullable=False)
+    tag_id = Column(Integer, ForeignKey("intelligence_memory_tags.id", ondelete="CASCADE"), nullable=False)
+    confidence_score = Column(Float, nullable=False, default=1.0)
+    source = Column(String(30), nullable=False, default="automatic")
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    evidence = relationship("IntelligenceEvidence", back_populates="tag_links")
+    tag = relationship("IntelligenceMemoryTag", back_populates="evidence_links")
+
+
+class IntelligenceClaim(Base):
+    """A versionable fact, statement, observation, hypothesis, or validated pattern."""
+
+    __tablename__ = "intelligence_claims"
+    __table_args__ = (
+        CheckConstraint("confidence_score >= 0 AND confidence_score <= 1", name="ck_intelligence_claim_confidence"),
+        Index("idx_intelligence_claims_user_status", "user_id", "review_status"),
+        Index("idx_intelligence_claims_user_type", "user_id", "claim_type"),
+        Index("idx_intelligence_claims_user_updated", "user_id", "updated_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_number = Column(String, nullable=True, index=True)
+    claim_type = Column(String(40), nullable=False, index=True)
+    pattern_key = Column(String(120), nullable=True, index=True)
+    pattern_title = Column(String(240), nullable=True)
+    object_type = Column(String(40), nullable=False, default="attribute", index=True)
+    scope = Column(String(80), nullable=True, index=True)
+    stability = Column(String(30), nullable=False, default="recurring", index=True)
+    subject_type = Column(String(40), nullable=True, index=True)
+    subject_id = Column(String(120), nullable=True, index=True)
+    statement = Column(Text, nullable=False)
+    interpretation = Column(Text, nullable=True)
+    trajectory = Column(String(30), nullable=True, index=True)
+    context_summary = Column(Text, nullable=True)
+    alternative_explanation = Column(Text, nullable=True)
+    coaching_implication = Column(Text, nullable=True)
+    epistemic_status = Column(String(40), nullable=False, default="hypothesis", index=True)
+    confidence_score = Column(Float, nullable=False, default=0.0)
+    review_status = Column(String(30), nullable=False, default="active", index=True)
+    valid_from = Column(DateTime(timezone=True), nullable=True)
+    valid_to = Column(DateTime(timezone=True), nullable=True)
+    first_seen_at = Column(DateTime(timezone=True), nullable=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    confirmed_at = Column(DateTime(timezone=True), nullable=True)
+    contradicted_at = Column(DateTime(timezone=True), nullable=True)
+    superseded_by_id = Column(
+        Integer,
+        ForeignKey("intelligence_claims.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    metadata_json = Column(MutableDict.as_mutable(JSONB), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User")
+    evidence_links = relationship(
+        "IntelligenceClaimEvidence",
+        back_populates="claim",
+        cascade="all, delete-orphan",
+    )
+    contexts = relationship(
+        "IntelligenceClaimContext",
+        back_populates="claim",
+        cascade="all, delete-orphan",
+    )
+    feedback_entries = relationship(
+        "IntelligencePatternFeedback",
+        back_populates="claim",
+        cascade="all, delete-orphan",
+    )
+    superseded_by = relationship("IntelligenceClaim", remote_side=[id])
+
+
+class IntelligenceClaimEvidence(Base):
+    """Traceability edge connecting an inference to supporting or contradicting evidence."""
+
+    __tablename__ = "intelligence_claim_evidence"
+    __table_args__ = (
+        UniqueConstraint("claim_id", "evidence_id", name="uq_intelligence_claim_evidence"),
+        Index("idx_intelligence_claim_evidence_claim", "claim_id"),
+        Index("idx_intelligence_claim_evidence_evidence", "evidence_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    claim_id = Column(
+        Integer,
+        ForeignKey("intelligence_claims.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    evidence_id = Column(
+        Integer,
+        ForeignKey("intelligence_evidence.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    relationship_type = Column(String(20), nullable=False, default="supports")
+    relevance_score = Column(Float, nullable=True)
+    rationale = Column(Text, nullable=True)
+    independence_group = Column(String(120), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    claim = relationship("IntelligenceClaim", back_populates="evidence_links")
+    evidence = relationship("IntelligenceEvidence", back_populates="claim_links")
+
+
+class IntelligenceClaimContext(Base):
+    """A situation in which a longitudinal pattern applies, changes, or does not apply."""
+
+    __tablename__ = "intelligence_claim_contexts"
+    __table_args__ = (
+        Index("idx_intelligence_claim_contexts_claim", "claim_id"),
+        Index("idx_intelligence_claim_contexts_type", "context_type"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    claim_id = Column(
+        Integer,
+        ForeignKey("intelligence_claims.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    context_type = Column(String(40), nullable=False, default="general")
+    label = Column(String(240), nullable=False)
+    applicability = Column(String(30), nullable=False, default="applies")
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    claim = relationship("IntelligenceClaim", back_populates="contexts")
+
+
+class IntelligencePatternFeedback(Base):
+    """User calibration of a longitudinal pattern without erasing its history."""
+
+    __tablename__ = "intelligence_pattern_feedback"
+    __table_args__ = (
+        Index("idx_intelligence_pattern_feedback_claim", "claim_id"),
+        Index("idx_intelligence_pattern_feedback_user", "user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    claim_id = Column(
+        Integer,
+        ForeignKey("intelligence_claims.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    verdict = Column(String(30), nullable=False)
+    correction_text = Column(Text, nullable=True)
+    context_note = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    claim = relationship("IntelligenceClaim", back_populates="feedback_entries")
+    user = relationship("User")
+
+
+class IntelligenceBackfillRun(Base):
+    """Durable status for a per-user historical intelligence rebuild."""
+
+    __tablename__ = "intelligence_backfill_runs"
+    __table_args__ = (
+        Index("idx_intelligence_backfill_runs_user_created", "user_id", "created_at"),
+        Index("idx_intelligence_backfill_runs_status", "status"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(30), nullable=False, default="queued", index=True)
+    evidence_count = Column(Integer, nullable=False, default=0)
+    claims_created = Column(Integer, nullable=False, default=0)
+    processing_mode = Column(String(20), nullable=False, default="incremental")
+    new_evidence_count = Column(Integer, nullable=False, default=0)
+    changed_evidence_count = Column(Integer, nullable=False, default=0)
+    unchanged_evidence_count = Column(Integer, nullable=False, default=0)
+    progress_percent = Column(Integer, nullable=False, default=0)
+    progress_stage = Column(String(40), nullable=False, default="queued")
+    progress_current = Column(Integer, nullable=False, default=0)
+    progress_total = Column(Integer, nullable=False, default=0)
+    heartbeat_at = Column(DateTime(timezone=True), nullable=True)
+    checkpoint_data = Column(MutableDict.as_mutable(JSONB), nullable=True)
+    activity_log = Column(JSONB, nullable=True)
+    source_counts = Column(MutableDict.as_mutable(JSONB), nullable=True)
+    window_weeks = Column(Integer, nullable=True)
+    window_start = Column(DateTime(timezone=True), nullable=True)
+    window_end = Column(DateTime(timezone=True), nullable=True)
+    prompt_version = Column(String(80), nullable=True)
+    model_version = Column(String(80), nullable=True)
+    error_message = Column(Text, nullable=True)
+    failure_stage = Column(String(40), nullable=True)
+    failure_reference = Column(String(40), nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    user = relationship("User")
+
+
+class IntelligenceTwinSnapshot(Base):
+    """A compact Core Twin derived from the evidence-linked Full Twin."""
+
+    __tablename__ = "intelligence_twin_snapshots"
+    __table_args__ = (
+        Index("idx_intelligence_twin_snapshots_user_current", "user_id", "is_current"),
+        Index("idx_intelligence_twin_snapshots_user_created", "user_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    core_twin = Column(MutableDict.as_mutable(JSONB), nullable=False)
+    prompt_version = Column(String(80), nullable=False)
+    model_version = Column(String(80), nullable=False)
+    is_current = Column(Boolean, nullable=False, default=True, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    user = relationship("User")
+
 class Task(Base):
     __tablename__ = "tasks"
 
@@ -433,6 +728,7 @@ class Meeting(Base):
     consent_acknowledged_at = Column(DateTime(timezone=True), nullable=True)
     prompt_version = Column(String(40), nullable=True)
     model_version = Column(String(80), nullable=True)
+    context_receipt = Column(MutableDict.as_mutable(JSONB), nullable=True)
     leadership_assessment_version = Column(String(80), nullable=True, index=True)
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)

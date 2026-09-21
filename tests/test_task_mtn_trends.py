@@ -4,6 +4,7 @@ from unittest import TestCase
 
 from app.services.task_mtn_trend_service import (
     _local_completed_at_iso,
+    _period_stats,
     _rank_procrastinated_tasks,
     _task_completed_day,
 )
@@ -51,3 +52,18 @@ class TaskMtnTrendsTest(TestCase):
         )
 
         self.assertEqual(_local_completed_at_iso(task, "UTC"), "2026-06-03T10:00:00+00:00")
+
+    def test_period_average_excludes_weekend_scores(self):
+        chart = [
+            {"date": "2026-06-12", "mtn_score": 8, "completed_tasks": 1},
+            {"date": "2026-06-13", "mtn_score": 10, "completed_tasks": 1},
+            {"date": "2026-06-14", "mtn_score": 10, "completed_tasks": 1},
+            {"date": "2026-06-15", "mtn_score": 4, "completed_tasks": 1},
+        ]
+
+        stats = _period_stats(chart, 4)
+
+        self.assertEqual(stats["eligible_weekdays"], 2)
+        self.assertEqual(stats["average_score"], 6)
+        self.assertEqual(stats["total_score"], 32)
+        self.assertEqual(stats["completed_tasks"], 4)

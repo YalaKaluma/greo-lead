@@ -9,6 +9,7 @@ from app.services.opportunity.opportunity_feedback import mark_opportunity_decli
 from app.services.opportunity.opportunity_generator import generate_candidate_opportunities
 from app.services.opportunity.opportunity_scorer import score_opportunities_with_mtn
 from app.services.opportunity.opportunity_selector import select_top_opportunities
+from app.services.twin_context_service import get_twin_context
 
 
 def _serialize_opportunity(suggestion: OpportunitySuggestion) -> Dict[str, Any]:
@@ -79,6 +80,19 @@ def get_best_opportunities(
         raise ValueError("A database session is required")
 
     context = build_opportunity_context(user_id, surface, db)
+    user = db.query(User).filter(User.id == user_id).first()
+    if user:
+        user_number = user.phone_number or user.email
+        if user_number:
+            twin_context = get_twin_context(
+                db,
+                user_number,
+                surface="mtn",
+                query=f"{surface} proactive opportunities priorities goals",
+                limit=6,
+            )
+            context["digital_twin_context"] = twin_context.prompt_context
+            context["digital_twin_trace"] = twin_context.metadata()
     candidates = generate_candidate_opportunities(context, opportunity_type, n=10)
     scored_candidates = score_opportunities_with_mtn(candidates, context)
     selected = select_top_opportunities(scored_candidates, limit=limit)

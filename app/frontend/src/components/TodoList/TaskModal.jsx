@@ -3,6 +3,7 @@ import { getTodayET, getETDate, formatDateForInput, formatDateForDisplay, normal
 import { useState, useEffect } from 'react';
 import VoiceRecorder from '../VoiceRecorder';
 import { API_URL } from '../../config';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 /**
  * TaskModal Component
@@ -16,6 +17,7 @@ import { API_URL } from '../../config';
  * - Delegate autocomplete
  */
 export default function TaskModal({ task, onSave, onCancel, onDelete, delegates, goals, timezone }) {
+  const { t } = useLanguage();
   const isEditing = !!task;
   const weekdayOptions = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   
@@ -38,6 +40,28 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
   const [alfredInsights, setAlfredInsights] = useState(null);
   const [showAlfredInsights, setShowAlfredInsights] = useState(false);
   const [alfredLoading, setAlfredLoading] = useState(false);
+  const [memoryTags, setMemoryTags] = useState([]);
+
+  useEffect(() => {
+    if (!task?.id) {
+      setMemoryTags([]);
+      return;
+    }
+
+    let cancelled = false;
+    fetch(`${API_URL}/api/intelligence/memory/source/task/${task.id}/tags`, {
+      credentials: 'include'
+    })
+      .then((response) => response.ok ? response.json() : { tags: [] })
+      .then((data) => {
+        if (!cancelled) setMemoryTags(data.tags || []);
+      })
+      .catch(() => {
+        if (!cancelled) setMemoryTags([]);
+      });
+
+    return () => { cancelled = true; };
+  }, [task?.id]);
 
   useEffect(() => {
 
@@ -549,6 +573,24 @@ export default function TaskModal({ task, onSave, onCancel, onDelete, delegates,
                 placeholder="Add any additional details..."
               />
             </div>
+
+            {isEditing && memoryTags.length > 0 && (
+              <details className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                <summary className="cursor-pointer select-none text-xs font-medium text-slate-500">
+                  {t('memoryTags.title')}
+                </summary>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {memoryTags.map((tag) => (
+                    <span
+                      key={`${tag.type}-${tag.value}`}
+                      className="rounded-full bg-white px-2 py-1 text-xs text-slate-600 ring-1 ring-slate-200"
+                    >
+                      {tag.value}
+                    </span>
+                  ))}
+                </div>
+              </details>
+            )}
           </div>
 
           <div className="sticky bottom-0 bg-slate-50 border-t border-gray-200 px-4 py-3 flex items-center justify-between">

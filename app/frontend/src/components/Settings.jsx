@@ -78,6 +78,7 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
     const baseTabs = [
       { id: 'profile', label: 'Profile' },
       { id: 'preferences', label: 'Preferences' },
+      { id: 'beliefs', label: t('settings.beliefs.tab') },
       { id: 'privacy', label: 'Privacy & Data' }
     ];
     if (!isIosApp) {
@@ -87,7 +88,7 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
       baseTabs.push({ id: 'admin', label: 'Admin' });
     }
     return baseTabs;
-  }, [currentUser, isIosApp]);
+  }, [currentUser, isIosApp, t]);
 
   const runReflectionDepthBackfill = async () => {
     if (!userNumber || isBackfillingDepth) return;
@@ -275,6 +276,10 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
           <NotificationSettingsPanel apiUrl={apiUrl} userNumber={userNumber} />
         )}
 
+        {activeTab === 'beliefs' && (
+          <ExecutiveModelPanel apiUrl={apiUrl} t={t} />
+        )}
+
         {activeTab === 'privacy' && (
           <section className="py-8">
             <div className="max-w-2xl">
@@ -292,6 +297,463 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
         )}
       </div>
     </div>
+  );
+}
+
+const TWIN_DIMENSIONS = ['identity_and_direction', 'leadership', 'operating_model', 'capabilities', 'leadership_world', 'track_record', 'current_reality', 'development'];
+const EVIDENCE_ROLES = ['supports', 'counters', 'qualifies'];
+
+function ClaimCard({ claim, onOpen, displayStatement, displayType, displayStatus, displayStability, t }) {
+  const roleCount = (role) => (claim.evidence || []).filter((item) => (item.relationship_type || 'supports') === role).length;
+  return (
+    <article className="rounded-xl border border-slate-200 bg-white p-5">
+      <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <span>{displayType(claim.object_type)}</span><span>·</span>
+        <span>{displayStatus(claim.epistemic_status)}</span><span>·</span>
+        <span>{displayStability(claim.stability)}</span>
+        {claim.scope && <><span>·</span><span>{claim.scope}</span></>}
+      </div>
+      {claim.pattern_title && <h4 className="mt-3 text-lg font-semibold text-slate-950">{claim.pattern_title}</h4>}
+      <p className="mt-2 text-base leading-7 text-slate-900">{displayStatement(claim.statement)}</p>
+      <div className="mt-4 flex flex-wrap gap-2 text-xs">
+        {EVIDENCE_ROLES.map((role) => roleCount(role) > 0 && (
+          <span key={role} className={`rounded-full px-2.5 py-1 ${role === 'counters' ? 'bg-amber-100 text-amber-800' : role === 'qualifies' ? 'bg-violet-100 text-violet-800' : 'bg-slate-100 text-slate-700'}`}>
+            {t(`settings.executiveModel.evidenceRole.${role}`)}: {roleCount(role)}
+          </span>
+        ))}
+        {claim.trajectory && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">{t('settings.executiveModel.trajectory')}: {claim.trajectory.replaceAll('_', ' ')}</span>}
+      </div>
+      <button type="button" onClick={() => onOpen(claim.id)}
+        className="mt-4 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-800">
+        {t('settings.executiveModel.inspectDossier')}
+      </button>
+    </article>
+  );
+}
+
+function ClaimDossier({ claim, onClose, displayStatement, displayType, displayStatus, displayStability, t }) {
+  useEffect(() => {
+    if (!claim) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [claim, onClose]);
+
+  if (!claim) return null;
+  const evidenceByRole = Object.fromEntries(EVIDENCE_ROLES.map((role) => [
+    role,
+    (claim.evidence || []).filter((item) => (item.relationship_type || 'supports') === role)
+  ]));
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40" role="dialog" aria-modal="true" aria-labelledby="claim-dossier-title">
+      <button type="button" className="absolute inset-0 cursor-default" onClick={onClose} aria-label={t('settings.executiveModel.closeDossier')} />
+      <div className="relative h-full w-full overflow-y-auto bg-white shadow-2xl sm:max-w-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">{t('settings.executiveModel.dossier')}</p>
+            <h3 id="claim-dossier-title" className="mt-1 text-lg font-semibold text-slate-950">{claim.pattern_title || t('settings.executiveModel.assertion')}</h3>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" aria-label={t('settings.executiveModel.closeDossier')}>
+            {t('settings.executiveModel.close')}
+          </button>
+        </div>
+
+        <div className="space-y-6 p-5 sm:p-7">
+          <section>
+            <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span>{displayType(claim.object_type)}</span><span>·</span><span>{displayStatus(claim.epistemic_status)}</span><span>·</span>
+              <span>{displayStability(claim.stability)}</span><span>·</span><span>{Math.round(claim.confidence_score * 100)}% {t('settings.executiveModel.confidence')}</span>
+            </div>
+            <p className="mt-3 text-xl leading-8 text-slate-950">{displayStatement(claim.statement)}</p>
+            {claim.interpretation && <div className="mt-4 rounded-xl bg-slate-50 p-4"><h4 className="text-sm font-semibold text-slate-900">{t('settings.executiveModel.interpretation')}</h4><p className="mt-2 text-sm leading-6 text-slate-700">{claim.interpretation}</p></div>}
+          </section>
+
+          <section className="grid gap-3 sm:grid-cols-2">
+            {claim.trajectory && <div className="rounded-lg border border-slate-200 p-3 text-sm"><span className="font-semibold">{t('settings.executiveModel.trajectory')}:</span> {claim.trajectory.replaceAll('_', ' ')}</div>}
+            {(claim.first_seen_at || claim.last_seen_at) && <div className="rounded-lg border border-slate-200 p-3 text-sm"><span className="font-semibold">{t('settings.executiveModel.observedAcross')}:</span> {claim.first_seen_at ? formatDate(claim.first_seen_at) : '—'} → {claim.last_seen_at ? formatDate(claim.last_seen_at) : '—'}</div>}
+          </section>
+
+          {(claim.context_summary || (claim.contexts || []).length > 0) && (
+            <section><h4 className="text-base font-semibold text-slate-950">{t('settings.executiveModel.context')}</h4>
+              {claim.context_summary && <p className="mt-2 text-sm leading-6 text-slate-700">{claim.context_summary}</p>}
+              <div className="mt-3 space-y-2">{(claim.contexts || []).map((context, index) => (
+                <div key={`${context.label}-${index}`} className="rounded-lg border border-slate-200 p-3 text-sm"><span className="font-semibold">{context.label}</span> · {t(`settings.executiveModel.applicability.${context.applicability || 'conditional'}`)}{context.notes ? <p className="mt-1 text-slate-600">{context.notes}</p> : null}</div>
+              ))}</div>
+            </section>
+          )}
+
+          <section>
+            <h4 className="text-base font-semibold text-slate-950">{t('settings.executiveModel.why')}</h4>
+            <p className="mt-1 text-sm text-slate-500">{t('settings.executiveModel.whyDescription')}</p>
+            <div className="mt-4 space-y-5">
+              {EVIDENCE_ROLES.map((role) => evidenceByRole[role].length > 0 && (
+                <div key={role}>
+                  <h5 className={`text-sm font-semibold ${role === 'counters' ? 'text-amber-800' : role === 'qualifies' ? 'text-violet-800' : 'text-slate-900'}`}>{t(`settings.executiveModel.evidenceRole.${role}`)} ({evidenceByRole[role].length})</h5>
+                  <div className="mt-2 space-y-3">{evidenceByRole[role].map((item) => (
+                    <article key={item.id} className="rounded-lg border border-slate-200 p-4 text-sm">
+                      <div className="flex flex-wrap justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500"><span>{item.source_type.replaceAll('_', ' ')}</span><span>{item.occurred_at ? formatDate(item.occurred_at) : ''}</span></div>
+                      <p className="mt-2 leading-6 text-slate-700">{item.excerpt || t('settings.executiveModel.noExcerpt')}</p>
+                      {item.rationale && <p className="mt-2 border-l-2 border-blue-200 pl-3 text-xs italic leading-5 text-slate-500">{item.rationale}</p>}
+                    </article>
+                  ))}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {(claim.alternative_explanation || claim.coaching_implication) && <section className="grid gap-3 sm:grid-cols-2">
+            {claim.alternative_explanation && <div className="rounded-xl bg-amber-50 p-4"><h4 className="text-sm font-semibold text-amber-950">{t('settings.executiveModel.alternative')}</h4><p className="mt-2 text-sm leading-6 text-amber-900">{claim.alternative_explanation}</p></div>}
+            {claim.coaching_implication && <div className="rounded-xl bg-blue-50 p-4"><h4 className="text-sm font-semibold text-blue-950">{t('settings.executiveModel.coaching')}</h4><p className="mt-2 text-sm leading-6 text-blue-900">{claim.coaching_implication}</p></div>}
+          </section>}
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExecutiveModelPanel({ apiUrl, t }) {
+  const [model, setModel] = useState(null);
+  const [activeView, setActiveView] = useState('core');
+  const [activeDimension, setActiveDimension] = useState('identity_and_direction');
+  const [loading, setLoading] = useState(true);
+  const [starting, setStarting] = useState(false);
+  const [analysisWeeks, setAnalysisWeeks] = useState(12);
+  const [error, setError] = useState('');
+  const [selectedClaimId, setSelectedClaimId] = useState(null);
+
+  const load = async () => {
+    try {
+      const response = await axios.get(`${apiUrl}/api/intelligence/model`);
+      setModel(response.data || null);
+      setError('');
+    } catch (requestError) {
+      setError(requestError.response?.data?.detail || t('settings.executiveModel.loadError'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, [apiUrl]);
+
+  useEffect(() => {
+    const run = model?.last_run;
+    if (!run || !['queued', 'ingesting', 'synthesizing'].includes(run.status)) return undefined;
+    const pollRun = async () => {
+      try {
+        const response = await axios.get(`${apiUrl}/api/intelligence/backfill/latest`);
+        const latestRun = response.data?.run || null;
+        setModel((current) => ({ ...(current || {}), last_run: latestRun }));
+        if (latestRun && !['queued', 'ingesting', 'synthesizing'].includes(latestRun.status)) {
+          await load();
+        }
+      } catch (requestError) {
+        setError(requestError.response?.data?.detail || t('settings.executiveModel.loadError'));
+      }
+    };
+    const timer = window.setInterval(pollRun, 3000);
+    return () => window.clearInterval(timer);
+  }, [model?.last_run?.status, apiUrl, t]);
+
+  const startBackfill = async () => {
+    setStarting(true);
+    setError('');
+    try {
+      const response = await axios.post(`${apiUrl}/api/intelligence/backfill`, { weeks: analysisWeeks });
+      setModel((current) => ({ ...(current || {}), last_run: response.data }));
+    } catch (requestError) {
+      setError(requestError.response?.data?.detail || t('settings.executiveModel.startError'));
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const run = model?.last_run;
+  const isRunning = run && ['queued', 'ingesting', 'synthesizing'].includes(run.status);
+  const progressPercent = Math.max(0, Math.min(100, run?.progress_percent || 0));
+  const visibleClaims = model?.full_twin?.[activeDimension] || [];
+  const allClaims = Object.values(model?.full_twin || {}).flat();
+  const selectedClaim = allClaims.find((claim) => claim.id === selectedClaimId) || null;
+  const hasModel = (model?.assertion_count || 0) > 0;
+
+  const displayType = (value) => t(`settings.executiveModel.type.${value || 'attribute'}`);
+  const displayStatus = (value) => t(`settings.executiveModel.status.${value || 'hypothesis'}`);
+  const displayStability = (value) => t(`settings.executiveModel.stability.${value || 'recurring'}`);
+  const displayStatement = (value) => String(value || '');
+
+  const formatActivity = (item) => {
+    const details = item?.details || {};
+    const sources = (details.source_types || []).map((value) => value.replaceAll('_', ' ')).join(', ');
+    switch (item?.event) {
+      case 'run_started':
+        return details.resuming
+          ? t('settings.executiveModel.activity.runResumed')
+          : t('settings.executiveModel.activity.runStarted');
+      case 'evidence_collected':
+        return `${t('settings.executiveModel.activity.collected')} ${details.evidence_count || 0} ${t('settings.executiveModel.activity.dataPoints')}`;
+      case 'evidence_upserted':
+        return `${t('settings.executiveModel.activity.prepared')} ${details.evidence_count || 0} ${t('settings.executiveModel.activity.dataPoints')} · ${details.source_count || 0} ${t('settings.executiveModel.activity.sourceTypes')}`;
+      case 'analysis_prepared':
+        return `${t('settings.executiveModel.activity.analysisPrepared')} ${details.included || 0} ${t('settings.executiveModel.activity.primaryPoints')} · ${details.skipped || 0} ${t('settings.executiveModel.activity.contextExcluded')} · ${details.batch_total || 0} ${t('settings.executiveModel.activity.batches')}`;
+      case 'batch_started':
+        return `${t('settings.executiveModel.activity.batchStarted')} ${details.current || 0}/${details.total || 0} · ${details.evidence_count || 0} ${t('settings.executiveModel.activity.dataPoints')}${sources ? ` · ${sources}` : ''}${details.date_from && details.date_to ? ` · ${details.date_from} → ${details.date_to}` : ''}`;
+      case 'batch_completed':
+        return `${t('settings.executiveModel.activity.batchCompleted')} ${details.current || 0}/${details.total || 0} · ${details.claims_found || 0} ${t('settings.executiveModel.activity.candidates')}`;
+      case 'batch_restored':
+        return `${t('settings.executiveModel.activity.batchRestored')} ${details.current || 0}/${details.total || 0} · ${details.claims_found || 0} ${t('settings.executiveModel.activity.candidates')}`;
+      case 'consolidation_started':
+        return `${t('settings.executiveModel.activity.consolidating')} ${details.candidate_count || 0} ${t('settings.executiveModel.activity.candidates')}`;
+      case 'consolidation_batch_started':
+        return `${t('settings.executiveModel.activity.consolidationBatch')} ${details.current || 0}/${details.total || 0} · ${t('settings.executiveModel.activity.round')} ${details.round || 0}`;
+      case 'consolidation_batch_completed':
+        return `${t('settings.executiveModel.activity.consolidationBatchCompleted')} ${details.current || 0}/${details.total || 0} · ${details.candidate_count || 0} ${t('settings.executiveModel.activity.candidates')}`;
+      case 'consolidation_batch_restored':
+        return `${t('settings.executiveModel.activity.consolidationBatchRestored')} · ${details.candidate_count || 0} ${t('settings.executiveModel.activity.candidates')}`;
+      case 'consolidation_final':
+        return `${t('settings.executiveModel.activity.finalConsolidation')} ${details.candidate_count || 0} ${t('settings.executiveModel.activity.candidates')}`;
+      case 'consolidation_final_restored':
+        return `${t('settings.executiveModel.activity.finalConsolidationRestored')} · ${details.candidate_count || 0} ${t('settings.executiveModel.activity.candidates')}`;
+      case 'saving_model':
+        return `${t('settings.executiveModel.activity.saving')} ${details.assertion_count || 0} ${t('settings.executiveModel.activity.assertionCandidates')}`;
+      case 'core_twin_started':
+        return t('settings.executiveModel.activity.coreTwinStarted');
+      case 'core_twin_completed':
+        return `${t('settings.executiveModel.activity.coreTwinCompleted')} ${details.assertion_count || 0} ${t('settings.executiveModel.activity.assertionCandidates')}`;
+      case 'run_completed':
+        return `${t('settings.executiveModel.activity.completed')} ${details.claims_created || 0} ${t('settings.executiveModel.activity.assertionsCreated')}`;
+      case 'run_failed':
+        return `${t('settings.executiveModel.activity.stopped')} ${details.stage || ''}`.trim();
+      default:
+        return t('settings.executiveModel.activity.processing');
+    }
+  };
+
+  return (
+    <section className="py-8">
+      <div className="max-w-5xl">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">{t('settings.executiveModel.title')}</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{t('settings.executiveModel.description')}</p>
+          </div>
+          <div className="w-full shrink-0 sm:w-72">
+            <label className="block text-sm font-semibold text-slate-800">
+              {t('settings.executiveModel.analysisWindow')}: {analysisWeeks} {t('settings.executiveModel.weeks')}
+              <input type="range" min="1" max={Math.min(520, Math.max(analysisWeeks, model?.history_weeks || 52))} value={analysisWeeks}
+                onChange={(event) => setAnalysisWeeks(Number(event.target.value))}
+                disabled={starting || isRunning} className="mt-2 w-full" />
+            </label>
+            <p className="mt-1 text-xs text-slate-500">{t('settings.executiveModel.analysisWindowHint')}</p>
+            <button
+              type="button"
+              onClick={startBackfill}
+              disabled={starting || isRunning}
+              className="mt-3 w-full rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300"
+            >
+            {isRunning
+              ? t('settings.executiveModel.running')
+              : starting
+                ? t('settings.executiveModel.starting')
+                : run?.can_resume
+                  ? t('settings.executiveModel.resume')
+                  : hasModel
+                    ? t('settings.executiveModel.refresh')
+                    : t('settings.executiveModel.build')}
+            </button>
+          </div>
+        </div>
+
+        {error && <p className="mt-4 text-sm text-rose-700">{error}</p>}
+        {run?.status === 'failed' && (
+          <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+            <p>{run.error_message || t('settings.executiveModel.failed')}</p>
+            {run.failure_stage && (
+              <p className="mt-1 text-xs">
+                {t('settings.executiveModel.failureStage')}: {t(`settings.executiveModel.failure.${run.failure_stage}`)}
+                {run.failure_reference ? ` · ${t('settings.executiveModel.failureReference')}: ${run.failure_reference}` : ''}
+              </p>
+            )}
+          </div>
+        )}
+
+        {isRunning && (
+          <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4">
+            <div className="flex items-center justify-between gap-4 text-sm">
+              <div>
+                <p className="font-semibold text-blue-950">
+                  {t(`settings.executiveModel.progress.${run.progress_stage || 'queued'}`)}
+                </p>
+                {run.progress_total > 0 && (
+                  <p className="mt-1 text-xs text-blue-700">
+                    {t('settings.executiveModel.progressBatch')} {run.progress_current} / {run.progress_total}
+                  </p>
+                )}
+              </div>
+              <span className="text-sm font-semibold tabular-nums text-blue-800">{progressPercent}%</span>
+            </div>
+            <div
+              className="mt-3 h-2.5 overflow-hidden rounded-full bg-blue-100"
+              role="progressbar"
+              aria-label={t('settings.executiveModel.progressLabel')}
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow={progressPercent}
+            >
+              <div
+                className="h-full rounded-full bg-blue-600 transition-all duration-500"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {(run?.activity_log || []).length > 0 && (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-between gap-4">
+              <h3 className="text-sm font-semibold text-slate-950">
+                {t('settings.executiveModel.activity.title')}
+              </h3>
+              {run.heartbeat_at && (
+                <span className="text-xs text-slate-500">
+                  {t('settings.executiveModel.activity.lastUpdate')} {new Intl.DateTimeFormat(undefined, {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    second: '2-digit'
+                  }).format(new Date(run.heartbeat_at))}
+                </span>
+              )}
+            </div>
+            <ol className="mt-3 max-h-72 space-y-3 overflow-y-auto" aria-live="polite">
+              {[...(run.activity_log || [])].slice(-12).reverse().map((item, index) => (
+                <li key={`${item.at || 'activity'}-${index}`} className="flex gap-3 text-sm">
+                  <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${index === 0 && isRunning ? 'bg-blue-600' : 'bg-slate-300'}`} />
+                  <div>
+                    <p className="text-slate-700">{formatActivity(item)}</p>
+                    {item.at && (
+                      <p className="mt-0.5 text-xs text-slate-400">
+                        {new Intl.DateTimeFormat(undefined, {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          second: '2-digit'
+                        }).format(new Date(item.at))}
+                      </p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            [t('settings.executiveModel.stage'), model?.stage ? t(`settings.executiveModel.stage.${model.stage}`) : '—'],
+            [t('settings.executiveModel.evidence'), model?.evidence_count ?? '—'],
+            [t('settings.executiveModel.sources'), model?.source_count ?? '—'],
+            [t('settings.executiveModel.assertions'), model?.assertion_count ?? '—']
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-lg border border-slate-200 p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+              <div className="mt-1 text-xl font-semibold capitalize text-slate-950">{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {run && (
+          <div className="mt-4 text-xs text-slate-500">
+            <p>
+              {t('settings.executiveModel.lastRun')}: {t(`settings.executiveModel.run.${run.status}`)}
+              {run.completed_at ? ` · ${formatDate(run.completed_at)}` : ''}
+            </p>
+            {run.status === 'completed' && (
+              <p className="mt-1">
+                {t('settings.executiveModel.deltaNew')}: {run.new_evidence_count || 0}
+                {' · '}{t('settings.executiveModel.deltaChanged')}: {run.changed_evidence_count || 0}
+                {' · '}{t('settings.executiveModel.deltaUnchanged')}: {run.unchanged_evidence_count || 0}
+              </p>
+            )}
+          </div>
+        )}
+
+        {loading ? (
+          <p className="mt-8 text-sm text-slate-500">{t('settings.executiveModel.loading')}</p>
+        ) : !hasModel ? (
+          <p className="mt-8 rounded-lg border border-dashed border-slate-300 p-6 text-sm text-slate-600">
+            {t('settings.executiveModel.empty')}
+          </p>
+        ) : (
+          <div className="mt-8">
+            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1" role="tablist" aria-label={t('settings.executiveModel.twinViewsLabel')}>
+              {['core', 'full'].map((view) => (
+                <button key={view} type="button" role="tab" aria-selected={activeView === view}
+                  onClick={() => setActiveView(view)}
+                  className={`rounded-md px-4 py-2 text-sm font-semibold ${activeView === view ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}>
+                  {t(`settings.executiveModel.view.${view}`)}
+                </button>
+              ))}
+            </div>
+
+            {activeView === 'core' ? (
+              <div className="mt-6">
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-5">
+                  <h3 className="text-lg font-semibold text-blue-950">{t('settings.executiveModel.core.title')}</h3>
+                  <p className="mt-2 text-sm leading-6 text-blue-900">{model?.core_twin?.overview || t('settings.executiveModel.core.empty')}</p>
+                </div>
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  {TWIN_DIMENSIONS.map((dimension) => (
+                    <section key={dimension} className="rounded-xl border border-slate-200 bg-white p-5">
+                      <h4 className="text-sm font-semibold text-slate-950">{t(`settings.executiveModel.dimension.${dimension}`)}</h4>
+                      <p className="mt-2 text-sm leading-6 text-slate-700">{model?.core_twin?.dimensions?.[dimension] || t('settings.executiveModel.core.noFinding')}</p>
+                    </section>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-6">
+                <div className="flex flex-wrap gap-2" role="tablist" aria-label={t('settings.executiveModel.dimensionsLabel')}>
+                  {TWIN_DIMENSIONS.map((dimension) => (
+                    <button key={dimension} type="button" role="tab" aria-selected={activeDimension === dimension}
+                      onClick={() => setActiveDimension(dimension)}
+                      className={`rounded-full border px-3 py-2 text-sm font-semibold ${activeDimension === dimension ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`}>
+                      {t(`settings.executiveModel.dimension.${dimension}`)} ({model?.full_twin?.[dimension]?.length || 0})
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-6">
+                  <h3 className="text-base font-semibold text-slate-950">{t(`settings.executiveModel.dimension.${activeDimension}`)}</h3>
+                  <p className="mt-1 text-sm text-slate-500">{t('settings.executiveModel.full.description')}</p>
+                </div>
+                {visibleClaims.length === 0 ? (
+                  <p className="mt-5 rounded-lg bg-slate-50 p-5 text-sm text-slate-600">{t('settings.executiveModel.sectionEmpty')}</p>
+                ) : (
+                  <div className="mt-5 space-y-4">
+                    {visibleClaims.map((claim) => (
+                      <ClaimCard key={claim.id} claim={claim} onOpen={setSelectedClaimId}
+                        displayStatement={displayStatement} displayType={displayType}
+                        displayStatus={displayStatus} displayStability={displayStability} t={t} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      <ClaimDossier
+        claim={selectedClaim}
+        onClose={() => setSelectedClaimId(null)}
+        displayStatement={displayStatement}
+        displayType={displayType}
+        displayStatus={displayStatus}
+        displayStability={displayStability}
+        t={t}
+      />
+    </section>
   );
 }
 

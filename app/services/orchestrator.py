@@ -28,6 +28,7 @@ from app.services.task_service import create_task
 from app.services.people_review_orchestrator import handle_people_review_session
 from app.services.language import normalize_language, response_language_instruction
 from app.services.journal_reflection_depth_service import score_reflection_depth
+from app.services.twin_context_service import build_context_with_twin
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -314,7 +315,13 @@ def handle_coaching(
     style_guidelines = prompt.get("style_guidelines", "").strip()
 
     # Build structured journey context
-    journey_context = build_journey_context(db, user_number)
+    journey_context = build_context_with_twin(
+        db,
+        user_number,
+        surface="coaching",
+        query=user_message,
+        base_context=build_journey_context(db, user_number),
+    )
 
     # Optional: include a small amount of recent chat history to avoid "stateless" coaching
     history = load_conversation_history(db, user_number)
@@ -397,7 +404,13 @@ def handle_journal_coaching(
     system_rules = prompt["system_prompt"]
     style_guidelines = prompt.get("style_guidelines", "").strip()
 
-    journey_context = build_journey_context(db, user_number)
+    journey_context = build_context_with_twin(
+        db,
+        user_number,
+        surface="journal",
+        query=user_message,
+        base_context=build_journey_context(db, user_number),
+    )
     history = load_conversation_history(db, user_number, conversation_type="journal", limit=6)
     depth = score_reflection_depth(user_message)
     depth_level = depth.get("level")
@@ -661,7 +674,13 @@ def _generate_gpt_response(
 ) -> str:
     """Generate GPT response with full context."""
 
-    journey_context = build_journey_context(db, user_number)
+    journey_context = build_context_with_twin(
+        db,
+        user_number,
+        surface="general",
+        query=user_message,
+        base_context=build_journey_context(db, user_number),
+    )
     tasks = get_today_tasks(user_number)
     tasks_context = format_tasks_for_context(tasks) or "No tasks scheduled for today."
     history = load_conversation_history(db, user_number)
@@ -709,7 +728,13 @@ def _finalize_goal_review_session(
     """
     from datetime import timedelta
 
-    journey_context = build_journey_context(db, user_number)
+    journey_context = build_context_with_twin(
+        db,
+        user_number,
+        surface="coaching",
+        query=json.dumps(state_ctx, ensure_ascii=False, default=str),
+        base_context=build_journey_context(db, user_number),
+    )
     history = load_conversation_history(db, user_number, conversation_type="goal_coaching") or []
     goal_tree = _format_goal_tree_for_prompt(state_ctx)
     prompt_base = "app/prompts/coaching/goal_review"
@@ -1227,7 +1252,13 @@ def handle_goal_review(
         }
         phase = "framing"
 
-    journey_context = build_journey_context(db, user_number)
+    journey_context = build_context_with_twin(
+        db,
+        user_number,
+        surface="coaching",
+        query=user_message,
+        base_context=build_journey_context(db, user_number),
+    )
     history = load_conversation_history(db, user_number, conversation_type="goal_coaching") or []
     goal_tree = _format_goal_tree_for_prompt(state_ctx)
     prompt_base = "app/prompts/coaching/goal_review"

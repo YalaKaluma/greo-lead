@@ -25,6 +25,7 @@ from app.models import (
     TaskMtnFeedback,
 )
 from app.services.timezone_service import get_user_timezone
+from app.services.twin_context_service import get_twin_context
 
 GOAL_LEVEL_ALIASES = {
     "long": ["long", "long_term", "vision"],
@@ -292,6 +293,13 @@ class PriorityService:
 
         context = self.create_context_snapshot(user_number)
         self._attach_mtn_learning_examples(context, user_number)
+        context.twin_prompt_context = get_twin_context(
+            self.db,
+            user_number,
+            surface="mtn",
+            query="prioritize open tasks strategic alignment leverage cost of delay",
+            limit=6,
+        ).prompt_context
         tasks = self.get_tasks_for_scoring(user_number)
         if max_tasks:
             tasks = tasks[:max_tasks]
@@ -367,6 +375,13 @@ class PriorityService:
 
         context = self.create_context_snapshot(user_number)
         self._attach_mtn_learning_examples(context, user_number)
+        context.twin_prompt_context = get_twin_context(
+            self.db,
+            user_number,
+            surface="mtn",
+            query="prioritize open tasks strategic alignment leverage cost of delay",
+            limit=6,
+        ).prompt_context
         llm_result = llm_service.score_tasks(missing_tasks, context)
         scores = self.save_priority_scores(
             context_id=context.id,

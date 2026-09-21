@@ -35,6 +35,7 @@ from app.services.timezone_service import get_user_timezone, today_for_timezone
 from app.config import OPENAI_MODEL
 from app.services.openai_service import client
 from app.services.opportunity.opportunity_service import get_best_opportunities
+from app.services.twin_context_service import TwinContext, append_twin_context, get_twin_context
 
 
 DOMAIN_LABELS = {
@@ -162,6 +163,7 @@ def _operating_system_commentary(
     journal_messages: list[Message],
     meeting_feedback: list[MeetingLeadershipDomainAssessment],
     language: str = "en",
+    twin_context: TwinContext | None = None,
 ) -> str:
     context = {
         "indexes": metrics,
@@ -176,20 +178,23 @@ def _operating_system_commentary(
             for item in meeting_feedback[:12]
         ],
     }
+    system_prompt = (
+        "You are Alfred, an executive chief of staff. Write one concise operating-system observation "
+        "of 90-140 words in second person. Synthesize the indexes, their recent direction, the last few "
+        "days of journal context, open work, and meeting leadership feedback. Identify the central pattern, "
+        "name one tension or risk, and end with one practical focus for today. Be warm, direct, and specific. "
+        "Do not invent evidence, list every input, or use headings."
+        + (" Write in French." if language == "fr" else " Write in English.")
+    )
+    if twin_context is not None:
+        system_prompt = append_twin_context(system_prompt, twin_context)
     response = client.chat.completions.create(
         model=OPENAI_MODEL,
         temperature=0.25,
         messages=[
             {
                 "role": "system",
-                "content": (
-                    "You are Alfred, an executive chief of staff. Write one concise operating-system observation "
-                    "of 90-140 words in second person. Synthesize the indexes, their recent direction, the last few "
-                    "days of journal context, open work, and meeting leadership feedback. Identify the central pattern, "
-                    "name one tension or risk, and end with one practical focus for today. Be warm, direct, and specific. "
-                    "Do not invent evidence, list every input, or use headings."
-                    + (" Write in French." if language == "fr" else " Write in English.")
-                ),
+                "content": system_prompt,
             },
             {"role": "user", "content": json.dumps(context, default=str, ensure_ascii=False)[:60000]},
         ],
@@ -344,6 +349,15 @@ def _average_chart_value(rows: list[dict[str, Any]], key: str, days: int = 35) -
     return round(mean(values), 1) if values else 0
 
 
+def _average_weekday_chart_value(rows: list[dict[str, Any]], key: str, days: int = 35) -> float:
+    values = [
+        _as_float(item.get(key), 0)
+        for item in rows[-days:]
+        if datetime.fromisoformat(str(item.get("date"))).weekday() < 5
+    ]
+    return round(mean(values), 1) if values else 0
+
+
 def _five_week_wisdom_average(rows: list[dict[str, Any]]) -> float:
     daily_scores = [
         10 * _as_float(item.get("daily_average"), 0)
@@ -361,12 +375,18 @@ def _completed_days(rows: list[dict[str, Any]], today) -> list[dict[str, Any]]:
 
 def _mtn_period_stats(trend_chart: list[dict[str, Any]], days: int) -> dict[str, Any]:
     window = trend_chart[-days:]
+    weekday_window = [
+        item for item in window
+        if datetime.fromisoformat(str(item.get("date"))).weekday() < 5
+    ]
     total_score = round(sum(_as_float(item.get("mtn_score"), 0) for item in window), 2)
+    weekday_score = round(sum(_as_float(item.get("mtn_score"), 0) for item in weekday_window), 2)
     completed_tasks = sum(int(item.get("completed_tasks") or 0) for item in window)
     return {
         "days": days,
+        "eligible_weekdays": len(weekday_window),
         "total_score": total_score,
-        "average_score": round(total_score / days, 2),
+        "average_score": round(weekday_score / len(weekday_window), 2) if weekday_window else 0,
         "completed_tasks": completed_tasks,
     }
 
@@ -607,7 +627,7 @@ class HomeDashboardService:
                 "delta": _as_float((mtn_week.get("trend") or {}).get("delta_vs_30"), 0),
                 "status": (mtn_week.get("trend") or {}).get("label") or "Stable",
                 "sparkline": [item.get("rolling_average") for item in mtn_chart[-14:]],
-                "five_week_average": _average_chart_value(mtn_chart, "mtn_score"),
+                "five_week_average": _average_weekday_chart_value(mtn_chart, "mtn_score"),
             },
             "habits": {
                 "compliance_rate": int(habit_week.get("compliance_rate") or 0),
@@ -649,6 +669,13 @@ class HomeDashboardService:
                     recent_journal,
                     recent_meeting_feedback,
                     (user.language_preference if user else "en"),
+                    get_twin_context(
+                        self.db,
+                        user_number,
+                        surface="general",
+                        query="today operating pattern priorities energy leadership",
+                        limit=6,
+                    ),
                 )
             except Exception as exc:
                 log_failure("home_operating_commentary", exc, level=logging.WARNING)
