@@ -26,7 +26,7 @@ This folder contains FastAPI routers. Routers should stay thin: validate request
 - `projects.py` under `/api/projects` for user-scoped project data used by task, Journey, and meeting workflows.
 - `message_feedback.py` under `/api` for message feedback capture.
 - `message_signals.py` under `/api/message-signals` for signal classification and backfill.
-- `intelligence.py` under `/api/intelligence` for longitudinal evidence, historical backfill status, inspectable claims, user corrections, and confidence-aware context compilation.
+- `intelligence.py` under `/api/intelligence` for longitudinal evidence, historical backfill status, inspectable claims, confidence-aware context compilation, and the gated Digital Twin pipeline at `/twin/pipeline` and `/twin/stages/{stage_key}/run`.
 - `opportunities.py` under `/api/opportunities` for opportunity generation and accept/decline actions.
 - `priority.py` under `/api/priority` for priority review, recommendations, decisions, feedback, apply actions, history, and learning insights.
 - `usage.py` under `/api` for usage event capture.
