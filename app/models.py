@@ -61,6 +61,7 @@ class Message(Base):
     reflection_depth_explanation = Column(Text, nullable=True)
     reflection_depth_recommendations = Column(JSON, nullable=True)
     reflection_depth_scored_at = Column(DateTime, nullable=True)
+    context_receipt = Column(MutableDict.as_mutable(JSONB), nullable=True)
 
 
 class MessageFeedback(Base):
@@ -727,6 +728,7 @@ class Meeting(Base):
     consent_acknowledged_at = Column(DateTime(timezone=True), nullable=True)
     prompt_version = Column(String(40), nullable=True)
     model_version = Column(String(80), nullable=True)
+    context_receipt = Column(MutableDict.as_mutable(JSONB), nullable=True)
     leadership_assessment_version = Column(String(80), nullable=True, index=True)
     reviewed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)

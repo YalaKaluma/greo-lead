@@ -22,6 +22,7 @@ class EmailDraftingServiceTest(TestCase):
         get_twin_context.return_value = TwinContext(
             prompt_context="Prefers concise and direct communication.",
             applied=True,
+            core_twin_applied=True,
             surface="email",
         )
         load_history.return_value = [
@@ -34,7 +35,8 @@ class EmailDraftingServiceTest(TestCase):
 
         result = draft_email(Mock(), "+15555550123", "Share the latest update")
 
-        self.assertEqual(result, "Subject: Update\n\nDraft body")
+        self.assertEqual(result.draft, "Subject: Update\n\nDraft body")
+        self.assertTrue(result.context_receipt["core_twin"]["used"])
         get_twin_context.assert_called_once_with(
             ANY,
             "+15555550123",

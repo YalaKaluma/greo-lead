@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useLanguage } from '../i18n/LanguageContext';
+import ContextReceipt from './ContextReceipt';
 
 
 export default function MyEmails({ apiUrl, userNumber }) {
@@ -109,6 +110,7 @@ export default function MyEmails({ apiUrl, userNumber }) {
                     </button>
                   </div>
                   <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-900">{draft.content}</div>
+                  <ContextReceipt receipt={draft.context_receipt} className="mt-5" />
                 </div>
               </article>
             ))}

@@ -26,7 +26,7 @@ def create_email_draft(request: EmailDraftRequest, db: Session = Depends(get_db)
 
     context = request.context.strip()
     try:
-        draft = draft_email(db, request.user_number, context)
+        result = draft_email(db, request.user_number, context)
         user_message = save_message(
             db,
             sender="user",
@@ -39,10 +39,12 @@ def create_email_draft(request: EmailDraftRequest, db: Session = Depends(get_db)
             db,
             sender="assistant",
             user_number=request.user_number,
-            content=draft,
+            content=result.draft,
             message_type="email_draft",
             conversation_type="email",
         )
+        assistant_message.context_receipt = result.context_receipt
+        db.commit()
     except Exception as exc:
         log_failure("email_draft", exc)
         raise HTTPException(status_code=503, detail="Alfred could not draft the email right now.") from exc
@@ -54,7 +56,8 @@ def create_email_draft(request: EmailDraftRequest, db: Session = Depends(get_db)
         log_failure("email_evidence_memory", exc)
 
     return {
-        "draft": draft,
+        "draft": result.draft,
+        "context_receipt": result.context_receipt,
         "message_id": assistant_message.id,
         "request_message_id": user_message.id,
     }
