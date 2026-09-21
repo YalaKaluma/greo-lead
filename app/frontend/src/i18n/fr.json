@@ -899,7 +899,8 @@
   "recovery.invalidToken": "Ce lien de récupération est invalide ou expiré. Demandez un nouveau lien.",
   "recovery.backToSignIn": "Retour à la connexion",
   "taskTrends.ninetyDayAverageInfoLabel": "À propos de la moyenne quotidienne sur 90 jours",
-  "taskTrends.ninetyDayAverageInfo": "La moyenne du score MTN par jour civil au cours des 90 derniers jours.",
+  "taskTrends.ninetyDayAverageInfo": "La moyenne du score MTN par jour de semaine au cours des 90 derniers jours. Les samedis et dimanches sont exclus.",
   "taskTrends.ninetyDayAverageTitle": "Moyenne quotidienne sur 90 jours",
-  "taskTrends.ninetyDayAverageDetail": "tâche(s) terminée(s) ont contribué pendant cette période."
+  "taskTrends.ninetyDayAverageDetail": "tâche(s) terminée(s) ont contribué pendant cette période.",
+  "memoryTags.title": "Mémoire et étiquettes"
 }
