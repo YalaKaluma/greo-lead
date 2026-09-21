@@ -44,6 +44,7 @@ from app.services.evidence_memory_service import (
     source_tags,
     sync_task_evidence,
 )
+from app.services.intelligence_tag_review_service import build_tagging_review
 
 
 router = APIRouter()
@@ -223,6 +224,34 @@ def get_twin_pipeline(
             ],
         },
     }
+
+
+@router.get("/twin/evidence-review")
+def get_twin_evidence_review(
+    tag_type: Literal["person", "project", "workstream", "theme"] | None = None,
+    tag_id: int | None = Query(default=None, ge=1),
+    source_type: str | None = Query(default=None, min_length=1, max_length=40),
+    quality: Literal["all", "untagged", "no_entity", "low_confidence"] = "all",
+    limit: int = Query(default=20, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_authenticated_user),
+):
+    """Expose an authenticated, read-only audit of Stage 1 tags and source evidence."""
+    stages = ensure_twin_stages(db, current_user.id)
+    foundation = next((stage for stage in stages if stage.stage_key == "evidence_foundation"), None)
+    if foundation is None or foundation.status != "completed":
+        raise HTTPException(status_code=409, detail="Complete Organize Evidence before reviewing its output.")
+    return build_tagging_review(
+        db,
+        current_user.id,
+        tag_type=tag_type,
+        tag_id=tag_id,
+        source_type=source_type,
+        quality=quality,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.post("/twin/stages/{stage_key}/run")

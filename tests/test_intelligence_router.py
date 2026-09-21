@@ -1,6 +1,9 @@
 import os
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import patch
+
+from fastapi import HTTPException
 
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
@@ -10,9 +13,62 @@ from app.routers.intelligence import (  # noqa: E402
     _refresh_stalled_twin_stages,
     _run_is_stale,
     build_operating_model,
+    get_twin_evidence_review,
     model_section,
     operating_model_area,
 )
+
+
+def test_tag_review_requires_completed_foundation_stage():
+    stage = SimpleNamespace(stage_key="evidence_foundation", status="running")
+    with patch("app.routers.intelligence.ensure_twin_stages", return_value=[stage]):
+        try:
+            get_twin_evidence_review(
+                tag_type=None,
+                tag_id=None,
+                source_type=None,
+                quality="all",
+                limit=20,
+                offset=0,
+                db=SimpleNamespace(),
+                current_user=SimpleNamespace(id=7),
+            )
+        except HTTPException as error:
+            assert error.status_code == 409
+        else:
+            raise AssertionError("Expected incomplete Stage 1 to block the review endpoint")
+
+
+def test_tag_review_is_scoped_to_the_authenticated_user():
+    stage = SimpleNamespace(stage_key="evidence_foundation", status="completed")
+    expected = {"summary": {"evidence_count": 12}}
+    db = SimpleNamespace()
+    with (
+        patch("app.routers.intelligence.ensure_twin_stages", return_value=[stage]),
+        patch("app.routers.intelligence.build_tagging_review", return_value=expected) as build_review,
+    ):
+        result = get_twin_evidence_review(
+            tag_type="person",
+            tag_id=3,
+            source_type="meeting",
+            quality="no_entity",
+            limit=10,
+            offset=20,
+            db=db,
+            current_user=SimpleNamespace(id=42),
+        )
+
+    assert result == expected
+    build_review.assert_called_once_with(
+        db,
+        42,
+        tag_type="person",
+        tag_id=3,
+        source_type="meeting",
+        quality="no_entity",
+        limit=10,
+        offset=20,
+    )
 
 
 def test_model_section_routes_the_broader_user_model():

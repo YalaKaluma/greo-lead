@@ -49,7 +49,146 @@ function ActivityFeed({ activity, t }) {
   );
 }
 
-function StageOutput({ stage, pipeline, model, activeEntityType, setActiveEntityType, t }) {
+function EvidenceFoundationReview({ apiUrl, t }) {
+  const [report, setReport] = useState(null);
+  const [view, setView] = useState('coverage');
+  const [tagType, setTagType] = useState('person');
+  const [tagSearch, setTagSearch] = useState('');
+  const [selectedTag, setSelectedTag] = useState(null);
+  const [sourceType, setSourceType] = useState('');
+  const [quality, setQuality] = useState('all');
+  const [offset, setOffset] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const limit = 12;
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadReport = async () => {
+      setLoading(true);
+      try {
+        const response = await axios.get(`${apiUrl}/api/intelligence/twin/evidence-review`, {
+          params: {
+            tag_type: tagType,
+            tag_id: selectedTag?.id || undefined,
+            source_type: sourceType || undefined,
+            quality,
+            limit,
+            offset
+          }
+        });
+        if (!cancelled) {
+          setReport(response.data || null);
+          setError('');
+        }
+      } catch (requestError) {
+        if (!cancelled) setError(requestError.response?.data?.detail || t('settings.twinPipeline.review.loadError'));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    loadReport();
+    return () => { cancelled = true; };
+  }, [apiUrl, tagType, selectedTag?.id, sourceType, quality, offset]);
+
+  const selectView = (nextView) => {
+    setView(nextView);
+    setOffset(0);
+  };
+  const chooseTagType = (type) => {
+    setTagType(type);
+    setSelectedTag(null);
+    setOffset(0);
+  };
+  const inspectTag = (tag) => {
+    setSelectedTag(tag);
+    setQuality('all');
+    setView('records');
+    setOffset(0);
+  };
+  const sources = report?.source_coverage || [];
+  const tags = (report?.tags || []).filter((tag) => (
+    tag.display_value.toLowerCase().includes(tagSearch.trim().toLowerCase())
+  ));
+  const items = report?.items || [];
+  const pagination = report?.pagination || {};
+
+  return (
+    <section className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label={t('settings.twinPipeline.review.tabsLabel')}>
+        {['coverage', 'tags', 'records'].map((tab) => (
+          <button key={tab} type="button" role="tab" aria-selected={view === tab} onClick={() => selectView(tab)}
+            className={`rounded-full px-3 py-2 text-sm font-semibold ${view === tab ? 'bg-slate-950 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}>
+            {t(`settings.twinPipeline.review.tab.${tab}`)}
+          </button>
+        ))}
+      </div>
+
+      {error && <p className="mt-4 text-sm text-rose-700">{error}</p>}
+      {loading && !report && <p className="mt-5 text-sm text-slate-500">{t('settings.twinPipeline.review.loading')}</p>}
+
+      {view === 'coverage' && report && (
+        <div className="mt-5">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <MetricCard label={t('settings.twinPipeline.metric.evidence')} value={report.summary.evidence_count} />
+            <MetricCard label={t('settings.twinPipeline.metric.tagged')} value={report.summary.tagged_evidence_count} />
+            <MetricCard label={t('settings.twinPipeline.review.withEntities')} value={report.summary.entity_tagged_evidence_count} />
+            <MetricCard label={t('settings.twinPipeline.review.untagged')} value={report.summary.untagged_evidence_count} />
+          </div>
+          <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">{t('settings.twinPipeline.review.source')}</th><th className="px-4 py-3">{t('settings.twinPipeline.review.records')}</th><th className="px-4 py-3">{t('settings.twinPipeline.metric.tagged')}</th><th className="px-4 py-3">{t('settings.twinPipeline.metric.coverage')}</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {sources.map((source) => <tr key={source.source_type}><td className="px-4 py-3 font-medium text-slate-800">{source.source_type.replaceAll('_', ' ')}</td><td className="px-4 py-3 text-slate-600">{source.evidence_count}</td><td className="px-4 py-3 text-slate-600">{source.tagged_count}</td><td className="px-4 py-3 font-semibold text-slate-800">{source.coverage_percent}%</td></tr>)}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-xs leading-5 text-slate-500">{t('settings.twinPipeline.review.coverageHelp')}</p>
+        </div>
+      )}
+
+      {view === 'tags' && report && (
+        <div className="mt-5">
+          <div className="flex flex-wrap gap-2" aria-label={t('settings.twinPipeline.review.tagTypesLabel')}>
+            {['person', 'project', 'workstream', 'theme'].map((type) => <button key={type} type="button" onClick={() => chooseTagType(type)} className={`rounded-md border px-3 py-2 text-sm font-semibold ${tagType === type ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600'}`}>{t(`settings.twinPipeline.entity.${type}`)}</button>)}
+          </div>
+          <label className="mt-4 block text-sm font-semibold text-slate-700">{t('settings.twinPipeline.review.searchTags')}<input type="search" value={tagSearch} onChange={(event) => setTagSearch(event.target.value)} placeholder={t('settings.twinPipeline.review.searchTagsPlaceholder')} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-normal" /></label>
+          {tags.length === 0 ? <p className="mt-4 text-sm text-slate-500">{t('settings.twinPipeline.review.noTags')}</p> : (
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {tags.map((tag) => <button key={tag.id} type="button" onClick={() => inspectTag(tag)} className="rounded-xl border border-slate-200 bg-white p-4 text-left hover:border-blue-300">
+                <div className="flex items-start justify-between gap-3"><span className="font-semibold text-slate-900">{tag.display_value}</span><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{tag.evidence_count}</span></div>
+                <p className="mt-2 text-xs text-slate-500">{translateWith(t, 'settings.twinPipeline.review.tagMeta', { sources: tag.source_count, confidence: Math.round(tag.average_confidence * 100) })}</p>
+              </button>)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {view === 'records' && report && (
+        <div className="mt-5">
+          {selectedTag && <div className="mb-4 flex items-center justify-between gap-3 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800"><span>{translateWith(t, 'settings.twinPipeline.review.filteredBy', { tag: selectedTag.display_value })}</span><button type="button" onClick={() => { setSelectedTag(null); setOffset(0); }} className="font-semibold">{t('settings.twinPipeline.review.clear')}</button></div>}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-sm font-semibold text-slate-700">{t('settings.twinPipeline.review.source')}<select value={sourceType} onChange={(event) => { setSourceType(event.target.value); setOffset(0); }} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-normal"><option value="">{t('settings.twinPipeline.review.allSources')}</option>{sources.map((source) => <option key={source.source_type} value={source.source_type}>{source.source_type.replaceAll('_', ' ')} ({source.evidence_count})</option>)}</select></label>
+            <label className="text-sm font-semibold text-slate-700">{t('settings.twinPipeline.review.quality')}<select value={quality} onChange={(event) => { setQuality(event.target.value); setOffset(0); }} className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-normal"><option value="all">{t('settings.twinPipeline.review.quality.all')}</option><option value="untagged">{t('settings.twinPipeline.review.quality.untagged')}</option><option value="no_entity">{t('settings.twinPipeline.review.quality.no_entity')}</option><option value="low_confidence">{t('settings.twinPipeline.review.quality.low_confidence')}</option></select></label>
+          </div>
+          <p className="mt-4 text-xs text-slate-500">{translateWith(t, 'settings.twinPipeline.review.matching', { count: pagination.matching_count || 0 })}</p>
+          <div className="mt-3 space-y-3">
+            {items.map((item) => <article key={item.id} className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span className="font-semibold uppercase tracking-wide">{item.source_type.replaceAll('_', ' ')}</span><time>{item.occurred_at ? new Date(item.occurred_at).toLocaleDateString() : ''}</time></div>
+              <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-800">{item.excerpt || t('settings.twinPipeline.review.emptyExcerpt')}</p>
+              <div className="mt-3 flex flex-wrap gap-2">{item.tags.map((tag) => <span key={`${item.id}-${tag.id}`} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-700">{tag.display_value} · {Math.round(tag.confidence_score * 100)}%</span>)}</div>
+              {item.review_reasons.length > 0 && <p className="mt-3 text-xs text-amber-700">{item.review_reasons.map((reason) => t(`settings.twinPipeline.review.reason.${reason}`)).join(' · ')}</p>}
+            </article>)}
+            {!loading && items.length === 0 && <p className="rounded-xl bg-white p-5 text-sm text-slate-500">{t('settings.twinPipeline.review.noRecords')}</p>}
+          </div>
+          <div className="mt-4 flex items-center justify-between"><button type="button" disabled={offset === 0 || loading} onClick={() => setOffset(Math.max(0, offset - limit))} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold disabled:opacity-40">{t('settings.twinPipeline.review.previous')}</button><button type="button" disabled={!pagination.has_more || loading} onClick={() => setOffset(offset + limit)} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold disabled:opacity-40">{t('settings.twinPipeline.review.next')}</button></div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function StageOutput({ stage, pipeline, model, activeEntityType, setActiveEntityType, apiUrl, t }) {
   const output = stage?.output || {};
   const metrics = stage?.metrics || {};
   if (stage?.status !== 'completed') {
@@ -62,8 +201,6 @@ function StageOutput({ stage, pipeline, model, activeEntityType, setActiveEntity
   }
 
   if (stage.stage_key === 'evidence_foundation') {
-    const sources = Object.entries(output.source_counts || {}).sort((a, b) => b[1] - a[1]);
-    const tags = Object.entries(output.tag_counts || {}).sort((a, b) => b[1] - a[1]);
     return (
       <div className="mt-6">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -72,20 +209,7 @@ function StageOutput({ stage, pipeline, model, activeEntityType, setActiveEntity
           <MetricCard label={t('settings.twinPipeline.metric.tagged')} value={metrics.tagged_evidence_count} />
           <MetricCard label={t('settings.twinPipeline.metric.coverage')} value={`${output.coverage_percent || 0}%`} />
         </div>
-        <div className="mt-5 grid gap-5 md:grid-cols-2">
-          <section>
-            <h4 className="text-sm font-semibold text-slate-950">{t('settings.twinPipeline.sources.title')}</h4>
-            <div className="mt-2 divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white px-4">
-              {sources.slice(0, 15).map(([name, count]) => <div key={name} className="flex justify-between gap-4 py-2.5 text-sm"><span className="text-slate-700">{name.replaceAll('_', ' ')}</span><span className="font-semibold text-slate-950">{count}</span></div>)}
-            </div>
-          </section>
-          <section>
-            <h4 className="text-sm font-semibold text-slate-950">{t('settings.twinPipeline.tags.title')}</h4>
-            <div className="mt-2 divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white px-4">
-              {tags.map(([name, count]) => <div key={name} className="flex justify-between gap-4 py-2.5 text-sm"><span className="text-slate-700">{t(`settings.twinPipeline.entity.${name}`)}</span><span className="font-semibold text-slate-950">{count}</span></div>)}
-            </div>
-          </section>
-        </div>
+        <EvidenceFoundationReview apiUrl={apiUrl} t={t} />
       </div>
     );
   }
@@ -262,7 +386,7 @@ export default function DigitalTwinPipeline({ apiUrl, t }) {
 
             <ActivityFeed activity={activeStage?.activity_log} t={t} />
 
-            <StageOutput stage={activeStage} pipeline={pipeline} model={model} activeEntityType={activeEntityType} setActiveEntityType={setActiveEntityType} t={t} />
+            <StageOutput stage={activeStage} pipeline={pipeline} model={model} activeEntityType={activeEntityType} setActiveEntityType={setActiveEntityType} apiUrl={apiUrl} t={t} />
 
             {activeStage?.can_run && !hasRunningStage && <div className="mt-6 flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs leading-5 text-slate-500">{activeStage.status === 'completed' ? t('settings.twinPipeline.rebuildWarning') : t('settings.twinPipeline.readyHint')}</p><button type="button" onClick={runStage} disabled={starting} className="rounded-md bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300">{starting ? t('settings.executiveModel.starting') : actionLabel}</button></div>}
           </div>
