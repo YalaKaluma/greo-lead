@@ -15,6 +15,7 @@ from app.services.message_service import (
     normalize_conversation_type,
     save_message,
 )
+from app.services.evidence_memory_service import source_tags, sync_journal_message
 from app.services.language import normalize_language
 from app.services.intro_cards import build_intro_cards_recap
 
@@ -143,6 +144,7 @@ async def send_chat_message(
         "user_reflection_depth_label": getattr(user_message, "reflection_depth_label", None),
         "user_reflection_depth_explanation": getattr(user_message, "reflection_depth_explanation", None),
         "user_reflection_depth_recommendations": getattr(user_message, "reflection_depth_recommendations", None),
+        "user_memory_tags": source_tags(db, user.id, "message", str(user_message.id)) if user else [],
         "tour_action": tour_action,
         "timestamp": datetime.utcnow().isoformat(),
         "state": result.state,
@@ -300,7 +302,7 @@ async def get_chat_history(
     """
 
     try:
-        from app.models import Message
+        from app.models import Message, User
         from app.services.onboarding_seed_service import is_starter_journal_example
 
         query = db.query(Message).filter(Message.user_number == user_number)
@@ -314,6 +316,15 @@ async def get_chat_history(
             )
 
         messages = query.order_by(Message.timestamp.desc()).limit(limit).all()
+        owner = db.query(User).filter(User.phone_number == user_number).first()
+        if owner and normalized_conversation_type == "journal":
+            for msg in messages:
+                if msg.sender == "user" and not source_tags(db, owner.id, "message", str(msg.id)):
+                    sync_journal_message(db, owner, msg)
+        tags_by_message = {
+            msg.id: source_tags(db, owner.id, "message", str(msg.id))
+            for msg in messages
+        } if owner and normalized_conversation_type == "journal" else {}
 
         # Reverse to get chronological order
         messages = reversed(messages)
@@ -335,6 +346,7 @@ async def get_chat_history(
                 "reflection_depth_explanation": getattr(msg, "reflection_depth_explanation", None),
                 "reflection_depth_recommendations": getattr(msg, "reflection_depth_recommendations", None),
                 "context_receipt": getattr(msg, "context_receipt", None),
+                "memory_tags": tags_by_message.get(msg.id, []),
                 "is_starter_example": is_starter_journal_example(msg),
             }
             for msg in messages
