@@ -147,6 +147,110 @@ def tag_evidence(db: Session, user: User, evidence: IntelligenceEvidence) -> Non
     set_evidence_tags(db, evidence, tags)
 
 
+def tag_evidence_batch(
+    db: Session,
+    user: User,
+    evidence_rows: list[IntelligenceEvidence],
+    *,
+    batch_size: int = 500,
+    progress_callback=None,
+) -> None:
+    """Tag large histories without repeating entity and tag lookups for every record."""
+    people = [
+        (person.name.strip(), _normalize(person.name))
+        for person in db.query(JourneyPerson).filter(JourneyPerson.user_number == user.phone_number).all()
+        if (person.name or "").strip()
+    ]
+    projects = [
+        (project.project_name.strip(), _normalize(project.project_name))
+        for project in db.query(JourneyProject).filter(JourneyProject.user_number == user.phone_number).all()
+        if (project.project_name or "").strip()
+    ]
+    tag_cache = {
+        (tag.tag_type, tag.normalized_value): tag
+        for tag in db.query(IntelligenceMemoryTag).filter(IntelligenceMemoryTag.user_id == user.id).all()
+    }
+    total = len(evidence_rows)
+    for offset in range(0, total, batch_size):
+        batch = evidence_rows[offset:offset + batch_size]
+        proposed: dict[int, list[tuple[str, str, str, float]]] = {}
+        missing: dict[tuple[str, str], str] = {}
+        for evidence in batch:
+            text = evidence.excerpt or ""
+            normalized_text = f" {_normalize(text)} "
+            tags = [
+                ("person", display, 1.0)
+                for display, normalized in people
+                if f" {normalized} " in normalized_text
+            ]
+            tags.extend(
+                ("project", display, 1.0)
+                for display, normalized in projects
+                if f" {normalized} " in normalized_text
+            )
+            tags.extend(_theme_tags(text))
+            payload = evidence.payload or {}
+            for value in payload.get("participants", []) or []:
+                tags.append(("person", str(value), 1.0))
+            for value in payload.get("projects", []) or []:
+                tags.append(("project", str(value), 1.0))
+            for value in payload.get("people", []) or []:
+                tags.append(("person", str(value), 1.0))
+            for value in payload.get("workstreams", []) or []:
+                tags.append(("workstream", str(value), 0.9))
+
+            seen = set()
+            normalized_tags = []
+            for tag_type, display_value, confidence in tags:
+                normalized_value = _normalize(display_value)[:240]
+                key = (tag_type, normalized_value)
+                if tag_type not in TAG_TYPES or not normalized_value or key in seen:
+                    continue
+                seen.add(key)
+                normalized_tags.append((tag_type, normalized_value, display_value.strip()[:240], confidence))
+                if key not in tag_cache:
+                    missing.setdefault(key, display_value.strip()[:240])
+            proposed[evidence.id] = normalized_tags
+
+        for (tag_type, normalized_value), display_value in missing.items():
+            tag = IntelligenceMemoryTag(
+                user_id=user.id,
+                tag_type=tag_type,
+                normalized_value=normalized_value,
+                display_value=display_value,
+            )
+            db.add(tag)
+            tag_cache[(tag_type, normalized_value)] = tag
+        db.flush()
+        evidence_ids = [row.id for row in batch]
+        manual_pairs = {
+            (link.evidence_id, link.tag_id)
+            for link in db.query(IntelligenceEvidenceTag).filter(
+                IntelligenceEvidenceTag.evidence_id.in_(evidence_ids),
+                IntelligenceEvidenceTag.source != "automatic",
+            ).all()
+        }
+        db.query(IntelligenceEvidenceTag).filter(
+            IntelligenceEvidenceTag.evidence_id.in_(evidence_ids),
+            IntelligenceEvidenceTag.source == "automatic",
+        ).delete(synchronize_session=False)
+        for evidence_id, tags in proposed.items():
+            for tag_type, normalized_value, _display_value, confidence in tags:
+                tag_id = tag_cache[(tag_type, normalized_value)].id
+                if (evidence_id, tag_id) in manual_pairs:
+                    continue
+                db.add(IntelligenceEvidenceTag(
+                    evidence_id=evidence_id,
+                    tag_id=tag_id,
+                    confidence_score=max(0.0, min(1.0, confidence)),
+                    source="automatic",
+                ))
+        db.commit()
+        completed = min(offset + len(batch), total)
+        if progress_callback:
+            progress_callback(completed, total)
+
+
 def sync_candidates(db: Session, user: User, candidates: list[EvidenceCandidate]) -> list[IntelligenceEvidence]:
     saved, _, _, _ = upsert_evidence(db, user, candidates)
     for evidence in saved:
