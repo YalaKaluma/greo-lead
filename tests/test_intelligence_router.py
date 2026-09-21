@@ -7,6 +7,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
 from app.routers.intelligence import (  # noqa: E402
     _backfill_response,
+    _refresh_stalled_twin_stages,
     _run_is_stale,
     build_operating_model,
     model_section,
@@ -116,3 +117,28 @@ def test_recent_heartbeat_keeps_active_run_alive():
     )
 
     assert _run_is_stale(run, now=now) is False
+
+
+def test_stalled_twin_stage_becomes_resumable():
+    class FakeDb:
+        committed = False
+
+        def commit(self):
+            self.committed = True
+
+    stage = SimpleNamespace(
+        status="running",
+        updated_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        started_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        created_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        error_message=None,
+        failure_reference=None,
+        completed_at=None,
+    )
+    db = FakeDb()
+
+    _refresh_stalled_twin_stages(db, [stage])
+
+    assert stage.status == "failed"
+    assert stage.failure_reference == "worker_interrupted"
+    assert db.committed is True
