@@ -16,6 +16,9 @@ from app.models import (
     IntelligenceEvidenceTag,
     IntelligencePatternFeedback,
     IntelligenceTwinSnapshot,
+    IntelligenceTwinStage,
+    IntelligenceWorldEntity,
+    IntelligenceWorldRelationship,
     Task,
     User,
 )
@@ -27,6 +30,14 @@ from app.services.intelligence_backfill_service import (
     execute_backfill_run,
 )
 from app.services.intelligence_core_service import IntelligenceCoreService
+from app.services.intelligence_twin_pipeline_service import (
+    ACTIVE_STAGE_STATUSES,
+    ensure_twin_stages,
+    execute_twin_stage,
+    stage_is_unlocked,
+    twin_stage_response,
+    world_entity_response,
+)
 from app.services.evidence_memory_service import (
     retrieve_evidence,
     set_evidence_tags,
@@ -38,6 +49,7 @@ from app.services.evidence_memory_service import (
 router = APIRouter()
 ACTIVE_BACKFILL_STATUSES = ("queued", "ingesting", "synthesizing")
 BACKFILL_STALE_AFTER = timedelta(minutes=5)
+TWIN_STAGE_STALE_AFTER = timedelta(minutes=10)
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -70,6 +82,25 @@ def _refresh_stalled_run(db: Session, run: IntelligenceBackfillRun | None) -> In
         db.commit()
         db.refresh(run)
     return run
+
+
+def _refresh_stalled_twin_stages(db: Session, stages: list[IntelligenceTwinStage]) -> None:
+    now = datetime.now(timezone.utc)
+    changed = False
+    for stage in stages:
+        if stage.status not in ACTIVE_STAGE_STATUSES:
+            continue
+        last_activity = _as_utc(stage.updated_at or stage.started_at or stage.created_at)
+        if last_activity and last_activity < now - TWIN_STAGE_STALE_AFTER:
+            stage.status = "failed"
+            stage.error_message = (
+                "This Digital Twin stage stopped before it completed. Retry to resume from saved work."
+            )
+            stage.failure_reference = "worker_interrupted"
+            stage.completed_at = now
+            changed = True
+    if changed:
+        db.commit()
 
 
 def _backfill_response(run: IntelligenceBackfillRun | None):
@@ -132,6 +163,10 @@ class BackfillStart(BaseModel):
     weeks: int | None = Field(default=None, ge=1, le=520)
 
 
+class TwinStageStart(BaseModel):
+    weeks: int | None = Field(default=None, ge=1, le=520)
+
+
 class MemoryTagInput(BaseModel):
     tag_type: Literal["person", "project", "workstream", "theme"]
     value: str = Field(min_length=1, max_length=240)
@@ -139,6 +174,97 @@ class MemoryTagInput(BaseModel):
 
 class MemoryTagsUpdate(BaseModel):
     tags: list[MemoryTagInput] = Field(default_factory=list, max_length=30)
+
+
+@router.get("/twin/pipeline")
+def get_twin_pipeline(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_authenticated_user),
+):
+    stages = ensure_twin_stages(db, current_user.id)
+    _refresh_stalled_twin_stages(db, stages)
+    stage_payload = []
+    for stage in stages:
+        payload = twin_stage_response(stage)
+        payload["can_run"] = (
+            stage_is_unlocked(stages, stage.stage_key)
+            and stage.status not in ACTIVE_STAGE_STATUSES
+        )
+        stage_payload.append(payload)
+
+    entities = db.query(IntelligenceWorldEntity).filter(
+        IntelligenceWorldEntity.user_id == current_user.id,
+    ).order_by(
+        IntelligenceWorldEntity.entity_type,
+        IntelligenceWorldEntity.evidence_count.desc(),
+        IntelligenceWorldEntity.display_name,
+    ).all()
+    relationships = db.query(IntelligenceWorldRelationship).filter(
+        IntelligenceWorldRelationship.user_id == current_user.id,
+    ).order_by(IntelligenceWorldRelationship.evidence_count.desc()).limit(200).all()
+    return {
+        "stages": stage_payload,
+        "completed_count": sum(1 for stage in stages if stage.status == "completed"),
+        "executive_world": {
+            "entities": [world_entity_response(entity) for entity in entities],
+            "relationships": [
+                {
+                    "id": relationship.id,
+                    "source_entity_id": relationship.source_entity_id,
+                    "target_entity_id": relationship.target_entity_id,
+                    "relationship_type": relationship.relationship_type,
+                    "summary": relationship.summary,
+                    "confidence_score": float(relationship.confidence_score or 0),
+                    "evidence_count": relationship.evidence_count,
+                    "first_seen_at": relationship.first_seen_at,
+                    "last_seen_at": relationship.last_seen_at,
+                }
+                for relationship in relationships
+            ],
+        },
+    }
+
+
+@router.post("/twin/stages/{stage_key}/run")
+def start_twin_stage(
+    stage_key: Literal["evidence_foundation", "executive_world", "behavioral_profile", "dynamic_state"],
+    background_tasks: BackgroundTasks,
+    request: TwinStageStart | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_authenticated_user),
+):
+    stages = ensure_twin_stages(db, current_user.id)
+    stage = next((item for item in stages if item.stage_key == stage_key), None)
+    if stage is None:
+        raise HTTPException(status_code=404, detail="Digital Twin stage not found.")
+    if not stage_is_unlocked(stages, stage_key):
+        raise HTTPException(status_code=409, detail="Complete the previous Digital Twin stage first.")
+    active = next((item for item in stages if item.status in ACTIVE_STAGE_STATUSES), None)
+    if active is not None:
+        if active.id == stage.id:
+            return twin_stage_response(active)
+        raise HTTPException(status_code=409, detail="Another Digital Twin stage is already running.")
+
+    stage.status = "queued"
+    stage.progress_percent = 0
+    stage.progress_current = 0
+    stage.progress_total = 0
+    stage.error_message = None
+    stage.failure_reference = None
+    stage.completed_at = None
+    stage.activity_log = []
+    if stage_key == "evidence_foundation":
+        stage.output_json = {"requested_weeks": request.weeks if request else None}
+    for downstream in stages:
+        if downstream.stage_order > stage.stage_order:
+            downstream.status = "locked"
+            downstream.progress_percent = 0
+            downstream.error_message = None
+            downstream.failure_reference = None
+    db.commit()
+    db.refresh(stage)
+    background_tasks.add_task(execute_twin_stage, stage.id, current_user.id)
+    return twin_stage_response(stage)
 
 
 @router.get("/memory/source/{source_type}/{source_id}/tags")
