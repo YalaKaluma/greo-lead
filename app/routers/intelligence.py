@@ -169,7 +169,7 @@ class TwinStageStart(BaseModel):
 
 
 class MemoryTagInput(BaseModel):
-    tag_type: Literal["person", "project", "workstream", "theme"]
+    tag_type: Literal["person", "organization", "initiative"]
     value: str = Field(min_length=1, max_length=240)
 
 
@@ -228,7 +228,7 @@ def get_twin_pipeline(
 
 @router.get("/twin/evidence-review")
 def get_twin_evidence_review(
-    tag_type: Literal["person", "project", "workstream", "theme"] | None = None,
+    tag_type: Literal["person", "organization", "initiative"] | None = None,
     tag_id: int | None = Query(default=None, ge=1),
     source_type: str | None = Query(default=None, min_length=1, max_length=40),
     quality: Literal["all", "untagged", "no_entity", "low_confidence"] = "all",
@@ -256,7 +256,10 @@ def get_twin_evidence_review(
 
 @router.post("/twin/stages/{stage_key}/run")
 def start_twin_stage(
-    stage_key: Literal["evidence_foundation", "executive_world", "behavioral_profile", "dynamic_state"],
+    stage_key: Literal[
+        "evidence_foundation", "entity_directory", "executive_world",
+        "behavioral_profile", "dynamic_state", "twin_assembly",
+    ],
     background_tasks: BackgroundTasks,
     request: TwinStageStart | None = None,
     db: Session = Depends(get_db),

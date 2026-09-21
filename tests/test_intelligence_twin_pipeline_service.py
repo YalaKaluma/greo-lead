@@ -34,22 +34,26 @@ def _stage(key, order, status):
 def test_stages_unlock_only_after_the_previous_stage_completes():
     stages = [
         _stage("evidence_foundation", 1, "completed"),
-        _stage("executive_world", 2, "ready"),
-        _stage("behavioral_profile", 3, "locked"),
-        _stage("dynamic_state", 4, "locked"),
+        _stage("entity_directory", 2, "ready"),
+        _stage("executive_world", 3, "locked"),
+        _stage("behavioral_profile", 4, "locked"),
+        _stage("dynamic_state", 5, "locked"),
+        _stage("twin_assembly", 6, "locked"),
     ]
 
     assert stage_is_unlocked(stages, "evidence_foundation") is True
-    assert stage_is_unlocked(stages, "executive_world") is True
+    assert stage_is_unlocked(stages, "entity_directory") is True
+    assert stage_is_unlocked(stages, "executive_world") is False
     assert stage_is_unlocked(stages, "behavioral_profile") is False
     assert stage_is_unlocked(stages, "dynamic_state") is False
+    assert stage_is_unlocked(stages, "twin_assembly") is False
 
     stages[1].status = "completed"
-    assert stage_is_unlocked(stages, "behavioral_profile") is True
+    assert stage_is_unlocked(stages, "executive_world") is True
 
 
 def test_stage_response_exposes_progress_output_and_activity():
-    stage = _stage("executive_world", 2, "completed")
+    stage = _stage("entity_directory", 2, "completed")
     stage.progress_percent = 100
     stage.metrics_json = {"person_count": 12}
     stage.output_json = {"entity_counts": {"person": 12}}
@@ -57,7 +61,7 @@ def test_stage_response_exposes_progress_output_and_activity():
 
     response = twin_stage_response(stage)
 
-    assert response["stage_key"] == "executive_world"
+    assert response["stage_key"] == "entity_directory"
     assert response["progress_percent"] == 100
     assert response["metrics"]["person_count"] == 12
     assert response["output"]["entity_counts"]["person"] == 12

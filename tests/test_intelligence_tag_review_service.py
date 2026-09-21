@@ -20,15 +20,15 @@ def test_untagged_evidence_is_explicitly_flagged():
     assert evidence_review_reasons(evidence) == ["untagged"]
 
 
-def test_theme_only_evidence_is_flagged_as_missing_an_entity():
-    evidence = SimpleNamespace(tag_links=[_link("theme", 0.65)])
+def test_non_entity_evidence_is_flagged_as_missing_an_entity():
+    evidence = SimpleNamespace(tag_links=[_link("legacy", 1.0)])
 
     assert evidence_review_reasons(evidence) == ["no_entity"]
 
 
 def test_low_confidence_entity_is_flagged_without_penalizing_theme_confidence():
-    reliable = SimpleNamespace(tag_links=[_link("person", 0.95), _link("theme", 0.65)])
-    uncertain = SimpleNamespace(tag_links=[_link("project", 0.7), _link("theme", 0.65)])
+    reliable = SimpleNamespace(tag_links=[_link("person", 0.95), _link("organization", 0.9)])
+    uncertain = SimpleNamespace(tag_links=[_link("initiative", 0.7)])
 
     assert evidence_review_reasons(reliable) == []
     assert evidence_review_reasons(uncertain) == ["low_confidence"]

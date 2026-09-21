@@ -28,7 +28,7 @@ This folder contains Alfred's orchestration and business logic. Services are whe
 - `message_service.py` and `message_signal_classifier.py` support message history and signal classification.
 - `intelligence_core_service.py` stores source-backed evidence separately from claims, compiles confidence-aware longitudinal context, preserves default behavior for cold-start users, and supports user confirmation/correction of Alfred's model.
 - `intelligence_backfill_service.py` ingests a signed-in user's historical Alfred data idempotently, distinguishes primary evidence from AI-derived or context-only material, and synthesizes inspectable longitudinal beliefs in a durable background run.
-- `intelligence_twin_pipeline_service.py` builds the Digital Twin through four persisted, gated stages: evidence organization, Executive World mapping, longitudinal behavioral profiling, and current dynamic state. Stage outputs and AI checkpoints remain reviewable and resumable.
+- `intelligence_twin_pipeline_service.py` builds the Digital Twin through six persisted, gated stages: entity discovery, canonical entity definition, Executive World mapping, longitudinal behavioral profiling, current dynamic state, and final Full/Core Twin assembly. Stage outputs and AI checkpoints remain reviewable and resumable.
 - `intelligence_tag_review_service.py` provides the authenticated, read-only Stage 1 audit: source coverage, normalized tag statistics, quality filters, and paginated links back to original evidence.
 - `gmail_service.py` and `audio_service.py` wrap external Gmail/audio dependencies.
 - `morning_briefing_service.py` supports proactive briefing/nudge behavior.

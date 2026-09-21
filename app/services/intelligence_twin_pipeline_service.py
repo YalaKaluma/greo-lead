@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import itertools
+import json
 import re
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import selectinload
+from openai import OpenAI
 
+from app.config import OPENAI_API_KEY, OPENAI_MODEL
 from app.db import SessionLocal
 from app.models import (
     IntelligenceClaim,
@@ -19,7 +22,7 @@ from app.models import (
     IntelligenceWorldRelationship,
     User,
 )
-from app.services.evidence_memory_service import tag_evidence_batch
+from app.services.evidence_memory_service import discover_evidence_entities, tag_evidence_batch
 from app.services.intelligence_backfill_service import (
     SEED_SOURCE_TYPES,
     build_core_twin_snapshot,
@@ -28,13 +31,16 @@ from app.services.intelligence_backfill_service import (
     upsert_evidence,
 )
 from app.utils.safe_errors import log_failure
+from app.utils.ai_safety import UNTRUSTED_CONTEXT_POLICY, parse_bounded_json_object, wrap_untrusted_context
 
 
 TWIN_STAGE_DEFINITIONS = (
     ("evidence_foundation", 1),
-    ("executive_world", 2),
-    ("behavioral_profile", 3),
-    ("dynamic_state", 4),
+    ("entity_directory", 2),
+    ("executive_world", 3),
+    ("behavioral_profile", 4),
+    ("dynamic_state", 5),
+    ("twin_assembly", 6),
 )
 ACTIVE_STAGE_STATUSES = {"queued", "running"}
 
@@ -180,10 +186,24 @@ def _run_evidence_foundation(db, stage: IntelligenceTwinStage, user: User, weeks
         progress_callback=lambda completed, count: _update_progress(
             db,
             stage.id,
-            20 + int(75 * completed / max(1, count)),
+            20 + int(25 * completed / max(1, count)),
             completed,
             count,
             "evidence_tagged",
+            {"current": completed, "total": count},
+        ),
+    )
+    discover_evidence_entities(
+        db,
+        user,
+        evidence,
+        progress_callback=lambda completed, count: _update_progress(
+            db,
+            stage.id,
+            45 + int(50 * completed / max(1, count)),
+            completed,
+            count,
+            "entity_batch_completed",
             {"current": completed, "total": count},
         ),
     )
@@ -191,11 +211,15 @@ def _run_evidence_foundation(db, stage: IntelligenceTwinStage, user: User, weeks
     selected_links = db.query(IntelligenceEvidenceTag).options(
         selectinload(IntelligenceEvidenceTag.tag),
     ).filter(IntelligenceEvidenceTag.evidence_id.in_(selected_ids)).all()
-    tag_counts = dict(Counter(link.tag.tag_type for link in selected_links if link.tag))
-    tagged_evidence = db.query(IntelligenceEvidenceTag.evidence_id).join(IntelligenceEvidence).filter(
-        IntelligenceEvidence.user_id == user.id,
-        IntelligenceEvidenceTag.evidence_id.in_(selected_ids),
-    ).distinct().count()
+    entity_tag_types = {"person", "organization", "initiative"}
+    tag_counts = dict(Counter(
+        link.tag.tag_type for link in selected_links
+        if link.tag and link.tag.tag_type in entity_tag_types
+    ))
+    tagged_evidence = len({
+        link.evidence_id for link in selected_links
+        if link.tag and link.tag.tag_type in entity_tag_types
+    })
     metrics = {
         "evidence_count": total,
         "source_count": len(source_counts),
@@ -239,9 +263,11 @@ def _entity_candidates(db, user_id: int, allowed_evidence_ids: set[int]) -> dict
     for link in links:
         if link.evidence_id not in allowed_evidence_ids:
             continue
-        if link.tag is None or link.evidence is None or link.tag.tag_type not in {"person", "project", "workstream"}:
+        if link.tag is None or link.evidence is None or link.tag.tag_type not in {
+            "person", "organization", "initiative", "project", "workstream",
+        }:
             continue
-        entity_type = link.tag.tag_type
+        entity_type = "initiative" if link.tag.tag_type in {"project", "workstream"} else link.tag.tag_type
         key = (entity_type, link.tag.normalized_value)
         bucket = grouped.setdefault(key, {
             "entity_type": entity_type,
@@ -251,32 +277,137 @@ def _entity_candidates(db, user_id: int, allowed_evidence_ids: set[int]) -> dict
         })
         bucket["evidence"].append(link.evidence)
 
-    for row in db.query(IntelligenceEvidence).filter(
-        IntelligenceEvidence.user_id == user_id,
-        IntelligenceEvidence.source_type.in_(("goal", "team_dynamic")),
-    ).all():
-        if row.id not in allowed_evidence_ids:
-            continue
-        name = (row.excerpt or "").splitlines()[0].strip()[:240]
-        if not name:
-            continue
-        entity_type = "goal" if row.source_type == "goal" else "team"
-        normalized = _normalize(name)
-        key = (entity_type, normalized)
-        bucket = grouped.setdefault(key, {
-            "entity_type": entity_type,
-            "normalized_name": normalized,
-            "display_name": name,
-            "evidence": [],
-        })
-        bucket["evidence"].append(row)
     return grouped
 
 
-def _run_executive_world(db, stage: IntelligenceTwinStage, user: User) -> None:
+def _canonicalize_entity_candidates(grouped: dict[tuple[str, str], dict], *, progress_callback=None) -> list[dict]:
+    """Resolve aliases and write factual definitions without inferring relationships."""
+    fallback = [
+        {**item, "aliases": [item["display_name"]], "summary": None}
+        for _key, item in sorted(grouped.items())
+    ]
+    if not OPENAI_API_KEY or not fallback:
+        return fallback
+    client = OpenAI(api_key=OPENAI_API_KEY, timeout=90.0, max_retries=1)
+    resolved: list[dict] = []
+    chunks = [fallback[offset:offset + 60] for offset in range(0, len(fallback), 60)]
+    for chunk_index, chunk in enumerate(chunks, start=1):
+        offset = (chunk_index - 1) * 60
+        source_items = []
+        by_id = {}
+        for index, item in enumerate(chunk):
+            candidate_id = f"c{offset + index}"
+            by_id[candidate_id] = item
+            samples = []
+            for evidence in sorted(item["evidence"], key=lambda row: row.occurred_at, reverse=True):
+                excerpt = " ".join((evidence.excerpt or "").split())
+                if excerpt and excerpt not in samples:
+                    samples.append(excerpt[:500])
+                if len(samples) == 3:
+                    break
+            source_items.append({
+                "candidate_id": candidate_id,
+                "type": item["entity_type"],
+                "name": item["display_name"],
+                "evidence_samples": samples,
+            })
+        response = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            response_format={"type": "json_object"},
+            temperature=0,
+            max_tokens=6000,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        f"{UNTRUSTED_CONTEXT_POLICY}\n"
+                        "Create a canonical directory of the supplied People, Organizations, and Initiatives. "
+                        "Merge candidates only when the evidence clearly indicates they are the same entity. "
+                        "Do not infer relationship health, goals, commitments, status, emotions, leadership traits, or behavior. "
+                        "Descriptions must be concise factual identifications supported by the samples. "
+                        "Every source candidate_id must appear exactly once across source_ids. "
+                        "Return JSON {\"entities\":[{\"entity_type\":\"person|organization|initiative\","
+                        "\"canonical_name\":\"...\",\"aliases\":[\"...\"],\"description\":\"...\","
+                        "\"source_ids\":[\"c0\"]}]}."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": wrap_untrusted_context(
+                        "entity_candidates",
+                        json.dumps(source_items, ensure_ascii=False),
+                        90_000,
+                    ),
+                },
+            ],
+        )
+        parsed = parse_bounded_json_object(
+            response.choices[0].message.content,
+            max_characters=160_000,
+            max_nodes=12_000,
+        )
+        used: set[str] = set()
+        for entity in parsed.get("entities", [])[: len(chunk) * 2]:
+            if not isinstance(entity, dict):
+                continue
+            source_ids = [value for value in entity.get("source_ids", []) if value in by_id and value not in used]
+            entity_type = str(entity.get("entity_type") or "").strip().lower()
+            canonical_name = str(entity.get("canonical_name") or "").strip()[:240]
+            if not source_ids or entity_type not in {"person", "organization", "initiative"} or not canonical_name:
+                continue
+            matching = [by_id[value] for value in source_ids if by_id[value]["entity_type"] == entity_type]
+            if not matching:
+                continue
+            matching_ids = [value for value in source_ids if by_id[value]["entity_type"] == entity_type]
+            used.update(matching_ids)
+            aliases = sorted({
+                str(alias).strip()[:240]
+                for alias in entity.get("aliases", [])
+                if str(alias).strip()
+            } | {item["display_name"] for item in matching})
+            resolved.append({
+                "entity_type": entity_type,
+                "normalized_name": _normalize(canonical_name)[:240],
+                "display_name": canonical_name,
+                "aliases": aliases,
+                "summary": str(entity.get("description") or "").strip()[:1200] or None,
+                "evidence": [row for item in matching for row in item["evidence"]],
+            })
+        for candidate_id, item in by_id.items():
+            if candidate_id not in used:
+                resolved.append(item)
+        if progress_callback:
+            progress_callback(chunk_index, len(chunks))
+    return resolved
+
+
+def _run_entity_directory(db, stage: IntelligenceTwinStage, user: User) -> None:
     allowed_evidence = _evidence_in_active_window(db, user.id)
     allowed_evidence_ids = {row.id for row in allowed_evidence}
     grouped = _entity_candidates(db, user.id, allowed_evidence_ids)
+    _update_progress(
+        db, stage.id, 5, 0, len(grouped), "entity_definition_started",
+        {"candidate_count": len(grouped)},
+    )
+    canonical_items = _canonicalize_entity_candidates(
+        grouped,
+        progress_callback=lambda current, total: _update_progress(
+            db, stage.id, 5 + int(35 * current / max(1, total)), current, total,
+            "entity_definition_batch_completed", {"current": current, "total": total},
+        ),
+    )
+    merged_items: dict[tuple[str, str], dict] = {}
+    for item in canonical_items:
+        key = (item["entity_type"], item["normalized_name"])
+        existing = merged_items.get(key)
+        if existing is None:
+            merged_items[key] = item
+            continue
+        existing["evidence"].extend(item["evidence"])
+        existing["aliases"] = sorted(set(existing.get("aliases", [])) | set(item.get("aliases", [])))
+        if not existing.get("summary") and item.get("summary"):
+            existing["summary"] = item["summary"]
+    canonical_items = list(merged_items.values())
     db.query(IntelligenceWorldRelationship).filter(
         IntelligenceWorldRelationship.user_id == user.id,
     ).delete(synchronize_session=False)
@@ -286,8 +417,9 @@ def _run_executive_world(db, stage: IntelligenceTwinStage, user: User) -> None:
     db.commit()
 
     saved: dict[tuple[str, str], IntelligenceWorldEntity] = {}
-    items = list(grouped.items())
-    for index, (key, item) in enumerate(items, start=1):
+    items = canonical_items
+    for index, item in enumerate(items, start=1):
+        key = (item["entity_type"], item["normalized_name"])
         evidence = sorted(item["evidence"], key=lambda row: row.occurred_at)
         excerpts = []
         for row in reversed(evidence):
@@ -301,13 +433,17 @@ def _run_executive_world(db, stage: IntelligenceTwinStage, user: User) -> None:
             entity_type=item["entity_type"],
             normalized_name=item["normalized_name"],
             display_name=item["display_name"],
-            summary=(excerpts[0][:1200] if excerpts else None),
+            summary=item.get("summary") or (
+                f"Observed across {len({row.id for row in evidence})} evidence points and "
+                f"{len({row.source_type for row in evidence})} source types."
+            ),
             confidence_score=max(0.5, min(1.0, 0.5 + len(evidence) * 0.03)),
             evidence_count=len({row.id for row in evidence}),
             first_seen_at=evidence[0].occurred_at if evidence else None,
             last_seen_at=evidence[-1].occurred_at if evidence else None,
             metadata_json={
                 "source_types": sorted({row.source_type for row in evidence}),
+                "aliases": item.get("aliases") or [item["display_name"]],
                 "recent_evidence": [value[:500] for value in excerpts],
             },
         )
@@ -315,7 +451,32 @@ def _run_executive_world(db, stage: IntelligenceTwinStage, user: User) -> None:
         db.flush()
         saved[key] = entity
         if index % 50 == 0:
-            _update_progress(db, stage.id, 10 + int(60 * index / max(1, len(items))), index, len(items), "world_entities_saved")
+            _update_progress(db, stage.id, 40 + int(50 * index / max(1, len(items))), index, len(items), "entity_definitions_saved")
+    db.commit()
+
+    counts = Counter(entity.entity_type for entity in saved.values())
+    top_entities = sorted(
+        saved.values(),
+        key=lambda row: (row.evidence_count, _as_utc(row.last_seen_at) if row.last_seen_at else datetime.min.replace(tzinfo=timezone.utc)),
+        reverse=True,
+    )[:30]
+    metrics = {f"{key}_count": value for key, value in counts.items()}
+    _complete_stage(db, stage, metrics=metrics, output={
+        "entity_counts": dict(counts),
+        "top_entities": [world_entity_response(row) for row in top_entities],
+    })
+
+
+def _run_executive_world(db, stage: IntelligenceTwinStage, user: User) -> None:
+    allowed_evidence = _evidence_in_active_window(db, user.id)
+    allowed_evidence_ids = {row.id for row in allowed_evidence}
+    entities = db.query(IntelligenceWorldEntity).filter(
+        IntelligenceWorldEntity.user_id == user.id,
+    ).all()
+    saved = {(row.entity_type, row.normalized_name): row for row in entities}
+    db.query(IntelligenceWorldRelationship).filter(
+        IntelligenceWorldRelationship.user_id == user.id,
+    ).delete(synchronize_session=False)
     db.commit()
 
     evidence_entities: dict[int, set[tuple[str, str]]] = defaultdict(set)
@@ -325,8 +486,9 @@ def _run_executive_world(db, stage: IntelligenceTwinStage, user: User) -> None:
     for link in tag_links:
         if link.evidence_id not in allowed_evidence_ids:
             continue
-        if link.tag and link.tag.tag_type in {"person", "project", "workstream"}:
-            evidence_entities[link.evidence_id].add((link.tag.tag_type, link.tag.normalized_value))
+        if link.tag and link.tag.tag_type in {"person", "organization", "initiative", "project", "workstream"}:
+            entity_type = "initiative" if link.tag.tag_type in {"project", "workstream"} else link.tag.tag_type
+            evidence_entities[link.evidence_id].add((entity_type, link.tag.normalized_value))
     pair_counts: Counter = Counter()
     for keys in evidence_entities.values():
         valid = sorted(key for key in keys if key in saved)
@@ -347,20 +509,25 @@ def _run_executive_world(db, stage: IntelligenceTwinStage, user: User) -> None:
             evidence_count=count,
         ))
     db.commit()
-    counts = Counter(entity.entity_type for entity in saved.values())
     relationship_count = db.query(IntelligenceWorldRelationship.id).filter(
         IntelligenceWorldRelationship.user_id == user.id,
     ).count()
-    top_entities = sorted(
-        saved.values(),
-        key=lambda row: (row.evidence_count, _as_utc(row.last_seen_at) if row.last_seen_at else datetime.min.replace(tzinfo=timezone.utc)),
-        reverse=True,
-    )[:20]
-    metrics = {**{f"{key}_count": value for key, value in counts.items()}, "relationship_count": relationship_count}
+    top_relationships = db.query(IntelligenceWorldRelationship).filter(
+        IntelligenceWorldRelationship.user_id == user.id,
+    ).order_by(IntelligenceWorldRelationship.evidence_count.desc()).limit(30).all()
+    metrics = {"entity_count": len(entities), "relationship_count": relationship_count}
     _complete_stage(db, stage, metrics=metrics, output={
-        "entity_counts": dict(counts),
         "relationship_count": relationship_count,
-        "top_entities": [world_entity_response(row) for row in top_entities],
+        "top_relationships": [
+            {
+                "source_entity_id": row.source_entity_id,
+                "target_entity_id": row.target_entity_id,
+                "relationship_type": row.relationship_type,
+                "summary": row.summary,
+                "evidence_count": row.evidence_count,
+            }
+            for row in top_relationships
+        ],
     })
 
 
@@ -441,12 +608,9 @@ def _run_behavioral_profile(db, stage: IntelligenceTwinStage, user: User) -> Non
         IntelligenceClaim.user_id == user.id,
         IntelligenceClaim.review_status.in_(("active", "confirmed")),
     ).all()
-    snapshot = build_core_twin_snapshot(db, user, active_claims)
     metrics = {"assertion_count": len(active_claims), "new_assertion_count": len(claims)}
     db.refresh(stage)
     _complete_stage(db, stage, metrics=metrics, output={
-        "core_twin": snapshot.core_twin,
-        "snapshot_id": snapshot.id,
         "checkpoint": (db.query(IntelligenceTwinStage).filter(IntelligenceTwinStage.id == stage.id).first().output_json or {}).get("checkpoint", {}),
     })
 
@@ -460,10 +624,10 @@ def _run_dynamic_state(db, stage: IntelligenceTwinStage, user: User) -> None:
         selectinload(IntelligenceEvidence.tag_links).selectinload(IntelligenceEvidenceTag.tag)
     ).filter(IntelligenceEvidence.id.in_(recent_ids)).order_by(IntelligenceEvidence.occurred_at.desc()).all()
     tag_counts = Counter(
-        f"{link.tag.tag_type}:{link.tag.display_value}"
+        f"{'initiative' if link.tag.tag_type in {'project', 'workstream'} else link.tag.tag_type}:{link.tag.display_value}"
         for row in recent
         for link in row.tag_links
-        if link.tag and link.tag.tag_type in {"person", "project", "workstream"}
+        if link.tag and link.tag.tag_type in {"person", "organization", "initiative", "project", "workstream"}
     )
     current_claims = db.query(IntelligenceClaim).filter(
         IntelligenceClaim.user_id == user.id,
@@ -485,6 +649,31 @@ def _run_dynamic_state(db, stage: IntelligenceTwinStage, user: User) -> None:
         "active_context_count": len(tag_counts),
         "current_finding_count": len(current_claims),
     }, output=output)
+
+
+def _run_twin_assembly(db, stage: IntelligenceTwinStage, user: User) -> None:
+    active_claims = db.query(IntelligenceClaim).filter(
+        IntelligenceClaim.user_id == user.id,
+        IntelligenceClaim.review_status.in_(("active", "confirmed")),
+    ).all()
+    _update_progress(
+        db, stage.id, 25, 0, len(active_claims), "twin_assembly_started",
+        {"assertion_count": len(active_claims)},
+    )
+    snapshot = build_core_twin_snapshot(db, user, active_claims)
+    entity_counts = dict(Counter(
+        row.entity_type for row in db.query(IntelligenceWorldEntity).filter(
+            IntelligenceWorldEntity.user_id == user.id,
+        ).all()
+    ))
+    _complete_stage(db, stage, metrics={
+        "assertion_count": len(active_claims),
+        "entity_count": sum(entity_counts.values()),
+    }, output={
+        "core_twin": snapshot.core_twin,
+        "snapshot_id": snapshot.id,
+        "entity_counts": entity_counts,
+    })
 
 
 def execute_twin_stage(stage_id: int, user_id: int) -> None:
@@ -509,12 +698,16 @@ def execute_twin_stage(stage_id: int, user_id: int) -> None:
         if stage.stage_key == "evidence_foundation":
             weeks = int((stage.output_json or {}).get("requested_weeks") or 0) or None
             _run_evidence_foundation(db, stage, user, weeks)
+        elif stage.stage_key == "entity_directory":
+            _run_entity_directory(db, stage, user)
         elif stage.stage_key == "executive_world":
             _run_executive_world(db, stage, user)
         elif stage.stage_key == "behavioral_profile":
             _run_behavioral_profile(db, stage, user)
         elif stage.stage_key == "dynamic_state":
             _run_dynamic_state(db, stage, user)
+        elif stage.stage_key == "twin_assembly":
+            _run_twin_assembly(db, stage, user)
         else:
             raise ValueError(f"Unknown Digital Twin stage: {stage.stage_key}")
     except Exception as error:
