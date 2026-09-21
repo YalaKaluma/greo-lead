@@ -70,10 +70,12 @@ def draft_email(db: Session, user_number: str, request: str) -> EmailDraftResult
                 "evidence_id": item.evidence_id,
                 "source_type": item.source_type,
                 "source_id": item.source_id,
+                "label": item.label,
                 "occurred_at": item.occurred_at.isoformat(),
                 "tags": list(item.tags),
                 "excerpt": item.excerpt[:280],
                 "relevance_score": round(item.score, 4),
+                "supporting_items": item.supporting_items,
             }
             for item in evidence
         ],
