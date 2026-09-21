@@ -401,7 +401,7 @@ export function TaskMtnTrendsTab({ trends, loading, error, t = (key, fallback) =
 
       <div className="relative rounded-lg border bg-white p-4">
         <KpiInfoButton label={t('taskTrends.ninetyDayAverageInfoLabel', 'About the 90-day daily average')}>
-          {t('taskTrends.ninetyDayAverageInfo', 'The average MTN score per calendar day over the last 90 days.')}
+          {t('taskTrends.ninetyDayAverageInfo', 'The average MTN score per weekday over the last 90 days. Saturdays and Sundays are excluded.')}
         </KpiInfoButton>
         <h2 className="text-lg font-semibold text-slate-800">{t('taskTrends.ninetyDayAverageTitle', '90-Day Daily Average')}</h2>
         <div className="mt-2 text-3xl font-semibold text-slate-900">
