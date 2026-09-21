@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 import calendar
-from app.db import get_db
+from app.db import SessionLocal, get_db
 from app.models import JourneyGoal, Task, User
 from pydantic import BaseModel
 from datetime import datetime, date, timedelta
@@ -175,16 +175,30 @@ class TaskFollowUpResponse(BaseModel):
 PRIORITY_ORDER = {"High": 1, "Medium": 2, "Low": 3}
 
 
-def _sync_task_memory(db: Session, user_number: str, task: Task) -> None:
+def _sync_task_memory(user_number: str, task_id: int) -> None:
+    """Synchronize task evidence after the task response has been sent.
+
+    Background work must own its database session: the request-scoped session
+    may already be closed by the time Starlette executes this function.
+    """
+    db = SessionLocal()
     try:
         user = db.query(User).filter(
             (User.phone_number == user_number) | (User.email == user_number)
         ).first()
-        if user is not None:
+        task = db.query(Task).filter(
+            Task.id == task_id,
+            Task.user_number == user_number,
+        ).first()
+        if user is not None and task is not None:
             sync_task_evidence(db, user, task)
     except Exception as error:
         db.rollback()
         log_failure("task_evidence_memory", error)
+    finally:
+        db.close()
+
+
 WEEKDAY_BY_NAME = {
     "monday": 0,
     "tuesday": 1,
@@ -512,6 +526,7 @@ def get_mtn_history(
 @router.post("/", response_model=TaskResponse)
 def create_task(
         task: TaskCreate,
+        background_tasks: BackgroundTasks = None,
         user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
@@ -549,7 +564,8 @@ def create_task(
     db.add(new_task)
     db.commit()
     db.refresh(new_task)
-    _sync_task_memory(db, user_number, new_task)
+    if background_tasks is not None:
+        background_tasks.add_task(_sync_task_memory, user_number, new_task.id)
 
     return new_task
 
@@ -558,6 +574,7 @@ def create_task(
 def update_task(
         task_id: int,
         updates: TaskUpdate,
+        background_tasks: BackgroundTasks = None,
         user_number: str = Depends(require_authenticated_user_identifier),
         db: Session = Depends(get_db)
 ):
@@ -630,7 +647,8 @@ def update_task(
 
     db.commit()
     db.refresh(task)
-    _sync_task_memory(db, user_number, task)
+    if background_tasks is not None:
+        background_tasks.add_task(_sync_task_memory, user_number, task.id)
 
     return task
 
