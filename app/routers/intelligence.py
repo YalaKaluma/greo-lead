@@ -16,6 +16,7 @@ from app.models import (
     IntelligenceEvidenceTag,
     IntelligencePatternFeedback,
     IntelligenceTwinSnapshot,
+    Task,
     User,
 )
 from app.routers.auth import require_authenticated_user
@@ -26,7 +27,12 @@ from app.services.intelligence_backfill_service import (
     execute_backfill_run,
 )
 from app.services.intelligence_core_service import IntelligenceCoreService
-from app.services.evidence_memory_service import retrieve_evidence, set_evidence_tags
+from app.services.evidence_memory_service import (
+    retrieve_evidence,
+    set_evidence_tags,
+    source_tags,
+    sync_task_evidence,
+)
 
 
 router = APIRouter()
@@ -133,6 +139,25 @@ class MemoryTagInput(BaseModel):
 
 class MemoryTagsUpdate(BaseModel):
     tags: list[MemoryTagInput] = Field(default_factory=list, max_length=30)
+
+
+@router.get("/memory/source/{source_type}/{source_id}/tags")
+def get_source_memory_tags(
+    source_type: Literal["task", "message", "journal", "meeting"],
+    source_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_authenticated_user),
+):
+    tags = source_tags(db, current_user.id, source_type, source_id)
+    if not tags and source_type == "task":
+        task = db.query(Task).filter(
+            Task.id == source_id,
+            Task.user_number == current_user.phone_number,
+        ).first()
+        if task is not None:
+            sync_task_evidence(db, current_user, task)
+            tags = source_tags(db, current_user.id, source_type, source_id)
+    return {"tags": tags}
 
 
 @router.get("/memory/search")
