@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { useLanguage } from '../i18n/LanguageContext';
 import { clearSessionCredentials } from '../sessionCredentials';
+import DigitalTwinPipeline from './DigitalTwinPipeline';
 import {
   disableNotifications,
   enableNotifications,
@@ -277,7 +278,7 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
         )}
 
         {activeTab === 'beliefs' && (
-          <ExecutiveModelPanel apiUrl={apiUrl} t={t} />
+          <DigitalTwinPipeline apiUrl={apiUrl} t={t} />
         )}
 
         {activeTab === 'privacy' && (

@@ -401,7 +401,7 @@ class IntelligenceEvidence(Base):
 
 
 class IntelligenceMemoryTag(Base):
-    """A normalized person, project, workstream, or theme attached to raw evidence."""
+    """A normalized person, organization, or initiative attached to raw evidence."""
 
     __tablename__ = "intelligence_memory_tags"
     __table_args__ = (
@@ -646,6 +646,105 @@ class IntelligenceTwinSnapshot(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     user = relationship("User")
+
+
+class IntelligenceTwinStage(Base):
+    """Persisted, reviewable stage in the gated Digital Twin build."""
+
+    __tablename__ = "intelligence_twin_stages"
+    __table_args__ = (
+        UniqueConstraint("user_id", "stage_key", name="uq_intelligence_twin_stage_user_key"),
+        Index("idx_intelligence_twin_stages_user_order", "user_id", "stage_order"),
+        Index("idx_intelligence_twin_stages_status", "status"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    stage_key = Column(String(40), nullable=False, index=True)
+    stage_order = Column(Integer, nullable=False)
+    status = Column(String(30), nullable=False, default="locked", index=True)
+    progress_percent = Column(Integer, nullable=False, default=0)
+    progress_current = Column(Integer, nullable=False, default=0)
+    progress_total = Column(Integer, nullable=False, default=0)
+    output_json = Column(MutableDict.as_mutable(JSONB), nullable=True)
+    metrics_json = Column(MutableDict.as_mutable(JSONB), nullable=True)
+    activity_log = Column(JSONB, nullable=True)
+    run_reference = Column(String(120), nullable=True)
+    error_message = Column(Text, nullable=True)
+    failure_reference = Column(String(40), nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User")
+
+
+class IntelligenceWorldEntity(Base):
+    """A canonical person, organization, or initiative in the Executive World."""
+
+    __tablename__ = "intelligence_world_entities"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "entity_type", "normalized_name",
+            name="uq_intelligence_world_entity_user_type_name",
+        ),
+        Index("idx_intelligence_world_entities_user_type", "user_id", "entity_type"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    entity_type = Column(String(40), nullable=False, index=True)
+    normalized_name = Column(String(240), nullable=False)
+    display_name = Column(String(240), nullable=False)
+    summary = Column(Text, nullable=True)
+    status = Column(String(40), nullable=True)
+    confidence_score = Column(Float, nullable=False, default=0.0)
+    evidence_count = Column(Integer, nullable=False, default=0)
+    emotional_stance = Column(String(40), nullable=True)
+    emotional_intensity = Column(Float, nullable=True)
+    metadata_json = Column(MutableDict.as_mutable(JSONB), nullable=True)
+    first_seen_at = Column(DateTime(timezone=True), nullable=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User")
+
+
+class IntelligenceWorldRelationship(Base):
+    """Evidence-backed connection between two Executive World entities."""
+
+    __tablename__ = "intelligence_world_relationships"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "source_entity_id", "target_entity_id", "relationship_type",
+            name="uq_intelligence_world_relationship_edge",
+        ),
+        Index("idx_intelligence_world_relationships_user", "user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_entity_id = Column(
+        Integer, ForeignKey("intelligence_world_entities.id", ondelete="CASCADE"), nullable=False,
+    )
+    target_entity_id = Column(
+        Integer, ForeignKey("intelligence_world_entities.id", ondelete="CASCADE"), nullable=False,
+    )
+    relationship_type = Column(String(40), nullable=False, default="associated_with")
+    summary = Column(Text, nullable=True)
+    confidence_score = Column(Float, nullable=False, default=0.0)
+    evidence_count = Column(Integer, nullable=False, default=0)
+    metadata_json = Column(MutableDict.as_mutable(JSONB), nullable=True)
+    first_seen_at = Column(DateTime(timezone=True), nullable=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User")
+    source_entity = relationship("IntelligenceWorldEntity", foreign_keys=[source_entity_id])
+    target_entity = relationship("IntelligenceWorldEntity", foreign_keys=[target_entity_id])
 
 class Task(Base):
     __tablename__ = "tasks"
