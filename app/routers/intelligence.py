@@ -277,6 +277,8 @@ def start_twin_stage(
             return twin_stage_response(active)
         raise HTTPException(status_code=409, detail="Another Digital Twin stage is already running.")
 
+    previous_status = stage.status
+    previous_output = dict(stage.output_json or {})
     stage.status = "queued"
     stage.progress_percent = 0
     stage.progress_current = 0
@@ -284,9 +286,21 @@ def start_twin_stage(
     stage.error_message = None
     stage.failure_reference = None
     stage.completed_at = None
-    stage.activity_log = []
     if stage_key == "evidence_foundation":
-        stage.output_json = {"requested_weeks": request.weeks if request else None}
+        requested_weeks = (
+            request.weeks if request else
+            previous_output.get("requested_weeks") if previous_status == "failed" else None
+        )
+        can_resume = (
+            previous_status == "failed"
+            and previous_output.get("requested_weeks") == requested_weeks
+        )
+        stage.output_json = previous_output if can_resume else {}
+        stage.output_json = {**stage.output_json, "requested_weeks": requested_weeks}
+        if not can_resume:
+            stage.activity_log = []
+    else:
+        stage.activity_log = []
     for downstream in stages:
         if downstream.stage_order > stage.stage_order:
             downstream.status = "locked"

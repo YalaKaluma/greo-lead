@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -64,8 +65,26 @@ class MemoryResult:
     supporting_items: int = 1
 
 
+@dataclass(frozen=True)
+class EntityDiscoveryEnvelope:
+    """One model input with links back to the raw evidence it represents."""
+
+    envelope_id: str
+    source_type: str
+    occurred_at: datetime
+    text: str
+    evidence_ids: tuple[int, ...]
+    representative_evidence_id: int
+
+
 def _normalize(value: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^\w\- ]+", " ", value.lower(), flags=re.UNICODE)).strip()
+
+
+def _as_utc(value: datetime | None) -> datetime:
+    if value is None:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
 def _terms(value: str) -> set[str]:
@@ -122,10 +141,23 @@ def set_evidence_tags(
             )
             db.add(tag)
             db.flush()
+        confidence_score = max(0.0, min(1.0, confidence))
+        existing_link = db.query(IntelligenceEvidenceTag).filter(
+            IntelligenceEvidenceTag.evidence_id == evidence.id,
+            IntelligenceEvidenceTag.tag_id == tag.id,
+        ).first()
+        if existing_link is not None:
+            existing_link.confidence_score = max(
+                float(existing_link.confidence_score or 0), confidence_score,
+            )
+            source_priority = {"automatic": 0, "model": 1, "manual": 2}
+            if source_priority.get(source, 1) > source_priority.get(existing_link.source, 1):
+                existing_link.source = source
+            continue
         db.add(IntelligenceEvidenceTag(
             evidence_id=evidence.id,
             tag_id=tag.id,
-            confidence_score=max(0.0, min(1.0, confidence)),
+            confidence_score=confidence_score,
             source=source,
         ))
 
@@ -252,22 +284,109 @@ def tag_evidence_batch(
             progress_callback(completed, total)
 
 
-def _entity_discovery_batches(
+def _meeting_envelope_text(rows: list[IntelligenceEvidence], *, max_characters: int = 18_000) -> str:
+    """Keep meeting-level context while avoiding one model record per transcript segment."""
+    priority = {
+        "meeting": 0,
+        "meeting_decision": 1,
+        "meeting_action": 2,
+        "meeting_observation": 3,
+        "meeting_transcript": 4,
+    }
+    ordered = sorted(rows, key=lambda row: (
+        priority.get(row.source_type, 9),
+        _as_utc(row.occurred_at),
+        row.id,
+    ))
+    unique_parts: list[str] = []
+    seen: set[str] = set()
+    for row in ordered:
+        excerpt = (row.excerpt or "").strip()
+        normalized = _normalize(excerpt)
+        if not excerpt or normalized in seen:
+            continue
+        seen.add(normalized)
+        unique_parts.append(f"[{row.source_type}] {excerpt}")
+
+    if sum(len(part) + 1 for part in unique_parts) <= max_characters:
+        return "\n".join(unique_parts)
+
+    contextual = [part for part in unique_parts if not part.startswith("[meeting_transcript]")]
+    transcripts = [part for part in unique_parts if part.startswith("[meeting_transcript]")]
+    kept = contextual[:]
+    remaining = max(0, max_characters - sum(len(part) + 1 for part in kept))
+    if transcripts and remaining:
+        average_slots = max(1, remaining // 900)
+        if len(transcripts) <= average_slots:
+            sampled = transcripts
+        elif average_slots == 1:
+            sampled = [transcripts[0]]
+        else:
+            indexes = {
+                round(index * (len(transcripts) - 1) / (average_slots - 1))
+                for index in range(average_slots)
+            }
+            sampled = [transcripts[index] for index in sorted(indexes)]
+        kept.extend(sampled)
+    return "\n".join(kept)[:max_characters]
+
+
+def build_entity_discovery_envelopes(
     evidence_rows: list[IntelligenceEvidence],
+) -> list[EntityDiscoveryEnvelope]:
+    """Consolidate transcript-heavy meetings before model-assisted entity discovery."""
+    meeting_groups: dict[str, list[IntelligenceEvidence]] = {}
+    individual: list[IntelligenceEvidence] = []
+    for row in evidence_rows:
+        payload = row.payload or {}
+        meeting_id = payload.get("meeting_id")
+        if row.source_type in MEETING_SOURCE_TYPES and meeting_id is not None:
+            meeting_groups.setdefault(str(meeting_id), []).append(row)
+        else:
+            individual.append(row)
+
+    envelopes: list[EntityDiscoveryEnvelope] = []
+    for meeting_id, rows in meeting_groups.items():
+        representative = next((row for row in rows if row.source_type == "meeting"), rows[0])
+        envelopes.append(EntityDiscoveryEnvelope(
+            envelope_id=f"meeting:{meeting_id}",
+            source_type="meeting",
+            occurred_at=min((_as_utc(row.occurred_at) for row in rows), default=_as_utc(representative.occurred_at)),
+            text=_meeting_envelope_text(rows),
+            evidence_ids=tuple(sorted(row.id for row in rows)),
+            representative_evidence_id=representative.id,
+        ))
+    envelopes.extend(
+        EntityDiscoveryEnvelope(
+            envelope_id=f"evidence:{row.id}",
+            source_type=row.source_type,
+            occurred_at=_as_utc(row.occurred_at),
+            text=(row.excerpt or "")[:5000],
+            evidence_ids=(row.id,),
+            representative_evidence_id=row.id,
+        )
+        for row in individual
+        if (row.excerpt or "").strip()
+    )
+    return sorted(envelopes, key=lambda item: (_as_utc(item.occurred_at), item.envelope_id))
+
+
+def _entity_discovery_batches(
+    envelopes: list[EntityDiscoveryEnvelope],
     *,
     max_records: int = 120,
     max_characters: int = 55_000,
-) -> list[list[IntelligenceEvidence]]:
-    batches: list[list[IntelligenceEvidence]] = []
-    current: list[IntelligenceEvidence] = []
+) -> list[list[EntityDiscoveryEnvelope]]:
+    batches: list[list[EntityDiscoveryEnvelope]] = []
+    current: list[EntityDiscoveryEnvelope] = []
     size = 0
-    for row in evidence_rows:
-        row_size = len(row.excerpt or "") + 100
+    for envelope in envelopes:
+        row_size = len(envelope.text) + 100
         if current and (len(current) >= max_records or size + row_size > max_characters):
             batches.append(current)
             current = []
             size = 0
-        current.append(row)
+        current.append(envelope)
         size += row_size
     if current:
         batches.append(current)
@@ -280,26 +399,42 @@ def discover_evidence_entities(
     evidence_rows: list[IntelligenceEvidence],
     *,
     progress_callback=None,
-) -> None:
+    checkpoint_data: dict | None = None,
+    checkpoint_callback=None,
+) -> dict:
     """Discover People, Organizations, and Initiatives across mixed evidence batches.
 
     This intentionally runs only during the explicit Stage 1 historical build. Live
     writes keep using the deterministic, inexpensive tagger above.
     """
     if not OPENAI_API_KEY or not evidence_rows:
-        return
+        return {"plan_hash": None, "completed_batches": [], "batch_total": 0, "envelope_count": 0}
     client = OpenAI(api_key=OPENAI_API_KEY, timeout=90.0, max_retries=1)
-    batches = _entity_discovery_batches(evidence_rows)
-    allowed_ids = {row.id for row in evidence_rows}
+    envelopes = build_entity_discovery_envelopes(evidence_rows)
+    batches = _entity_discovery_batches(envelopes)
+    batch_hashes = [hashlib.sha256(json.dumps([
+        (item.envelope_id, hashlib.sha256(item.text.encode("utf-8")).hexdigest())
+        for item in batch
+    ], separators=(",", ":")).encode("utf-8")).hexdigest() for batch in batches]
+    plan_hash = hashlib.sha256("|".join(batch_hashes).encode("utf-8")).hexdigest()
+    checkpoint_data = checkpoint_data or {}
+    completed_batches = set(checkpoint_data.get("completed_batches") or []) \
+        if checkpoint_data.get("plan_hash") == plan_hash else set()
+    evidence_by_id = {row.id: row for row in evidence_rows}
+    if progress_callback and completed_batches:
+        progress_callback(len(completed_batches), len(batches), True)
     for index, batch in enumerate(batches, start=1):
+        batch_hash = batch_hashes[index - 1]
+        if batch_hash in completed_batches:
+            continue
         records = [
             {
-                "evidence_id": row.id,
-                "source_type": row.source_type,
-                "occurred_at": row.occurred_at.date().isoformat(),
-                "text": (row.excerpt or "")[:5000],
+                "envelope_id": item.envelope_id,
+                "source_type": item.source_type,
+                "occurred_at": item.occurred_at.date().isoformat(),
+                "text": item.text,
             }
-            for row in batch if (row.excerpt or "").strip()
+            for item in batch if item.text.strip()
         ]
         if not records:
             continue
@@ -317,7 +452,7 @@ def discover_evidence_entities(
                         "An Initiative is a named project, product, program, workstream, or major venture. "
                         "Do not create generic themes, activities, emotions, goals, or behavioral traits. "
                         "Use the clearest canonical name visible in the data. Do not invent identities. "
-                        "Return JSON: {\"records\":[{\"evidence_id\":1,\"entities\":["
+                        "Return JSON: {\"records\":[{\"envelope_id\":\"meeting:1\",\"entities\":["
                         "{\"type\":\"person|organization|initiative\",\"name\":\"...\","
                         "\"confidence\":0.0}]}]}."
                     ),
@@ -337,14 +472,15 @@ def discover_evidence_entities(
             max_characters=180_000,
             max_nodes=12_000,
         )
-        by_id = {row.id: row for row in batch}
+        by_id = {item.envelope_id: item for item in batch}
+        tags_by_evidence: dict[int, list[tuple[str, str, float]]] = {}
         for item in parsed.get("records", [])[: len(records) * 2]:
             if not isinstance(item, dict):
                 continue
-            evidence_id = item.get("evidence_id")
-            if not isinstance(evidence_id, int) or evidence_id not in allowed_ids or evidence_id not in by_id:
+            envelope_id = str(item.get("envelope_id") or "")
+            if envelope_id not in by_id:
                 continue
-            tags = []
+            envelope = by_id[envelope_id]
             for entity in item.get("entities", [])[:30]:
                 if not isinstance(entity, dict):
                     continue
@@ -355,11 +491,28 @@ def discover_evidence_entities(
                 except (TypeError, ValueError):
                     confidence = 0.75
                 if tag_type in TAG_TYPES and 1 < len(name) <= 240:
-                    tags.append((tag_type, name, confidence))
-            set_evidence_tags(db, by_id[evidence_id], tags, source="model")
+                    normalized_name = _normalize(name)
+                    targets = {envelope.representative_evidence_id}
+                    targets.update(
+                        evidence_id for evidence_id in envelope.evidence_ids
+                        if normalized_name and f" {normalized_name} " in f" {_normalize(evidence_by_id[evidence_id].excerpt or '')} "
+                    )
+                    for evidence_id in targets:
+                        tags_by_evidence.setdefault(evidence_id, []).append((tag_type, name, confidence))
+        for evidence_id, tags in tags_by_evidence.items():
+            set_evidence_tags(db, evidence_by_id[evidence_id], tags, source="model")
         db.commit()
+        completed_batches.add(batch_hash)
+        if checkpoint_callback:
+            checkpoint_callback(plan_hash, sorted(completed_batches), len(batches), len(envelopes))
         if progress_callback:
-            progress_callback(index, len(batches))
+            progress_callback(len(completed_batches), len(batches), False)
+    return {
+        "plan_hash": plan_hash,
+        "completed_batches": sorted(completed_batches),
+        "batch_total": len(batches),
+        "envelope_count": len(envelopes),
+    }
 
 
 def sync_candidates(db: Session, user: User, candidates: list[EvidenceCandidate]) -> list[IntelligenceEvidence]:

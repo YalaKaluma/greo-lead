@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import itertools
 import json
 import re
@@ -155,6 +156,42 @@ def _complete_stage(db, stage: IntelligenceTwinStage, *, metrics: dict, output: 
     db.commit()
 
 
+def _evidence_plan_hash(evidence: list[IntelligenceEvidence]) -> str:
+    digest = hashlib.sha256()
+    for row in sorted(evidence, key=lambda item: item.id):
+        digest.update(
+            f"{row.id}:{row.content_hash or ''}:{row.source_type}\n".encode("utf-8")
+        )
+    return digest.hexdigest()
+
+
+def _save_foundation_checkpoint(
+    stage_id: int,
+    evidence_plan_hash: str,
+    *,
+    scan_completed: bool | None = None,
+    discovery: dict | None = None,
+) -> None:
+    checkpoint_db = SessionLocal()
+    try:
+        row = checkpoint_db.query(IntelligenceTwinStage).filter(IntelligenceTwinStage.id == stage_id).first()
+        if row is None:
+            return
+        output = dict(row.output_json or {})
+        checkpoint = dict(output.get("checkpoint") or {})
+        if checkpoint.get("evidence_plan_hash") != evidence_plan_hash:
+            checkpoint = {"evidence_plan_hash": evidence_plan_hash}
+        if scan_completed is not None:
+            checkpoint["scan_completed"] = scan_completed
+        if discovery is not None:
+            checkpoint["entity_discovery"] = discovery
+        output["checkpoint"] = checkpoint
+        row.output_json = output
+        checkpoint_db.commit()
+    finally:
+        checkpoint_db.close()
+
+
 def _run_evidence_foundation(db, stage: IntelligenceTwinStage, user: User, weeks: int | None) -> None:
     _update_progress(db, stage.id, 5, event="collecting_evidence")
     candidates = collect_historical_evidence(db, user)
@@ -179,38 +216,64 @@ def _run_evidence_foundation(db, stage: IntelligenceTwinStage, user: User, weeks
         "evidence_count": total,
         "source_count": len(source_counts),
     })
-    tag_evidence_batch(
-        db,
-        user,
-        evidence,
-        progress_callback=lambda completed, count: _update_progress(
+    evidence_plan_hash = _evidence_plan_hash(evidence)
+    checkpoint = dict((stage.output_json or {}).get("checkpoint") or {})
+    checkpoint_matches = checkpoint.get("evidence_plan_hash") == evidence_plan_hash
+    if checkpoint_matches and checkpoint.get("scan_completed"):
+        _update_progress(db, stage.id, 45, total, total, "evidence_scan_reused", {
+            "current": total,
+            "total": total,
+        })
+    else:
+        tag_evidence_batch(
             db,
-            stage.id,
-            20 + int(25 * completed / max(1, count)),
-            completed,
-            count,
-            "evidence_tagged",
-            {"current": completed, "total": count},
-        ),
-    )
-    discover_evidence_entities(
+            user,
+            evidence,
+            progress_callback=lambda completed, count: _update_progress(
+                db,
+                stage.id,
+                20 + int(25 * completed / max(1, count)),
+                completed,
+                count,
+                "evidence_tagged",
+                {"current": completed, "total": count},
+            ),
+        )
+        _save_foundation_checkpoint(stage.id, evidence_plan_hash, scan_completed=True)
+        checkpoint = {"evidence_plan_hash": evidence_plan_hash, "scan_completed": True}
+
+    discovery_checkpoint = dict(checkpoint.get("entity_discovery") or {}) if checkpoint_matches else {}
+    discovery = discover_evidence_entities(
         db,
         user,
         evidence,
-        progress_callback=lambda completed, count: _update_progress(
+        checkpoint_data=discovery_checkpoint,
+        checkpoint_callback=lambda plan_hash, completed_batches, batch_total, envelope_count: (
+            _save_foundation_checkpoint(stage.id, evidence_plan_hash, scan_completed=True, discovery={
+                "plan_hash": plan_hash,
+                "completed_batches": completed_batches,
+                "batch_total": batch_total,
+                "envelope_count": envelope_count,
+            })
+        ),
+        progress_callback=lambda completed, count, resumed: _update_progress(
             db,
             stage.id,
             45 + int(50 * completed / max(1, count)),
             completed,
             count,
-            "entity_batch_completed",
+            "entity_discovery_resumed" if resumed else "entity_batch_completed",
             {"current": completed, "total": count},
         ),
     )
     selected_ids = [row.id for row in evidence]
-    selected_links = db.query(IntelligenceEvidenceTag).options(
-        selectinload(IntelligenceEvidenceTag.tag),
-    ).filter(IntelligenceEvidenceTag.evidence_id.in_(selected_ids)).all()
+    selected_links: list[IntelligenceEvidenceTag] = []
+    for offset in range(0, len(selected_ids), 5_000):
+        selected_links.extend(db.query(IntelligenceEvidenceTag).options(
+            selectinload(IntelligenceEvidenceTag.tag),
+        ).filter(
+            IntelligenceEvidenceTag.evidence_id.in_(selected_ids[offset:offset + 5_000]),
+        ).all())
     entity_tag_types = {"person", "organization", "initiative"}
     tag_counts = dict(Counter(
         link.tag.tag_type for link in selected_links
@@ -227,7 +290,11 @@ def _run_evidence_foundation(db, stage: IntelligenceTwinStage, user: User, weeks
         "untagged_evidence_count": max(0, total - tagged_evidence),
         "new_evidence_count": int(delta["new"]),
         "changed_evidence_count": int(delta["changed"]),
+        "discovery_envelope_count": int(discovery.get("envelope_count") or 0),
+        "discovery_batch_count": int(discovery.get("batch_total") or 0),
     }
+    db.refresh(stage)
+    saved_checkpoint = dict((stage.output_json or {}).get("checkpoint") or {})
     _complete_stage(db, stage, metrics=metrics, output={
         "requested_weeks": weeks,
         "window_start": window_start.isoformat() if window_start else None,
@@ -235,6 +302,7 @@ def _run_evidence_foundation(db, stage: IntelligenceTwinStage, user: User, weeks
         "source_counts": source_counts,
         "tag_counts": tag_counts,
         "coverage_percent": round(100 * tagged_evidence / max(1, total), 1),
+        "checkpoint": saved_checkpoint,
     })
 
 
