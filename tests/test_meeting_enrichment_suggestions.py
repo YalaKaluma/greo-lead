@@ -54,6 +54,22 @@ def test_weak_or_unsupported_profile_claims_are_not_suggested():
     assert suggestions[0]["title"] == "Clarity"
 
 
+def test_missing_or_invalid_confidence_is_ignored_without_aborting_save():
+    analysis = {
+        "suggested_person_matches": [{"speaker_label": "A", "person_id": 7}],
+        "new_people": [{"speaker_label": "B", "name": "Morgan", "confidence": None}],
+        "suggested_goal_ids": [{"id": 3, "confidence": "unknown"}],
+        "new_goals": [{"title": "Grow Engine"}],
+        "suggested_project_ids": [{"id": 4}],
+        "new_projects": [{"name": "Campari US Demo", "confidence": None}],
+        "suggested_flags": [{"label": "Client demo"}],
+        "profile_suggestions": [{"suggestion_type": "strength", "title": "Clarity"}],
+        "entity_enrichments": [{"entity_type": "person", "target_id": 7, "entity_name": "Sarah"}],
+    }
+
+    assert service._analysis_suggestions(_meeting(), analysis) == []
+
+
 def test_suggestion_fingerprint_is_stable_for_equivalent_labels():
     first = {
         "suggestion_type": "flag",
