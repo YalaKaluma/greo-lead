@@ -54,12 +54,21 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
-MEETING_PROMPT_VERSION = "meeting-v5-context-approval"
+MEETING_PROMPT_VERSION = "meeting-v6-systematic-context"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4o-mini")
 MEETING_COACHING_MODEL = os.getenv("MEETING_COACHING_MODEL", MEETING_MODEL)
 # Increment this whenever the leadership assessment prompt or scoring logic changes.
 # The admin reassessment action uses it to resume safely and avoid duplicate AI work.
 LEADERSHIP_ASSESSMENT_VERSION = "leadership-v1-five-domains"
+PERSON_ENRICHMENT_FIELDS = {
+    "organization", "team", "relation", "context", "current_goals", "stakeholder_priorities",
+    "risks_or_pressures", "stakeholder_aspirations", "how_i_create_value", "potential_tensions",
+    "next_action", "relationship_strategy",
+}
+PROJECT_ENRICHMENT_FIELDS = {
+    "goal", "description", "status", "client", "role", "objective", "timeline", "in_scope",
+    "out_of_scope", "deliverables", "core_team", "client_stakeholders", "risks",
+}
 DB_WRITE_ATTEMPTS = max(1, int(os.getenv("MEETING_DB_WRITE_ATTEMPTS", "3")))
 TRANSCRIPTION_CHUNK_SECONDS = min(
     1200, max(300, int(os.getenv("MEETING_TRANSCRIPTION_CHUNK_SECONDS", "1200")))
@@ -450,14 +459,7 @@ def analyze_transcript(
                     "Return this exact JSON shape: {title, meeting_type, one_line_summary, "
                     "executive_summary, participants:[{display_name,speaker_label}], "
                     "self_speaker_label, self_identification_confidence, "
-                    "topics:[{title,summary}], decisions:[{description,confidence,evidence_excerpt}], "
-                    "suggested_person_matches:[{speaker_label,person_id,confidence,evidence_excerpt}], "
-                    "suggested_goal_ids:[{id,confidence,evidence_excerpt}], "
-                    "suggested_project_ids:[{id,confidence,evidence_excerpt}], "
-                    "suggested_flags:[{label,confidence,evidence_excerpt,rationale}], "
-                    "new_people:[{name,speaker_label,description,confidence,evidence_excerpt}], "
-                    "new_projects:[{name,description,confidence,evidence_excerpt}], "
-                    "new_goals:[{title,description,confidence,evidence_excerpt}]}. "
+                    "topics:[{title,summary}], decisions:[{description,confidence,evidence_excerpt}]}. "
                     "Executive summary should be 3-5 concise paragraphs for substantial transcripts, "
                     "and proportionally shorter for brief notes. Use null for unknown due dates.\n\n"
                     "The user participated in every uploaded meeting. Set self_speaker_label to exactly one "
@@ -468,17 +470,10 @@ def analyze_transcript(
                     "contains generic labels such as A and B. Always make a best selection and express uncertainty "
                     "through self_identification_confidence rather than inventing another speaker. Participants must "
                     "contain only distinct speakers that actually appear in the transcript.\n\n"
-                    "Suggest people, goals, projects, and compact meeting flags only when there is meaningful "
-                    "evidence. Prefer no suggestion over a weak one. A new project must be an ongoing initiative, "
-                    "not merely a discussion topic. A new goal must be an explicit durable desired outcome, not "
-                    "an action item. A new person must be a real named participant with no credible match in the "
-                    "candidate catalog. Flags should be short reusable context labels such as a workstream, client, "
-                    "or initiative—not generic filler such as meeting or discussion. Use confidence of at least "
-                    "0.75 only for strong matches. These are provisional suggestions and must never be described "
-                    "as confirmed database updates.\n\n"
-                    + wrap_untrusted_context("meeting_context", supplied_context or "none", 8000)
-                    + "\n\n"
-                    + wrap_untrusted_context("link_target_catalog", matching_context or "none", 20000)
+                    "The supplied meeting context includes a separate provisional goal, people, and project "
+                    "resolution. Use the retrieved records to sharpen interpretation, but do not claim those "
+                    "matches are user-confirmed.\n\n"
+                    + wrap_untrusted_context("meeting_context", supplied_context or "none", 30000)
                     + "\n\n"
                     + wrap_untrusted_context("transcript", transcript, 120000)
                 ),
@@ -487,6 +482,85 @@ def analyze_transcript(
         max_tokens=3500,
     )
     return parse_bounded_json_object(response.choices[0].message.content, max_characters=120_000)
+
+
+def resolve_meeting_context(
+    transcript: str,
+    supplied_title: str | None,
+    supplied_context: str | None,
+    matching_context: str | None,
+) -> dict:
+    """Systematically resolve goal, people, and project before meeting assessment."""
+    response = client.chat.completions.create(
+        model=MEETING_MODEL,
+        response_format={"type": "json_object"},
+        temperature=0.1,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You resolve the operating context for an executive meeting before it is analyzed. "
+                    "Work through goal, every distinct speaker, and primary project in that exact order. "
+                    "Candidate IDs are opaque: return only IDs from the supplied catalog. Prefer none or "
+                    "unknown over a weak match. Return JSON only. " + UNTRUSTED_CONTEXT_POLICY
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Return exactly: {primary_goal:{status:existing|new|none,id,title,description,confidence,"
+                    "evidence_excerpt,rationale},people:[{speaker_label,status:existing|new|unknown,id,name,"
+                    "description,confidence,evidence_excerpt,rationale}],primary_project:{status:existing|new|"
+                    "none,id,name,description,confidence,evidence_excerpt,rationale},suggested_flags:[{label,"
+                    "confidence,evidence_excerpt,rationale}]}. Inspect all three dimensions even when one is absent. "
+                    "A goal is a durable desired outcome, not an action item. A project is the primary ongoing "
+                    "initiative being worked on, not merely a topic. Include every distinct transcript speaker; "
+                    "use unknown when a speaker cannot be named. Mark existing only with a credible catalog match, "
+                    "and new only when the transcript gives a real name or durable entity. Suggestions are "
+                    "provisional and must not be described as saved.\n\n"
+                    + wrap_untrusted_context("supplied_meeting_context", f"{supplied_title or ''}\n{supplied_context or ''}", 8000)
+                    + "\n\n"
+                    + wrap_untrusted_context("candidate_catalog", matching_context or "none", 30000)
+                    + "\n\n"
+                    + wrap_untrusted_context("transcript", transcript, 120000)
+                ),
+            },
+        ],
+        max_tokens=2600,
+    )
+    return parse_bounded_json_object(response.choices[0].message.content, max_characters=100_000)
+
+
+def _resolution_to_analysis(resolution: dict) -> dict:
+    """Map the dedicated resolution pass to the existing approval proposal shape."""
+    result = {
+        "suggested_person_matches": [],
+        "new_people": [],
+        "suggested_goal_ids": [],
+        "new_goals": [],
+        "suggested_project_ids": [],
+        "new_projects": [],
+        "suggested_flags": resolution.get("suggested_flags") or [],
+    }
+    goal = resolution.get("primary_goal") or {}
+    if goal.get("status") == "existing" and goal.get("id"):
+        result["suggested_goal_ids"].append({**goal, "id": goal["id"]})
+    elif goal.get("status") == "new" and str(goal.get("title") or "").strip():
+        result["new_goals"].append(goal)
+    project = resolution.get("primary_project") or {}
+    if project.get("status") == "existing" and project.get("id"):
+        result["suggested_project_ids"].append({**project, "id": project["id"]})
+    elif project.get("status") == "new" and str(project.get("name") or "").strip():
+        result["new_projects"].append(project)
+    for person in resolution.get("people") or []:
+        if person.get("status") == "existing" and person.get("id"):
+            result["suggested_person_matches"].append({
+                **person,
+                "person_id": person["id"],
+            })
+        elif person.get("status") == "new" and str(person.get("name") or "").strip():
+            result["new_people"].append(person)
+    return result
 
 
 def analyze_leadership_feedback(
@@ -517,11 +591,24 @@ def analyze_leadership_feedback(
                     "Return JSON only: {leadership_observations:[{category,observation,confidence,"
                     "evidence_excerpt}],domain_assessments:[{domain,score,feedback,evidence_excerpt}],"
                     "profile_suggestions:[{suggestion_type,action,target_id,title,description,rationale,"
-                    "confidence,evidence_excerpt}]}. "
+                    "confidence,evidence_excerpt}],entity_enrichments:[{entity_type:person|project,target_id,"
+                    "entity_name,confidence,rationale,changes:[{field,operation:replace|append,current_value,"
+                    "proposed_value,rationale,evidence_excerpt}]}]}. "
                     "profile_suggestions may propose only strength or development_area. action must be create "
                     "for a genuinely new item or evidence for a nuance to an existing catalog item, using its "
                     "exact opaque target_id. One meeting is evidence, not a permanent personality judgment. "
                     "Prefer no profile suggestion over a vague or weak claim; never present a suggestion as saved. "
+                    "For entity_enrichments, inspect every resolved existing person and the resolved existing "
+                    "project. Propose only genuinely new, durable intelligence supported by the transcript. For a "
+                    "person, allowed fields are organization, team, relation, context, current_goals, "
+                    "stakeholder_priorities, risks_or_pressures, stakeholder_aspirations, how_i_create_value, "
+                    "potential_tensions, next_action, and relationship_strategy. For a project, allowed fields are "
+                    "goal, description, status, client, role, objective, timeline, in_scope, out_of_scope, "
+                    "deliverables, core_team, client_stakeholders, and risks. Use replace for corrected stable facts "
+                    "or current status; project status proposed_value must be active, paused, or completed. Use append "
+                    "for additional narrative or list intelligence. Copy current_value "
+                    "from the supplied resolved context. Do not propose an update when the existing record already "
+                    "contains the same meaning. Never infer permanent personality traits from one meeting. "
                     "Always return exactly one domain assessment, in this order, for Vision, People, "
                     "Prioritize & Execute, Time & Energy, and Learning & Development. Assess behavior, not just "
                     "explicit discussion of a domain. Use the transcript, speaker turns, questions, decisions, "
@@ -668,18 +755,30 @@ def reassess_meeting_with_context(meeting_id: int) -> None:
     transcript = snapshot["transcript"]
     if not transcript:
         raise ValueError("This meeting has no transcript or notes to assess.")
-    analysis = analyze_transcript(
+    raw_resolution = resolve_meeting_context(
         transcript,
         snapshot["title"],
         snapshot["supplied_context"],
         snapshot["matching_context"],
     )
-    provisional_context = _with_fresh_session(
-        lambda db: _provisional_context_for_analysis(db, snapshot["user_number"], analysis),
-        "resolve_provisional_context",
+    resolved = _with_fresh_session(
+        lambda db: _validated_resolution_context(db, snapshot["user_number"], raw_resolution),
+        "validate_meeting_context",
         meeting_id=meeting_id,
         attempt_id=attempt_id,
     )
+    analysis = analyze_transcript(
+        transcript,
+        snapshot["title"],
+        "\n\n".join(value for value in (snapshot["supplied_context"], resolved["prompt_context"]) if value),
+        snapshot["matching_context"],
+    )
+    analysis = {
+        **analysis,
+        **_resolution_to_analysis(resolved["resolution"]),
+        "meeting_resolution": resolved["resolution"],
+    }
+    provisional_context = resolved["prompt_context"]
     existing_analysis = _with_fresh_session(
         lambda db: _meeting_payload_for_coaching(db, meeting_id),
         "load_meeting_analysis",
@@ -688,7 +787,12 @@ def reassess_meeting_with_context(meeting_id: int) -> None:
     )
     coaching = analyze_leadership_feedback(
         transcript,
-        {**existing_analysis, "provisional_context": provisional_context},
+        {
+            **existing_analysis,
+            "meeting_resolution": resolved["resolution"],
+            "retrieved_entity_context": resolved["retrieved_context"],
+            "provisional_context": provisional_context,
+        },
         "\n\n".join(value for value in (snapshot["leadership_context"], provisional_context) if value),
     )
     _with_fresh_session(
@@ -771,11 +875,13 @@ def _save_context_reassessment(
         "new_projects": analysis.get("new_projects") or [],
         "new_goals": analysis.get("new_goals") or [],
         "profile_suggestions": coaching.get("profile_suggestions") or [],
+        "entity_enrichments": coaching.get("entity_enrichments") or [],
         "leadership_observations": coaching.get("leadership_observations") or [],
         "domain_assessments": coaching.get("domain_assessments") or [],
     })
     receipt = dict(context_receipt or {})
     receipt["provisional_context"] = _context_receipt_suggestions(analysis, coaching)
+    receipt["meeting_resolution"] = analysis.get("meeting_resolution")
     meeting.context_receipt = receipt
     meeting.leadership_assessment_version = LEADERSHIP_ASSESSMENT_VERSION
     meeting.processing_status = "ready"
@@ -963,6 +1069,7 @@ def _suggestion_fingerprint(item: dict) -> str:
         "target_id": item.get("target_id"),
         "speaker_label": str(item.get("speaker_label") or "").strip().casefold(),
         "title": str(item.get("title") or "").strip().casefold(),
+        "changes": item.get("changes") if item.get("action") == "update" else None,
     }
     return hashlib.sha256(json.dumps(stable, sort_keys=True).encode("utf-8")).hexdigest()
 
@@ -971,8 +1078,16 @@ def _analysis_suggestions(meeting: Meeting, analysis: dict) -> list[dict]:
     suggestions: list[dict] = []
     linked_goal_ids = {link.goal_id for link in meeting.goal_links}
     linked_project_ids = {link.project_id for link in meeting.project_links}
+    linked_people = {
+        str(item.speaker_label or "").strip().casefold(): item.person_id
+        for item in getattr(meeting, "participants", [])
+        if item.person_id
+    }
 
     for item in analysis.get("suggested_person_matches") or []:
+        speaker_key = str(item.get("speaker_label") or "").strip().casefold()
+        if linked_people.get(speaker_key) == item.get("person_id"):
+            continue
         if _safe_confidence(item.get("confidence")) >= 0.6 and item.get("person_id"):
             suggestions.append({
                 "suggestion_type": "person",
@@ -1040,12 +1155,39 @@ def _analysis_suggestions(meeting: Meeting, analysis: dict) -> list[dict]:
         if _safe_confidence(item.get("confidence")) < 0.6 or not str(item.get("title") or "").strip():
             continue
         suggestions.append({**item, "suggestion_type": suggestion_type, "action": action})
+    for item in analysis.get("entity_enrichments") or []:
+        entity_type = str(item.get("entity_type") or "").strip()
+        allowed_fields = PERSON_ENRICHMENT_FIELDS if entity_type == "person" else PROJECT_ENRICHMENT_FIELDS
+        changes = [
+            change for change in (item.get("changes") or [])
+            if isinstance(change, dict)
+            and change.get("field") in allowed_fields
+            and change.get("operation") in {"replace", "append"}
+            and change.get("proposed_value") is not None
+            and change.get("proposed_value") != ""
+        ]
+        if entity_type not in {"person", "project"} or not item.get("target_id") or not changes:
+            continue
+        if _safe_confidence(item.get("confidence")) < 0.6:
+            continue
+        suggestions.append({
+            **item,
+            "suggestion_type": f"{entity_type}_update",
+            "action": "update",
+            "title": str(item.get("entity_name") or f"Update {entity_type}").strip(),
+            "description": f"{len(changes)} proposed context update{'s' if len(changes) != 1 else ''}",
+            "changes": changes,
+        })
     return suggestions
 
 
 def _context_receipt_suggestions(analysis: dict, coaching: dict | None = None) -> list[dict]:
     """Keep a transparent, non-canonical record of context used for this result."""
-    combined = {**analysis, "profile_suggestions": (coaching or {}).get("profile_suggestions") or []}
+    combined = {
+        **analysis,
+        "profile_suggestions": (coaching or {}).get("profile_suggestions") or [],
+        "entity_enrichments": (coaching or {}).get("entity_enrichments") or [],
+    }
     rows = []
     for item in _analysis_suggestions(type("MeetingLinks", (), {"goal_links": [], "project_links": []})(), combined):
         rows.append({
@@ -1058,46 +1200,87 @@ def _context_receipt_suggestions(analysis: dict, coaching: dict | None = None) -
     return rows
 
 
-def _provisional_context_for_analysis(db: Session, user_number: str, analysis: dict) -> str:
-    """Resolve detected context for this meeting without changing canonical records."""
-    goal_ids = [item.get("id") for item in analysis.get("suggested_goal_ids") or [] if item.get("id")]
-    project_ids = [item.get("id") for item in analysis.get("suggested_project_ids") or [] if item.get("id")]
-    person_ids = [item.get("person_id") for item in analysis.get("suggested_person_matches") or [] if item.get("person_id")]
-    goals = {
-        item.id: item.title or item.goal_text
-        for item in db.query(JourneyGoal).filter(
-            JourneyGoal.user_number == user_number, JourneyGoal.id.in_(goal_ids)
-        ).all()
-    } if goal_ids else {}
-    projects = {
-        item.id: item.project_name
-        for item in db.query(JourneyProject).filter(
-            JourneyProject.user_number == user_number, JourneyProject.id.in_(project_ids)
-        ).all()
-    } if project_ids else {}
-    people = {
-        item.id: item.name
-        for item in db.query(JourneyPerson).filter(
-            JourneyPerson.user_number == user_number, JourneyPerson.id.in_(person_ids)
-        ).all()
-    } if person_ids else {}
-    provisional = {
-        "existing_people": [
-            {"speaker_label": item.get("speaker_label"), "person": people.get(item.get("person_id"))}
-            for item in analysis.get("suggested_person_matches") or []
-            if people.get(item.get("person_id"))
-        ],
-        "existing_goals": [goals[item_id] for item_id in goal_ids if item_id in goals],
-        "existing_projects": [projects[item_id] for item_id in project_ids if item_id in projects],
-        "new_people": analysis.get("new_people") or [],
-        "new_goals": analysis.get("new_goals") or [],
-        "new_projects": analysis.get("new_projects") or [],
-        "meeting_flags": analysis.get("suggested_flags") or [],
+def _validated_resolution_context(db: Session, user_number: str, resolution: dict) -> dict:
+    """Validate opaque IDs and retrieve full context without changing canonical records."""
+    identifiers = {user_number}
+    user = db.query(User).filter((User.phone_number == user_number) | (User.email == user_number)).first()
+    if user:
+        identifiers.update(value for value in (user.phone_number, user.email) if value)
+    sanitized = {
+        "primary_goal": {"status": "none"},
+        "people": [],
+        "primary_project": {"status": "none"},
+        "suggested_flags": resolution.get("suggested_flags") or [],
     }
-    return (
-        "Provisional context detected in this meeting. Use it to interpret this meeting now, but do not "
-        "treat it as user-confirmed or durable profile data:\n" + json.dumps(provisional, default=str)[:10000]
+    retrieved = {"goal": None, "people": [], "project": None}
+
+    goal = resolution.get("primary_goal") or {}
+    if goal.get("status") == "existing" and isinstance(goal.get("id"), int):
+        record = db.query(JourneyGoal).filter(
+            JourneyGoal.id == goal["id"], JourneyGoal.user_number.in_(identifiers)
+        ).first()
+        if record:
+            sanitized["primary_goal"] = {**goal, "status": "existing", "title": record.title or record.goal_text}
+            retrieved["goal"] = {
+                "id": record.id, "title": record.title, "goal_text": record.goal_text,
+                "why": record.why, "time_horizon": record.time_horizon,
+            }
+    elif goal.get("status") == "new" and str(goal.get("title") or "").strip():
+        sanitized["primary_goal"] = {**goal, "status": "new"}
+
+    for person in resolution.get("people") or []:
+        cleaned = {**person, "speaker_label": str(person.get("speaker_label") or "").strip()[:80]}
+        if person.get("status") == "existing" and isinstance(person.get("id"), int):
+            record = db.query(JourneyPerson).filter(
+                JourneyPerson.id == person["id"], JourneyPerson.user_number.in_(identifiers)
+            ).first()
+            if record:
+                cleaned.update({"status": "existing", "name": record.name})
+                retrieved["people"].append({
+                    "id": record.id, "speaker_label": cleaned["speaker_label"], "name": record.name,
+                    "organization": record.organization, "team": record.team, "relation": record.relation,
+                    "context": record.context, "current_goals": record.current_goals,
+                    "stakeholder_priorities": record.stakeholder_priorities,
+                    "risks_or_pressures": record.risks_or_pressures,
+                    "stakeholder_aspirations": record.stakeholder_aspirations,
+                    "how_i_create_value": record.how_i_create_value,
+                    "potential_tensions": record.potential_tensions, "next_action": record.next_action,
+                    "relationship_strategy": record.relationship_strategy,
+                })
+            else:
+                cleaned["status"] = "unknown"
+                cleaned.pop("id", None)
+        elif person.get("status") == "new" and str(person.get("name") or "").strip():
+            cleaned["status"] = "new"
+        else:
+            cleaned["status"] = "unknown"
+            cleaned.pop("id", None)
+        sanitized["people"].append(cleaned)
+
+    project = resolution.get("primary_project") or {}
+    if project.get("status") == "existing" and isinstance(project.get("id"), int):
+        record = db.query(JourneyProject).filter(
+            JourneyProject.id == project["id"], JourneyProject.user_number.in_(identifiers)
+        ).first()
+        if record:
+            sanitized["primary_project"] = {**project, "status": "existing", "name": record.project_name}
+            retrieved["project"] = {
+                "id": record.id, "name": record.project_name, "goal": record.goal,
+                "description": record.description, "status": record.status, "client": record.client,
+                "role": record.role, "objective": record.objective, "timeline": record.timeline,
+                "in_scope": record.in_scope, "out_of_scope": record.out_of_scope,
+                "deliverables": record.deliverables, "core_team": record.core_team,
+                "client_stakeholders": record.client_stakeholders, "risks": record.risks,
+            }
+    elif project.get("status") == "new" and str(project.get("name") or "").strip():
+        sanitized["primary_project"] = {**project, "status": "new"}
+
+    prompt_context = (
+        "Systematically resolved provisional meeting context. Use it for this meeting now, including the "
+        "retrieved records, but do not treat proposed matches or creations as user-confirmed:\n"
+        + json.dumps({"resolution": sanitized, "retrieved_context": retrieved}, default=str)[:24000]
     )
+    return {"resolution": sanitized, "retrieved_context": retrieved, "prompt_context": prompt_context}
 
 
 def _store_pending_enrichment_suggestions(db: Session, meeting: Meeting, analysis: dict) -> None:
@@ -1311,14 +1494,28 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
                 "claim_ids": list(twin_context.claim_ids),
             }
     people = db.query(JourneyPerson).filter(JourneyPerson.user_number == meeting.user_number).all()
+    matching_goals = db.query(JourneyGoal).filter(
+        JourneyGoal.user_number.in_(user_identifiers)
+    ).order_by(JourneyGoal.updated_at.desc()).limit(100).all()
     projects = db.query(JourneyProject).filter(
-        JourneyProject.user_number == meeting.user_number,
-        JourneyProject.status == "active",
-    ).all()
+        JourneyProject.user_number == meeting.user_number
+    ).order_by(JourneyProject.updated_at.desc()).limit(100).all()
     matching_context = {
-        "people": [{"id": p.id, "name": p.name, "organization": p.organization, "context": (p.context or "")[:300]} for p in people],
-        "goals": [{"id": g.id, "title": g.title or g.goal_text, "description": (g.goal_text or "")[:400]} for g in goals],
-        "projects": [{"id": p.id, "title": p.project_name, "description": (p.description or p.goal or "")[:400]} for p in projects],
+        "people": [{
+            "id": p.id, "name": p.name, "organization": p.organization, "team": p.team,
+            "relation": p.relation, "context": (p.context or "")[:600],
+            "current_goals": (p.current_goals or "")[:500],
+            "stakeholder_priorities": (p.stakeholder_priorities or "")[:500],
+        } for p in people],
+        "goals": [{
+            "id": g.id, "title": g.title or g.goal_text, "description": (g.goal_text or "")[:700],
+            "why": (g.why or "")[:500], "time_horizon": g.time_horizon,
+        } for g in matching_goals],
+        "projects": [{
+            "id": p.id, "title": p.project_name, "description": (p.description or "")[:700],
+            "goal": (p.goal or "")[:500], "objective": (p.objective or "")[:500],
+            "status": p.status, "client": p.client, "role": p.role, "timeline": p.timeline,
+        } for p in projects],
         "strengths": [{"id": item.id, "title": item.title, "description": item.strength[:500]} for item in strengths],
         "development_areas": [{"id": item.id, "title": item.title, "description": item.skill[:500]} for item in development_areas],
     }
@@ -1401,6 +1598,7 @@ def _save_analysis(
         "leadership_observations": coaching.get("leadership_observations") or [],
         "domain_assessments": coaching.get("domain_assessments") or [],
         "profile_suggestions": coaching.get("profile_suggestions") or [],
+        "entity_enrichments": coaching.get("entity_enrichments") or [],
     }
     _replace_analysis(db, meeting, analysis_with_coaching)
     meeting.leadership_assessment_version = LEADERSHIP_ASSESSMENT_VERSION
@@ -1409,6 +1607,7 @@ def _save_analysis(
     meeting.updated_at = datetime.now(timezone.utc)
     receipt = dict(context_receipt or {})
     receipt["provisional_context"] = _context_receipt_suggestions(analysis, coaching)
+    receipt["meeting_resolution"] = analysis.get("meeting_resolution")
     meeting.context_receipt = receipt
 
 
@@ -1555,15 +1754,44 @@ def process_meeting(meeting_id: int) -> None:
         if not transcript:
             raise ValueError("No recording, transcript, or notes were provided.")
 
+        stage = "resolving meeting context"
+        stage_started = time.monotonic()
+        _meeting_log(logging.INFO, "stage_started", meeting_id=meeting_id, attempt_id=attempt_id, stage="context_resolution")
+        raw_resolution = resolve_meeting_context(
+            transcript,
+            snapshot["title"],
+            snapshot["supplied_context"],
+            snapshot["matching_context"],
+        )
+        resolved = _with_fresh_session(
+            lambda db: _validated_resolution_context(db, snapshot["user_number"], raw_resolution),
+            "validate_meeting_context",
+            meeting_id=meeting_id,
+            attempt_id=attempt_id,
+        )
+        _meeting_log(
+            logging.INFO,
+            "stage_completed",
+            meeting_id=meeting_id,
+            attempt_id=attempt_id,
+            stage="context_resolution",
+            duration_ms=round((time.monotonic() - stage_started) * 1000),
+            resolved_people_count=len(resolved["resolution"].get("people") or []),
+        )
         stage = "analyzing meeting"
         stage_started = time.monotonic()
         _meeting_log(logging.INFO, "stage_started", meeting_id=meeting_id, attempt_id=attempt_id, stage="analysis")
         analysis = analyze_transcript(
             transcript,
             snapshot["title"],
-            snapshot["supplied_context"],
+            "\n\n".join(value for value in (snapshot["supplied_context"], resolved["prompt_context"]) if value),
             snapshot["matching_context"],
         )
+        analysis = {
+            **analysis,
+            **_resolution_to_analysis(resolved["resolution"]),
+            "meeting_resolution": resolved["resolution"],
+        }
         _meeting_log(
             logging.INFO,
             "stage_completed",
@@ -1575,12 +1803,7 @@ def process_meeting(meeting_id: int) -> None:
             topic_count=len(analysis.get("topics") or []),
             decision_count=len(analysis.get("decisions") or []),
         )
-        provisional_context = _with_fresh_session(
-            lambda db: _provisional_context_for_analysis(db, snapshot["user_number"], analysis),
-            "resolve_provisional_context",
-            meeting_id=meeting_id,
-            attempt_id=attempt_id,
-        )
+        provisional_context = resolved["prompt_context"]
         stage = "extracting action items"
         stage_started = time.monotonic()
         _meeting_log(logging.INFO, "stage_started", meeting_id=meeting_id, attempt_id=attempt_id, stage="task_extraction")
@@ -1601,6 +1824,7 @@ def process_meeting(meeting_id: int) -> None:
         coaching_analysis = {
             **analysis,
             "action_items": tasks.get("action_items") or [],
+            "retrieved_entity_context": resolved["retrieved_context"],
             "provisional_context": provisional_context,
         }
         coaching = analyze_leadership_feedback(

@@ -216,6 +216,7 @@ def _meeting_payload(meeting: Meeting, detail: bool = False):
                 "rationale": item.rationale,
                 "evidence_excerpt": item.evidence_excerpt,
                 "confidence": item.confidence,
+                "changes": (item.payload or {}).get("changes") or [],
                 "status": item.status,
                 "created_at": item.created_at,
                 "reviewed_at": item.reviewed_at,
@@ -664,6 +665,63 @@ def _append_confirmed_evidence(existing: str | None, suggestion: MeetingEnrichme
     return "\n\n".join(value for value in (existing, f"Confirmed meeting evidence: {evidence}") if value)
 
 
+PERSON_ENRICHMENT_FIELDS = {
+    "organization", "team", "relation", "context", "current_goals", "stakeholder_priorities",
+    "risks_or_pressures", "stakeholder_aspirations", "how_i_create_value", "potential_tensions",
+    "next_action", "relationship_strategy",
+}
+PROJECT_ENRICHMENT_FIELDS = {
+    "goal", "description", "status", "client", "role", "objective", "timeline", "in_scope",
+    "out_of_scope", "deliverables", "core_team", "client_stakeholders", "risks",
+}
+PROJECT_LIST_FIELDS = {"in_scope", "out_of_scope", "deliverables", "core_team", "client_stakeholders", "risks"}
+
+
+def _same_enrichment_value(current, expected) -> bool:
+    if current is None and (expected is None or expected in ("", "null")):
+        return True
+    if isinstance(current, list) or isinstance(expected, list):
+        return current == expected
+    return str(current or "").strip() == str(expected or "").strip()
+
+
+def _apply_entity_enrichment(record, changes: list[dict], allowed_fields: set[str], list_fields: set[str] | None = None) -> None:
+    list_fields = list_fields or set()
+    for change in changes:
+        field = str(change.get("field") or "").strip()
+        operation = str(change.get("operation") or "append").strip()
+        if field not in allowed_fields or operation not in {"replace", "append"}:
+            raise HTTPException(status_code=400, detail="The proposed context update contains an unsupported field.")
+        proposed = change.get("proposed_value")
+        if proposed is None or proposed == "":
+            continue
+        current = getattr(record, field)
+        if operation == "replace" and not _same_enrichment_value(current, change.get("current_value")):
+            raise HTTPException(
+                status_code=409,
+                detail=f"The current {field.replace('_', ' ')} changed after this suggestion was generated. Reassess the meeting before approving it.",
+            )
+        if field == "status" and proposed not in {"active", "paused", "completed"}:
+            raise HTTPException(status_code=400, detail="The proposed project status is invalid.")
+        if field in list_fields:
+            proposed_values = proposed if isinstance(proposed, list) else [proposed]
+            if operation == "append":
+                merged = list(current or [])
+                for value in proposed_values:
+                    if value not in merged:
+                        merged.append(value)
+                setattr(record, field, merged)
+            else:
+                setattr(record, field, proposed_values)
+        elif operation == "append":
+            proposed_text = str(proposed).strip()
+            current_text = str(current or "").strip()
+            if proposed_text and proposed_text.casefold() not in current_text.casefold():
+                setattr(record, field, "\n\n".join(value for value in (current_text, proposed_text) if value))
+        else:
+            setattr(record, field, str(proposed).strip())
+
+
 def _accept_meeting_suggestion(db: Session, meeting: Meeting, suggestion: MeetingEnrichmentSuggestion) -> None:
     suggestion_type = suggestion.suggestion_type
     action = suggestion.action
@@ -797,6 +855,25 @@ def _accept_meeting_suggestion(db: Session, meeting: Meeting, suggestion: Meetin
             suggestion.target_id = area.id
         else:
             raise HTTPException(status_code=409, detail="The development suggestion is incomplete.")
+    elif suggestion_type == "person_update" and action == "update" and target_id:
+        person = db.query(JourneyPerson).filter(
+            JourneyPerson.id == target_id, JourneyPerson.user_number == meeting.user_number
+        ).first()
+        if not person:
+            raise HTTPException(status_code=404, detail="The person record no longer exists.")
+        _apply_entity_enrichment(person, (suggestion.payload or {}).get("changes") or [], PERSON_ENRICHMENT_FIELDS)
+    elif suggestion_type == "project_update" and action == "update" and target_id:
+        project = db.query(JourneyProject).filter(
+            JourneyProject.id == target_id, JourneyProject.user_number == meeting.user_number
+        ).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="The project record no longer exists.")
+        _apply_entity_enrichment(
+            project,
+            (suggestion.payload or {}).get("changes") or [],
+            PROJECT_ENRICHMENT_FIELDS,
+            PROJECT_LIST_FIELDS,
+        )
     else:
         raise HTTPException(status_code=400, detail="Unsupported meeting suggestion.")
 
