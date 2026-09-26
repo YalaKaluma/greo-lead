@@ -844,6 +844,11 @@ class Meeting(Base):
     project_links = relationship("MeetingProjectLink", back_populates="meeting", cascade="all, delete-orphan")
     attendees = relationship("MeetingAttendee", back_populates="meeting", cascade="all, delete-orphan")
     context_notes = relationship("MeetingContextNote", back_populates="meeting", cascade="all, delete-orphan")
+    enrichment_suggestions = relationship(
+        "MeetingEnrichmentSuggestion",
+        back_populates="meeting",
+        cascade="all, delete-orphan",
+    )
 
 
 class MeetingAttendee(Base):
@@ -869,6 +874,36 @@ class MeetingContextNote(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     meeting = relationship("Meeting", back_populates="context_notes")
+
+
+class MeetingEnrichmentSuggestion(Base):
+    """A meeting-derived database enrichment that requires explicit user approval."""
+
+    __tablename__ = "meeting_enrichment_suggestions"
+    __table_args__ = (
+        UniqueConstraint("meeting_id", "fingerprint", name="uq_meeting_enrichment_fingerprint"),
+        Index("idx_meeting_enrichment_status", "meeting_id", "status"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True)
+    suggestion_type = Column(String(50), nullable=False, index=True)
+    action = Column(String(30), nullable=False, default="create")
+    target_id = Column(Integer, nullable=True)
+    speaker_label = Column(String(80), nullable=True)
+    title = Column(String(240), nullable=False)
+    description = Column(Text, nullable=True)
+    rationale = Column(Text, nullable=True)
+    evidence_excerpt = Column(Text, nullable=True)
+    confidence = Column(Float, nullable=True)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    payload = Column(MutableDict.as_mutable(JSONB), nullable=True)
+    fingerprint = Column(String(64), nullable=False)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    meeting = relationship("Meeting", back_populates="enrichment_suggestions")
 
 
 class MeetingParticipant(Base):
