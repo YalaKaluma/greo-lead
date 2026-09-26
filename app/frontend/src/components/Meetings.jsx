@@ -43,8 +43,9 @@ const toDateTimeLocal = (value) => {
 };
 
 function Confidence({ value }) {
+  const { t } = useLanguage();
   if (value == null) return null;
-  return <span className="text-xs text-slate-500">{Math.round(value * 100)}% confidence</span>;
+  return <span className="text-xs text-slate-500">{Math.round(value * 100)}% {t('meetings.confidence')}</span>;
 }
 
 function Evidence({ children }) {
@@ -517,6 +518,7 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
   const [askingAlfred, setAskingAlfred] = useState(false);
   const [meetingChatError, setMeetingChatError] = useState('');
   const [assessingLeadership, setAssessingLeadership] = useState(false);
+  const [reviewingSuggestion, setReviewingSuggestion] = useState(null);
   const [contextOptions, setContextOptions] = useState({ current_user: { title: 'Me' }, people: [], goals: [], projects: [] });
   const transcript = meeting.transcript_text || meeting.user_notes || '';
   const visibleTranscript = useMemo(() => {
@@ -548,6 +550,22 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, target_id: Number(targetId) })
     });
     onChanged(meeting.id);
+  };
+
+  const reviewSuggestion = async (suggestionId, decision) => {
+    setReviewingSuggestion(suggestionId);
+    setActionError('');
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/${meeting.id}/suggestions/${suggestionId}/review`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision })
+      });
+      if (!response.ok) throw new Error((await response.json()).detail || t('meetings.contextReview.error'));
+      onChanged(meeting.id);
+    } catch (error) {
+      setActionError(error.message);
+    } finally {
+      setReviewingSuggestion(null);
+    }
   };
 
   const makeTask = async (actionId) => {
@@ -692,8 +710,17 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
               <button disabled={askingAlfred || !meetingQuestion.trim()} className="mt-2 w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{askingAlfred ? t('meetings.chat.thinking') : t('meetings.chat.submit')}</button>
             </form>
           </Section>
-          <Section title="Overview"><dl className="space-y-3 text-sm"><div><dt className="text-slate-500">Meeting type</dt><dd className="font-medium">{meeting.meeting_type || 'Other'}</dd></div><div><dt className="text-slate-500">Participants</dt><dd className="mt-2 space-y-2">{meeting.participants.length ? meeting.participants.map((participant) => <label key={participant.id} className="block"><span className="mb-1 block text-xs font-medium">{participant.is_current_user ? 'Me' : participant.speaker_label || participant.display_name}</span><select value={participant.is_current_user ? '__me__' : participant.person_id || ''} onChange={(event) => matchParticipant(participant.id, event.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-2"><option value="">Unmatched — {participant.speaker_label || participant.display_name}</option><option value="__me__">Me — {contextOptions.current_user?.title || 'Current user'}</option>{contextOptions.people.map((person) => <option key={person.id} value={person.id}>{person.title}</option>)}</select></label>) : <span className="font-medium">Not identified</span>}</dd></div></dl></Section>
-          <Section title="Related Work"><div className="space-y-4"><div><p className="mb-2 text-xs font-semibold uppercase text-slate-500">Goals</p>{meeting.related_goals?.map((goal) => <span key={goal.id} className="mb-2 mr-2 inline-block rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-800">{goal.title}</span>)}<select defaultValue="" onChange={(event) => { addContextLink('goals', event.target.value); event.target.value = ''; }} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"><option value="">Link a goal…</option>{contextOptions.goals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select></div><div><p className="mb-2 text-xs font-semibold uppercase text-slate-500">Projects</p>{meeting.related_projects?.map((project) => <span key={project.id} className="mb-2 mr-2 inline-block rounded-full bg-violet-50 px-3 py-1 text-xs text-violet-800">{project.title}</span>)}<select defaultValue="" onChange={(event) => { addContextLink('projects', event.target.value); event.target.value = ''; }} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"><option value="">Link a project…</option>{contextOptions.projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}</select></div></div></Section>
+          <Section title={t('meetings.contextReview.title')}>
+            <p className="text-sm leading-5 text-slate-600">{t('meetings.contextReview.intro')}</p>
+            <dl className="mt-4 space-y-3 text-sm"><div><dt className="text-slate-500">{t('meetings.contextReview.meetingType')}</dt><dd className="font-medium">{meeting.meeting_type || t('meetings.contextReview.other')}</dd></div><div><dt className="text-slate-500">{t('meetings.contextReview.participants')}</dt><dd className="mt-2 space-y-2">{meeting.participants.length ? meeting.participants.map((participant) => <label key={participant.id} className="block"><span className="mb-1 block text-xs font-medium">{participant.is_current_user ? t('meetings.contextReview.me') : participant.speaker_label || participant.display_name}</span><select value={participant.is_current_user ? '__me__' : participant.person_id || ''} onChange={(event) => matchParticipant(participant.id, event.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-2"><option value="">{t('meetings.contextReview.unmatched')} — {participant.speaker_label || participant.display_name}</option><option value="__me__">{t('meetings.contextReview.me')} — {contextOptions.current_user?.title || t('meetings.contextReview.currentUser')}</option>{contextOptions.people.map((person) => <option key={person.id} value={person.id}>{person.title}</option>)}</select></label>) : <span className="font-medium">{t('meetings.contextReview.notIdentified')}</span>}</dd></div></dl>
+            <div className="mt-5 border-t border-slate-200 pt-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('meetings.contextReview.suggested')}</p>
+              {(meeting.enrichment_suggestions || []).filter((item) => item.status === 'pending').length ? <div className="mt-3 space-y-3">{meeting.enrichment_suggestions.filter((item) => item.status === 'pending').map((item) => <div key={item.id} className="rounded-xl border border-amber-200 bg-amber-50 p-3"><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{t(`meetings.contextReview.type.${item.type}`)}</p><p className="mt-1 font-semibold text-slate-900">{item.title}</p></div><Confidence value={item.confidence} /></div>{item.description && <p className="mt-2 text-sm text-slate-700">{item.description}</p>}{item.rationale && <p className="mt-2 text-xs text-slate-500">{item.rationale}</p>}<Evidence>{item.evidence_excerpt}</Evidence><div className="mt-3 flex gap-2"><button disabled={reviewingSuggestion === item.id} onClick={() => reviewSuggestion(item.id, 'accepted')} className="rounded-lg bg-emerald-700 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50">{t('meetings.contextReview.yes')}</button><button disabled={reviewingSuggestion === item.id} onClick={() => reviewSuggestion(item.id, 'rejected')} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-50">{t('meetings.contextReview.no')}</button></div></div>)}</div> : <p className="mt-2 text-sm text-slate-500">{t('meetings.contextReview.noSuggestions')}</p>}
+            </div>
+            <div className="mt-4 border-t border-slate-200 pt-4 text-sm text-slate-600">{t('meetings.contextReview.tasks')}: <span className="font-semibold text-slate-900">{meeting.action_items?.length || 0}</span></div>
+            {(meeting.context_receipt?.meeting_flags || []).length > 0 && <div className="mt-4"><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{t('meetings.contextReview.confirmedFlags')}</p>{meeting.context_receipt.meeting_flags.map((flag) => <span key={flag.suggestion_id || flag.label} className="mb-2 mr-2 inline-block rounded-full bg-emerald-50 px-3 py-1 text-xs text-emerald-800">{flag.label}</span>)}</div>}
+            <details className="mt-4 border-t border-slate-200 pt-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">{t('meetings.contextReview.manual')}</summary><div className="mt-3 space-y-4"><div><p className="mb-2 text-xs font-semibold uppercase text-slate-500">{t('meetings.contextReview.goals')}</p>{meeting.related_goals?.map((goal) => <span key={goal.id} className="mb-2 mr-2 inline-block rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-800">{goal.title}</span>)}<select defaultValue="" onChange={(event) => { addContextLink('goals', event.target.value); event.target.value = ''; }} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"><option value="">{t('meetings.contextReview.linkGoal')}</option>{contextOptions.goals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select></div><div><p className="mb-2 text-xs font-semibold uppercase text-slate-500">{t('meetings.contextReview.projects')}</p>{meeting.related_projects?.map((project) => <span key={project.id} className="mb-2 mr-2 inline-block rounded-full bg-violet-50 px-3 py-1 text-xs text-violet-800">{project.title}</span>)}<select defaultValue="" onChange={(event) => { addContextLink('projects', event.target.value); event.target.value = ''; }} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"><option value="">{t('meetings.contextReview.linkProject')}</option>{contextOptions.projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}</select></div></div></details>
+          </Section>
           {meeting.has_recording && <Section title="Recording"><audio controls className="w-full" src={`${apiUrl}/api/meetings/${meeting.id}/recording?user_number=${encodeURIComponent(userNumber)}`} /><button onClick={async () => { await fetch(`${apiUrl}/api/meetings/${meeting.id}/recording?user_number=${encodeURIComponent(userNumber)}`, { method: 'DELETE' }); onChanged(meeting.id); }} className="mt-3 text-sm font-medium text-red-600">Delete recording, keep transcript</button></Section>}
         </aside>
       </div>}
