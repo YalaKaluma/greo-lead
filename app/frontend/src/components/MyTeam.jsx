@@ -1236,6 +1236,9 @@ function normalizePayload(data) {
     if (payload[field] === undefined || payload[field] === null) return;
     if (typeof payload[field] === 'string') payload[field] = payload[field].trim();
   });
+  ['last_interaction_at', 'current_contribution', 'potential_contribution'].forEach((field) => {
+    if (payload[field] === '') payload[field] = null;
+  });
   return payload;
 }
 
