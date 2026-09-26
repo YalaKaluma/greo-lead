@@ -13,8 +13,8 @@ def _meeting(*, goal_ids=(), project_ids=()):
 def test_analysis_suggestions_are_proposals_and_skip_existing_links():
     analysis = {
         "suggested_goal_ids": [
-            {"id": 10, "confidence": 0.95},
-            {"id": 11, "confidence": 0.91},
+            {"id": 10, "confidence": 0.95, "evidence_excerpt": "We need to grow Engine."},
+            {"id": 11, "confidence": 0.91, "evidence_excerpt": "This advances the platform goal."},
         ],
         "suggested_project_ids": [{"id": 20, "confidence": 0.92}],
         "new_people": [{
@@ -68,6 +68,89 @@ def test_missing_or_invalid_confidence_is_ignored_without_aborting_save():
     }
 
     assert service._analysis_suggestions(_meeting(), analysis) == []
+
+
+def test_confidence_outside_zero_to_one_is_rejected_not_clamped():
+    assert service._safe_confidence(4) == 0.0
+    assert service._safe_confidence(-0.1) == 0.0
+    assert service._safe_confidence(float("inf")) == 0.0
+    assert service._safe_confidence(0.86) == 0.86
+
+
+def test_existing_match_requires_evidence_and_clear_lead_over_runner_up():
+    weak = {
+        "suggested_goal_ids": [{
+            "id": 3,
+            "confidence": 0.9,
+            "runner_up_id": 4,
+            "runner_up_confidence": 0.83,
+            "evidence_excerpt": "We discussed growth.",
+        }]
+    }
+    strong = {
+        "suggested_goal_ids": [{
+            "id": 3,
+            "confidence": 0.9,
+            "runner_up_id": 4,
+            "runner_up_confidence": 0.55,
+            "evidence_excerpt": "This meeting is about reaching the Engine growth target.",
+        }]
+    }
+
+    assert service._analysis_suggestions(_meeting(), weak) == []
+    assert service._analysis_suggestions(_meeting(), strong)[0]["target_id"] == 3
+
+
+def test_unnamed_speaker_is_not_created_as_a_person():
+    analysis = {
+        "new_people": [{
+            "speaker_label": "A",
+            "name": "Speaker A",
+            "confidence": 0.95,
+            "evidence_excerpt": "A: I will lead the work.",
+        }]
+    }
+
+    assert service._analysis_suggestions(_meeting(), analysis) == []
+
+
+def test_named_speaker_can_be_proposed_as_a_new_person():
+    analysis = {
+        "new_people": [{
+            "speaker_label": "Christian",
+            "name": "Christian",
+            "confidence": 0.9,
+            "evidence_excerpt": "Christian: I lead the client workstream.",
+        }]
+    }
+
+    suggestions = service._analysis_suggestions(_meeting(), analysis)
+
+    assert suggestions[0]["title"] == "Christian"
+
+
+def test_person_enrichment_rejects_a_name_used_as_database_id():
+    analysis = {
+        "entity_enrichments": [{
+            "entity_type": "person",
+            "target_id": "Christian",
+            "entity_name": "Christian",
+            "confidence": 0.9,
+            "changes": [{
+                "field": "context",
+                "operation": "append",
+                "proposed_value": "Leads the work.",
+            }],
+        }]
+    }
+
+    assert service._analysis_suggestions(_meeting(), analysis) == []
+
+
+def test_transcript_speakers_are_deduplicated_in_order():
+    transcript = "A: Hello\nB: Hi\nA: Next point\nMe: Agreed"
+
+    assert service._transcript_speaker_labels(transcript) == ["A", "B", "Me"]
 
 
 def test_suggestion_fingerprint_is_stable_for_equivalent_labels():
