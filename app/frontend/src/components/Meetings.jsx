@@ -686,7 +686,7 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
 
   const resolutionLabel = (item, nameField) => {
     if (!item || item.status === 'none') return t('meetings.contextReview.noneDetected');
-    if (item.status === 'unknown') return `${item.speaker_label || t('meetings.contextReview.unknown')} — ${t('meetings.contextReview.unknown')}`;
+    if (item.status === 'unknown') return `${item.speaker_label || t('meetings.contextReview.unknown')} — ${t('meetings.contextReview.identifyParticipant')}`;
     return `${item[nameField] || item.speaker_label || t('meetings.contextReview.unknown')} — ${t(`meetings.contextReview.status.${item.status}`)}`;
   };
 
