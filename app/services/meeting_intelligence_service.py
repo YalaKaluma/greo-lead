@@ -224,7 +224,10 @@ def _safe_confidence(value):
     try:
         return max(0.0, min(float(value), 1.0))
     except (TypeError, ValueError):
-        return None
+        # AI structured output can omit an optional confidence value. Treat an
+        # absent or malformed score as unsupported rather than letting threshold
+        # comparisons fail while the reassessment is being saved.
+        return 0.0
 
 
 def _safe_date(value):
