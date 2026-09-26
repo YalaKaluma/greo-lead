@@ -892,7 +892,7 @@
   "meetings.contextReview.title": "Contexte de la réunion",
   "meetings.contextReview.intro": "Alfred a utilisé ces suggestions immédiatement pour cette réunion. Approuvez uniquement ce qui doit enrichir durablement votre contexte.",
   "meetings.contextReview.meetingType": "Type de réunion",
-  "meetings.contextReview.participants": "Participants",
+  "meetings.contextReview.participants": "Personnes présentes",
   "meetings.contextReview.other": "Autre",
   "meetings.contextReview.me": "Moi",
   "meetings.contextReview.currentUser": "Utilisateur actuel",
