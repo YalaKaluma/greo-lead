@@ -578,7 +578,7 @@ def resolve_meeting_context(
                 "not the primary project. If the main client/initiative has no matching record, propose a "
                 "new project, never force it into an unrelated existing one. Next identify actual attendees "
                 "using greetings, direct address, replies and introductions; distinguish them from people "
-                "merely discussed. Finally select a goal only if the meeting substantively advances that "
+                "merely discussed. Finally choose a goal only if the meeting substantively advances that "
                 "specific outcome. A commercial proposal is not automatically a UX or data onboarding goal. "
                 "It is valid and preferable to return no goal when evidence is weak. "
                 "Copy the selected catalog name/title AND its exact ID together. Do not use list positions "
