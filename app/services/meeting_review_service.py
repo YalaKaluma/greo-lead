@@ -18,9 +18,14 @@ def review_actions(client, model, transcript, analysis, candidates):
             "Resolve first-person commitments by Me to owner_name='Me', even without a personal name. "
             "Distinguish the local consulting team from the client and from Engine. Do not transfer work "
             "between them. Mixed diarization labels may represent several people, including Me; assign named "
-            "owners only when supported by direct address or explicit context. Otherwise retain the speaker label. "
+            "owners only when supported by explicit context. A vocative is the ADDRESSEE, not the speaker: "
+            "'Thanks Yala, I'll finish the proposal' is the OTHER speaker's commitment, not Yala's. "
+            "Otherwise retain the speaker label. Preserve explicit counterparty commitments such as asking Ross; "
+            "a conditional user offer to contact someone is not a replacement for those commitments. "
             "Due dates use the meeting date, not today's date. Do not turn a date range into a firm first-day deadline. "
-            "Return {action_items:[{description,owner_name,due_date,confidence,evidence_excerpt,evidence_line_ids}]}. "
+            "The meeting date itself is NEVER a deadline. A due date requires source lines stating a temporal "
+            "commitment for that action; otherwise null. Cite these in due_date_evidence_line_ids (or []). "
+            "Return {action_items:[{description,owner_name,due_date,confidence,evidence_excerpt,evidence_line_ids,due_date_evidence_line_ids}]}. "
             "Dates are ISO strings or null; confidence is 0..1. evidence_excerpt may be empty: provide exact "
             "supporting numbered line IDs and the application copies the quote. " + UNTRUSTED_CONTEXT_POLICY)},
             {"role": "user", "content": f"Meeting date: {analysis.get('meeting_date') or 'unknown'}\n"
@@ -47,6 +52,8 @@ def review_coaching(client, model, transcript, analysis, coaching):
         messages=[{"role": "system", "content": (
             "Return JSON only. You are an evidence reviewer, not a critic looking for something to criticize. Audit this coaching "
             "against the entire transcript. Return the same top-level fields with corrected contents. "
+            "Extracted actions are fallible drafts, not confirmed facts. Never praise or criticize a deadline "
+            "on the basis of action metadata alone; verify the actual timing words in the transcript. "
             "Check every negative claim for counterevidence: 'this weekend', named dates, assigned ownership, "
             "expressed limits or explicit invitations count. Never say a deadline or boundary was absent when "
             "it was stated. Do not impose generic coaching because a template has a Growth edge field. "
@@ -62,7 +69,7 @@ def review_coaching(client, model, transcript, analysis, coaching):
             "Return no profile suggestions unless strongly supported. Keep entity_enrichments unchanged. "
             + UNTRUSTED_CONTEXT_POLICY)}, {"role": "user", "content":
                 wrap_untrusted_context("draft_coaching", json.dumps(coaching), 45000)
-                + wrap_untrusted_context("confirmed_extracted_actions", json.dumps(analysis.get('action_items') or []), 16000)
+                + wrap_untrusted_context("draft_extracted_actions", json.dumps(analysis.get('action_items') or []), 16000)
                 + wrap_untrusted_context("transcript", numbered_transcript(transcript), 150000)}])
     result = parse_bounded_json_object(response.choices[0].message.content, max_characters=140000)
     for key in ("domain_assessments", "leadership_observations", "profile_suggestions"):

@@ -228,3 +228,23 @@ def test_retry_existing_analysis_uses_preserving_reassessment(db):
     retry_meeting(meeting.id, background, "test", db)
     assert background.tasks[0].func is service.reassess_meeting_with_context
     assert db.get(models.Meeting, meeting.id).executive_summary == "Existing summary"
+
+
+def test_sparse_evidence_does_not_include_unrelated_turns():
+    from app.services.meeting_resolution_contract import sourced_evidence, grounded
+    transcript = "Me: I will share the deck.\nA: Unrelated private discussion.\nMe: On Friday."
+    quote = sourced_evidence({"evidence_line_ids": [1, 3]}, transcript)["evidence_excerpt"]
+    assert "Unrelated" not in quote
+    assert "[…]" in quote
+    assert grounded(quote, transcript)
+    assert not grounded(quote + " fabricated", transcript)
+
+
+def test_task_deadline_requires_temporal_source_evidence():
+    from app.services.meeting_task_extraction_service import validate_due_date
+    transcript = "Me: Let me adjust that wording.\nMe: I will send it on Wednesday."
+    item = {"due_date": "2026-09-18"}
+    assert validate_due_date(item, transcript)["due_date"] is None
+    assert validate_due_date({**item, "due_date_evidence_line_ids": [1]}, transcript)["due_date"] is None
+    assert validate_due_date({**item, "due_date": "2026-09-23", "due_date_evidence_line_ids": [2]}, transcript)["due_date"] == "2026-09-23"
+    assert validate_due_date({**item, "due_date_evidence_line_ids": [99]}, transcript)["due_date"] is None
