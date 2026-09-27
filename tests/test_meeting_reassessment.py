@@ -197,6 +197,7 @@ def test_coverage_review_recovers_omitted_action_and_explicit_self_owner(monkeyp
     responses = iter([{"action_items": []}, {"action_items": [{"description": "Adjust the certification wording",
         "owner_name": None, "due_date": None, "confidence": .95, "evidence_line_ids": [1]}]}])
     def complete(**_kwargs):
+        assert "json" in " ".join(m["content"] for m in _kwargs["messages"]).lower()
         return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(next(responses))))])
     monkeypatch.setattr(tasks.client.chat.completions, "create", complete)
     result = tasks.extract_action_items("Me: Let me adjust that wording.", {"meeting_date": "2026-09-18"})
@@ -207,6 +208,7 @@ def test_coverage_review_recovers_omitted_action_and_explicit_self_owner(monkeyp
 def test_coaching_review_rejects_other_speaker_only_evidence(monkeypatch):
     from app.services.meeting_review_service import review_coaching
     def complete(**_kwargs):
+        assert "json" in " ".join(m["content"] for m in _kwargs["messages"]).lower()
         payload = {"domain_assessments": [{"domain": "People", "score": 5, "feedback": "Claim",
                     "evidence_line_ids": [1]}], "profile_suggestions": [{"title": "Claim", "evidence_line_ids": [1]}]}
         return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))])
@@ -214,3 +216,15 @@ def test_coaching_review_rejects_other_speaker_only_evidence(monkeypatch):
     result = review_coaching(service.client, "test", "A: I will make time for this.\nMe: Thank you.", {}, {})
     assert result["domain_assessments"][0]["score"] is None
     assert result["profile_suggestions"] == []
+
+
+def test_retry_existing_analysis_uses_preserving_reassessment(db):
+    from fastapi import BackgroundTasks
+    from app.routers.meetings import retry_meeting
+    meeting = models.Meeting(user_number="test", title="Retry", source_type="notes", processing_status="failed",
+                             transcript_text="Me: Let me adjust that", executive_summary="Existing summary")
+    db.add(meeting); db.commit()
+    background = BackgroundTasks()
+    retry_meeting(meeting.id, background, "test", db)
+    assert background.tasks[0].func is service.reassess_meeting_with_context
+    assert db.get(models.Meeting, meeting.id).executive_summary == "Existing summary"
