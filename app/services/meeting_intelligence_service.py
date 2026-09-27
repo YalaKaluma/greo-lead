@@ -26,7 +26,8 @@ from app.db import SessionLocal
 from app.utils.safe_errors import log_failure
 from app.services.meeting_task_extraction_service import extract_action_items
 from app.services.meeting_review_service import review_coaching
-from app.services.meeting_resolution_contract import resolution_schema, validate_catalog_choices, canonical_people, grounded, normalized, numbered_transcript
+from app.services.meeting_entity_intelligence_service import extract_entity_intelligence
+from app.services.meeting_resolution_contract import resolution_schema, validate_catalog_choices, canonical_people, grounded, normalized, numbered_transcript, sourced_evidence
 from app.services.meeting_task_priority_service import score_pending_meeting_action_items
 from app.services.twin_context_service import get_twin_context
 from app.utils.ai_safety import UNTRUSTED_CONTEXT_POLICY, parse_bounded_json_object, wrap_untrusted_context
@@ -57,7 +58,7 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
-MEETING_PROMPT_VERSION = "meeting-v12-local-attribution"
+MEETING_PROMPT_VERSION = "meeting-v13-entity-intelligence"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4.1")
 MEETING_CONTEXT_MODEL = os.getenv("MEETING_CONTEXT_MODEL", "gpt-4.1")
 MEETING_COACHING_MODEL = os.getenv("MEETING_COACHING_MODEL", MEETING_MODEL)
@@ -691,9 +692,7 @@ def analyze_leadership_feedback(
                     "Return JSON only: {leadership_observations:[{category,observation,confidence,"
                     "evidence_excerpt}],domain_assessments:[{domain,score,feedback,evidence_excerpt}],"
                     "profile_suggestions:[{suggestion_type,action,target_id,title,description,rationale,"
-                    "confidence,evidence_excerpt}],entity_enrichments:[{entity_type:person|project,target_id,"
-                    "entity_name,confidence,rationale,changes:[{field,operation:replace|append,current_value,"
-                    "proposed_value,rationale,evidence_excerpt}]}]}. "
+                    "confidence,evidence_excerpt}],entity_enrichments:[]}. "
                     "Every confidence value must be a decimal from 0.0 to 1.0. Only domain assessment score uses "
                     "the 1-5 scale. Every entity_enrichment target_id must be the exact numeric ID from the supplied "
                     "retrieved entity context; never put a person's or project's name in target_id. "
@@ -701,17 +700,7 @@ def analyze_leadership_feedback(
                     "for a genuinely new item or evidence for a nuance to an existing catalog item, using its "
                     "exact opaque target_id. One meeting is evidence, not a permanent personality judgment. "
                     "Prefer no profile suggestion over a vague or weak claim; never present a suggestion as saved. "
-                    "For entity_enrichments, inspect every resolved existing person and the resolved existing "
-                    "project. Propose only genuinely new, durable intelligence supported by the transcript. For a "
-                    "person, allowed fields are organization, team, relation, context, current_goals, "
-                    "stakeholder_priorities, risks_or_pressures, stakeholder_aspirations, how_i_create_value, "
-                    "potential_tensions, next_action, and relationship_strategy. For a project, allowed fields are "
-                    "goal, description, status, client, role, objective, timeline, in_scope, out_of_scope, "
-                    "deliverables, core_team, client_stakeholders, and risks. Use replace for corrected stable facts "
-                    "or current status; project status proposed_value must be active, paused, or completed. Use append "
-                    "for additional narrative or list intelligence. Copy current_value "
-                    "from the supplied resolved context. Do not propose an update when the existing record already "
-                    "contains the same meaning. Never infer permanent personality traits from one meeting. "
+                    "Keep entity_enrichments empty: a dedicated source-grounded pass extracts these separately. "
                     "Always return exactly one domain assessment, in this order, for Vision, People, "
                     "Prioritize & Execute, Time & Energy, and Learning & Development. Assess behavior, not just "
                     "explicit discussion of a domain. Use the transcript, speaker turns, questions, decisions, "
@@ -905,7 +894,9 @@ def _reassess_meeting_with_context(meeting_id: int) -> None:
         "\n\n".join(value for value in (snapshot["leadership_context"], provisional_context) if value),
     )
     coaching["entity_enrichments"] = _validated_entity_enrichments(
-        coaching.get("entity_enrichments") or [], resolved["retrieved_context"], transcript
+        extract_entity_intelligence(client, MEETING_CONTEXT_MODEL, transcript,
+                                    resolved["retrieved_context"], snapshot.get("meeting_date")),
+        resolved["retrieved_context"], transcript
     )
     _with_fresh_session(
         lambda db: _save_context_reassessment(db, meeting_id, analysis, coaching, snapshot.get("context_receipt")),
@@ -1371,6 +1362,12 @@ def _validated_entity_enrichments(items: list[dict], retrieved_context: dict, tr
     }
     allowed_ids["project"].update(_strict_integer_id(p.get("id")) for p in retrieved_context.get("projects", []))
     allowed_ids["project"].discard(None)
+    records = {
+        ("person", _strict_integer_id(record.get("id"))): record
+        for record in retrieved_context.get("people") or []
+    }
+    for record in [retrieved_context.get("project") or {}, *(retrieved_context.get("projects") or [])]:
+        records[("project", _strict_integer_id(record.get("id")))] = record
     validated = []
     for item in items or []:
         entity_type = str(item.get("entity_type") or "").strip()
@@ -1379,8 +1376,16 @@ def _validated_entity_enrichments(items: list[dict], retrieved_context: dict, tr
             continue
         if _safe_confidence(item.get("confidence")) < 0.6:
             continue
-        changes = [change for change in item.get("changes") or []
-                   if normalized(change.get("proposed_value")) != normalized(change.get("current_value"))
+        sourced_changes = [sourced_evidence(change, transcript) for change in item.get("changes") or []]
+        fields = PERSON_ENRICHMENT_FIELDS if entity_type == "person" else PROJECT_ENRICHMENT_FIELDS
+        record = records[(entity_type, target_id)]
+        changes = [change for change in sourced_changes
+                   if change.get("field") in fields
+                   and change.get("operation") in {"append", "replace"}
+                   and normalized(change.get("current_value")) == normalized(record.get(change.get("field")))
+                   and (change.get("field") != "status" or change.get("proposed_value") in {"active", "paused", "completed"})
+                   and normalized(change.get("proposed_value"))
+                   and normalized(change.get("proposed_value")) != normalized(change.get("current_value"))
                    and (not transcript or grounded(change.get("evidence_excerpt"), transcript))]
         if not changes:
             continue
@@ -2169,7 +2174,9 @@ def process_meeting(meeting_id: int) -> None:
             "\n\n".join(value for value in (snapshot["leadership_context"], provisional_context) if value),
         )
         coaching["entity_enrichments"] = _validated_entity_enrichments(
-            coaching.get("entity_enrichments") or [], resolved["retrieved_context"], transcript
+            extract_entity_intelligence(client, MEETING_CONTEXT_MODEL, transcript,
+                                        resolved["retrieved_context"], snapshot.get("meeting_date")),
+            resolved["retrieved_context"], transcript
         )
         _meeting_log(
             logging.INFO, "stage_completed", meeting_id=meeting_id, attempt_id=attempt_id,
