@@ -1,5 +1,6 @@
 """Strict output contract and grounding checks for meeting entity resolution."""
 import re
+from difflib import SequenceMatcher
 
 
 def normalized(value):
@@ -60,6 +61,7 @@ def resolution_schema(catalog, speaker_labels):
             "rationale": {"type": "string"},
         }
         if kind == "people":
+            properties["observed_name"] = {"type": "string"}
             properties["attendance_basis"] = {"type": "string", "enum": ["direct_address", "introduction", "self", "mentioned", "unknown"]}
             properties["shared_speaker_label"] = {"type": "boolean"}
             properties["speaker_label"] = {"type": "string", "enum": speaker_labels}
@@ -86,7 +88,7 @@ def validate_catalog_choices(resolution, catalog, transcript):
             item["model_status"] = item.get("status")
             if kind == "people":
                 if item.get("attendance_basis") == "mentioned":
-                    item.update(status="unknown", id=None, validation_reason="model_unknown")
+                    item["speaker_label"] = ""
                 label = re.escape(str(item.get("speaker_label") or ""))
                 name = str(item.get("name") or "")
                 name = re.sub(rf"^(?:Speaker )?{label}\s*[-:(]\s*|\s*\((?:Speaker )?{label}\)$", "", name, flags=re.I).strip(" )")
@@ -109,7 +111,12 @@ def validate_catalog_choices(resolution, catalog, transcript):
                     # in the cited turns; uncertain transcription variants need review.
                     name_words = {word for word in normalized(record.get("name")).split() if len(word) >= 3}
                     quote_words = set(normalized(item.get("evidence_excerpt")).split())
-                    if not name_words.intersection(quote_words):
+                    observed = normalized(item.get("observed_name"))
+                    variant = (observed and observed in quote_words and any(
+                        SequenceMatcher(None, observed, word).ratio() >= .7 for word in name_words)
+                        and item.get("confidence", 0) >= .78
+                        and item.get("confidence", 0) - item.get("runner_up_confidence", 0) >= .12)
+                    if not name_words.intersection(quote_words) and not variant:
                         item.update(status="unknown", id=None,
                                     validation_reason="missing_identity_anchor")
                         continue
@@ -119,6 +126,10 @@ def validate_catalog_choices(resolution, catalog, transcript):
                             else "catalog_identity_mismatch")
             else:
                 item["validation_reason"] = "validated_catalog_and_evidence"
+    # Identity survives even when the person did not attend.
+    mentions = [p for p in resolution.get("people", []) if p.get("attendance_basis") == "mentioned"]
+    resolution["people"] = [p for p in resolution.get("people", []) if p.get("attendance_basis") != "mentioned"]
+    resolution["mentioned_people"] = mentions
     return resolution
 
 

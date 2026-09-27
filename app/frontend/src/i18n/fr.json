@@ -1114,5 +1114,7 @@
   "meetings.contextReview.validation.catalog_identity_mismatch": "Le nom proposé ne correspondait pas à la fiche existante.",
   "meetings.contextReview.validation.insufficient_match_confidence_or_margin": "Les éléments disponibles ne distinguent pas assez clairement cette personne des autres candidats.",
   "meetings.contextReview.validation.model_unknown": "Alfred n’a pas pu identifier cette personne avec suffisamment de certitude.",
-  "meetings.contextReview.validation.validated_catalog_and_evidence": "Cette identité nécessite une confirmation supplémentaire."
+  "meetings.contextReview.validation.validated_catalog_and_evidence": "Cette identité nécessite une confirmation supplémentaire.",
+  "meetings.contextReview.mentionedPeople": "Personnes évoquées (non présentes)",
+  "meetings.contextReview.status.unresolved": "identité non résolue"
 }

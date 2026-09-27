@@ -1114,5 +1114,7 @@
   "meetings.contextReview.validation.catalog_identity_mismatch": "The proposed name and existing record did not match.",
   "meetings.contextReview.validation.insufficient_match_confidence_or_margin": "The evidence did not distinguish this person clearly enough from other candidates.",
   "meetings.contextReview.validation.model_unknown": "Alfred could not identify this participant confidently.",
-  "meetings.contextReview.validation.validated_catalog_and_evidence": "The identity needs additional confirmation."
+  "meetings.contextReview.validation.validated_catalog_and_evidence": "The identity needs additional confirmation.",
+  "meetings.contextReview.mentionedPeople": "People discussed (not attendees)",
+  "meetings.contextReview.status.unresolved": "identity unresolved"
 }

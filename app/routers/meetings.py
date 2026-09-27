@@ -754,7 +754,7 @@ def _accept_meeting_suggestion(db: Session, meeting: Meeting, suggestion: Meetin
             person = JourneyPerson(
                 user_number=meeting.user_number,
                 name=suggestion.title,
-                relation="Meeting participant",
+                relation="Mentioned in meeting" if (suggestion.payload or {}).get("attendance_basis") == "mentioned" else "Meeting participant",
                 context=suggestion.description,
             )
             db.add(person)
@@ -762,6 +762,9 @@ def _accept_meeting_suggestion(db: Session, meeting: Meeting, suggestion: Meetin
             suggestion.target_id = person.id
         if not person:
             raise HTTPException(status_code=409, detail="The person suggestion is incomplete.")
+        if (suggestion.payload or {}).get("attendance_basis") == "mentioned":
+            # The accepted suggestion is the durable meeting/person link, not attendance.
+            return
         if (suggestion.payload or {}).get("shared_speaker_label"):
             # One diarization label cannot safely become one person's identity.
             attendee = db.query(MeetingAttendee).filter(
