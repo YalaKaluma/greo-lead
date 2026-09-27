@@ -1640,6 +1640,7 @@ def _store_pending_enrichment_suggestions(db: Session, meeting: Meeting, analysi
         fingerprint = _suggestion_fingerprint(item)
         if fingerprint in existing_fingerprints:
             continue
+        existing_fingerprints.add(fingerprint)
         db.add(MeetingEnrichmentSuggestion(
             meeting_id=meeting.id,
             suggestion_type=item["suggestion_type"],

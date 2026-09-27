@@ -13,7 +13,7 @@ def _resolve(client, model, name, properties, instruction, context, transcript):
     schema = {"type": "object", "properties": properties, "required": list(properties),
               "additionalProperties": False}
     response = client.chat.completions.create(
-        model=model, temperature=0, max_tokens=7000,
+        model=model, temperature=0, max_tokens=14000,
         response_format={"type": "json_schema", "json_schema": {
             "name": name, "strict": True, "schema": schema}},
         messages=[{"role": "system", "content": instruction + (
@@ -25,6 +25,8 @@ def _resolve(client, model, name, properties, instruction, context, transcript):
             "links, and duplicate proposals. Return only the requested JSON. ") + UNTRUSTED_CONTEXT_POLICY},
             {"role": "user", "content": wrap_untrusted_context("linking_context", json.dumps(context), 60000)
              + wrap_untrusted_context("transcript", numbered_transcript(transcript), 150000)}])
+    if getattr(response.choices[0], "finish_reason", None) == "length":
+        raise ValueError("Entity linking response exceeded its output budget; retry required")
     return parse_bounded_json_object(response.choices[0].message.content, max_characters=100000)
 
 
