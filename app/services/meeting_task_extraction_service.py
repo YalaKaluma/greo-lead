@@ -8,9 +8,9 @@ from openai import OpenAI
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import OPENAI_API_KEY
+from app.services.meeting_resolution_contract import grounded
 from app.utils.ai_safety import (
     UNTRUSTED_CONTEXT_POLICY,
-    evidence_is_grounded,
     parse_bounded_json_object,
     wrap_untrusted_context,
 )
@@ -19,7 +19,7 @@ from app.utils.ai_safety import (
 client = OpenAI(api_key=OPENAI_API_KEY)
 MEETING_TASK_MODEL = os.getenv(
     "MEETING_TASK_MODEL",
-    os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4o-mini"),
+    os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4.1"),
 )
 
 
@@ -80,13 +80,13 @@ def extract_action_items(
                 ),
             },
         ],
-        max_tokens=1800,
+        max_tokens=4000,
     )
     parsed = parse_bounded_json_object(response.choices[0].message.content, max_characters=80_000)
     validated = ExtractedActionItems.model_validate(parsed)
     grounded_items = [
         item.model_dump()
         for item in validated.action_items
-        if evidence_is_grounded(item.evidence_excerpt, transcript)
+        if grounded(item.evidence_excerpt, transcript)
     ]
     return {"action_items": grounded_items}

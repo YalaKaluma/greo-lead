@@ -8,7 +8,13 @@ def normalized(value):
 
 def grounded(excerpt, transcript):
     quote = normalized(excerpt)
-    return len(quote) >= 8 and quote in normalized(transcript)
+    if len(quote) < 8:
+        return False
+    if quote in normalized(transcript):
+        return True
+    # Diarization labels are metadata, not spoken words. Preserve word order.
+    spoken = re.sub(r"(?m)^\s*[^:\n]{1,80}:\s+", "", transcript or "")
+    return quote in normalized(spoken)
 
 
 def resolution_schema(catalog, speaker_labels):
@@ -19,9 +25,9 @@ def resolution_schema(catalog, speaker_labels):
             "id": {"type": ["integer", "null"], "enum": [None, *ids]},
             name_field: {"type": "string"},
             "description": {"type": "string"},
-            "confidence": {"type": "number"},
+            "confidence": {"type": "number", "minimum": 0, "maximum": 1},
             "runner_up_id": {"type": ["integer", "null"], "enum": [None, *ids]},
-            "runner_up_confidence": {"type": "number"},
+            "runner_up_confidence": {"type": "number", "minimum": 0, "maximum": 1},
             "evidence_excerpt": {"type": "string"},
             "rationale": {"type": "string"},
         }
