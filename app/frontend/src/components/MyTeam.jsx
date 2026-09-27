@@ -65,6 +65,7 @@ const personFields = [
   'name',
   'email',
   'phone',
+  'role',
   'relation',
   'context',
   'mission_statement',
@@ -331,7 +332,7 @@ export default function MyTeam({ apiUrl, userNumber }) {
           copy={copy}
           people={teamMembers}
           emptyText={copy('team.fullTeamEmpty', 'No team members yet. Add people to your leadership ecosystem.')}
-          columns={['name', 'role', 'team', 'manager', 'health', 'lastInteraction', 'objective', 'strength', 'risk', 'circle']}
+          columns={['name', 'role', 'type', 'team', 'manager', 'health', 'lastInteraction', 'objective', 'strength', 'risk', 'circle']}
           onOpen={setViewingPersonId}
           onEdit={setEditingPerson}
           onMark={markCircle}
@@ -848,6 +849,9 @@ function ProfileTab({ copy, person, synthesis, reviews, expandedReviewId, setExp
           <HealthBadge value={person.relationship_health} />
         </div>
         <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <InfoTile label={copy('team.role', 'Role')} value={person.role} />
+          <InfoTile label={copy('team.relationshipType', 'Relationship type')} value={person.relation} />
+          <InfoTile label={copy('team.personContext', 'Context')} value={person.context} />
           <InfoTile label={copy('team.circleStatus', 'Circle status')} value={circleLabel(person.circle_type)} />
           <InfoTile label={copy('team.lastInteraction', 'Last interaction')} value={formatDisplayDate(person.last_interaction_at)} />
         </div>
@@ -1050,7 +1054,9 @@ function PersonForm({ copy, person, onSubmit, onCancel, onDelete }) {
     <form onSubmit={handleSubmit} className="space-y-5 rounded-lg border border-slate-200 bg-white p-5">
       <div className="grid gap-4 md:grid-cols-3">
         <TextInput label={copy('team.name', 'Name')} value={formData.name} onChange={(value) => setField('name', value)} required />
-        <TextInput label={copy('team.role', 'Role / Relationship')} value={formData.relation} onChange={(value) => setField('relation', value)} />
+        <TextInput label={copy('team.role', 'Role')} value={formData.role || ''} onChange={(value) => setField('role', value)} />
+        <TextInput label={copy('team.relationshipType', 'Relationship type')} value={formData.relation} onChange={(value) => setField('relation', value)} />
+        <TextArea label={copy('team.personContext', 'Context')} value={formData.context || ''} onChange={(value) => setField('context', value)} />
         <label className="block text-sm font-medium text-slate-700">
           {copy('team.circleStatus', 'Circle status')}
           <select value={formData.circle_type || ''} onChange={(event) => setField('circle_type', event.target.value)} className="mt-1 w-full rounded border border-slate-300 px-3 py-2">
@@ -1244,12 +1250,12 @@ function normalizePayload(data) {
 
 function isTeamMember(person) {
   const relation = (person.relation || '').toLowerCase();
-  return person.circle_type === CIRCLE.LEADERSHIP || relation.includes('team') || relation.includes('direct') || relation.includes('employee') || person.team;
+  return person.circle_type === CIRCLE.LEADERSHIP || relation.includes('team') || relation.includes('reports to me') || relation.includes('direct report') || relation.includes('employee') || person.team;
 }
 
 function isStakeholder(person) {
   const relation = (person.relation || '').toLowerCase();
-  return person.circle_type === CIRCLE.SPONSOR || ['sponsor', 'stakeholder', 'mentor', 'peer', 'client'].some((word) => relation.includes(word)) || person.organization;
+  return person.circle_type === CIRCLE.SPONSOR || ['sponsor', 'stakeholder', 'mentor', 'peer', 'client', 'i report to', 'enthusiast', 'counterpart', 'hierarch'].some((word) => relation.includes(word)) || person.organization;
 }
 
 function hasNotes(person) {
@@ -1349,7 +1355,7 @@ function columnLabel(copy, column) {
 
 function renderColumn(person, column, onMark) {
   if (column === 'name') return <span className="font-semibold text-slate-900">{person.name}</span>;
-  if (column === 'role') return person.relation || 'Not captured';
+  if (column === 'role') return person.role || 'Not captured';
   if (column === 'team') return person.team || 'Not captured';
   if (column === 'manager') return person.manager_name || 'Not captured';
   if (column === 'health') return <HealthBadge value={person.relationship_health} />;

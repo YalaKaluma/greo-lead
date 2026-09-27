@@ -1104,5 +1104,6 @@
   "taskTrends.ninetyDayAverageInfo": "The average MTN score per weekday over the last 90 days. Saturdays and Sundays are excluded.",
   "taskTrends.ninetyDayAverageTitle": "90-Day Daily Average",
   "taskTrends.ninetyDayAverageDetail": "completed task(s) contributed during this period.",
-  "memoryTags.title": "Memory & tags"
+  "memoryTags.title": "Memory & tags",
+  "team.personContext": "Context"
 }

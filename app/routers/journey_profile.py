@@ -166,6 +166,7 @@ def create_person(
         name=person_data.name,
         email=person_data.email,
         phone=person_data.phone,
+        role=person_data.role,
         relation=person_data.relation,
         context=person_data.context,
         mission_statement=person_data.mission_statement,
@@ -229,6 +230,8 @@ def update_person(
         person.email = person_data.email
     if person_data.phone is not None:
         person.phone = person_data.phone
+    if person_data.role is not None:
+        person.role = person_data.role
     if person_data.relation is not None:
         person.relation = person_data.relation
     if person_data.context is not None:

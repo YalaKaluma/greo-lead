@@ -1115,7 +1115,8 @@ class JourneyPerson(Base):
     name = Column(String, nullable=False)
     email = Column(String, nullable=True)
     phone = Column(String, nullable=True)
-    relation = Column(String, nullable=True)  # colleague, client, partner…
+    role = Column(String, nullable=True)  # Professional position, separate from relationship
+    relation = Column(String, nullable=True)  # Relationship to the user
     context = Column(Text, nullable=True)  # optional notes
     mission_statement = Column(Text, nullable=True)
     strengths = Column(Text, nullable=True)

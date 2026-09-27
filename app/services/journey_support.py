@@ -210,6 +210,7 @@ class GoalReorderRequest(BaseModel):
 
 # Pydantic request models for People
 class PersonCreate(BaseModel):
+    role: Optional[str] = None
     name: str
     email: Optional[str] = None
     phone: Optional[str] = None
@@ -248,6 +249,7 @@ class PersonCreate(BaseModel):
 
 
 class PersonUpdate(BaseModel):
+    role: Optional[str] = None
     name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
@@ -788,6 +790,7 @@ class ProjectResponse(BaseModel):
 
 
 class PersonResponse(BaseModel):
+    role: Optional[str] = None
     id: int
     user_number: str
     name: str
