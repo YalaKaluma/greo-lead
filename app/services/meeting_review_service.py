@@ -57,6 +57,43 @@ def review_resolution(client, model, transcript, catalog, labels, draft, supplie
     return parse_bounded_json_object(response.choices[0].message.content, max_characters=100000)
 
 
+def review_project_resolution(client, model, transcript, catalog, draft):
+    """Review project boundaries separately from identity and goal resolution."""
+    full = resolution_schema(catalog, ["Me"])
+    properties = {key: full["properties"][key] for key in ("primary_project", "additional_projects")}
+    schema = {"type": "object", "properties": properties,
+              "required": list(properties), "additionalProperties": False}
+    response = client.chat.completions.create(
+        model=model, temperature=0.0, max_tokens=4000,
+        response_format={"type": "json_schema", "json_schema": {
+            "name": "meeting_project_boundaries", "strict": True, "schema": schema}},
+        messages=[{"role": "system", "content": (
+            "Resolve ONLY project boundaries against the full transcript and supplied project catalog. "
+            "The previous draft is fallible. Read the source in segments, identify the client/initiative "
+            "for each substantive segment, then choose primary and secondary projects. "
+            "A new opportunity mentioned at the opening is not necessarily the client whose existing "
+            "contract, security checklist or go-live is discussed later. Match that later client's "
+            "existing project using explicit references, including supported phonetic transcription variants. "
+            "Do not transfer one client's contractual terms or requirements to another opportunity. "
+            "Keep distinct client opportunities separate even when they share an offer or demo agenda. "
+            "Retain smaller substantive delivery updates for existing clients as additional projects. "
+            "Examples, workload comparisons and case studies do not establish projects of this meeting. "
+            "Keep an unknown client's identity unknown; a neutral proposal is allowed. "
+            "For each match cite short source spans establishing client identity AND the substantive "
+            "discussion; explain the boundary in rationale. Use exact catalog IDs/names. Existing "
+            "requires confidence >=.78 and margin >=.12. New/none IDs must be null. "
+            "Do not change people or goals. Return the requested JSON. " + UNTRUSTED_CONTEXT_POLICY)},
+            {"role": "user", "content":
+                wrap_untrusted_context("project_catalog", json.dumps(catalog.get("projects", [])), 30000)
+                + wrap_untrusted_context("previous_draft_not_truth", json.dumps({key: draft.get(key) for key in properties}), 18000)
+                + wrap_untrusted_context("transcript", numbered_transcript(transcript), 150000)}])
+    result = parse_bounded_json_object(response.choices[0].message.content, max_characters=70000)
+    if not isinstance(result.get("primary_project"), dict) or not isinstance(result.get("additional_projects"), list):
+        raise ValueError("Project boundary review returned an incomplete result")
+    return {**draft, "primary_project": result["primary_project"],
+            "additional_projects": result["additional_projects"]}
+
+
 def review_actions(client, model, transcript, analysis, candidates):
     response = client.chat.completions.create(
         model=model, temperature=0.0, response_format={"type": "json_object"}, max_tokens=7000,

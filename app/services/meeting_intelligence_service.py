@@ -58,7 +58,7 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
-MEETING_PROMPT_VERSION = "meeting-v14-context-consistency"
+MEETING_PROMPT_VERSION = "meeting-v15-project-boundaries"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4.1")
 MEETING_CONTEXT_MODEL = os.getenv("MEETING_CONTEXT_MODEL", "gpt-4.1")
 MEETING_COACHING_MODEL = os.getenv("MEETING_COACHING_MODEL", MEETING_MODEL)
@@ -623,8 +623,9 @@ def resolve_meeting_context(
         max_tokens=5000,
     )
     parsed = parse_bounded_json_object(response.choices[0].message.content, max_characters=100_000)
-    from app.services.meeting_review_service import review_resolution
+    from app.services.meeting_review_service import review_resolution, review_project_resolution
     parsed = review_resolution(client, MEETING_CONTEXT_MODEL, transcript, catalog, labels, parsed, supplied_context)
+    parsed = review_project_resolution(client, MEETING_CONTEXT_MODEL, transcript, catalog, parsed)
     parsed = validate_catalog_choices(parsed, catalog, transcript)
     parsed["people"] = canonical_people(parsed.get("people"), _transcript_speaker_labels(transcript))
     return parsed
@@ -904,7 +905,8 @@ def _reassess_meeting_with_context(meeting_id: int) -> None:
         "\n\n".join(value for value in (snapshot["leadership_context"], provisional_context) if value),
     )
     coaching["entity_enrichments"] = _enrich_resolved_analysis(
-        analysis, resolved["retrieved_context"], transcript, snapshot.get("meeting_date")
+        analysis, resolved["retrieved_context"], transcript, snapshot.get("meeting_date"),
+        json.loads(snapshot.get("matching_context") or "{}").get("current_user")
     )
     _with_fresh_session(
         lambda db: _save_context_reassessment(db, meeting_id, analysis, coaching, snapshot.get("context_receipt")),
@@ -1361,6 +1363,19 @@ def _analysis_suggestions(meeting: Meeting, analysis: dict) -> list[dict]:
     return suggestions
 
 
+def _currency_supported(value, evidence):
+    """Currency cannot be inferred from a client's country or an unrelated record."""
+    currencies = {
+        "USD": r"\b(?:USD|US dollars?|U\.S\. dollars?|American dollars?)\b|US\$",
+        "EUR": r"\b(?:EUR|euros?)\b|€",
+        "GBP": r"\b(?:GBP|pounds? sterling)\b|£",
+        "ZAR": r"\b(?:ZAR|rand)\b",
+    }
+    proposed = json.dumps(value, ensure_ascii=False) if isinstance(value, (list, dict)) else str(value or "")
+    return all(not re.search(pattern, proposed, re.I) or re.search(pattern, evidence or "", re.I)
+               for pattern in currencies.values())
+
+
 def _validated_entity_enrichments(items: list[dict], retrieved_context: dict, transcript: str = "") -> list[dict]:
     """Allow updates only for entities that the resolver actually retrieved."""
     allowed_ids = {
@@ -1407,6 +1422,7 @@ def _validated_entity_enrichments(items: list[dict], retrieved_context: dict, tr
                    and normalized(change.get("current_value")) == normalized(record.get(change.get("field")))
                    and (change.get("field") != "status" or change.get("proposed_value") in {"active", "paused", "completed"})
                    and normalized(change.get("proposed_value"))
+                   and _currency_supported(change.get("proposed_value"), change.get("evidence_excerpt"))
                    and normalized(change.get("proposed_value")) != normalized(change.get("current_value"))
                    and (not transcript or grounded(change.get("evidence_excerpt"), transcript))]
         if not changes:
@@ -1422,13 +1438,14 @@ def _validated_entity_enrichments(items: list[dict], retrieved_context: dict, tr
 
 
 
-def _enrich_resolved_analysis(analysis, context, transcript, meeting_date):
+def _enrich_resolved_analysis(analysis, context, transcript, meeting_date, current_user=None):
     """Enrich pending creations as well as existing records; never write either here."""
     projects = analysis.get("new_projects") or []
     proposed = [{"candidate_key": f"new-project-{i}", "name": project["name"],
                  "description": project.get("description"), "status": "active"}
                 for i, project in enumerate(projects)]
-    context = {**context, "proposed_projects": proposed}
+    context = {**context, "proposed_projects": proposed, "current_user": current_user or {},
+               "meeting_identity": analysis.get("meeting_resolution") or {}}
     draft = extract_entity_intelligence(client, MEETING_CONTEXT_MODEL, transcript, context, meeting_date)
     draft = _validated_entity_enrichments(draft, context, transcript)
     reviewed = review_entity_intelligence(client, MEETING_CONTEXT_MODEL, transcript, context, draft)
@@ -2218,7 +2235,8 @@ def process_meeting(meeting_id: int) -> None:
             "\n\n".join(value for value in (snapshot["leadership_context"], provisional_context) if value),
         )
         coaching["entity_enrichments"] = _enrich_resolved_analysis(
-            analysis, resolved["retrieved_context"], transcript, snapshot.get("meeting_date")
+            analysis, resolved["retrieved_context"], transcript, snapshot.get("meeting_date"),
+            json.loads(snapshot.get("matching_context") or "{}").get("current_user")
         )
         _meeting_log(
             logging.INFO, "stage_completed", meeting_id=meeting_id, attempt_id=attempt_id,

@@ -265,11 +265,13 @@ def test_context_review_runs_before_catalog_validation(monkeypatch):
         calls.append(kwargs)
         payload = {"people": []} if len(calls) == 1 else {"people": [{"status": "existing", "id": 7,
             "name": "Matt", "speaker_label": "A", "evidence_line_ids": [1]}]}
+        if len(calls) == 3:
+            payload = {"primary_project": {"status": "none"}, "additional_projects": []}
         return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))])
     monkeypatch.setattr(service.client.chat.completions, "create", complete)
     result = service.resolve_meeting_context("Me: Hey Matt, how are you?\nA: Good thanks.", None, None,
         json.dumps({"people": [{"id": 7, "name": "Matt"}]}))
-    assert len(calls) == 2
+    assert len(calls) == 3
     assert any(person.get("id") == 7 for person in result["people"])
 
 
