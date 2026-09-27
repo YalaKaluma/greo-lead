@@ -57,13 +57,13 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
-MEETING_PROMPT_VERSION = "meeting-v11-reviewed-context"
+MEETING_PROMPT_VERSION = "meeting-v12-local-attribution"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4.1")
 MEETING_CONTEXT_MODEL = os.getenv("MEETING_CONTEXT_MODEL", "gpt-4.1")
 MEETING_COACHING_MODEL = os.getenv("MEETING_COACHING_MODEL", MEETING_MODEL)
 # Increment this whenever the leadership assessment prompt or scoring logic changes.
 # The admin reassessment action uses it to resume safely and avoid duplicate AI work.
-LEADERSHIP_ASSESSMENT_VERSION = "leadership-v3-evidence-review"
+LEADERSHIP_ASSESSMENT_VERSION = "leadership-v4-local-attribution"
 PERSON_ENRICHMENT_FIELDS = {
     "organization", "team", "relation", "context", "current_goals", "stakeholder_priorities",
     "risks_or_pressures", "stakeholder_aspirations", "how_i_create_value", "potential_tensions",
@@ -511,6 +511,8 @@ def analyze_transcript(
                     "You extract evidence-backed executive meeting intelligence. Return JSON only. "
                     "Never invent attendees, decisions, deadlines, or evidence. Confidence is 0 to 1. "
                     "Do not infer conversations that did not occur. Candidate IDs are opaque identifiers: "
+                    "A recording can concatenate conversations. Keep their topics and agreements distinct; "
+                    "do not turn incidental conversation fragments into decisions of the main meeting. "
                     "only return an ID present in the supplied candidate catalog. Always generate a concise, "
                     "specific meeting title that names the main subject or outcome of the conversation. The title "
                     "must stand on its own in a meeting history; never return a filename, 'Meeting notes', "
@@ -591,6 +593,8 @@ def resolve_meeting_context(
                 "decimals from 0 to 1, never percentages. Compare against the closest runner-up; use existing only "
                 "with confidence >=0.78 and a margin >=0.12. For new/none/unknown/self use a null ID. "
                 "Return one entry per actual PERSON, not per diarization label. Multiple people can share A or B; "
+                "A recording may concatenate meetings: use local greetings and introductions within each segment, "
+                "never assume a label stays the same person after a meeting boundary. "
                 "preserve all named attendees with their own evidence and shared_speaker_label=true. "
                 "Do not collapse people just because they share a label. Use names only in name, no label suffixes. "
                 "Me is self. current_user in the catalog identifies the user. Phonetic transcription variants "
@@ -618,6 +622,8 @@ def resolve_meeting_context(
         max_tokens=5000,
     )
     parsed = parse_bounded_json_object(response.choices[0].message.content, max_characters=100_000)
+    from app.services.meeting_review_service import review_resolution
+    parsed = review_resolution(client, MEETING_CONTEXT_MODEL, transcript, catalog, labels, parsed)
     parsed = validate_catalog_choices(parsed, catalog, transcript)
     parsed["people"] = canonical_people(parsed.get("people"), _transcript_speaker_labels(transcript))
     return parsed
