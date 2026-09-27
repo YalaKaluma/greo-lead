@@ -72,6 +72,7 @@ def ensure_admin_schema_and_seed() -> None:
         conn.execute(text("ALTER TABLE journey_people ADD COLUMN IF NOT EXISTS meeting_notes JSONB DEFAULT '[]'::jsonb"))
         conn.execute(text("UPDATE journey_people SET meeting_notes = '[]'::jsonb WHERE meeting_notes IS NULL"))
         for column_sql in [
+            "role VARCHAR",
             "organization VARCHAR",
             "team VARCHAR",
             "manager_name VARCHAR",
