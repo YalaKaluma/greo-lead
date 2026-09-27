@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime, timezone
 
 from openai import OpenAI
@@ -33,6 +34,23 @@ class ExtractedActionItem(BaseModel):
     confidence: float = Field(ge=0, le=1)
     evidence_excerpt: str = Field(default="", max_length=1000)
     evidence_line_ids: list[int] | None = Field(default=None, max_length=100)
+    due_date_evidence_line_ids: list[int] | None = Field(default=None, max_length=20)
+
+
+def validate_due_date(item, transcript):
+    """An extraction timestamp must never become a commitment deadline."""
+    if not item.get("due_date"):
+        return item
+    ids = item.get("due_date_evidence_line_ids")
+    quote = sourced_evidence({"evidence_line_ids": ids or [], "evidence_excerpt": ""}, transcript)["evidence_excerpt"]
+    temporal = r"\b(today|tomorrow|tonight|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week|this week|end of|by \d|within \d|in \d|january|february|march|april|may|june|july|august|september|october|november|december)\b|\d{1,4}[-/]\d{1,2}[-/]\d{1,4}"
+    if not grounded(quote, transcript) or not re.search(temporal, quote, re.I):
+        return {**item, "due_date": None}
+    try:
+        datetime.strptime(item["due_date"], "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return {**item, "due_date": None}
+    return item
 
 
 class ExtractedActionItems(BaseModel):
@@ -67,7 +85,9 @@ def extract_action_items(
                 "role": "user",
                 "content": (
                     f"Meeting date: {meeting_date or 'unknown'}. Return JSON only: "
-                    "{action_items:[{description,owner_name,due_date,confidence,evidence_excerpt,evidence_line_ids}]}. "
+                    "{action_items:[{description,owner_name,due_date,confidence,evidence_excerpt,evidence_line_ids,due_date_evidence_line_ids}]}. "
+                    "A due date requires due_date_evidence_line_ids citing an explicit temporal commitment for THIS action. "
+                    "The meeting date alone is not a deadline. Otherwise due_date=null and date evidence=[]. "
                     "Every action must include evidence_line_ids, the bracketed line numbers of its commitment "
                     "in the transcript. Choose a small continuous span; the application copies the exact source. "
                     "Use null for an unknown owner or due date. Resolve relative dates against the MEETING DATE, "
@@ -91,5 +111,6 @@ def extract_action_items(
     validated = ExtractedActionItems.model_validate(reviewed)
     sourced_items = [sourced_evidence(item.model_dump(exclude_none=True), transcript)
                      for item in validated.action_items]
-    grounded_items = [explicit_self_owner(item) for item in sourced_items if grounded(item["evidence_excerpt"], transcript)]
+    grounded_items = [validate_due_date(explicit_self_owner(item), transcript) for item in sourced_items
+                      if grounded(item["evidence_excerpt"], transcript)]
     return {"action_items": grounded_items}

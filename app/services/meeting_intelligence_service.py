@@ -593,13 +593,16 @@ def resolve_meeting_context(
                 "Return one entry per actual PERSON, not per diarization label. Multiple people can share A or B; "
                 "preserve all named attendees with their own evidence and shared_speaker_label=true. "
                 "Do not collapse people just because they share a label. Use names only in name, no label suffixes. "
-                "Me is self. Mentioned people who do not attend are not participants. "
+                "Me is self. current_user in the catalog identifies the user. Phonetic transcription variants "
+                "of the user's name are self, never a new stakeholder. Greetings address someone OTHER than "
+                "the speaker. Mentioned people who do not attend are not participants. "
                 "A unique existing person with the same name, organization and work context is the likely match; "
                 "a role description such as Product Manager does not prevent them discussing technical details. "
                 "Do not propose a duplicate person solely because their role is broader than their stored title. "
                 "For runner_up use a DIFFERENT candidate ID; null and confidence 0 if no credible alternative. "
                 "Put the main project in primary_project and OTHER substantive client initiatives in additional_projects. "
-                "Never combine separate clients in one new project. Do not include analogies, case studies or casual mentions. "
+                "Never combine separate clients in one new project. A scheduled client demo or proposal with "
+                "concrete next steps is substantive. Do not include analogies, case studies or casual mentions. "
                 "Use explicit greetings and replies to identify the dominant person behind a speaker label; "
                 "occasional diarization errors do not invalidate a clearly addressed identity. "
                 "Diarization may mix multiple people under one label: resolve only where defensible, "
@@ -1427,6 +1430,7 @@ def _validated_resolution_context(
     if user:
         identifiers.update(value for value in (user.phone_number, user.email) if value)
     sanitized = {
+        "current_user": {"name": user.name if user else None, "speaker_label": "Me"},
         "primary_goal": {"status": "none"},
         "people": [],
         "primary_project": {"status": "none"},
@@ -1674,6 +1678,8 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
         MeetingContextNote.meeting_id == meeting_id
     ).order_by(MeetingContextNote.elapsed_seconds, MeetingContextNote.id).all()
     supplied_context_parts = ["Meeting date: " + (meeting.started_at or meeting.created_at).date().isoformat()]
+    if user and user.name:
+        supplied_context_parts.append("Current user (Me): " + user.name)
     if attendee_names:
         supplied_context_parts.append("People selected as present: " + ", ".join(attendee_names))
     supplied_context_parts.extend(
@@ -1837,6 +1843,7 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
             "status": p.status, "client": p.client, "role": p.role, "timeline": p.timeline,
         } for p in projects]
     matching_context = {
+        "current_user": {"name": user.name if user else None, "speaker_label": "Me"},
         "people": _bounded_catalog_items(matching_people, 14000),
         "goals": _bounded_catalog_items(matching_goal_rows, 10000),
         "projects": _bounded_catalog_items(matching_project_rows, 14000),

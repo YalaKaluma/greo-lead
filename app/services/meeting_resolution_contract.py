@@ -7,6 +7,8 @@ def normalized(value):
 
 
 def grounded(excerpt, transcript):
+    if "\n[…]\n" in str(excerpt or ""):
+        return all(grounded(part, transcript) for part in excerpt.split("\n[…]\n"))
     quote = normalized(excerpt)
     if len(quote) < 8:
         return False
@@ -29,8 +31,15 @@ def sourced_evidence(item, transcript):
     lines = transcript.splitlines()
     if not ids or any(type(i) is not int or i < 1 or i > len(lines) for i in ids):
         return {**item, "evidence_excerpt": ""}
-    # Use the complete span, including intervening words, to retain context.
-    return {**item, "evidence_excerpt": "\n".join(lines[min(ids)-1:max(ids)])}
+    # Never inflate a sparse citation into hundreds of unrelated intervening turns.
+    groups = []
+    previous = None
+    for index in sorted(set(ids)):
+        if previous is None or index != previous + 1:
+            groups.append([])
+        groups[-1].append(lines[index - 1])
+        previous = index
+    return {**item, "evidence_excerpt": "\n[…]\n".join("\n".join(group) for group in groups)}
 
 
 def resolution_schema(catalog, speaker_labels):
