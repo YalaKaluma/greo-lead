@@ -537,7 +537,7 @@ def analyze_transcript(
                     "transcript text, never a summary presented as a quotation. Use null for unknown due dates.\n\n"
                     "The user participated in every uploaded meeting. Set self_speaker_label to exactly one "
                     "speaker label that already appears in the transcript. If voice recognition labelled a "
-                    "speaker Me, choose Me. Otherwise select the most likely existing speaker using introductions, "
+                    "speaker Me, choose Me. Otherwise choose the most likely existing speaker using introductions, "
                     "names, roles, supplied attendee/context information, first-person references, and the user's "
                     "supplied meeting context. Never add Me as a separate participant when the transcript only "
                     "contains generic labels such as A and B. Always make a best selection and express uncertainty "
