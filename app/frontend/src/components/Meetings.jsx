@@ -651,18 +651,17 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
 
   const generateLeadershipAssessment = async () => {
     setAssessingLeadership(true);
-    const response = await fetch(`${apiUrl}/api/meetings/${meeting.id}/leadership-assessment?user_number=${encodeURIComponent(userNumber)}`, { method: 'POST' });
-    if (!response.ok) {
+    setActionError('');
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/${meeting.id}/leadership-assessment?user_number=${encodeURIComponent(userNumber)}`, { method: 'POST' });
+      if (!response.ok) throw new Error((await response.json()).detail || t('meetings.leadership.error'));
+      // The parent polls the persisted processing status and cleans up on navigation.
+      await onChanged(meeting.id);
+    } catch (error) {
+      setActionError(error.message || t('meetings.leadership.error'));
+    } finally {
       setAssessingLeadership(false);
-      window.alert((await response.json()).detail || 'Could not generate the leadership assessment.');
-      return;
     }
-    let checks = 0;
-    const poll = window.setInterval(() => {
-      onChanged(meeting.id);
-      checks += 1;
-      if (checks >= 8) { window.clearInterval(poll); setAssessingLeadership(false); }
-    }, 4000);
   };
 
   const deleteMeeting = async () => {
@@ -684,6 +683,7 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
     }
   };
 
+  const reassessmentBusy = assessingLeadership || ['queued', 'analyzing', 'transcribing'].includes(meeting.processing_status);
   const pendingSuggestions = (meeting.enrichment_suggestions || []).filter((item) => item.status === 'pending');
   const meetingResolution = meeting.context_receipt?.meeting_resolution || {};
   const goalSuggestions = pendingSuggestions.filter((item) => item.type === 'goal');
@@ -729,7 +729,7 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
           <Section title={`Decisions (${meeting.decisions.length})`}>{meeting.decisions.length ? <div className="space-y-4">{meeting.decisions.map((decision) => <div key={decision.id}><div className="flex justify-between gap-3"><p className="font-medium text-slate-900">{decision.description}</p><Confidence value={decision.confidence} /></div><Evidence>{decision.evidence_excerpt}</Evidence></div>)}</div> : <p className="text-slate-500">No explicit decisions detected.</p>}</Section>
           <Section title={`Action Items (${meeting.action_items.length})`}>{meeting.action_items.length ? <div className="space-y-4">{meeting.action_items.map((action) => <div key={action.id} className="rounded-xl border border-slate-200 p-4"><div className="flex justify-between gap-3"><div><p className="font-medium">{action.description}</p><p className="mt-1 text-sm text-slate-500">Owner: {action.owner_name || 'Unclear'}{action.due_date ? ` · Due ${action.due_date}` : ''}</p></div><Confidence value={action.confidence} /></div><Evidence>{action.evidence_excerpt}</Evidence>{action.created_task_id ? <div className="mt-3 flex items-center gap-3"><span className="text-sm font-medium text-green-700">Added to tasks</span><button disabled={busyAction === action.id} onClick={() => makeTask(action.id)} className="text-sm font-semibold text-blue-600 hover:underline">Move to Today</button></div> : action.ignored ? <p className="mt-3 text-sm font-medium text-slate-500">Ignored</p> : <div className="mt-3 flex flex-wrap gap-2"><button disabled={busyAction === action.id} onClick={() => makeTask(action.id)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Add to My Todo</button><button disabled={busyAction === action.id} onClick={() => ignoreAction(action.id)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800">Ignore</button></div>}</div>)}</div> : <p className="text-slate-500">No action items detected.</p>}</Section>
           <Section title={t('meetings.leadership.title')} privateLabel><LeadershipDomainWheel assessments={meeting.leadership_domain_assessments || []} />
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4"><p className="text-sm text-slate-500">{t('meetings.leadership.disclaimer')}</p><button onClick={generateLeadershipAssessment} disabled={assessingLeadership} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{assessingLeadership ? t('meetings.leadership.assessing') : meeting.leadership_domain_assessments?.length ? t('meetings.leadership.reassess') : t('meetings.leadership.assess')}</button></div>
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4"><p className="text-sm text-slate-500">{t('meetings.leadership.disclaimer')}</p><button onClick={generateLeadershipAssessment} disabled={reassessmentBusy} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{reassessmentBusy ? t('meetings.leadership.assessing') : meeting.leadership_domain_assessments?.length ? t('meetings.leadership.reassess') : t('meetings.leadership.assess')}</button></div>
             {meeting.leadership_observations.length > 0 && <details className="mt-5 border-t border-slate-200 pt-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">{t('meetings.leadership.additional')}</summary><div className="mt-4 space-y-4">{meeting.leadership_observations.map((item) => <div key={item.id}><p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{item.category}</p><p className="mt-1 text-slate-800">{item.observation}</p><Evidence>{item.evidence_excerpt}</Evidence></div>)}</div></details>}
           </Section>
           {meeting.context_notes?.length > 0 && <Section title="Your Context Notes"><div className="space-y-3">{meeting.context_notes.map((note) => <div key={note.id} className="rounded-lg bg-amber-50 px-4 py-3"><span className="mr-3 font-mono text-xs text-amber-700">{formatTimer(note.elapsed_seconds)}</span><span className="text-slate-800">{note.note_text}</span></div>)}</div></Section>}
@@ -926,6 +926,7 @@ export default function Meetings({ apiUrl, userNumber }) {
   const { t } = useLanguage();
   const [meetings, setMeetings] = useState([]);
   const [selected, setSelected] = useState(null);
+  const detailRequest = useRef(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -957,8 +958,12 @@ export default function Meetings({ apiUrl, userNumber }) {
   };
 
   const loadDetail = async (id) => {
+    const requestId = ++detailRequest.current;
     const response = await fetch(`${apiUrl}/api/meetings/${id}?user_number=${encodeURIComponent(userNumber)}`);
-    if (response.ok) setSelected(await response.json());
+    if (response.ok) {
+      const detail = await response.json();
+      if (requestId === detailRequest.current) setSelected(detail);
+    }
   };
 
   const editFromList = async (id) => {
@@ -982,7 +987,7 @@ export default function Meetings({ apiUrl, userNumber }) {
     return () => window.clearInterval(interval);
   }, [meetings, selected?.id, selected?.processing_status]);
 
-  if (selected) return <MeetingDetail meeting={selected} apiUrl={apiUrl} userNumber={userNumber} onBack={() => setSelected(null)} onChanged={loadDetail} onDeleted={() => { setSelected(null); loadMeetings(); }} />;
+  if (selected) return <MeetingDetail meeting={selected} apiUrl={apiUrl} userNumber={userNumber} onBack={() => { detailRequest.current += 1; setSelected(null); }} onChanged={loadDetail} onDeleted={() => { detailRequest.current += 1; setSelected(null); loadMeetings(); }} />;
 
   return (
     <div className="mx-auto max-w-7xl p-5 lg:p-10">

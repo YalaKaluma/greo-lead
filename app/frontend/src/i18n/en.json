@@ -1105,5 +1105,6 @@
   "taskTrends.ninetyDayAverageTitle": "90-Day Daily Average",
   "taskTrends.ninetyDayAverageDetail": "completed task(s) contributed during this period.",
   "memoryTags.title": "Memory & tags",
-  "team.personContext": "Context"
+  "team.personContext": "Context",
+  "meetings.leadership.error": "Could not reassess this meeting. Please try again."
 }

@@ -45,7 +45,7 @@ def extract_action_items(
     supplied_context: str | None = None,
 ) -> dict:
     """Extract explicit commitments independently from meeting summarization."""
-    today = datetime.now(timezone.utc).date().isoformat()
+    meeting_date = meeting_analysis.get("meeting_date")
     response = client.chat.completions.create(
         model=MEETING_TASK_MODEL,
         response_format={"type": "json_object"},
@@ -64,10 +64,13 @@ def extract_action_items(
             {
                 "role": "user",
                 "content": (
-                    f"Today is {today}. Return JSON only: "
+                    f"Meeting date: {meeting_date or 'unknown'}. Return JSON only: "
                     "{action_items:[{description,owner_name,due_date,confidence,evidence_excerpt}]}. "
-                    "Use null for an unknown owner or due date. Resolve relative dates against today only when "
-                    "the transcript clearly states them. Consolidate duplicates. Include commitments made by "
+                    "Use null for an unknown owner or due date. Resolve relative dates against the MEETING DATE, "
+                    "never the reassessment date. If the meeting date is unknown, leave relative deadlines null. "
+                    "Check the actual weekday. Separate agreed commitments from proposed scope and hypothetical "
+                    "workstreams. Include explicit commitments to circulate materials or review a document. "
+                    "Consolidate duplicates. Include commitments made by "
                     "other participants because the user may want to track a follow-up. Confidence is 0 to 1.\n\n"
                     + wrap_untrusted_context("meeting_overview", json.dumps(meeting_analysis, default=str), 16000)
                     + "\n\n"

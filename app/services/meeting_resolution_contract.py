@@ -1,0 +1,77 @@
+"""Strict output contract and grounding checks for meeting entity resolution."""
+import re
+
+
+def normalized(value):
+    return " ".join(re.findall(r"\w+", str(value or "").casefold()))
+
+
+def grounded(excerpt, transcript):
+    quote = normalized(excerpt)
+    return len(quote) >= 8 and quote in normalized(transcript)
+
+
+def resolution_schema(catalog, speaker_labels):
+    def entity(kind, name_field, statuses):
+        ids = [row["id"] for row in catalog.get(kind, [])]
+        properties = {
+            "status": {"type": "string", "enum": statuses},
+            "id": {"type": ["integer", "null"], "enum": [None, *ids]},
+            name_field: {"type": "string"},
+            "description": {"type": "string"},
+            "confidence": {"type": "number"},
+            "runner_up_id": {"type": ["integer", "null"], "enum": [None, *ids]},
+            "runner_up_confidence": {"type": "number"},
+            "evidence_excerpt": {"type": "string"},
+            "rationale": {"type": "string"},
+        }
+        if kind == "people":
+            properties["speaker_label"] = {"type": "string", "enum": speaker_labels}
+        return {"type": "object", "properties": properties,
+                "required": list(properties), "additionalProperties": False}
+    properties = {
+        "primary_goal": entity("goals", "title", ["existing", "new", "none"]),
+        "people": {"type": "array", "items": entity("people", "name", ["existing", "new", "unknown", "self"])},
+        "primary_project": entity("projects", "name", ["existing", "new", "none"]),
+    }
+    return {"type": "object", "properties": properties,
+            "required": list(properties), "additionalProperties": False}
+
+
+def validate_catalog_choices(resolution, catalog, transcript):
+    """Reject name/ID disagreement and unsupported quotations before DB retrieval."""
+    for key, kind, name_field in [("primary_goal", "goals", "title"),
+                                  ("primary_project", "projects", "name"),
+                                  ("people", "people", "name")]:
+        rows = resolution.get(key) or ([] if key == "people" else {})
+        for item in rows if isinstance(rows, list) else [rows]:
+            if item.get("status") not in {"existing", "new"}:
+                continue
+            valid = grounded(item.get("evidence_excerpt"), transcript)
+            if item.get("status") == "existing":
+                record = next((r for r in catalog.get(kind, []) if r["id"] == item.get("id")), None)
+                valid = valid and record is not None and normalized(item.get(name_field)) == normalized(
+                    (record or {}).get("name") or (record or {}).get("title"))
+            if not valid:
+                item.update(status="unknown" if key == "people" else "none", id=None)
+    return resolution
+
+
+def canonical_people(people, labels):
+    """Only real transcript labels may appear, once each; Me is always self."""
+    by_key = {normalized(label): label for label in labels}
+    selected = {}
+    for item in people or []:
+        key = normalized(re.sub(r"(?i)^(speaker|participant)\s+", "", str(item.get("speaker_label") or "")))
+        if key not in by_key:
+            continue
+        label = by_key[key]
+        candidate = {**item, "speaker_label": label}
+        if key == "me":
+            candidate = {"speaker_label": label, "status": "self", "name": "Me"}
+        elif candidate.get("status") == "self" and "me" in by_key:
+            candidate = {"speaker_label": label, "status": "unknown"}
+        if label not in selected or candidate.get("status") in {"existing", "new", "self"}:
+            selected[label] = candidate
+    return [selected.get(label, {"speaker_label": label, "status": "self" if normalized(label) == "me" else "unknown",
+                               **({"name": "Me"} if normalized(label) == "me" else {})}) for label in labels]
