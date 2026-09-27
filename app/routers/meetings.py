@@ -169,7 +169,18 @@ def _meeting_payload(meeting: Meeting, detail: bool = False):
         action.created_task_id is not None or action.ignored_at is not None
         for action in meeting.action_items
     )
+    resolution = (meeting.context_receipt or {}).get("meeting_resolution")
+    names = []
+    if resolution is not None:
+        for person in resolution.get("people") or []:
+            name = (person.get("name") if person.get("status") in {"existing", "new", "self"}
+                    else person.get("speaker_label"))
+            if name and name not in names:
+                names.append(name)
+    else:
+        names = [p.display_name for p in participants]
     payload = {
+        "participant_names": names,
         "id": meeting.id,
         "title": meeting.title,
         "source_type": meeting.source_type,
@@ -808,6 +819,10 @@ def _accept_meeting_suggestion(db: Session, meeting: Meeting, suggestion: Meetin
                 project_name=suggestion.title,
                 description=suggestion.description,
                 status="active",
+            )
+            _apply_entity_enrichment(
+                project, (suggestion.payload or {}).get("changes") or [],
+                PROJECT_ENRICHMENT_FIELDS, PROJECT_LIST_FIELDS,
             )
             db.add(project)
             db.flush()

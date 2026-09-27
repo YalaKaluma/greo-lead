@@ -26,7 +26,7 @@ from app.db import SessionLocal
 from app.utils.safe_errors import log_failure
 from app.services.meeting_task_extraction_service import extract_action_items
 from app.services.meeting_review_service import review_coaching
-from app.services.meeting_entity_intelligence_service import extract_entity_intelligence
+from app.services.meeting_entity_intelligence_service import extract_entity_intelligence, review_entity_intelligence
 from app.services.meeting_resolution_contract import resolution_schema, validate_catalog_choices, canonical_people, grounded, normalized, numbered_transcript, sourced_evidence
 from app.services.meeting_task_priority_service import score_pending_meeting_action_items
 from app.services.twin_context_service import get_twin_context
@@ -58,7 +58,7 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
-MEETING_PROMPT_VERSION = "meeting-v13-entity-intelligence"
+MEETING_PROMPT_VERSION = "meeting-v14-context-consistency"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4.1")
 MEETING_CONTEXT_MODEL = os.getenv("MEETING_CONTEXT_MODEL", "gpt-4.1")
 MEETING_COACHING_MODEL = os.getenv("MEETING_COACHING_MODEL", MEETING_MODEL)
@@ -545,7 +545,7 @@ def analyze_transcript(
                     "contain only distinct speakers that actually appear in the transcript.\n\n"
                     "The supplied meeting context includes a separate provisional goal, people, and project "
                     "resolution. Use the retrieved records to sharpen interpretation, but do not claim those "
-                    "matches are user-confirmed.\n\n"
+                    "matches are user-confirmed. Use only the validated people for named attribution; unresolved speakers remain unresolved. Do not independently guess attendees from roles or topics.\n\n"
                     + wrap_untrusted_context("meeting_context", supplied_context or "none", 30000)
                     + "\n\n"
                     + wrap_untrusted_context("transcript", transcript, 120000)
@@ -624,7 +624,7 @@ def resolve_meeting_context(
     )
     parsed = parse_bounded_json_object(response.choices[0].message.content, max_characters=100_000)
     from app.services.meeting_review_service import review_resolution
-    parsed = review_resolution(client, MEETING_CONTEXT_MODEL, transcript, catalog, labels, parsed)
+    parsed = review_resolution(client, MEETING_CONTEXT_MODEL, transcript, catalog, labels, parsed, supplied_context)
     parsed = validate_catalog_choices(parsed, catalog, transcript)
     parsed["people"] = canonical_people(parsed.get("people"), _transcript_speaker_labels(transcript))
     return parsed
@@ -651,7 +651,13 @@ def _resolution_to_analysis(resolution: dict) -> dict:
             result["suggested_project_ids"].append({**project, "id": project["id"]})
         elif project.get("status") == "new" and str(project.get("name") or "").strip():
             result["new_projects"].append(project)
+    participants = {}
     for person in resolution.get("people") or []:
+        label = person.get("speaker_label") or "Unlabelled"
+        name = person.get("name") if person.get("status") in {"existing", "new", "self"} else label
+        participants.setdefault(label, [])
+        if name and name not in participants[label]:
+            participants[label].append(name)
         if person.get("status") == "existing" and person.get("id"):
             result["suggested_person_matches"].append({
                 **person,
@@ -659,6 +665,10 @@ def _resolution_to_analysis(resolution: dict) -> dict:
             })
         elif person.get("status") == "new" and str(person.get("name") or "").strip():
             result["new_people"].append(person)
+    result["participants"] = [{"speaker_label": label, "display_name": " / ".join(names) or label}
+                              for label, names in participants.items()]
+    result["self_speaker_label"] = next((p.get("speaker_label") for p in resolution.get("people") or []
+                                         if p.get("status") == "self"), None)
     return result
 
 
@@ -893,10 +903,8 @@ def _reassess_meeting_with_context(meeting_id: int) -> None:
         },
         "\n\n".join(value for value in (snapshot["leadership_context"], provisional_context) if value),
     )
-    coaching["entity_enrichments"] = _validated_entity_enrichments(
-        extract_entity_intelligence(client, MEETING_CONTEXT_MODEL, transcript,
-                                    resolved["retrieved_context"], snapshot.get("meeting_date")),
-        resolved["retrieved_context"], transcript
+    coaching["entity_enrichments"] = _enrich_resolved_analysis(
+        analysis, resolved["retrieved_context"], transcript, snapshot.get("meeting_date")
     )
     _with_fresh_session(
         lambda db: _save_context_reassessment(db, meeting_id, analysis, coaching, snapshot.get("context_receipt")),
@@ -1092,6 +1100,11 @@ def _replace_analysis(db: Session, meeting: Meeting, analysis: dict) -> None:
     }
     transcript_labels_by_key = {label.casefold(): label for label in transcript_labels}
 
+    if "meeting_resolution" in analysis:
+        # Clear stale model names, preserving explicit user matches and self.
+        for row in db.query(MeetingParticipant).filter(MeetingParticipant.meeting_id == meeting.id).all():
+            if not row.person_id and not row.is_current_user:
+                row.display_name = row.speaker_label
     for participant in analysis.get("participants") or []:
         display_name = str(participant.get("display_name") or participant.get("speaker_label") or "Unknown participant").strip()
         raw_speaker_label = str(participant.get("speaker_label") or display_name).strip()
@@ -1113,7 +1126,7 @@ def _replace_analysis(db: Session, meeting: Meeting, analysis: dict) -> None:
         generic_display = re.fullmatch(
             r"(?i)(speaker|participant)\s+[a-z0-9]+", display_name
         ) is not None
-        if existing and display_name != speaker_label and not generic_display:
+        if existing and not existing.person_id and display_name != speaker_label and not generic_display:
             existing.display_name = display_name[:200]
         elif display_name and not existing:
             db.add(MeetingParticipant(
@@ -1368,10 +1381,16 @@ def _validated_entity_enrichments(items: list[dict], retrieved_context: dict, tr
     }
     for record in [retrieved_context.get("project") or {}, *(retrieved_context.get("projects") or [])]:
         records[("project", _strict_integer_id(record.get("id")))] = record
+    for record in retrieved_context.get("proposed_projects") or []:
+        key = record["candidate_key"]
+        allowed_ids["project"].add(key)
+        records[("project", key)] = record
     validated = []
     for item in items or []:
         entity_type = str(item.get("entity_type") or "").strip()
         target_id = _strict_integer_id(item.get("target_id"))
+        if entity_type == "project" and item.get("candidate_key"):
+            target_id = item["candidate_key"]
         if target_id not in allowed_ids.get(entity_type, set()):
             continue
         if _safe_confidence(item.get("confidence")) < 0.6:
@@ -1381,6 +1400,9 @@ def _validated_entity_enrichments(items: list[dict], retrieved_context: dict, tr
         record = records[(entity_type, target_id)]
         changes = [change for change in sourced_changes
                    if change.get("field") in fields
+                   and (entity_type != "person" or change.get("field") != "organization"
+                        or re.search(r"\b(employ(?:ed|ee|ees|er|ment)|work(?:s|ing)? at|works? chez|travaille chez|joined|joining|my company|our company)\b",
+                                     change.get("evidence_excerpt") or "", re.I))
                    and change.get("operation") in {"append", "replace"}
                    and normalized(change.get("current_value")) == normalized(record.get(change.get("field")))
                    and (change.get("field") != "status" or change.get("proposed_value") in {"active", "paused", "completed"})
@@ -1392,11 +1414,33 @@ def _validated_entity_enrichments(items: list[dict], retrieved_context: dict, tr
         validated.append({
             **item,
             "changes": changes,
-            "target_id": target_id,
+            "target_id": target_id if isinstance(target_id, int) else None,
+            **({"candidate_key": target_id} if isinstance(target_id, str) else {}),
             "confidence": _safe_confidence(item.get("confidence")),
         })
     return validated
 
+
+
+def _enrich_resolved_analysis(analysis, context, transcript, meeting_date):
+    """Enrich pending creations as well as existing records; never write either here."""
+    projects = analysis.get("new_projects") or []
+    proposed = [{"candidate_key": f"new-project-{i}", "name": project["name"],
+                 "description": project.get("description"), "status": "active"}
+                for i, project in enumerate(projects)]
+    context = {**context, "proposed_projects": proposed}
+    draft = extract_entity_intelligence(client, MEETING_CONTEXT_MODEL, transcript, context, meeting_date)
+    draft = _validated_entity_enrichments(draft, context, transcript)
+    reviewed = review_entity_intelligence(client, MEETING_CONTEXT_MODEL, transcript, context, draft)
+    validated = _validated_entity_enrichments(reviewed, context, transcript)
+    existing = []
+    by_key = {p["candidate_key"]: projects[i] for i, p in enumerate(proposed)}
+    for item in validated:
+        if item.get("candidate_key") in by_key:
+            by_key[item["candidate_key"]]["changes"] = item["changes"]
+        elif item.get("target_id"):
+            existing.append(item)
+    return existing
 
 def _context_receipt_suggestions(analysis: dict, coaching: dict | None = None) -> list[dict]:
     """Keep a transparent, non-canonical record of context used for this result."""
@@ -2173,10 +2217,8 @@ def process_meeting(meeting_id: int) -> None:
             coaching_analysis,
             "\n\n".join(value for value in (snapshot["leadership_context"], provisional_context) if value),
         )
-        coaching["entity_enrichments"] = _validated_entity_enrichments(
-            extract_entity_intelligence(client, MEETING_CONTEXT_MODEL, transcript,
-                                        resolved["retrieved_context"], snapshot.get("meeting_date")),
-            resolved["retrieved_context"], transcript
+        coaching["entity_enrichments"] = _enrich_resolved_analysis(
+            analysis, resolved["retrieved_context"], transcript, snapshot.get("meeting_date")
         )
         _meeting_log(
             logging.INFO, "stage_completed", meeting_id=meeting_id, attempt_id=attempt_id,

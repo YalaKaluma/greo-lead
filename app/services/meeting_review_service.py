@@ -17,7 +17,7 @@ def commitment_windows(transcript):
     return "\n".join(f"[{i+1}] {lines[i]}" for i in sorted(selected))
 
 
-def review_resolution(client, model, transcript, catalog, labels, draft):
+def review_resolution(client, model, transcript, catalog, labels, draft, supplied_context=None):
     response = client.chat.completions.create(
         model=model, temperature=0.0, max_tokens=7000,
         response_format={"type": "json_schema", "json_schema": {
@@ -47,9 +47,11 @@ def review_resolution(client, model, transcript, catalog, labels, draft):
             "match when the catalog has that initiative; additional projects are not restricted to clients. "
             "Use existing only with confidence >=.78 and margin >=.12; runners-up must be distinct IDs. "
             "Use null ID for new/self/unknown/none. Be conservative about goals. All confidences are 0..1. "
+            "attendance_basis must describe actual evidence: direct_address, introduction, self, mentioned or unknown. A name merely occurring in a quote is not direct address. Repeated references, assigned work and future consultation remain mentioned. Inspect every substantive topic across the full transcript, including smaller delivery updates, before deciding additional_projects. Prefer an existing strategic growth goal when this client/product work demonstrably advances it; do not invent a meeting-shaped goal when that outcome already exists. "
             "Return the full corrected result using the schema, not a critique. " + UNTRUSTED_CONTEXT_POLICY)},
             {"role": "user", "content":
-                wrap_untrusted_context("catalog", json.dumps(catalog), 50000)
+                wrap_untrusted_context("supplied_meeting_context", supplied_context or "", 10000)
+                + wrap_untrusted_context("catalog", json.dumps(catalog), 50000)
                 + wrap_untrusted_context("draft_context_not_ground_truth", json.dumps(draft), 26000)
                 + wrap_untrusted_context("transcript", numbered_transcript(transcript), 150000)}])
     return parse_bounded_json_object(response.choices[0].message.content, max_characters=100000)

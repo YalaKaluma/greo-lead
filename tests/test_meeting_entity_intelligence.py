@@ -55,3 +55,43 @@ def test_identical_record_value_is_not_proposed_again():
     context = {"projects": [{"id": 42, "risks": "Recovery wording remains unresolved."}]}
     item = _proposal(current_value="Recovery wording remains unresolved.")
     assert _validated_entity_enrichments([item], context, "Me: Recovery remains unresolved.") == []
+
+
+def test_pending_project_is_enriched_without_creating_a_database_identity(monkeypatch):
+    from app.services import meeting_intelligence_service as service
+    source = "Me: I can advise half a day per week, not lead delivery."
+    proposal = {"entity_type": "project", "target_id": None, "candidate_key": "new-project-0",
+                "confidence": .95, "changes": [{"field": "role", "operation": "append",
+                "current_value": None, "proposed_value": "Advisor, half a day weekly; not delivery lead.",
+                "evidence_line_ids": [1]}]}
+    monkeypatch.setattr(service, "extract_entity_intelligence", lambda *args: [proposal])
+    monkeypatch.setattr(service, "review_entity_intelligence", lambda *args: args[-1])
+    analysis = {"new_projects": [{"name": "Client systems", "description": "Proposed roadmap"}]}
+    assert service._enrich_resolved_analysis(analysis, {}, source, "2026-01-01") == []
+    assert analysis["new_projects"][0]["changes"][0]["field"] == "role"
+    assert "id" not in analysis["new_projects"][0]
+
+
+def test_pending_project_rejects_unknown_key_and_fabricated_source():
+    context = {"proposed_projects": [{"candidate_key": "new-project-0", "name": "Client systems"}]}
+    proposal = {**_proposal(), "target_id": None, "candidate_key": "new-project-0"}
+    assert len(_validated_entity_enrichments([proposal], context, "Me: Recovery wording remains unresolved.")) == 1
+    assert _validated_entity_enrichments([{**proposal, "candidate_key": "new-project-999"}], context, "Me: Recovery wording remains unresolved.") == []
+
+
+def test_semantic_review_cannot_retarget_a_change():
+    from app.services.meeting_entity_intelligence_service import review_entity_intelligence
+    def create(**kwargs):
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=
+            '{"entity_enrichments":[{"entity_type":"project","target_id":999,"changes":[]}]}'))])
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    assert review_entity_intelligence(client, "model", "Me: We need a roadmap.", {}, [_proposal()]) == []
+
+
+def test_client_discussion_cannot_become_employer_but_employment_can():
+    context = {"people": [{"id": 7, "name": "Alex", "organization": None}]}
+    item = {"entity_type": "person", "target_id": 7, "confidence": .99, "changes": [{
+        "field": "organization", "operation": "replace", "current_value": None,
+        "proposed_value": "ClientCo", "evidence_line_ids": [1]}]}
+    assert _validated_entity_enrichments([item], context, "A: We are advising ClientCo on its transformation.") == []
+    assert _validated_entity_enrichments([item], context, "A: I am employed by ClientCo.")
