@@ -61,10 +61,11 @@ def resolution_schema(catalog, speaker_labels):
             "rationale": {"type": "string"},
         }
         if kind == "people":
+            properties["identity_basis"] = {"type": "string", "enum": ["named_person", "hypothetical", "uncertain_name"]}
             properties["observed_name"] = {"type": "string"}
             properties["attendance_basis"] = {"type": "string", "enum": ["direct_address", "introduction", "self", "mentioned", "unknown"]}
             properties["shared_speaker_label"] = {"type": "boolean"}
-            properties["speaker_label"] = {"type": "string", "enum": speaker_labels}
+            properties["speaker_label"] = {"type": "string", "enum": list(dict.fromkeys([*speaker_labels, "Unattributed attendee"]))}
         return {"type": "object", "properties": properties,
                 "required": list(properties), "additionalProperties": False}
     properties = {
@@ -87,6 +88,8 @@ def validate_catalog_choices(resolution, catalog, transcript):
         for item in rows if isinstance(rows, list) else [rows]:
             item["model_status"] = item.get("status")
             if kind == "people":
+                if item.get("identity_basis") == "uncertain_name":
+                    item.update(status="unknown", id=None, validation_reason="model_unknown")
                 if item.get("attendance_basis") == "mentioned":
                     item["speaker_label"] = ""
                 label = re.escape(str(item.get("speaker_label") or ""))
@@ -126,6 +129,7 @@ def validate_catalog_choices(resolution, catalog, transcript):
                             else "catalog_identity_mismatch")
             else:
                 item["validation_reason"] = "validated_catalog_and_evidence"
+    resolution["people"] = [p for p in resolution.get("people", []) if p.get("identity_basis") != "hypothetical"]
     # Identity survives even when the person did not attend.
     mentions = [p for p in resolution.get("people", []) if p.get("attendance_basis") == "mentioned"]
     resolution["people"] = [p for p in resolution.get("people", []) if p.get("attendance_basis") != "mentioned"]
@@ -135,6 +139,8 @@ def validate_catalog_choices(resolution, catalog, transcript):
 
 def canonical_people(people, labels):
     """Keep real labels but allow multiple independently identified attendees per label."""
+    if any(p.get("speaker_label") == "Unattributed attendee" for p in people or []):
+        labels = list(dict.fromkeys([*labels, "Unattributed attendee"]))
     by_key = {normalized(label): label for label in labels}
     groups = {label: [] for label in labels}
     for item in people or []:
@@ -155,5 +161,5 @@ def canonical_people(people, labels):
         known = [r for r in rows if r.get("status") in {"existing", "new", "self"}]
         chosen = known or rows[:1] or [{"speaker_label": label, "status": "self" if normalized(label) == "me" else "unknown",
                                       **({"name": "Me"} if normalized(label) == "me" else {})}]
-        result.extend({**r, "shared_speaker_label": len(known) > 1 or bool(r.get("shared_speaker_label"))} for r in chosen)
+        result.extend({**r, "shared_speaker_label": label == "Unattributed attendee" or len(known) > 1 or bool(r.get("shared_speaker_label"))} for r in chosen)
     return result
