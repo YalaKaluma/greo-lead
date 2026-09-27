@@ -95,3 +95,51 @@ def test_client_discussion_cannot_become_employer_but_employment_can():
         "proposed_value": "ClientCo", "evidence_line_ids": [1]}]}
     assert _validated_entity_enrichments([item], context, "A: We are advising ClientCo on its transformation.") == []
     assert _validated_entity_enrichments([item], context, "A: I am employed by ClientCo.")
+
+
+def test_currency_requires_explicit_support_in_the_cited_evidence():
+    context = {"projects": [{"id": 42, "risks": None}]}
+    assert _validated_entity_enrichments(
+        [_proposal(proposed_value="Discovery costs 95k USD.")], context,
+        "Me: Discovery costs 95k. We are discussing a US client.") == []
+    assert _validated_entity_enrichments(
+        [_proposal(proposed_value="Discovery costs 95k USD.")], context,
+        "Me: Discovery costs 95k US dollars.")
+    assert _validated_entity_enrichments(
+        [_proposal(proposed_value="Discovery costs 95k; currency unspecified.")], context,
+        "Me: Discovery costs 95k.")
+
+
+def test_enrichment_receives_user_identity_not_only_other_attendees(monkeypatch):
+    from app.services import meeting_intelligence_service as service
+    contexts = []
+    def extract(client, model, transcript, context, date):
+        contexts.append(context)
+        return []
+    monkeypatch.setattr(service, "extract_entity_intelligence", extract)
+    monkeypatch.setattr(service, "review_entity_intelligence", lambda *args: [])
+    identity = {"people": [{"status": "self", "name": "Me", "speaker_label": "Me"}]}
+    service._enrich_resolved_analysis({"meeting_resolution": identity}, {},
+        "Me: I can advise. Pat can lead.", "2026-01-01", {"name": "Alex", "speaker_label": "Me"})
+    assert contexts[0]["current_user"]["name"] == "Alex"
+    assert contexts[0]["meeting_identity"] == identity
+
+
+def test_project_boundary_review_cannot_overwrite_people_or_goals():
+    import json
+    from app.services.meeting_review_service import review_project_resolution
+    calls = []
+    def create(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps({
+            "primary_project": {"name": "Existing client", "id": 42},
+            "additional_projects": [], "people": [], "primary_goal": {}})))])
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    draft = {"people": [{"name": "Alex"}], "primary_goal": {"title": "Growth"},
+             "primary_project": {"name": "New region"}, "additional_projects": []}
+    result = review_project_resolution(client, "model", "Me: New region is tentative.\nA: Existing client contract next.",
+                                      {"projects": [{"id": 42, "name": "Existing client"}]}, draft)
+    assert result["people"] == draft["people"]
+    assert result["primary_goal"] == draft["primary_goal"]
+    assert result["primary_project"]["id"] == 42
+    assert "[2] A: Existing client contract next." in calls[0]["messages"][1]["content"]
