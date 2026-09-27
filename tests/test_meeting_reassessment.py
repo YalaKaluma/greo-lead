@@ -446,3 +446,15 @@ def test_hypothetical_named_example_never_becomes_person_link():
         {"people": [{"name": "Alex", "id": 1}]}, "Me: Imagine somebody named Alex making a scenario.")
     assert resolved["people"] == []
     assert resolved["mentioned_people"] == []
+
+
+def test_duplicate_person_suggestions_in_one_result_are_saved_once(db):
+    meeting = models.Meeting(user_number="test", title="Review", source_type="notes")
+    person = models.JourneyPerson(user_number="test", name="Alex")
+    db.add_all([meeting, person])
+    db.flush()
+    item = {"person_id": person.id, "speaker_label": "", "attendance_basis": "mentioned",
+            "confidence": .95, "runner_up_confidence": 0, "evidence_excerpt": "We will consult Alex."}
+    service._store_pending_enrichment_suggestions(db, meeting, {"suggested_person_matches": [item, dict(item)]})
+    db.flush()
+    assert db.query(models.MeetingEnrichmentSuggestion).count() == 1
