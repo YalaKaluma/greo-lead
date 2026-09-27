@@ -280,7 +280,20 @@ def test_context_review_runs_before_catalog_validation(monkeypatch):
     ("Me: Je vais fixer un autre rendez-vous.", "Me"),
     ("Me: Je vais peut-être demander un autre format.", None),
     ("Me: Let me adjust that wording.", "Me"),
+    ("Me: Happy to prepare a demo for Monday.", "Me"),
+    ("Me: Je peux l'enlever aujourd'hui.", "Me"),
 ])
 def test_self_ownership_requires_commitment_not_merely_self_speech(excerpt, expected):
     from app.services.meeting_review_service import supported_self_owner
     assert supported_self_owner({"owner_name": "Me", "evidence_excerpt": excerpt})["owner_name"] == expected
+
+
+def test_role_similarity_alone_cannot_identify_person():
+    catalog = {"people": [{"id": 7, "name": "Niko"}]}
+    person = {"status": "existing", "id": 7, "name": "Niko", "speaker_label": "A", "evidence_line_ids": [1]}
+    result = validate_catalog_choices({"people": [person]}, catalog, "A: Here are the vendor estimates.")
+    assert result["people"][0]["status"] == "unknown"
+    assert result["people"][0]["validation_reason"] == "missing_identity_anchor"
+    person = {**person, "status": "existing", "id": 7}
+    result = validate_catalog_choices({"people": [person]}, catalog, "Me: Thanks Niko for those estimates.")
+    assert result["people"][0]["status"] == "existing"

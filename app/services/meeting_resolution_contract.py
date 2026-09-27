@@ -99,6 +99,15 @@ def validate_catalog_choices(resolution, catalog, transcript):
                 record = next((r for r in catalog.get(kind, []) if r["id"] == item.get("id")), None)
                 valid = valid and record is not None and normalized(item.get(name_field)) == normalized(
                     (record or {}).get("name") or (record or {}).get("title"))
+                if valid and kind == "people":
+                    # A technical role is not an identity. Require a naming anchor
+                    # in the cited turns; uncertain transcription variants need review.
+                    name_words = {word for word in normalized(record.get("name")).split() if len(word) >= 3}
+                    quote_words = set(normalized(item.get("evidence_excerpt")).split())
+                    if not name_words.intersection(quote_words):
+                        item.update(status="unknown", id=None,
+                                    validation_reason="missing_identity_anchor")
+                        continue
             if not valid:
                 item.update(status="unknown" if key == "people" else "none", id=None,
                             validation_reason="unsupported_evidence" if not grounded(item.get("evidence_excerpt"), transcript)
