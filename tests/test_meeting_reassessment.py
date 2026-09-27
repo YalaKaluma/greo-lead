@@ -259,14 +259,16 @@ def test_group_request_is_not_automatically_owned_by_user():
     assert "[2] Me: Je vais le partager demain." in commitment_windows(source)
 
 
-def test_context_review_runs_before_catalog_validation(monkeypatch):
+def test_linking_passes_run_before_catalog_validation(monkeypatch):
     calls = []
     def complete(**kwargs):
         calls.append(kwargs)
-        payload = {"people": []} if len(calls) == 1 else {"people": [{"status": "existing", "id": 7,
+        payload = {"people": [{"status": "existing", "id": 7,
             "name": "Matt", "speaker_label": "A", "evidence_line_ids": [1]}]}
-        if len(calls) == 3:
+        if len(calls) == 2:
             payload = {"primary_project": {"status": "none"}, "additional_projects": []}
+        elif len(calls) == 3:
+            payload = {"primary_goal": {"status": "none"}}
         return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))])
     monkeypatch.setattr(service.client.chat.completions, "create", complete)
     result = service.resolve_meeting_context("Me: Hey Matt, how are you?\nA: Good thanks.", None, None,
@@ -331,7 +333,9 @@ def test_mentioned_person_is_not_an_attendee_even_with_real_quote():
     resolved = validate_catalog_choices({"people": [{"status": "existing", "id": 1, "name": "Alex",
         "speaker_label": "A", "attendance_basis": "mentioned", "evidence_line_ids": [1]}]},
         {"people": [{"id": 1, "name": "Alex"}]}, source)
-    assert resolved["people"][0]["status"] == "unknown"
+    assert resolved["people"] == []
+    assert resolved["mentioned_people"][0]["status"] == "existing"
+    assert resolved["mentioned_people"][0]["speaker_label"] == ""
 
 
 def test_short_naming_turn_in_sparse_source_evidence_remains_grounded():
@@ -375,3 +379,55 @@ def test_list_names_use_same_resolution_as_context_including_shared_labels(db):
     db.add(models.MeetingParticipant(meeting_id=meeting.id, speaker_label="A", display_name="Stale name"))
     db.flush()
     assert _meeting_payload(meeting)["participant_names"] == ["Alex", "Morgan", "B"]
+
+
+def test_mentioned_identity_survives_validation_without_attendance(db):
+    person = models.JourneyPerson(user_number='test', name='Alex')
+    meeting = models.Meeting(user_number='test', title='Review', source_type='notes')
+    db.add_all([person, meeting])
+    db.flush()
+    source = 'Me: We should consult Alex tomorrow about the project.'
+    resolution = validate_catalog_choices({'people': [{'status': 'existing', 'id': person.id,
+        'name': 'Alex', 'speaker_label': 'Me', 'attendance_basis': 'mentioned',
+        'confidence': .95, 'runner_up_confidence': 0, 'evidence_line_ids': [1]}]},
+        {'people': [{'id': person.id, 'name': 'Alex'}]}, source)
+    validated = service._validated_resolution_context(db, 'test', resolution, source)['resolution']
+    assert validated['mentioned_people'][0]['id'] == person.id
+    analysis = service._resolution_to_analysis(validated)
+    assert analysis['participants'] == [{'speaker_label': 'Me', 'display_name': 'Me'}]
+    suggestion = next(s for s in service._analysis_suggestions(meeting, analysis) if s['suggestion_type'] == 'person')
+    from app.routers.meetings import _accept_meeting_suggestion
+    _accept_meeting_suggestion(db, meeting, models.MeetingEnrichmentSuggestion(
+        meeting_id=meeting.id, suggestion_type='person', action='link', target_id=person.id,
+        payload=suggestion))
+    assert db.query(models.MeetingAttendee).count() == 0
+    assert db.query(models.MeetingParticipant).count() == 0
+
+
+def test_correlated_name_variant_can_match_but_close_runner_up_cannot():
+    source = 'Me: Hello Alexx, can you explain the cloud design?\nA: Yes, let us review it.'
+    def resolve(margin):
+        return validate_catalog_choices({'people': [{'status': 'existing', 'id': 1, 'name': 'Alex',
+            'observed_name': 'Alexx', 'speaker_label': 'A', 'attendance_basis': 'direct_address',
+            'confidence': .95, 'runner_up_confidence': margin, 'evidence_line_ids': [1, 2]}]},
+            {'people': [{'id': 1, 'name': 'Alex'}]}, source)['people'][0]
+    assert resolve(.1)['status'] == 'existing'
+    assert resolve(.9)['status'] == 'unknown'
+
+
+def test_phase_one_resolves_goal_after_projects_without_rewriting_people():
+    from app.services.meeting_linking_service import resolve_links
+    calls = []
+    outputs = [{'people': [{'status': 'unknown', 'speaker_label': 'A'}]},
+               {'primary_project': {'status': 'existing', 'id': 4, 'name': 'Atlas'}, 'additional_projects': []},
+               {'primary_goal': {'status': 'existing', 'id': 7, 'title': 'Grow product'}}]
+    def complete(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(outputs[len(calls)-1])))])
+    fake = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=complete)))
+    result = resolve_links(fake, 'test', 'A: Let us review Atlas.', {}, ['A'])
+    assert result['people'] == outputs[0]['people']
+    assert 'resolved_projects' in calls[2]['messages'][1]['content']
+    assert 'Atlas' in calls[2]['messages'][1]['content']
+    assert [c['response_format']['json_schema']['name'] for c in calls] == [
+        'meeting_people_links', 'meeting_project_boundaries', 'meeting_goal_link']

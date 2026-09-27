@@ -58,7 +58,7 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
-MEETING_PROMPT_VERSION = "meeting-v15-project-boundaries"
+MEETING_PROMPT_VERSION = "meeting-v16-entity-linking"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4.1")
 MEETING_CONTEXT_MODEL = os.getenv("MEETING_CONTEXT_MODEL", "gpt-4.1")
 MEETING_COACHING_MODEL = os.getenv("MEETING_COACHING_MODEL", MEETING_MODEL)
@@ -566,66 +566,9 @@ def resolve_meeting_context(
     """Systematically resolve goal, people, and project before meeting assessment."""
     catalog = json.loads(matching_context or "{}")
     labels = _transcript_speaker_labels(transcript) or ["Unlabelled"]
-    response = client.chat.completions.create(
-        model=MEETING_CONTEXT_MODEL,
-        response_format={"type": "json_schema", "json_schema": {
-            "name": "meeting_resolution", "strict": True,
-            "schema": resolution_schema(catalog, labels),
-        }},
-        temperature=0.1,
-        messages=[
-            {"role": "system", "content": (
-                "Identify the actual operating context of this meeting. The catalog contains candidates, "
-                "not answers. First understand the concrete client, initiative and purpose from the whole "
-                "transcript; then compare ALL project candidates. Broad overlap such as data, AI, RGM or "
-                "growth is not enough. A prior engagement used as an analogy or a competing priority is "
-                "not the primary project. If the main client/initiative has no matching record, propose a "
-                "new project, never force it into an unrelated existing one. Next identify actual attendees "
-                "using greetings, direct address, replies and introductions; distinguish them from people "
-                "merely discussed. Finally choose a goal only if the meeting substantively advances that "
-                "specific outcome. A commercial proposal is not automatically a UX or data onboarding goal. "
-                "It is valid and preferable to return no goal when evidence is weak. "
-                "Copy the selected catalog name/title AND its exact ID together. Do not use list positions "
-                "as IDs. Evidence must be a verbatim continuous transcript excerpt supporting the identity, "
-                "not merely the general topic. Prefer a short excerpt from a single turn, preserving words and "
-                "speaker labels exactly; no ellipses or stitched quotations. Return evidence_line_ids containing "
-                "the bracketed source line numbers supporting each choice. The application constructs the "
-                "verbatim quote from these lines. Prefer a small continuous span. All confidence values must be "
-                "decimals from 0 to 1, never percentages. Compare against the closest runner-up; use existing only "
-                "with confidence >=0.78 and a margin >=0.12. For new/none/unknown/self use a null ID. "
-                "Return one entry per actual PERSON, not per diarization label. Multiple people can share A or B; "
-                "A recording may concatenate meetings: use local greetings and introductions within each segment, "
-                "never assume a label stays the same person after a meeting boundary. "
-                "preserve all named attendees with their own evidence and shared_speaker_label=true. "
-                "Do not collapse people just because they share a label. Use names only in name, no label suffixes. "
-                "Me is self. current_user in the catalog identifies the user. Phonetic transcription variants "
-                "of the user's name are self, never a new stakeholder. Greetings address someone OTHER than "
-                "the speaker. Mentioned people who do not attend are not participants. "
-                "A unique existing person with the same name, organization and work context is the likely match; "
-                "a role description such as Product Manager does not prevent them discussing technical details. "
-                "Do not propose a duplicate person solely because their role is broader than their stored title. "
-                "For runner_up use a DIFFERENT candidate ID; null and confidence 0 if no credible alternative. "
-                "Put the main project in primary_project and OTHER substantive client initiatives in additional_projects. "
-                "Never combine separate clients in one new project. A scheduled client demo or proposal with "
-                "concrete next steps is substantive. Do not include analogies, case studies or casual mentions. "
-                "Use explicit greetings and replies to identify the dominant person behind a speaker label; "
-                "occasional diarization errors do not invalidate a clearly addressed identity. "
-                "Diarization may mix multiple people under one label: resolve only where defensible, "
-                "explain ambiguity and do not invent people. A named attendee absent from the catalog may "
-                "be new; a mentioned non-attendee must not be added. " + UNTRUSTED_CONTEXT_POLICY
-            )},
-            {"role": "user", "content": (
-                wrap_untrusted_context("meeting_context", f"{supplied_title or ''}\n{supplied_context or ''}", 10000)
-                + "\n" + wrap_untrusted_context("candidate_catalog", json.dumps(catalog), 50000)
-                + "\n" + wrap_untrusted_context("transcript", numbered_transcript(transcript), 120000)
-            )},
-        ],
-        max_tokens=5000,
-    )
-    parsed = parse_bounded_json_object(response.choices[0].message.content, max_characters=100_000)
-    from app.services.meeting_review_service import review_resolution, review_project_resolution
-    parsed = review_resolution(client, MEETING_CONTEXT_MODEL, transcript, catalog, labels, parsed, supplied_context)
-    parsed = review_project_resolution(client, MEETING_CONTEXT_MODEL, transcript, catalog, parsed)
+    from app.services.meeting_linking_service import resolve_links
+    parsed = resolve_links(client, MEETING_CONTEXT_MODEL, transcript, catalog, labels,
+                           supplied_title, supplied_context)
     parsed = validate_catalog_choices(parsed, catalog, transcript)
     parsed["people"] = canonical_people(parsed.get("people"), _transcript_speaker_labels(transcript))
     return parsed
@@ -653,12 +596,13 @@ def _resolution_to_analysis(resolution: dict) -> dict:
         elif project.get("status") == "new" and str(project.get("name") or "").strip():
             result["new_projects"].append(project)
     participants = {}
-    for person in resolution.get("people") or []:
+    for person in [*(resolution.get("people") or []), *(resolution.get("mentioned_people") or [])]:
         label = person.get("speaker_label") or "Unlabelled"
         name = person.get("name") if person.get("status") in {"existing", "new", "self"} else label
-        participants.setdefault(label, [])
-        if name and name not in participants[label]:
-            participants[label].append(name)
+        if person.get("attendance_basis") != "mentioned":
+            participants.setdefault(label, [])
+            if name and name not in participants[label]:
+                participants[label].append(name)
         if person.get("status") == "existing" and person.get("id"):
             result["suggested_person_matches"].append({
                 **person,
@@ -1262,8 +1206,8 @@ def _analysis_suggestions(meeting: Meeting, analysis: dict) -> list[dict]:
                 "action": "link",
                 "target_id": _strict_integer_id(item.get("person_id")),
                 "speaker_label": item.get("speaker_label"),
-                "title": f"Match {item.get('speaker_label') or 'participant'} to an existing person",
-                "description": "Use this person record as the confirmed participant for the meeting.",
+                "title": ("Link a person discussed" if item.get("attendance_basis") == "mentioned" else f"Match {item.get('speaker_label') or 'participant'} to an existing person"),
+                "description": ("Link this person as discussed, without marking attendance." if item.get("attendance_basis") == "mentioned" else "Use this person record as the confirmed participant for the meeting."),
                 **item,
             })
     for item in analysis.get("new_people") or []:
@@ -1505,6 +1449,7 @@ def _validated_resolution_context(
         "current_user": {"name": user.name if user else None, "speaker_label": "Me"},
         "primary_goal": {"status": "none"},
         "people": [],
+        "mentioned_people": [],
         "primary_project": {"status": "none"},
         "additional_projects": [],
         "suggested_flags": resolution.get("suggested_flags") or [],
@@ -1534,7 +1479,8 @@ def _validated_resolution_context(
     ):
         sanitized["primary_goal"] = {**goal, "status": "new", "confidence": _safe_confidence(goal.get("confidence"))}
 
-    for person in canonical_people(resolution.get("people"), _transcript_speaker_labels(transcript)):
+    for person in [*canonical_people(resolution.get("people"), _transcript_speaker_labels(transcript)),
+                   *(resolution.get("mentioned_people") or [])]:
         cleaned = {**person, "speaker_label": str(person.get("speaker_label") or "").strip()[:80]}
         person_id = _strict_integer_id(person.get("id"))
         if cleaned["speaker_label"].casefold() == "me" or person.get("status") == "self":
@@ -1576,7 +1522,7 @@ def _validated_resolution_context(
             if person.get("status") == "existing":
                 cleaned["validation_reason"] = "insufficient_match_confidence_or_margin"
             cleaned.pop("id", None)
-        sanitized["people"].append(cleaned)
+        sanitized["mentioned_people" if person.get("attendance_basis") == "mentioned" else "people"].append(cleaned)
 
     known_speaker_keys = {
         str(person.get("speaker_label") or "").strip().casefold()
@@ -1713,7 +1659,7 @@ def _store_pending_enrichment_suggestions(db: Session, meeting: Meeting, analysi
 
 def _bounded_catalog_items(items: list[dict], character_budget: int) -> list[dict]:
     """Keep every candidate identity; distribute descriptive space fairly."""
-    identity_fields = {"id", "name", "title", "role", "client", "organization", "relation"}
+    identity_fields = {"id", "name", "title", "role", "client", "organization", "relation", "goal"}
     selected = [{key: value for key, value in item.items()
                  if key in identity_fields and value is not None} for item in items]
     spare = max(0, character_budget - len(json.dumps(selected, default=str)))
