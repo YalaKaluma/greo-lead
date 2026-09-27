@@ -27,6 +27,7 @@ from app.utils.safe_errors import log_failure
 from app.services.meeting_task_extraction_service import extract_action_items
 from app.services.meeting_review_service import review_coaching
 from app.services.meeting_entity_intelligence_service import extract_entity_intelligence, review_entity_intelligence
+from app.services.journey_support import goal_level_variants
 from app.services.meeting_resolution_contract import resolution_schema, validate_catalog_choices, canonical_people, grounded, normalized, numbered_transcript, sourced_evidence
 from app.services.meeting_task_priority_service import score_pending_meeting_action_items
 from app.services.twin_context_service import get_twin_context
@@ -1843,7 +1844,9 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
         JourneyPerson.user_number.in_(user_identifiers)
     ).order_by(JourneyPerson.updated_at.desc()).limit(150).all()
     matching_goals = db.query(JourneyGoal).filter(
-        JourneyGoal.user_number.in_(user_identifiers)
+        JourneyGoal.user_number.in_(user_identifiers),
+        JourneyGoal.parent_goal_id.is_(None),
+        JourneyGoal.time_horizon.in_(goal_level_variants("vision")),
     ).order_by(JourneyGoal.updated_at.desc()).limit(100).all()
     projects = db.query(JourneyProject).filter(
         JourneyProject.user_number.in_(user_identifiers)
