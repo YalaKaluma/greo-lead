@@ -25,6 +25,7 @@ from app.config import OPENAI_API_KEY
 from app.db import SessionLocal
 from app.utils.safe_errors import log_failure
 from app.services.meeting_task_extraction_service import extract_action_items
+from app.services.meeting_review_service import review_coaching
 from app.services.meeting_resolution_contract import resolution_schema, validate_catalog_choices, canonical_people, grounded, normalized, numbered_transcript
 from app.services.meeting_task_priority_service import score_pending_meeting_action_items
 from app.services.twin_context_service import get_twin_context
@@ -56,13 +57,13 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
-MEETING_PROMPT_VERSION = "meeting-v10-source-line-evidence"
+MEETING_PROMPT_VERSION = "meeting-v11-reviewed-context"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4.1")
 MEETING_CONTEXT_MODEL = os.getenv("MEETING_CONTEXT_MODEL", "gpt-4.1")
 MEETING_COACHING_MODEL = os.getenv("MEETING_COACHING_MODEL", MEETING_MODEL)
 # Increment this whenever the leadership assessment prompt or scoring logic changes.
 # The admin reassessment action uses it to resume safely and avoid duplicate AI work.
-LEADERSHIP_ASSESSMENT_VERSION = "leadership-v2-speaker-grounded"
+LEADERSHIP_ASSESSMENT_VERSION = "leadership-v3-evidence-review"
 PERSON_ENRICHMENT_FIELDS = {
     "organization", "team", "relation", "context", "current_goals", "stakeholder_priorities",
     "risks_or_pressures", "stakeholder_aspirations", "how_i_create_value", "potential_tensions",
@@ -589,7 +590,16 @@ def resolve_meeting_context(
                 "verbatim quote from these lines. Prefer a small continuous span. All confidence values must be "
                 "decimals from 0 to 1, never percentages. Compare against the closest runner-up; use existing only "
                 "with confidence >=0.78 and a margin >=0.12. For new/none/unknown/self use a null ID. "
-                "Return one entry per actual speaker label, never use a status as a speaker label. Me is self. "
+                "Return one entry per actual PERSON, not per diarization label. Multiple people can share A or B; "
+                "preserve all named attendees with their own evidence and shared_speaker_label=true. "
+                "Do not collapse people just because they share a label. Use names only in name, no label suffixes. "
+                "Me is self. Mentioned people who do not attend are not participants. "
+                "A unique existing person with the same name, organization and work context is the likely match; "
+                "a role description such as Product Manager does not prevent them discussing technical details. "
+                "Do not propose a duplicate person solely because their role is broader than their stored title. "
+                "For runner_up use a DIFFERENT candidate ID; null and confidence 0 if no credible alternative. "
+                "Put the main project in primary_project and OTHER substantive client initiatives in additional_projects. "
+                "Never combine separate clients in one new project. Do not include analogies, case studies or casual mentions. "
                 "Use explicit greetings and replies to identify the dominant person behind a speaker label; "
                 "occasional diarization errors do not invalidate a clearly addressed identity. "
                 "Diarization may mix multiple people under one label: resolve only where defensible, "
@@ -626,11 +636,11 @@ def _resolution_to_analysis(resolution: dict) -> dict:
         result["suggested_goal_ids"].append({**goal, "id": goal["id"]})
     elif goal.get("status") == "new" and str(goal.get("title") or "").strip():
         result["new_goals"].append(goal)
-    project = resolution.get("primary_project") or {}
-    if project.get("status") == "existing" and project.get("id"):
-        result["suggested_project_ids"].append({**project, "id": project["id"]})
-    elif project.get("status") == "new" and str(project.get("name") or "").strip():
-        result["new_projects"].append(project)
+    for project in [resolution.get("primary_project") or {}, *(resolution.get("additional_projects") or [])]:
+        if project.get("status") == "existing" and project.get("id"):
+            result["suggested_project_ids"].append({**project, "id": project["id"]})
+        elif project.get("status") == "new" and str(project.get("name") or "").strip():
+            result["new_projects"].append(project)
     for person in resolution.get("people") or []:
         if person.get("status") == "existing" and person.get("id"):
             result["suggested_person_matches"].append({
@@ -813,7 +823,7 @@ def analyze_leadership_feedback(
         })
         for domain in expected_domains
     ]
-    return result
+    return review_coaching(client, MEETING_COACHING_MODEL, transcript, analysis, result)
 
 
 def reassess_meeting_leadership(meeting_id: int) -> None:
@@ -1350,6 +1360,7 @@ def _validated_entity_enrichments(items: list[dict], retrieved_context: dict, tr
             _strict_integer_id((retrieved_context.get("project") or {}).get("id"))
         },
     }
+    allowed_ids["project"].update(_strict_integer_id(p.get("id")) for p in retrieved_context.get("projects", []))
     allowed_ids["project"].discard(None)
     validated = []
     for item in items or []:
@@ -1395,6 +1406,8 @@ def _context_receipt_suggestions(analysis: dict, coaching: dict | None = None) -
 def _is_strong_context_match(item: dict) -> bool:
     confidence = _safe_confidence(item.get("confidence"))
     runner_up_confidence = _safe_confidence(item.get("runner_up_confidence"))
+    if item.get("runner_up_id") == item.get("id") and item.get("id") is not None:
+        return False
     return (
         confidence >= CONTEXT_MATCH_MIN_CONFIDENCE
         and _has_direct_evidence(item)
@@ -1417,6 +1430,7 @@ def _validated_resolution_context(
         "primary_goal": {"status": "none"},
         "people": [],
         "primary_project": {"status": "none"},
+        "additional_projects": [],
         "suggested_flags": resolution.get("suggested_flags") or [],
     }
     retrieved = {"goal": None, "people": [], "project": None}
@@ -1482,6 +1496,9 @@ def _validated_resolution_context(
             cleaned.pop("id", None)
         else:
             cleaned["status"] = "unknown"
+            cleaned.setdefault("validation_reason", "insufficient_match_confidence_or_margin")
+            if person.get("status") == "existing":
+                cleaned["validation_reason"] = "insufficient_match_confidence_or_margin"
             cleaned.pop("id", None)
         sanitized["people"].append(cleaned)
 
@@ -1498,34 +1515,47 @@ def _validated_resolution_context(
                 **({"name": "Me"} if speaker_label.casefold() == "me" else {}),
             })
 
-    project = resolution.get("primary_project") or {}
-    project_id = _strict_integer_id(project.get("id"))
-    if project.get("status") == "existing" and project_id and _is_strong_context_match(project) and grounded(project.get("evidence_excerpt"), transcript):
-        record = db.query(JourneyProject).filter(
-            JourneyProject.id == project_id, JourneyProject.user_number.in_(identifiers)
-        ).first()
-        if record:
-            sanitized["primary_project"] = {
-                **project, "id": project_id, "status": "existing", "name": record.project_name,
-                "confidence": _safe_confidence(project.get("confidence")),
+    retrieved["projects"] = []
+    seen_projects = set()
+    for index, project in enumerate([resolution.get("primary_project") or {}, *(resolution.get("additional_projects") or [])]):
+        validated_project = {"status": "none"}
+        retrieved_project = None
+        project_id = _strict_integer_id(project.get("id"))
+        if project.get("status") == "existing" and project_id and _is_strong_context_match(project) and grounded(project.get("evidence_excerpt"), transcript):
+            record = db.query(JourneyProject).filter(
+                JourneyProject.id == project_id, JourneyProject.user_number.in_(identifiers)
+            ).first()
+            if record:
+                validated_project = {
+                    **project, "id": project_id, "status": "existing", "name": record.project_name,
+                    "confidence": _safe_confidence(project.get("confidence")),
+                }
+                retrieved_project = {
+                    "id": record.id, "name": record.project_name, "goal": record.goal,
+                    "description": record.description, "status": record.status, "client": record.client,
+                    "role": record.role, "objective": record.objective, "timeline": record.timeline,
+                    "in_scope": record.in_scope, "out_of_scope": record.out_of_scope,
+                    "deliverables": record.deliverables, "core_team": record.core_team,
+                    "client_stakeholders": record.client_stakeholders, "risks": record.risks,
+                }
+        elif (
+            project.get("status") == "new"
+            and str(project.get("name") or "").strip()
+            and _safe_confidence(project.get("confidence")) >= CONTEXT_MATCH_MIN_CONFIDENCE
+            and grounded(project.get("evidence_excerpt"), transcript)
+        ):
+            validated_project = {
+                **project, "status": "new", "confidence": _safe_confidence(project.get("confidence")),
             }
-            retrieved["project"] = {
-                "id": record.id, "name": record.project_name, "goal": record.goal,
-                "description": record.description, "status": record.status, "client": record.client,
-                "role": record.role, "objective": record.objective, "timeline": record.timeline,
-                "in_scope": record.in_scope, "out_of_scope": record.out_of_scope,
-                "deliverables": record.deliverables, "core_team": record.core_team,
-                "client_stakeholders": record.client_stakeholders, "risks": record.risks,
-            }
-    elif (
-        project.get("status") == "new"
-        and str(project.get("name") or "").strip()
-        and _safe_confidence(project.get("confidence")) >= CONTEXT_MATCH_MIN_CONFIDENCE
-        and grounded(project.get("evidence_excerpt"), transcript)
-    ):
-        sanitized["primary_project"] = {
-            **project, "status": "new", "confidence": _safe_confidence(project.get("confidence")),
-        }
+        identity = (validated_project.get("id"), normalized(validated_project.get("name")))
+        if index == 0:
+            sanitized["primary_project"] = validated_project
+            retrieved["project"] = retrieved_project
+        elif validated_project.get("status") != "none" and identity not in seen_projects:
+            sanitized["additional_projects"].append(validated_project)
+        if retrieved_project and identity not in seen_projects:
+            retrieved["projects"].append(retrieved_project)
+        seen_projects.add(identity)
 
     prompt_context = (
         "Systematically resolved provisional meeting context. Use it for this meeting now, including the "

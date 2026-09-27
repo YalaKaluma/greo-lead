@@ -747,6 +747,14 @@ def _accept_meeting_suggestion(db: Session, meeting: Meeting, suggestion: Meetin
             suggestion.target_id = person.id
         if not person:
             raise HTTPException(status_code=409, detail="The person suggestion is incomplete.")
+        if (suggestion.payload or {}).get("shared_speaker_label"):
+            # One diarization label cannot safely become one person's identity.
+            attendee = db.query(MeetingAttendee).filter(
+                MeetingAttendee.meeting_id == meeting.id, MeetingAttendee.person_id == person.id
+            ).first()
+            if not attendee:
+                db.add(MeetingAttendee(meeting_id=meeting.id, person_id=person.id))
+            return
         participant = db.query(MeetingParticipant).filter(
             MeetingParticipant.meeting_id == meeting.id,
             MeetingParticipant.speaker_label.ilike(suggestion.speaker_label or ""),

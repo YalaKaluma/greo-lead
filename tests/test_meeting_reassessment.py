@@ -25,7 +25,7 @@ def db():
     names = ["User", "JourneyPerson", "JourneyGoal", "JourneyProject", "Meeting", "MeetingParticipant",
              "MeetingTranscriptSegment", "MeetingTopic", "MeetingDecision", "MeetingActionItem",
              "MeetingLeadershipObservation", "MeetingLeadershipDomainAssessment", "MeetingGoalLink",
-             "MeetingProjectLink", "MeetingEnrichmentSuggestion"]
+             "MeetingProjectLink", "MeetingEnrichmentSuggestion", "MeetingAttendee"]
     for name in names:
         getattr(models, name).__table__.create(engine)
     with Session(engine) as session:
@@ -147,3 +147,70 @@ def test_source_references_materialize_verbatim_quotes_and_reject_invalid_ids():
     assert result["evidence_excerpt"] == "Me: Hey Matt, how are you?\nA: Very stressed."
     assert sourced_evidence({"evidence_line_ids": [0]}, transcript)["evidence_excerpt"] == ""
     assert sourced_evidence({"evidence_line_ids": [99]}, transcript)["evidence_excerpt"] == ""
+
+
+def test_two_people_sharing_one_label_are_not_collapsed():
+    result = canonical_people([{"speaker_label": "A", "status": "new", "name": "Joost"},
+                               {"speaker_label": "A", "status": "new", "name": "Mark"}], ["Me", "A"])
+    assert {r.get("name") for r in result} == {"Me", "Joost", "Mark"}
+    assert all(r["shared_speaker_label"] for r in result if r["speaker_label"] == "A")
+
+
+def test_speaker_annotation_does_not_reject_correct_matt_identity():
+    result = validate_catalog_choices({"people": [{"status": "existing", "speaker_label": "A", "id": 7,
+        "name": "Matt (A)", "evidence_line_ids": [1]}]}, {"people": [{"id": 7, "name": "Matt"}]},
+        "Me: Hey Matt, how are you?")
+    assert result["people"][0]["status"] == "existing"
+    assert result["people"][0]["name"] == "Matt"
+
+
+def test_existing_david_name_cannot_be_proposed_as_duplicate():
+    result = validate_catalog_choices({"people": [{"status": "new", "speaker_label": "B", "name": "David",
+        "evidence_line_ids": [1]}]}, {"people": [{"id": 8, "name": "David", "role": "Product Manager"}]},
+        "Me: David, please explain the tenant architecture")
+    assert result["people"][0]["status"] == "unknown"
+    assert result["people"][0]["validation_reason"] == "existing_name_requires_review"
+
+
+def test_multiple_client_projects_reach_the_approval_queue():
+    result = service._resolution_to_analysis({"primary_project": {"status": "new", "name": "SAB discovery"},
+                                             "additional_projects": [{"status": "new", "name": "RCL proposal"}]})
+    assert [r["name"] for r in result["new_projects"]] == ["SAB discovery", "RCL proposal"]
+
+
+def test_shared_label_approval_preserves_speaker_and_adds_attendee(db):
+    from app.routers.meetings import _accept_meeting_suggestion
+    meeting = models.Meeting(user_number="test", title="Mixed", source_type="notes")
+    person = models.JourneyPerson(user_number="test", name="Mark")
+    db.add_all([meeting, person]); db.flush()
+    participant = models.MeetingParticipant(meeting_id=meeting.id, speaker_label="A", display_name="Mixed speakers")
+    db.add(participant); db.flush()
+    suggestion = models.MeetingEnrichmentSuggestion(meeting_id=meeting.id, suggestion_type="person", action="link",
+        target_id=person.id, speaker_label="A", title="Mark", payload={"shared_speaker_label": True})
+    _accept_meeting_suggestion(db, meeting, suggestion)
+    db.flush()
+    assert participant.person_id is None
+    assert db.query(models.MeetingAttendee).filter_by(meeting_id=meeting.id, person_id=person.id).count() == 1
+
+
+def test_coverage_review_recovers_omitted_action_and_explicit_self_owner(monkeypatch):
+    responses = iter([{"action_items": []}, {"action_items": [{"description": "Adjust the certification wording",
+        "owner_name": None, "due_date": None, "confidence": .95, "evidence_line_ids": [1]}]}])
+    def complete(**_kwargs):
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(next(responses))))])
+    monkeypatch.setattr(tasks.client.chat.completions, "create", complete)
+    result = tasks.extract_action_items("Me: Let me adjust that wording.", {"meeting_date": "2026-09-18"})
+    assert result["action_items"][0]["owner_name"] == "Me"
+    assert result["action_items"][0]["evidence_excerpt"] == "Me: Let me adjust that wording."
+
+
+def test_coaching_review_rejects_other_speaker_only_evidence(monkeypatch):
+    from app.services.meeting_review_service import review_coaching
+    def complete(**_kwargs):
+        payload = {"domain_assessments": [{"domain": "People", "score": 5, "feedback": "Claim",
+                    "evidence_line_ids": [1]}], "profile_suggestions": [{"title": "Claim", "evidence_line_ids": [1]}]}
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))])
+    monkeypatch.setattr(service.client.chat.completions, "create", complete)
+    result = review_coaching(service.client, "test", "A: I will make time for this.\nMe: Thank you.", {}, {})
+    assert result["domain_assessments"][0]["score"] is None
+    assert result["profile_suggestions"] == []

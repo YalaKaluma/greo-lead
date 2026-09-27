@@ -1106,5 +1106,13 @@
   "taskTrends.ninetyDayAverageDetail": "completed task(s) contributed during this period.",
   "memoryTags.title": "Memory & tags",
   "team.personContext": "Context",
-  "meetings.leadership.error": "Could not reassess this meeting. Please try again."
+  "meetings.leadership.error": "Could not reassess this meeting. Please try again.",
+  "meetings.contextReview.sharedSpeaker": "Several people share this transcript speaker label.",
+  "meetings.contextReview.whyReview": "Why this needs review",
+  "meetings.contextReview.validation.existing_name_requires_review": "A person with this name already exists. Confirm the identity before creating another record.",
+  "meetings.contextReview.validation.unsupported_evidence": "The proposed identity could not be verified against the quoted transcript.",
+  "meetings.contextReview.validation.catalog_identity_mismatch": "The proposed name and existing record did not match.",
+  "meetings.contextReview.validation.insufficient_match_confidence_or_margin": "The evidence did not distinguish this person clearly enough from other candidates.",
+  "meetings.contextReview.validation.model_unknown": "Alfred could not identify this participant confidently.",
+  "meetings.contextReview.validation.validated_catalog_and_evidence": "The identity needs additional confirmation."
 }

@@ -49,6 +49,7 @@ def resolution_schema(catalog, speaker_labels):
             "rationale": {"type": "string"},
         }
         if kind == "people":
+            properties["shared_speaker_label"] = {"type": "boolean"}
             properties["speaker_label"] = {"type": "string", "enum": speaker_labels}
         return {"type": "object", "properties": properties,
                 "required": list(properties), "additionalProperties": False}
@@ -56,6 +57,7 @@ def resolution_schema(catalog, speaker_labels):
         "primary_goal": entity("goals", "title", ["existing", "new", "none"]),
         "people": {"type": "array", "items": entity("people", "name", ["existing", "new", "unknown", "self"])},
         "primary_project": entity("projects", "name", ["existing", "new", "none"]),
+        "additional_projects": {"type": "array", "items": entity("projects", "name", ["existing", "new", "none"])},
     }
     return {"type": "object", "properties": properties,
             "required": list(properties), "additionalProperties": False}
@@ -65,10 +67,22 @@ def validate_catalog_choices(resolution, catalog, transcript):
     """Reject name/ID disagreement and unsupported quotations before DB retrieval."""
     for key, kind, name_field in [("primary_goal", "goals", "title"),
                                   ("primary_project", "projects", "name"),
+                                  ("additional_projects", "projects", "name"),
                                   ("people", "people", "name")]:
         rows = resolution.get(key) or ([] if key == "people" else {})
         for item in rows if isinstance(rows, list) else [rows]:
+            item["model_status"] = item.get("status")
+            if kind == "people":
+                label = re.escape(str(item.get("speaker_label") or ""))
+                name = str(item.get("name") or "")
+                name = re.sub(rf"^(?:Speaker )?{label}\s*[-:(]\s*|\s*\((?:Speaker )?{label}\)$", "", name, flags=re.I).strip(" )")
+                item["name"] = name
+                matches = [r for r in catalog.get("people", []) if normalized(r.get("name")) == normalized(name)]
+                if item.get("status") == "new" and matches:
+                    # A different role description is not proof of a different person.
+                    item.update(status="unknown", id=None, validation_reason="existing_name_requires_review")
             if item.get("status") not in {"existing", "new"}:
+                item.setdefault("validation_reason", "model_" + str(item.get("status")))
                 continue
             item.update(sourced_evidence(item, transcript))
             valid = grounded(item.get("evidence_excerpt"), transcript)
@@ -77,14 +91,18 @@ def validate_catalog_choices(resolution, catalog, transcript):
                 valid = valid and record is not None and normalized(item.get(name_field)) == normalized(
                     (record or {}).get("name") or (record or {}).get("title"))
             if not valid:
-                item.update(status="unknown" if key == "people" else "none", id=None)
+                item.update(status="unknown" if key == "people" else "none", id=None,
+                            validation_reason="unsupported_evidence" if not grounded(item.get("evidence_excerpt"), transcript)
+                            else "catalog_identity_mismatch")
+            else:
+                item["validation_reason"] = "validated_catalog_and_evidence"
     return resolution
 
 
 def canonical_people(people, labels):
-    """Only real transcript labels may appear, once each; Me is always self."""
+    """Keep real labels but allow multiple independently identified attendees per label."""
     by_key = {normalized(label): label for label in labels}
-    selected = {}
+    groups = {label: [] for label in labels}
     for item in people or []:
         key = normalized(re.sub(r"(?i)^(speaker|participant)\s+", "", str(item.get("speaker_label") or "")))
         if key not in by_key:
@@ -95,7 +113,13 @@ def canonical_people(people, labels):
             candidate = {"speaker_label": label, "status": "self", "name": "Me"}
         elif candidate.get("status") == "self" and "me" in by_key:
             candidate = {"speaker_label": label, "status": "unknown"}
-        if label not in selected or candidate.get("status") in {"existing", "new", "self"}:
-            selected[label] = candidate
-    return [selected.get(label, {"speaker_label": label, "status": "self" if normalized(label) == "me" else "unknown",
-                               **({"name": "Me"} if normalized(label) == "me" else {})}) for label in labels]
+        signature = (candidate.get("id"), normalized(candidate.get("name")), candidate.get("status"))
+        if not any((r.get("id"), normalized(r.get("name")), r.get("status")) == signature for r in groups[label]):
+            groups[label].append(candidate)
+    result = []
+    for label, rows in groups.items():
+        known = [r for r in rows if r.get("status") in {"existing", "new", "self"}]
+        chosen = known or rows[:1] or [{"speaker_label": label, "status": "self" if normalized(label) == "me" else "unknown",
+                                      **({"name": "Me"} if normalized(label) == "me" else {})}]
+        result.extend({**r, "shared_speaker_label": len(known) > 1 or bool(r.get("shared_speaker_label"))} for r in chosen)
+    return result
