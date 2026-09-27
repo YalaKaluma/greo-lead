@@ -1698,6 +1698,8 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
     supplied_context_parts = ["Meeting date: " + (meeting.started_at or meeting.created_at).date().isoformat()]
     if user and user.name:
         supplied_context_parts.append("Current user (Me): " + user.name)
+    if meeting.transcript_text and meeting.user_notes and meeting.user_notes.strip() != meeting.transcript_text.strip():
+        supplied_context_parts.append("User-provided meeting notes and corrections: " + meeting.user_notes[:8000])
     if attendee_names:
         supplied_context_parts.append("People selected as present: " + ", ".join(attendee_names))
     supplied_context_parts.extend(
