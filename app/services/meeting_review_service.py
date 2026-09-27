@@ -2,8 +2,48 @@
 import json
 import re
 
-from app.services.meeting_resolution_contract import grounded, numbered_transcript, sourced_evidence
+from app.services.meeting_resolution_contract import grounded, numbered_transcript, sourced_evidence, resolution_schema
 from app.utils.ai_safety import UNTRUSTED_CONTEXT_POLICY, parse_bounded_json_object, wrap_untrusted_context
+
+
+def commitment_windows(transcript):
+    """Surface local commitment turns so long discussions do not bury follow-ups."""
+    lines = transcript.splitlines()
+    cues = re.compile(r"\b(i will|i'll|let me|i can|i need to|i would|can you|could you|will you|we will|we'll|je vais|je peux|je dois|je partage|je demande|je prends|on va|tu peux|pourrais.tu)\b", re.I)
+    selected = set()
+    for i, line in enumerate(lines):
+        if cues.search(line):
+            selected.update(range(max(0, i-3), min(len(lines), i+5)))
+    return "\n".join(f"[{i+1}] {lines[i]}" for i in sorted(selected))
+
+
+def review_resolution(client, model, transcript, catalog, labels, draft):
+    response = client.chat.completions.create(
+        model=model, temperature=0.0, max_tokens=7000,
+        response_format={"type": "json_schema", "json_schema": {
+            "name": "reviewed_meeting_resolution", "strict": True, "schema": resolution_schema(catalog, labels)}},
+        messages=[{"role": "system", "content": (
+            "Independently audit the draft context against the FULL transcript and return corrected JSON. "
+            "First enumerate all directly greeted, introduced or addressed attendees, including those sharing "
+            "a diarization label. Check each named greeting so no known attendee is omitted. A person to call "
+            "tomorrow, a client contact discussed, or a manager mentioned is NOT thereby attending. "
+            "A phrase 'thanks NAME, I will do X' addresses NAME; the committing speaker is somebody else. "
+            "Use current_user identity to avoid proposing transcription variants of the user as new people. "
+            "Require evidence_line_ids including the actual naming/greeting/response, not generic technical talk. "
+            "Mixed labels and concatenated conversations require local attribution; preserve multiple attendees. "
+            "Second identify which client owns the main contract/delivery discussion from substantive details. "
+            "The title and opening topic may be misleading. A brief expansion opportunity must not erase the "
+            "main client's contract or go-live project. Recognize phonetic client transcription variants using "
+            "catalog descriptions and corroborating context. Keep substantive secondary initiatives separately. "
+            "Do not include cases used only as analogies. Match exact catalog IDs and names together. "
+            "Use existing only with confidence >=.78 and margin >=.12; runners-up must be distinct IDs. "
+            "Use null ID for new/self/unknown/none. Be conservative about goals. All confidences are 0..1. "
+            "Return the full corrected result using the schema, not a critique. " + UNTRUSTED_CONTEXT_POLICY)},
+            {"role": "user", "content":
+                wrap_untrusted_context("catalog", json.dumps(catalog), 50000)
+                + wrap_untrusted_context("draft_context_not_ground_truth", json.dumps(draft), 26000)
+                + wrap_untrusted_context("transcript", numbered_transcript(transcript), 150000)}])
+    return parse_bounded_json_object(response.choices[0].message.content, max_characters=100000)
 
 
 def review_actions(client, model, transcript, analysis, candidates):
@@ -15,12 +55,19 @@ def review_actions(client, model, transcript, analysis, candidates):
             "commitment: introductions/contacting people, sharing material or rates, confirming attendance, "
             "reviewing drafts, requesting metrics, updating wording and producing quotes. Preserve distinct "
             "deliverables; consolidate only genuine duplicates. Do not promote ideas into promises. "
+            "Remove completed work ('we enabled X'), status updates, standing policy reminders and hypothetical "
+            "contract clauses unless somebody explicitly commits to follow-up work. Do not replace a concrete "
+            "follow-up ('discuss recovery with Nico tomorrow') with a vague contract drafting task. "
+            "Check every highlighted commitment window, but a request alone is not an accepted commitment. "
+            "Do not assign an unaddressed group request to Me. Keep owner unknown if nobody accepts it. "
             "Resolve first-person commitments by Me to owner_name='Me', even without a personal name. "
             "Distinguish the local consulting team from the client and from Engine. Do not transfer work "
             "between them. Mixed diarization labels may represent several people, including Me; assign named "
             "owners only when supported by explicit context. A vocative is the ADDRESSEE, not the speaker: "
             "'Thanks Yala, I'll finish the proposal' is the OTHER speaker's commitment, not Yala's. "
             "Otherwise retain the speaker label. Preserve explicit counterparty commitments such as asking Ross; "
+            "Transcripts may concatenate meetings. After a goodbye and new greeting, reassess identity locally; "
+            "the same label can be another person. Recognize commitments and relative dates in French as well as English. "
             "a conditional user offer to contact someone is not a replacement for those commitments. "
             "Due dates use the meeting date, not today's date. Do not turn a date range into a firm first-day deadline. "
             "The meeting date itself is NEVER a deadline. A due date requires source lines stating a temporal "
@@ -31,6 +78,7 @@ def review_actions(client, model, transcript, analysis, candidates):
             {"role": "user", "content": f"Meeting date: {analysis.get('meeting_date') or 'unknown'}\n"
              + wrap_untrusted_context("candidate_actions", json.dumps(candidates), 24000)
              + wrap_untrusted_context("identities", json.dumps(analysis.get('meeting_resolution') or {}), 18000)
+             + wrap_untrusted_context("commitment_windows_not_automatically_tasks", commitment_windows(transcript), 50000)
              + wrap_untrusted_context("transcript", numbered_transcript(transcript), 150000)}])
     return parse_bounded_json_object(response.choices[0].message.content, max_characters=100000)
 
@@ -43,6 +91,13 @@ def explicit_self_owner(item):
     labels = set(re.findall(r"(?m)^([^:\n]{1,80}):", excerpt))
     if labels == {"Me"} and re.search(r"(?i)\b(let me|I will|I'll|I can|I should|I shall)\b", excerpt):
         return {**item, "owner_name": "Me"}
+    return item
+
+
+def supported_self_owner(item):
+    """Reject user ownership supported solely by somebody else's quoted request."""
+    if item.get("owner_name") == "Me" and not re.search(r"(?m)^Me:", item.get("evidence_excerpt") or ""):
+        return {**item, "owner_name": None}
     return item
 
 
@@ -59,7 +114,9 @@ def review_coaching(client, model, transcript, analysis, coaching):
             "it was stated. Do not impose generic coaching because a template has a Growth edge field. "
             "If no material gap is evidenced say that, with a light optional next experiment. Do not infer a "
             "longitudinal pattern from one meeting. Distinguish colleagues from clients. "
-            "Me is the user's reliable speaker label. Other labels can contain transcription errors; do not "
+            "Me normally identifies the user, but a locally explicit introduction or direct address can contradict "
+            "even Me. Exclude such disputed turns from user coaching. Transcripts may concatenate conversations: "
+            "do not carry a speaker identity across a new greeting without evidence. Other labels can contain errors; do not "
             "score the user on those turns alone. Remove claims whose attribution remains uncertain. "
             "For each domain_assessment, leadership_observation and profile_suggestion return evidence_line_ids "
             "for a short verbatim supporting span. Never insert commentary, ellipses or invented words into quotes. "

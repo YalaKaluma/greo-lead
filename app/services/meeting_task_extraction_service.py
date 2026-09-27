@@ -9,7 +9,7 @@ from openai import OpenAI
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import OPENAI_API_KEY
-from app.services.meeting_review_service import review_actions, explicit_self_owner
+from app.services.meeting_review_service import review_actions, explicit_self_owner, supported_self_owner
 from app.services.meeting_resolution_contract import grounded, numbered_transcript, sourced_evidence
 from app.utils.ai_safety import (
     UNTRUSTED_CONTEXT_POLICY,
@@ -44,6 +44,7 @@ def validate_due_date(item, transcript):
     ids = item.get("due_date_evidence_line_ids")
     quote = sourced_evidence({"evidence_line_ids": ids or [], "evidence_excerpt": ""}, transcript)["evidence_excerpt"]
     temporal = r"\b(today|tomorrow|tonight|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week|this week|end of|by \d|within \d|in \d|january|february|march|april|may|june|july|august|september|october|november|december)\b|\d{1,4}[-/]\d{1,2}[-/]\d{1,4}"
+    temporal += r"|\b(aujourd['’]hui|demain|ce soir|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|semaine prochaine|cette semaine|fin de|d['’]ici|janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\b"
     if not grounded(quote, transcript) or not re.search(temporal, quote, re.I):
         return {**item, "due_date": None}
     try:
@@ -111,6 +112,6 @@ def extract_action_items(
     validated = ExtractedActionItems.model_validate(reviewed)
     sourced_items = [sourced_evidence(item.model_dump(exclude_none=True), transcript)
                      for item in validated.action_items]
-    grounded_items = [validate_due_date(explicit_self_owner(item), transcript) for item in sourced_items
+    grounded_items = [validate_due_date(supported_self_owner(explicit_self_owner(item)), transcript) for item in sourced_items
                       if grounded(item["evidence_excerpt"], transcript)]
     return {"action_items": grounded_items}

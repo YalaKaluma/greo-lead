@@ -248,3 +248,26 @@ def test_task_deadline_requires_temporal_source_evidence():
     assert validate_due_date({**item, "due_date_evidence_line_ids": [1]}, transcript)["due_date"] is None
     assert validate_due_date({**item, "due_date": "2026-09-23", "due_date_evidence_line_ids": [2]}, transcript)["due_date"] == "2026-09-23"
     assert validate_due_date({**item, "due_date_evidence_line_ids": [99]}, transcript)["due_date"] is None
+    assert validate_due_date({**item, "due_date_evidence_line_ids": [1]}, "Me: Je le partage demain.")["due_date"] == "2026-09-18"
+
+
+def test_group_request_is_not_automatically_owned_by_user():
+    from app.services.meeting_review_service import supported_self_owner, commitment_windows
+    assert supported_self_owner({"owner_name": "Me", "evidence_excerpt": "C: Drop me some bullet points."})["owner_name"] is None
+    assert supported_self_owner({"owner_name": "Me", "evidence_excerpt": "Me: I will send them."})["owner_name"] == "Me"
+    source = "A: Background.\nMe: Je vais le partager demain.\nA: Merci."
+    assert "[2] Me: Je vais le partager demain." in commitment_windows(source)
+
+
+def test_context_review_runs_before_catalog_validation(monkeypatch):
+    calls = []
+    def complete(**kwargs):
+        calls.append(kwargs)
+        payload = {"people": []} if len(calls) == 1 else {"people": [{"status": "existing", "id": 7,
+            "name": "Matt", "speaker_label": "A", "evidence_line_ids": [1]}]}
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))])
+    monkeypatch.setattr(service.client.chat.completions, "create", complete)
+    result = service.resolve_meeting_context("Me: Hey Matt, how are you?\nA: Good thanks.", None, None,
+        json.dumps({"people": [{"id": 7, "name": "Matt"}]}))
+    assert len(calls) == 2
+    assert any(person.get("id") == 7 for person in result["people"])
