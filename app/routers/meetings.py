@@ -909,8 +909,14 @@ def create_leadership_assessment(meeting_id: int, background_tasks: BackgroundTa
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found.")
-    if meeting.processing_status != "ready":
+    if meeting.processing_status not in {"ready", "failed"} or not (meeting.transcript_text or meeting.user_notes):
         raise HTTPException(status_code=409, detail="The meeting must finish processing before it can be assessed.")
+    claimed = db.query(Meeting).filter(
+        Meeting.id == meeting_id, Meeting.processing_status.in_(["ready", "failed"])
+    ).update({"processing_status": "analyzing", "processing_error": None}, synchronize_session=False)
+    if not claimed:
+        raise HTTPException(status_code=409, detail="This meeting is already being assessed.")
+    db.commit()
     background_tasks.add_task(reassess_meeting_with_context, meeting.id)
     return {"id": meeting.id, "assessment_status": "queued"}
 

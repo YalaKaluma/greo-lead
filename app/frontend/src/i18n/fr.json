@@ -1105,5 +1105,6 @@
   "taskTrends.ninetyDayAverageTitle": "Moyenne quotidienne sur 90 jours",
   "taskTrends.ninetyDayAverageDetail": "tâche(s) terminée(s) ont contribué pendant cette période.",
   "memoryTags.title": "Mémoire et étiquettes",
-  "team.personContext": "Contexte"
+  "team.personContext": "Contexte",
+  "meetings.leadership.error": "Impossible de réévaluer cette réunion. Veuillez réessayer."
 }
