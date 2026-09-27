@@ -8,7 +8,9 @@ def normalized(value):
 
 def grounded(excerpt, transcript):
     if "\n[…]\n" in str(excerpt or ""):
-        return all(grounded(part, transcript) for part in excerpt.split("\n[…]\n"))
+        return len(normalized(excerpt)) >= 8 and all(
+            normalized(part) and normalized(part) in normalized(transcript)
+            for part in excerpt.split("\n[…]\n"))
     quote = normalized(excerpt)
     if len(quote) < 8:
         return False
@@ -58,6 +60,7 @@ def resolution_schema(catalog, speaker_labels):
             "rationale": {"type": "string"},
         }
         if kind == "people":
+            properties["attendance_basis"] = {"type": "string", "enum": ["direct_address", "introduction", "self", "mentioned", "unknown"]}
             properties["shared_speaker_label"] = {"type": "boolean"}
             properties["speaker_label"] = {"type": "string", "enum": speaker_labels}
         return {"type": "object", "properties": properties,
@@ -82,6 +85,8 @@ def validate_catalog_choices(resolution, catalog, transcript):
         for item in rows if isinstance(rows, list) else [rows]:
             item["model_status"] = item.get("status")
             if kind == "people":
+                if item.get("attendance_basis") == "mentioned":
+                    item.update(status="unknown", id=None, validation_reason="model_unknown")
                 label = re.escape(str(item.get("speaker_label") or ""))
                 name = str(item.get("name") or "")
                 name = re.sub(rf"^(?:Speaker )?{label}\s*[-:(]\s*|\s*\((?:Speaker )?{label}\)$", "", name, flags=re.I).strip(" )")

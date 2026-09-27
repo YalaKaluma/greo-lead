@@ -297,3 +297,79 @@ def test_role_similarity_alone_cannot_identify_person():
     person = {**person, "status": "existing", "id": 7}
     result = validate_catalog_choices({"people": [person]}, catalog, "Me: Thanks Niko for those estimates.")
     assert result["people"][0]["status"] == "existing"
+
+
+def test_resolution_overrides_independent_participant_guesses_and_clears_stale_names(db):
+    meeting = models.Meeting(user_number="test", title="Review", source_type="notes")
+    db.add(meeting)
+    db.flush()
+    stale = models.MeetingParticipant(meeting_id=meeting.id, speaker_label="A", display_name="Wrong guess")
+    confirmed = models.MeetingParticipant(meeting_id=meeting.id, speaker_label="B", display_name="Confirmed person", person_id=17)
+    db.add_all([stale, confirmed])
+    db.flush()
+    resolution = {"people": [{"speaker_label": "A", "status": "unknown", "name": "Wrong guess"},
+                             {"speaker_label": "B", "status": "unknown"}]}
+    analysis = {"participants": [{"speaker_label": "A", "display_name": "Another guess"}],
+                **service._resolution_to_analysis(resolution), "meeting_resolution": resolution}
+    service._replace_analysis(db, meeting, analysis)
+    db.flush()
+    assert stale.display_name == "A"
+    assert confirmed.display_name == "Confirmed person"
+
+
+def test_multiple_resolved_people_share_label_without_losing_names():
+    resolution = {"people": [{"speaker_label": "A", "status": "existing", "id": 1, "name": "Alex"},
+                             {"speaker_label": "A", "status": "new", "name": "Morgan"}]}
+    assert service._resolution_to_analysis(resolution)["participants"] == [
+        {"speaker_label": "A", "display_name": "Alex / Morgan"}]
+
+
+def test_mentioned_person_is_not_an_attendee_even_with_real_quote():
+    source = "Me: We should consult Alex tomorrow about the project."
+    resolved = validate_catalog_choices({"people": [{"status": "existing", "id": 1, "name": "Alex",
+        "speaker_label": "A", "attendance_basis": "mentioned", "evidence_line_ids": [1]}]},
+        {"people": [{"id": 1, "name": "Alex"}]}, source)
+    assert resolved["people"][0]["status"] == "unknown"
+
+
+def test_short_naming_turn_in_sparse_source_evidence_remains_grounded():
+    from app.services.meeting_resolution_contract import sourced_evidence, grounded
+    source = "Me: Morgan.\nA: Yes.\nMe: Thanks for joining our review."
+    item = sourced_evidence({"evidence_line_ids": [1, 3]}, source)
+    assert grounded(item["evidence_excerpt"], source)
+
+
+def test_new_project_approval_persists_reviewed_intelligence_and_link(db):
+    from app.routers.meetings import _accept_meeting_suggestion
+    meeting = models.Meeting(user_number="test", title="Review", source_type="notes")
+    db.add(meeting)
+    db.flush()
+    suggestion = models.MeetingEnrichmentSuggestion(meeting_id=meeting.id, suggestion_type="project",
+        action="create", title="Client systems", description="Proposed roadmap", status="pending",
+        fingerprint="synthetic-new-project", payload={"changes": [
+            {"field": "role", "operation": "append", "current_value": None,
+             "proposed_value": "Advisor, half a day weekly; not delivery lead."},
+            {"field": "risks", "operation": "append", "current_value": None,
+             "proposed_value": "Budget not approved."}]})
+    db.add(suggestion)
+    db.flush()
+    assert db.query(models.JourneyProject).count() == 0
+    _accept_meeting_suggestion(db, meeting, suggestion)
+    db.flush()
+    project = db.get(models.JourneyProject, suggestion.target_id)
+    assert project.role == "Advisor, half a day weekly; not delivery lead."
+    assert project.risks == ["Budget not approved."]
+    assert db.query(models.MeetingProjectLink).filter_by(project_id=project.id, meeting_id=meeting.id).count() == 1
+
+
+def test_list_names_use_same_resolution_as_context_including_shared_labels(db):
+    from app.routers.meetings import _meeting_payload
+    meeting = models.Meeting(user_number="test", title="Review", source_type="notes", context_receipt={
+        "meeting_resolution": {"people": [{"speaker_label": "A", "status": "existing", "name": "Alex"},
+            {"speaker_label": "A", "status": "new", "name": "Morgan"},
+            {"speaker_label": "B", "status": "unknown", "name": "Old guess"}]}})
+    db.add(meeting)
+    db.flush()
+    db.add(models.MeetingParticipant(meeting_id=meeting.id, speaker_label="A", display_name="Stale name"))
+    db.flush()
+    assert _meeting_payload(meeting)["participant_names"] == ["Alex", "Morgan", "B"]
