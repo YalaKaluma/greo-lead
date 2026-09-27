@@ -13,11 +13,9 @@ const CIRCLE = {
 };
 
 const tabs = [
-  ['overview', 'team.tabs.overview', 'Overview'],
+  ['team', 'team.tabs.fullTeam', 'Full Team'],
   ['leadership', 'team.tabs.leadership', 'Leadership Circle'],
   ['sponsor', 'team.tabs.sponsor', 'Sponsor Circle'],
-  ['team', 'team.tabs.fullTeam', 'Full Team'],
-  ['stakeholders', 'team.tabs.stakeholders', 'Stakeholders'],
   ['notes', 'team.tabs.notes', 'Relationship Reviews / Notes']
 ];
 
@@ -109,7 +107,7 @@ export default function MyTeam({ apiUrl, userNumber }) {
   const [reviewsByPerson, setReviewsByPerson] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('team');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingPerson, setEditingPerson] = useState(null);
   const [viewingPersonId, setViewingPersonId] = useState(null);
@@ -205,18 +203,6 @@ export default function MyTeam({ apiUrl, userNumber }) {
     () => people.filter((person) => person.circle_type === CIRCLE.SPONSOR),
     [people]
   );
-  const teamMembers = useMemo(
-    () => people.filter((person) => isTeamMember(person)),
-    [people]
-  );
-  const stakeholders = useMemo(
-    () => people.filter((person) => isStakeholder(person)),
-    [people]
-  );
-  const attentionItems = useMemo(
-    () => buildAttentionItems(people, copy),
-    [people]
-  );
   const recentNotes = useMemo(
     () => buildRecentNotes(people, reviewsByPerson),
     [people, reviewsByPerson]
@@ -284,17 +270,6 @@ export default function MyTeam({ apiUrl, userNumber }) {
         </div>
       )}
 
-      {activeTab === 'overview' && (
-        <OverviewTab
-          copy={copy}
-          leadershipCircle={leadershipCircle}
-          sponsorCircle={sponsorCircle}
-          attentionItems={attentionItems}
-          recentNotes={recentNotes}
-          onOpen={setViewingPersonId}
-        />
-      )}
-
       {activeTab === 'leadership' && (
         <CircleTab
           copy={copy}
@@ -330,21 +305,9 @@ export default function MyTeam({ apiUrl, userNumber }) {
       {activeTab === 'team' && (
         <TableTab
           copy={copy}
-          people={teamMembers}
+          people={people}
           emptyText={copy('team.fullTeamEmpty', 'No team members yet. Add people to your leadership ecosystem.')}
           columns={['name', 'role', 'type', 'team', 'manager', 'health', 'lastInteraction', 'objective', 'strength', 'risk', 'circle']}
-          onOpen={setViewingPersonId}
-          onEdit={setEditingPerson}
-          onMark={markCircle}
-        />
-      )}
-
-      {activeTab === 'stakeholders' && (
-        <TableTab
-          copy={copy}
-          people={stakeholders}
-          emptyText={copy('team.stakeholdersEmpty', 'No stakeholders yet. Add sponsors, peers, mentors, or client sponsors here.')}
-          columns={['name', 'role', 'organization', 'type', 'health', 'importance', 'lastInteraction', 'priority', 'nextAction', 'sponsor']}
           onOpen={setViewingPersonId}
           onEdit={setEditingPerson}
           onMark={markCircle}
