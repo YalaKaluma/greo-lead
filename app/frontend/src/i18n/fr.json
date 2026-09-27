@@ -1106,5 +1106,13 @@
   "taskTrends.ninetyDayAverageDetail": "tâche(s) terminée(s) ont contribué pendant cette période.",
   "memoryTags.title": "Mémoire et étiquettes",
   "team.personContext": "Contexte",
-  "meetings.leadership.error": "Impossible de réévaluer cette réunion. Veuillez réessayer."
+  "meetings.leadership.error": "Impossible de réévaluer cette réunion. Veuillez réessayer.",
+  "meetings.contextReview.sharedSpeaker": "Plusieurs personnes partagent cette étiquette de locuteur.",
+  "meetings.contextReview.whyReview": "Pourquoi vérifier cette identité",
+  "meetings.contextReview.validation.existing_name_requires_review": "Une personne de ce nom existe déjà. Confirmez son identité avant de créer une autre fiche.",
+  "meetings.contextReview.validation.unsupported_evidence": "L’identité proposée n’a pas pu être vérifiée dans la transcription citée.",
+  "meetings.contextReview.validation.catalog_identity_mismatch": "Le nom proposé ne correspondait pas à la fiche existante.",
+  "meetings.contextReview.validation.insufficient_match_confidence_or_margin": "Les éléments disponibles ne distinguent pas assez clairement cette personne des autres candidats.",
+  "meetings.contextReview.validation.model_unknown": "Alfred n’a pas pu identifier cette personne avec suffisamment de certitude.",
+  "meetings.contextReview.validation.validated_catalog_and_evidence": "Cette identité nécessite une confirmation supplémentaire."
 }

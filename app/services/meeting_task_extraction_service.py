@@ -8,6 +8,7 @@ from openai import OpenAI
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import OPENAI_API_KEY
+from app.services.meeting_review_service import review_actions, explicit_self_owner
 from app.services.meeting_resolution_contract import grounded, numbered_transcript, sourced_evidence
 from app.utils.ai_safety import (
     UNTRUSTED_CONTEXT_POLICY,
@@ -86,8 +87,9 @@ def extract_action_items(
         max_tokens=4000,
     )
     parsed = parse_bounded_json_object(response.choices[0].message.content, max_characters=80_000)
-    validated = ExtractedActionItems.model_validate(parsed)
+    reviewed = review_actions(client, MEETING_TASK_MODEL, transcript, meeting_analysis, parsed.get("action_items") or [])
+    validated = ExtractedActionItems.model_validate(reviewed)
     sourced_items = [sourced_evidence(item.model_dump(exclude_none=True), transcript)
                      for item in validated.action_items]
-    grounded_items = [item for item in sourced_items if grounded(item["evidence_excerpt"], transcript)]
+    grounded_items = [explicit_self_owner(item) for item in sourced_items if grounded(item["evidence_excerpt"], transcript)]
     return {"action_items": grounded_items}
