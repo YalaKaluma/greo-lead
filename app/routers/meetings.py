@@ -651,6 +651,10 @@ def retry_meeting(meeting_id: int, background_tasks: BackgroundTasks, user_numbe
         raise HTTPException(status_code=404, detail="Meeting not found.")
     if meeting.processing_status not in {"failed", "queued"}:
         raise HTTPException(status_code=409, detail="Only queued or failed meetings can be retried.")
+    if (meeting.processing_status == "failed" and meeting.executive_summary
+            and (meeting.transcript_text or meeting.user_notes)):
+        # Reassessing a previously processed meeting must preserve handled actions.
+        return create_leadership_assessment(meeting_id, background_tasks, user_number, db)
     meeting.processing_status = "queued"
     meeting.processing_error = None
     db.commit()

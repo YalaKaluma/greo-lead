@@ -10,7 +10,7 @@ def review_actions(client, model, transcript, analysis, candidates):
     response = client.chat.completions.create(
         model=model, temperature=0.0, response_format={"type": "json_object"}, max_tokens=7000,
         messages=[{"role": "system", "content": (
-            "Audit meeting action completeness and accuracy. Read the ENTIRE transcript in order, especially "
+            "Return JSON only. Audit meeting action completeness and accuracy. Read the ENTIRE transcript in order, especially "
             "the closing turns. Return the complete corrected list, not only additions. Find every explicit "
             "commitment: introductions/contacting people, sharing material or rates, confirming attendance, "
             "reviewing drafts, requesting metrics, updating wording and producing quotes. Preserve distinct "
@@ -45,7 +45,7 @@ def review_coaching(client, model, transcript, analysis, coaching):
     response = client.chat.completions.create(
         model=model, temperature=0.0, response_format={"type": "json_object"}, max_tokens=6500,
         messages=[{"role": "system", "content": (
-            "You are an evidence reviewer, not a critic looking for something to criticize. Audit this coaching "
+            "Return JSON only. You are an evidence reviewer, not a critic looking for something to criticize. Audit this coaching "
             "against the entire transcript. Return the same top-level fields with corrected contents. "
             "Check every negative claim for counterevidence: 'this weekend', named dates, assigned ownership, "
             "expressed limits or explicit invitations count. Never say a deadline or boundary was absent when "
