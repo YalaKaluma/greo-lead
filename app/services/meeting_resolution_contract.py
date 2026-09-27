@@ -17,6 +17,22 @@ def grounded(excerpt, transcript):
     return quote in normalized(spoken)
 
 
+def numbered_transcript(transcript):
+    return "\n".join(f"[{i}] {line}" for i, line in enumerate(transcript.splitlines(), 1))
+
+
+def sourced_evidence(item, transcript):
+    """Materialize source references; never rely on a model rewriting quotations."""
+    ids = item.get("evidence_line_ids")
+    if ids is None:
+        return item
+    lines = transcript.splitlines()
+    if not ids or any(type(i) is not int or i < 1 or i > len(lines) for i in ids):
+        return {**item, "evidence_excerpt": ""}
+    # Use the complete span, including intervening words, to retain context.
+    return {**item, "evidence_excerpt": "\n".join(lines[min(ids)-1:max(ids)])}
+
+
 def resolution_schema(catalog, speaker_labels):
     def entity(kind, name_field, statuses):
         ids = [row["id"] for row in catalog.get(kind, [])]
@@ -29,6 +45,7 @@ def resolution_schema(catalog, speaker_labels):
             "runner_up_id": {"type": ["integer", "null"], "enum": [None, *ids]},
             "runner_up_confidence": {"type": "number", "minimum": 0, "maximum": 1},
             "evidence_excerpt": {"type": "string"},
+            "evidence_line_ids": {"type": "array", "items": {"type": "integer"}},
             "rationale": {"type": "string"},
         }
         if kind == "people":
@@ -53,6 +70,7 @@ def validate_catalog_choices(resolution, catalog, transcript):
         for item in rows if isinstance(rows, list) else [rows]:
             if item.get("status") not in {"existing", "new"}:
                 continue
+            item.update(sourced_evidence(item, transcript))
             valid = grounded(item.get("evidence_excerpt"), transcript)
             if item.get("status") == "existing":
                 record = next((r for r in catalog.get(kind, []) if r["id"] == item.get("id")), None)

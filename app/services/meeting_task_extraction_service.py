@@ -8,7 +8,7 @@ from openai import OpenAI
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import OPENAI_API_KEY
-from app.services.meeting_resolution_contract import grounded
+from app.services.meeting_resolution_contract import grounded, numbered_transcript, sourced_evidence
 from app.utils.ai_safety import (
     UNTRUSTED_CONTEXT_POLICY,
     parse_bounded_json_object,
@@ -30,7 +30,8 @@ class ExtractedActionItem(BaseModel):
     owner_name: str | None = Field(default=None, max_length=160)
     due_date: str | None = Field(default=None, max_length=40)
     confidence: float = Field(ge=0, le=1)
-    evidence_excerpt: str = Field(min_length=8, max_length=1000)
+    evidence_excerpt: str = Field(default="", max_length=1000)
+    evidence_line_ids: list[int] | None = Field(default=None, max_length=100)
 
 
 class ExtractedActionItems(BaseModel):
@@ -65,7 +66,9 @@ def extract_action_items(
                 "role": "user",
                 "content": (
                     f"Meeting date: {meeting_date or 'unknown'}. Return JSON only: "
-                    "{action_items:[{description,owner_name,due_date,confidence,evidence_excerpt}]}. "
+                    "{action_items:[{description,owner_name,due_date,confidence,evidence_excerpt,evidence_line_ids}]}. "
+                    "Every action must include evidence_line_ids, the bracketed line numbers of its commitment "
+                    "in the transcript. Choose a small continuous span; the application copies the exact source. "
                     "Use null for an unknown owner or due date. Resolve relative dates against the MEETING DATE, "
                     "never the reassessment date. If the meeting date is unknown, leave relative deadlines null. "
                     "Check the actual weekday. Separate agreed commitments from proposed scope and hypothetical "
@@ -76,7 +79,7 @@ def extract_action_items(
                     + "\n\n"
                     + wrap_untrusted_context("user_context", supplied_context or "none", 8000)
                     + "\n\n"
-                    + wrap_untrusted_context("transcript", transcript, 120000)
+                    + wrap_untrusted_context("transcript", numbered_transcript(transcript), 120000)
                 ),
             },
         ],
@@ -84,9 +87,7 @@ def extract_action_items(
     )
     parsed = parse_bounded_json_object(response.choices[0].message.content, max_characters=80_000)
     validated = ExtractedActionItems.model_validate(parsed)
-    grounded_items = [
-        item.model_dump()
-        for item in validated.action_items
-        if grounded(item.evidence_excerpt, transcript)
-    ]
+    sourced_items = [sourced_evidence(item.model_dump(exclude_none=True), transcript)
+                     for item in validated.action_items]
+    grounded_items = [item for item in sourced_items if grounded(item["evidence_excerpt"], transcript)]
     return {"action_items": grounded_items}

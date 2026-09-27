@@ -25,7 +25,7 @@ from app.config import OPENAI_API_KEY
 from app.db import SessionLocal
 from app.utils.safe_errors import log_failure
 from app.services.meeting_task_extraction_service import extract_action_items
-from app.services.meeting_resolution_contract import resolution_schema, validate_catalog_choices, canonical_people, grounded, normalized
+from app.services.meeting_resolution_contract import resolution_schema, validate_catalog_choices, canonical_people, grounded, normalized, numbered_transcript
 from app.services.meeting_task_priority_service import score_pending_meeting_action_items
 from app.services.twin_context_service import get_twin_context
 from app.utils.ai_safety import UNTRUSTED_CONTEXT_POLICY, parse_bounded_json_object, wrap_untrusted_context
@@ -56,7 +56,7 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
-MEETING_PROMPT_VERSION = "meeting-v9-grounded-speaker-evidence"
+MEETING_PROMPT_VERSION = "meeting-v10-source-line-evidence"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4.1")
 MEETING_CONTEXT_MODEL = os.getenv("MEETING_CONTEXT_MODEL", "gpt-4.1")
 MEETING_COACHING_MODEL = os.getenv("MEETING_COACHING_MODEL", MEETING_MODEL)
@@ -584,10 +584,14 @@ def resolve_meeting_context(
                 "Copy the selected catalog name/title AND its exact ID together. Do not use list positions "
                 "as IDs. Evidence must be a verbatim continuous transcript excerpt supporting the identity, "
                 "not merely the general topic. Prefer a short excerpt from a single turn, preserving words and "
-                "speaker labels exactly; no ellipses or stitched quotations. All confidence values must be "
+                "speaker labels exactly; no ellipses or stitched quotations. Return evidence_line_ids containing "
+                "the bracketed source line numbers supporting each choice. The application constructs the "
+                "verbatim quote from these lines. Prefer a small continuous span. All confidence values must be "
                 "decimals from 0 to 1, never percentages. Compare against the closest runner-up; use existing only "
                 "with confidence >=0.78 and a margin >=0.12. For new/none/unknown/self use a null ID. "
                 "Return one entry per actual speaker label, never use a status as a speaker label. Me is self. "
+                "Use explicit greetings and replies to identify the dominant person behind a speaker label; "
+                "occasional diarization errors do not invalidate a clearly addressed identity. "
                 "Diarization may mix multiple people under one label: resolve only where defensible, "
                 "explain ambiguity and do not invent people. A named attendee absent from the catalog may "
                 "be new; a mentioned non-attendee must not be added. " + UNTRUSTED_CONTEXT_POLICY
@@ -595,7 +599,7 @@ def resolve_meeting_context(
             {"role": "user", "content": (
                 wrap_untrusted_context("meeting_context", f"{supplied_title or ''}\n{supplied_context or ''}", 10000)
                 + "\n" + wrap_untrusted_context("candidate_catalog", json.dumps(catalog), 50000)
-                + "\n" + wrap_untrusted_context("transcript", transcript, 120000)
+                + "\n" + wrap_untrusted_context("transcript", numbered_transcript(transcript), 120000)
             )},
         ],
         max_tokens=5000,
