@@ -271,3 +271,16 @@ def test_context_review_runs_before_catalog_validation(monkeypatch):
         json.dumps({"people": [{"id": 7, "name": "Matt"}]}))
     assert len(calls) == 2
     assert any(person.get("id") == 7 for person in result["people"])
+
+
+@pytest.mark.parametrize("excerpt,expected", [
+    ("Me: What do you think would be the right next step?", None),
+    ("Me: On peut faire quelques tests Marwan.", None),
+    ("Me: Je propose le refresh.\nA: Pas de soucis, on peut faire ça.", None),
+    ("Me: Je vais fixer un autre rendez-vous.", "Me"),
+    ("Me: Je vais peut-être demander un autre format.", None),
+    ("Me: Let me adjust that wording.", "Me"),
+])
+def test_self_ownership_requires_commitment_not_merely_self_speech(excerpt, expected):
+    from app.services.meeting_review_service import supported_self_owner
+    assert supported_self_owner({"owner_name": "Me", "evidence_excerpt": excerpt})["owner_name"] == expected

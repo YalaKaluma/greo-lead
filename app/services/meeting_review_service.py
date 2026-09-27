@@ -26,6 +26,8 @@ def review_resolution(client, model, transcript, catalog, labels, draft):
             "Independently audit the draft context against the FULL transcript and return corrected JSON. "
             "First enumerate all directly greeted, introduced or addressed attendees, including those sharing "
             "a diarization label. Check each named greeting so no known attendee is omitted. A person to call "
+            "Direct references to an interlocutor's contribution ('your framing, Matt') and requests to an "
+            "interlocutor ('Daniel, we have to drop') also support attendance; a greeting is not mandatory. "
             "tomorrow, a client contact discussed, or a manager mentioned is NOT thereby attending. "
             "A phrase 'thanks NAME, I will do X' addresses NAME; the committing speaker is somebody else. "
             "Use current_user identity to avoid proposing transcription variants of the user as new people. "
@@ -36,6 +38,8 @@ def review_resolution(client, model, transcript, catalog, labels, draft):
             "main client's contract or go-live project. Recognize phonetic client transcription variants using "
             "catalog descriptions and corroborating context. Keep substantive secondary initiatives separately. "
             "Do not include cases used only as analogies. Match exact catalog IDs and names together. "
+            "Audit additional_projects too: retain each substantive client delivery discussion even when the "
+            "main topic is an internal product initiative. Do not let the primary project absorb other clients. "
             "Use existing only with confidence >=.78 and margin >=.12; runners-up must be distinct IDs. "
             "Use null ID for new/self/unknown/none. Be conservative about goals. All confidences are 0..1. "
             "Return the full corrected result using the schema, not a critique. " + UNTRUSTED_CONTEXT_POLICY)},
@@ -59,6 +63,12 @@ def review_actions(client, model, transcript, analysis, candidates):
             "contract clauses unless somebody explicitly commits to follow-up work. Do not replace a concrete "
             "follow-up ('discuss recovery with Nico tomorrow') with a vague contract drafting task. "
             "Check every highlighted commitment window, but a request alone is not an accepted commitment. "
+            "French present-tense promises ('je demande à Laura', 'je t'envoie', 'je te tiens au courant') "
+            "are commitments. Review those turns explicitly. 'Je vais peut-être' is tentative, not firm. "
+            "A question about the next step is NOT a promise to perform it. 'We can test' does not assign "
+            "implementation to the person suggesting it. The accepting speaker may be a different person. "
+            "Keeping a feature for a later discussion is a scope decision, not a task. Exclude it unless "
+            "someone commits to a concrete deliverable. Include source lines with acceptance, not just proposal. "
             "Do not assign an unaddressed group request to Me. Keep owner unknown if nobody accepts it. "
             "Resolve first-person commitments by Me to owner_name='Me', even without a personal name. "
             "Distinguish the local consulting team from the client and from Engine. Do not transfer work "
@@ -96,8 +106,15 @@ def explicit_self_owner(item):
 
 def supported_self_owner(item):
     """Reject user ownership supported solely by somebody else's quoted request."""
-    if item.get("owner_name") == "Me" and not re.search(r"(?m)^Me:", item.get("evidence_excerpt") or ""):
-        return {**item, "owner_name": None}
+    if item.get("owner_name") == "Me":
+        excerpt = item.get("evidence_excerpt") or ""
+        own_turns = " ".join(re.findall(r"(?m)^Me:\s*(.*)$", excerpt))
+        # A self label alone is not an assignment: questions and collective design
+        # suggestions routinely appear in the same excerpt as another person's acceptance.
+        commitment = r"\b(i will|i['’]ll|let me|i shall|i can|i agree to|je vais|je m['’]engage|je demande|je prends|je partage|je t['’]envoie|j['’]envoie|je te tiens)\b"
+        tentative = r"\b(je vais peut[- ]être|i can perhaps|i can maybe)\b"
+        if not re.search(commitment, own_turns, re.I) or re.search(tentative, own_turns, re.I):
+            return {**item, "owner_name": None}
     return item
 
 
@@ -113,6 +130,9 @@ def review_coaching(client, model, transcript, analysis, coaching):
             "expressed limits or explicit invitations count. Never say a deadline or boundary was absent when "
             "it was stated. Do not impose generic coaching because a template has a Growth edge field. "
             "If no material gap is evidenced say that, with a light optional next experiment. Do not infer a "
+            "deficiency from the mere absence of a behavior: 'invite quieter voices', 'check energy', and "
+            "'request feedback' are optional experiments unless a specific neglected person, overload, or "
+            "missed learning opportunity is evidenced. Do not put those generic suggestions in Growth edge. "
             "longitudinal pattern from one meeting. Distinguish colleagues from clients. "
             "Me normally identifies the user, but a locally explicit introduction or direct address can contradict "
             "even Me. Exclude such disputed turns from user coaching. Transcripts may concatenate conversations: "
