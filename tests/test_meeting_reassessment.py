@@ -138,3 +138,12 @@ def test_resolution_confidence_uses_decimal_scale():
     assert confidence["minimum"] == 0
     assert confidence["maximum"] == 1
     assert not service._is_real_person_name("Unidentified (possible technical contributor)", "C")
+
+
+def test_source_references_materialize_verbatim_quotes_and_reject_invalid_ids():
+    from app.services.meeting_resolution_contract import sourced_evidence
+    transcript = "Me: Hey Matt, how are you?\nA: Very stressed.\nMe: Tell me more."
+    result = sourced_evidence({"evidence_line_ids": [1, 2], "evidence_excerpt": "paraphrase"}, transcript)
+    assert result["evidence_excerpt"] == "Me: Hey Matt, how are you?\nA: Very stressed."
+    assert sourced_evidence({"evidence_line_ids": [0]}, transcript)["evidence_excerpt"] == ""
+    assert sourced_evidence({"evidence_line_ids": [99]}, transcript)["evidence_excerpt"] == ""
