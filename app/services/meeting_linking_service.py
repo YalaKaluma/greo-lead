@@ -37,7 +37,12 @@ def resolve_links(client, model, transcript, catalog, labels, title=None, suppli
         "Resolve identity independently from attendance. Include substantively discussed people with "
         "attendance_basis=mentioned; never assign those people a speaking turn. A plan to consult someone, "
         "reported speech, workload assignment or third-person discussion does not establish attendance. "
-        "For attendees require an introduction, direct address with a locally plausible reply, or self. "
+        "For attendees require an introduction, conversational direct address, or self. A reply is not "
+        "mandatory: a direct question, second-person reference to their contribution, or telling a named "
+        "colleague that we need to leave establishes attendance even if a following sentence refers to "
+        "them in third person. Inspect every name occurrence before deciding mentioned-only. "
+        "If attendance and identity are clear but the speaker label is not, use Unattributed attendee "
+        "with shared_speaker_label=true. Do not discard the person or demote them to merely mentioned. "
         "A greeting names its addressee, NOT its speaker. An addressed person may share a noisy speaker "
         "label with another attendee. Keep each independently evidenced person. Mixed diarization must "
         "not erase directly addressed people. Include unknown speakers without inventing names. "
@@ -46,12 +51,18 @@ def resolve_links(client, model, transcript, catalog, labels, title=None, suppli
         "insufficient when more than one candidate fits. User-provided identity corrections are evidence "
         "but are not permission to invent biographies. Me is current_user, never a new person. "
         "Propose new only for an identifiable person for whom no existing candidate fits; unnamed "
-        "speakers remain unknown. Do not create a duplicate because the stored job title is narrow."
+        "speakers remain unknown. Do not create a duplicate because the stored job title is narrow. "
+        "identity_basis distinguishes named_person, hypothetical and uncertain_name. Fictional scenario "
+        "examples are hypothetical and must never create or link records. Before proposing a new person, "
+        "compare nearby spelling variants and the whole conversation: an awaited colleague greeted later "
+        "may be one person, not two. A noisy isolated name with no distinguishing context is uncertain_name "
+        "and unknown, not a new record. Do not treat products, organizations or tools as people."
     ), context, transcript)
     # Project-only review is the project resolver, not another full-context rewrite.
     projects = review_project_resolution(client, model, transcript, catalog,
                                         {"primary_project": {}, "additional_projects": []})
-    goal_context = {**context, "resolved_projects": projects}
+    goal_context = {"goals": catalog.get("goals", []), "project_catalog": catalog.get("projects", []),
+                    "user_supplied_context": supplied_context, "resolved_projects": projects}
     goal = _resolve(client, model, "meeting_goal_link", {"primary_goal": properties["primary_goal"]}, (
         "Resolve the GOAL after the supplied project decisions. Read the matched projects' stored goal "
         "and objective fields, then compare against existing goal records. The transcript need not "

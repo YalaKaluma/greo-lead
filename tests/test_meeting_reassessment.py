@@ -96,7 +96,7 @@ def test_fabricated_evidence_cannot_support_a_catalog_match():
 def test_schema_constrains_ids_and_speaker_labels_to_actual_candidates():
     schema = resolution_schema({"projects": [{"id": 314, "title": "Client proposal"}]}, ["A", "Me"])
     assert schema["properties"]["primary_project"]["properties"]["id"]["enum"] == [None, 314]
-    assert schema["properties"]["people"]["items"]["properties"]["speaker_label"]["enum"] == ["A", "Me"]
+    assert schema["properties"]["people"]["items"]["properties"]["speaker_label"]["enum"] == ["A", "Me", "Unattributed attendee"]
 
 
 def test_catalog_budget_does_not_drop_older_candidate_identities():
@@ -431,3 +431,18 @@ def test_phase_one_resolves_goal_after_projects_without_rewriting_people():
     assert 'Atlas' in calls[2]['messages'][1]['content']
     assert [c['response_format']['json_schema']['name'] for c in calls] == [
         'meeting_people_links', 'meeting_project_boundaries', 'meeting_goal_link']
+
+
+def test_attendee_without_reliable_speaker_mapping_is_retained():
+    people = canonical_people([{"status": "new", "name": "Morgan", "speaker_label": "Unattributed attendee"}], ["Me", "A"])
+    identified = next(p for p in people if p.get("name") == "Morgan")
+    assert identified["shared_speaker_label"] is True
+    assert identified["status"] == "new"
+
+
+def test_hypothetical_named_example_never_becomes_person_link():
+    resolved = validate_catalog_choices({"people": [{"name": "Alex", "status": "existing", "id": 1,
+        "attendance_basis": "mentioned", "identity_basis": "hypothetical", "evidence_line_ids": [1]}]},
+        {"people": [{"name": "Alex", "id": 1}]}, "Me: Imagine somebody named Alex making a scenario.")
+    assert resolved["people"] == []
+    assert resolved["mentioned_people"] == []
