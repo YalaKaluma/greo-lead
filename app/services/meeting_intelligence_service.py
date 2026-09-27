@@ -56,13 +56,13 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
-MEETING_PROMPT_VERSION = "meeting-v8-grounded-reassessment"
-MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4o-mini")
+MEETING_PROMPT_VERSION = "meeting-v9-grounded-speaker-evidence"
+MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4.1")
 MEETING_CONTEXT_MODEL = os.getenv("MEETING_CONTEXT_MODEL", "gpt-4.1")
 MEETING_COACHING_MODEL = os.getenv("MEETING_COACHING_MODEL", MEETING_MODEL)
 # Increment this whenever the leadership assessment prompt or scoring logic changes.
 # The admin reassessment action uses it to resume safely and avoid duplicate AI work.
-LEADERSHIP_ASSESSMENT_VERSION = "leadership-v1-five-domains"
+LEADERSHIP_ASSESSMENT_VERSION = "leadership-v2-speaker-grounded"
 PERSON_ENRICHMENT_FIELDS = {
     "organization", "team", "relation", "context", "current_goals", "stakeholder_priorities",
     "risks_or_pressures", "stakeholder_aspirations", "how_i_create_value", "potential_tensions",
@@ -263,7 +263,7 @@ def _is_real_person_name(value, speaker_label: str | None = None) -> bool:
         "unknown", "participant", "attendee", "speaker", "speaker a", "speaker b",
         "speaker c", "speaker d", "person", "new stakeholder", "unidentified", "me",
     }
-    if name.casefold() in generic:
+    if name.casefold() in generic or re.search(r"(?i)unknown|unidentified|possible|participant|contributor|facilitator|host/", name):
         return False
     label = str(speaker_label or "").strip()
     if name.casefold() == label.casefold() and re.fullmatch(r"(?i)(speaker\s*)?[a-z0-9]", label):
@@ -583,7 +583,9 @@ def resolve_meeting_context(
                 "It is valid and preferable to return no goal when evidence is weak. "
                 "Copy the selected catalog name/title AND its exact ID together. Do not use list positions "
                 "as IDs. Evidence must be a verbatim continuous transcript excerpt supporting the identity, "
-                "not merely the general topic. Compare against the closest runner-up; use existing only "
+                "not merely the general topic. Prefer a short excerpt from a single turn, preserving words and "
+                "speaker labels exactly; no ellipses or stitched quotations. All confidence values must be "
+                "decimals from 0 to 1, never percentages. Compare against the closest runner-up; use existing only "
                 "with confidence >=0.78 and a margin >=0.12. For new/none/unknown/self use a null ID. "
                 "Return one entry per actual speaker label, never use a status as a speaker label. Me is self. "
                 "Diarization may mix multiple people under one label: resolve only where defensible, "
@@ -651,7 +653,9 @@ def analyze_leadership_feedback(
                 "content": (
                     "You are Alfred, a rigorous but supportive executive coach. This is a dedicated coaching "
                     "analysis, separate from factual meeting extraction. Focus only on the user's identified "
-                    "speaker. Ground every behavioral claim in meeting evidence. Explicitly connect useful "
+                    "speaker (Me). Never credit the user for another speaker's ideas or statements. If the user "
+                    "sets a clear capacity boundary, assess that actual behavior rather than generic time-management "
+                    "advice. Ground every behavioral claim in meeting evidence. Explicitly connect useful "
                     "feedback to the leader's wheel, trials, goals, and recent journal patterns. Never quote "
                     "private journal, assessment, or trial text; paraphrase the relevant pattern. Distinguish "
                     "observation from inference and do not manufacture criticism. "

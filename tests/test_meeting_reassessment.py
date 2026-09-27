@@ -123,3 +123,18 @@ def test_noop_enrichment_is_not_proposed():
              "changes": [{"field": "status", "current_value": "active", "proposed_value": "active"}]}],
              {"project": {"id": 3}})
     assert result == []
+
+
+def test_evidence_ignores_diarization_metadata_without_allowing_invented_words():
+    from app.services.meeting_resolution_contract import grounded
+    transcript = "A: We need a platform\nA: blueprint for tenant management."
+    assert grounded("We need a platform blueprint for tenant management", transcript)
+    assert not grounded("We need a customer onboarding blueprint", transcript)
+
+
+def test_resolution_confidence_uses_decimal_scale():
+    schema = resolution_schema({}, ["Me", "A"])
+    confidence = schema["properties"]["primary_project"]["properties"]["confidence"]
+    assert confidence["minimum"] == 0
+    assert confidence["maximum"] == 1
+    assert not service._is_real_person_name("Unidentified (possible technical contributor)", "C")
