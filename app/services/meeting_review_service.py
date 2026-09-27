@@ -111,7 +111,7 @@ def supported_self_owner(item):
         own_turns = " ".join(re.findall(r"(?m)^Me:\s*(.*)$", excerpt))
         # A self label alone is not an assignment: questions and collective design
         # suggestions routinely appear in the same excerpt as another person's acceptance.
-        commitment = r"\b(i will|i['’]ll|let me|i shall|i can|i agree to|je vais|je m['’]engage|je demande|je prends|je partage|je t['’]envoie|j['’]envoie|je te tiens)\b"
+        commitment = r"\b(i will|i['’]ll|let me|i shall|i can|i agree to|happy to (?:prepare|build|discuss|connect|share)|je vais|je peux|je m['’]engage|je demande|je prends|je partage|je t['’]envoie|j['’]envoie|je te tiens)\b"
         tentative = r"\b(je vais peut[- ]être|i can perhaps|i can maybe)\b"
         if not re.search(commitment, own_turns, re.I) or re.search(tentative, own_turns, re.I):
             return {**item, "owner_name": None}
@@ -133,7 +133,7 @@ def review_coaching(client, model, transcript, analysis, coaching):
             "deficiency from the mere absence of a behavior: 'invite quieter voices', 'check energy', and "
             "'request feedback' are optional experiments unless a specific neglected person, overload, or "
             "missed learning opportunity is evidenced. Do not put those generic suggestions in Growth edge. "
-            "longitudinal pattern from one meeting. Distinguish colleagues from clients. "
+            "Do not infer a longitudinal pattern from one meeting. Distinguish colleagues from clients. "
             "Me normally identifies the user, but a locally explicit introduction or direct address can contradict "
             "even Me. Exclude such disputed turns from user coaching. Transcripts may concatenate conversations: "
             "do not carry a speaker identity across a new greeting without evidence. Other labels can contain errors; do not "
