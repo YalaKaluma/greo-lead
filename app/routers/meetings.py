@@ -7,7 +7,7 @@ import uuid
 import base64
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
@@ -16,8 +16,8 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
-from app.models import JourneyGoal, JourneyPerson, JourneyProject, Meeting, MeetingActionItem, MeetingAttendee, MeetingContextNote, MeetingGoalLink, MeetingParticipant, MeetingProjectLink, Task, User
-from app.services.meeting_intelligence_service import answer_meeting_question, process_meeting, reassess_meeting_leadership
+from app.models import JourneyDevelopmentArea, JourneyGoal, JourneyPerson, JourneyProject, JourneyStrength, Meeting, MeetingActionItem, MeetingAttendee, MeetingContextNote, MeetingEnrichmentSuggestion, MeetingGoalLink, MeetingParticipant, MeetingProjectLink, Task, User
+from app.services.meeting_intelligence_service import answer_meeting_question, process_meeting, reassess_meeting_with_context, reassess_meeting_entities
 from app.services.leadership_trends_service import get_leadership_trends
 from app.services.journey_support import goal_level_variants, normalize_goal_level
 from app.services.timezone_service import get_user_timezone, today_for_timezone
@@ -110,6 +110,10 @@ class ContextNoteCreate(BaseModel):
     elapsed_seconds: int = Field(default=0, ge=0)
 
 
+class MeetingSuggestionReview(BaseModel):
+    decision: str = Field(pattern="^(accepted|rejected)$")
+
+
 def _query(db: Session):
     return db.query(Meeting).options(
         selectinload(Meeting.participants),
@@ -123,6 +127,7 @@ def _query(db: Session):
         selectinload(Meeting.project_links).selectinload(MeetingProjectLink.project),
         selectinload(Meeting.attendees).selectinload(MeetingAttendee.person),
         selectinload(Meeting.context_notes),
+        selectinload(Meeting.enrichment_suggestions),
     )
 
 
@@ -164,7 +169,18 @@ def _meeting_payload(meeting: Meeting, detail: bool = False):
         action.created_task_id is not None or action.ignored_at is not None
         for action in meeting.action_items
     )
+    resolution = (meeting.context_receipt or {}).get("meeting_resolution")
+    names = []
+    if resolution is not None:
+        for person in resolution.get("people") or []:
+            name = (person.get("name") if person.get("status") in {"existing", "new", "self"}
+                    else person.get("speaker_label"))
+            if name and name not in names:
+                names.append(name)
+    else:
+        names = [p.display_name for p in participants]
     payload = {
+        "participant_names": names,
         "id": meeting.id,
         "title": meeting.title,
         "source_type": meeting.source_type,
@@ -200,6 +216,25 @@ def _meeting_payload(meeting: Meeting, detail: bool = False):
             "related_projects": [{"id": link.project.id, "title": link.project.project_name} for link in meeting.project_links],
             "context_notes": [{"id": note.id, "note_text": note.note_text, "elapsed_seconds": note.elapsed_seconds, "created_at": note.created_at} for note in sorted(meeting.context_notes, key=lambda item: (item.elapsed_seconds, item.id))],
             "context_receipt": meeting.context_receipt,
+            "enrichment_suggestions": [{
+                "id": item.id,
+                "type": item.suggestion_type,
+                "action": item.action,
+                "target_id": item.target_id,
+                "speaker_label": item.speaker_label,
+                "title": item.title,
+                "description": item.description,
+                "rationale": item.rationale,
+                "evidence_excerpt": item.evidence_excerpt,
+                "confidence": item.confidence,
+                "changes": (item.payload or {}).get("changes") or [],
+                "status": item.status,
+                "created_at": item.created_at,
+                "reviewed_at": item.reviewed_at,
+            } for item in sorted(
+                meeting.enrichment_suggestions,
+                key=lambda value: (value.status != "pending", value.created_at, value.id),
+            )],
         })
     return payload
 
@@ -627,6 +662,12 @@ def retry_meeting(meeting_id: int, background_tasks: BackgroundTasks, user_numbe
         raise HTTPException(status_code=404, detail="Meeting not found.")
     if meeting.processing_status not in {"failed", "queued"}:
         raise HTTPException(status_code=409, detail="Only queued or failed meetings can be retried.")
+    if (meeting.processing_status == "failed"
+            and (meeting.executive_summary or (meeting.context_receipt or {}).get("active_assessment_scope") == "entities")
+            and (meeting.transcript_text or meeting.user_notes)):
+        # Reassessing a previously processed meeting must preserve handled actions.
+        scope = "entities" if (meeting.context_receipt or {}).get("active_assessment_scope") == "entities" else "full"
+        return create_leadership_assessment(meeting_id, background_tasks, user_number, db, scope=scope)
     meeting.processing_status = "queued"
     meeting.processing_error = None
     db.commit()
@@ -634,15 +675,283 @@ def retry_meeting(meeting_id: int, background_tasks: BackgroundTasks, user_numbe
     return {"id": meeting.id, "processing_status": "queued"}
 
 
+def _append_confirmed_evidence(existing: str | None, suggestion: MeetingEnrichmentSuggestion) -> str:
+    evidence = (suggestion.description or suggestion.evidence_excerpt or suggestion.rationale or "").strip()
+    if not evidence or evidence in (existing or ""):
+        return existing or evidence
+    return "\n\n".join(value for value in (existing, f"Confirmed meeting evidence: {evidence}") if value)
+
+
+PERSON_ENRICHMENT_FIELDS = {
+    "organization", "team", "relation", "context", "current_goals", "stakeholder_priorities",
+    "risks_or_pressures", "stakeholder_aspirations", "how_i_create_value", "potential_tensions",
+    "next_action", "relationship_strategy",
+}
+PROJECT_ENRICHMENT_FIELDS = {
+    "goal", "description", "status", "client", "role", "objective", "timeline", "in_scope",
+    "out_of_scope", "deliverables", "core_team", "client_stakeholders", "risks",
+}
+PROJECT_LIST_FIELDS = {"in_scope", "out_of_scope", "deliverables", "core_team", "client_stakeholders", "risks"}
+
+
+def _same_enrichment_value(current, expected) -> bool:
+    if current is None and (expected is None or expected in ("", "null")):
+        return True
+    if isinstance(current, list) or isinstance(expected, list):
+        return current == expected
+    return str(current or "").strip() == str(expected or "").strip()
+
+
+def _apply_entity_enrichment(record, changes: list[dict], allowed_fields: set[str], list_fields: set[str] | None = None) -> None:
+    list_fields = list_fields or set()
+    for change in changes:
+        field = str(change.get("field") or "").strip()
+        operation = str(change.get("operation") or "append").strip()
+        if field not in allowed_fields or operation not in {"replace", "append"}:
+            raise HTTPException(status_code=400, detail="The proposed context update contains an unsupported field.")
+        proposed = change.get("proposed_value")
+        if proposed is None or proposed == "":
+            continue
+        current = getattr(record, field)
+        if operation == "replace" and not _same_enrichment_value(current, change.get("current_value")):
+            raise HTTPException(
+                status_code=409,
+                detail=f"The current {field.replace('_', ' ')} changed after this suggestion was generated. Reassess the meeting before approving it.",
+            )
+        if field == "status" and proposed not in {"active", "paused", "completed"}:
+            raise HTTPException(status_code=400, detail="The proposed project status is invalid.")
+        if field in list_fields:
+            proposed_values = proposed if isinstance(proposed, list) else [proposed]
+            if operation == "append":
+                merged = list(current or [])
+                for value in proposed_values:
+                    if value not in merged:
+                        merged.append(value)
+                setattr(record, field, merged)
+            else:
+                setattr(record, field, proposed_values)
+        elif operation == "append":
+            proposed_text = str(proposed).strip()
+            current_text = str(current or "").strip()
+            if proposed_text and proposed_text.casefold() not in current_text.casefold():
+                setattr(record, field, "\n\n".join(value for value in (current_text, proposed_text) if value))
+        else:
+            setattr(record, field, str(proposed).strip())
+
+
+def _accept_meeting_suggestion(db: Session, meeting: Meeting, suggestion: MeetingEnrichmentSuggestion) -> None:
+    suggestion_type = suggestion.suggestion_type
+    action = suggestion.action
+    target_id = suggestion.target_id
+
+    if suggestion_type == "person":
+        person = None
+        if action == "link" and target_id:
+            person = db.query(JourneyPerson).filter(
+                JourneyPerson.id == target_id, JourneyPerson.user_number == meeting.user_number
+            ).first()
+            if not person:
+                raise HTTPException(status_code=404, detail="The suggested person no longer exists.")
+        elif action == "create":
+            person = JourneyPerson(
+                user_number=meeting.user_number,
+                name=suggestion.title,
+                relation="Mentioned in meeting" if (suggestion.payload or {}).get("attendance_basis") == "mentioned" else "Meeting participant",
+                context=suggestion.description,
+            )
+            db.add(person)
+            db.flush()
+            suggestion.target_id = person.id
+        if not person:
+            raise HTTPException(status_code=409, detail="The person suggestion is incomplete.")
+        if (suggestion.payload or {}).get("attendance_basis") == "mentioned":
+            # The accepted suggestion is the durable meeting/person link, not attendance.
+            return
+        if (suggestion.payload or {}).get("shared_speaker_label"):
+            # One diarization label cannot safely become one person's identity.
+            attendee = db.query(MeetingAttendee).filter(
+                MeetingAttendee.meeting_id == meeting.id, MeetingAttendee.person_id == person.id
+            ).first()
+            if not attendee:
+                db.add(MeetingAttendee(meeting_id=meeting.id, person_id=person.id))
+            return
+        participant = db.query(MeetingParticipant).filter(
+            MeetingParticipant.meeting_id == meeting.id,
+            MeetingParticipant.speaker_label.ilike(suggestion.speaker_label or ""),
+        ).first()
+        if not participant:
+            raise HTTPException(status_code=409, detail="The suggested meeting participant could not be found.")
+        participant.person_id = person.id
+        participant.display_name = person.name
+        participant.is_current_user = False
+        participant.match_status = "confirmed"
+    elif suggestion_type == "goal":
+        goal = None
+        if action == "link" and target_id:
+            goal = db.query(JourneyGoal).filter(
+                JourneyGoal.id == target_id, JourneyGoal.user_number == meeting.user_number
+            ).first()
+            if not goal:
+                raise HTTPException(status_code=404, detail="The suggested goal no longer exists.")
+        elif action == "create":
+            goal = JourneyGoal(
+                user_number=meeting.user_number,
+                title=suggestion.title,
+                goal_text=suggestion.description or suggestion.title,
+                time_horizon="vision",
+            )
+            db.add(goal)
+            db.flush()
+            suggestion.target_id = goal.id
+        if not goal:
+            raise HTTPException(status_code=409, detail="The goal suggestion is incomplete.")
+        exists = db.query(MeetingGoalLink).filter(
+            MeetingGoalLink.meeting_id == meeting.id, MeetingGoalLink.goal_id == goal.id
+        ).first()
+        if not exists:
+            db.add(MeetingGoalLink(meeting_id=meeting.id, goal_id=goal.id))
+    elif suggestion_type == "project":
+        project = None
+        if action == "link" and target_id:
+            project = db.query(JourneyProject).filter(
+                JourneyProject.id == target_id, JourneyProject.user_number == meeting.user_number
+            ).first()
+            if not project:
+                raise HTTPException(status_code=404, detail="The suggested project no longer exists.")
+        elif action == "create":
+            project = JourneyProject(
+                user_number=meeting.user_number,
+                project_name=suggestion.title,
+                description=suggestion.description,
+                status="active",
+            )
+            _apply_entity_enrichment(
+                project, (suggestion.payload or {}).get("changes") or [],
+                PROJECT_ENRICHMENT_FIELDS, PROJECT_LIST_FIELDS,
+            )
+            db.add(project)
+            db.flush()
+            suggestion.target_id = project.id
+        if not project:
+            raise HTTPException(status_code=409, detail="The project suggestion is incomplete.")
+        exists = db.query(MeetingProjectLink).filter(
+            MeetingProjectLink.meeting_id == meeting.id, MeetingProjectLink.project_id == project.id
+        ).first()
+        if not exists:
+            db.add(MeetingProjectLink(meeting_id=meeting.id, project_id=project.id))
+    elif suggestion_type == "flag":
+        receipt = dict(meeting.context_receipt or {})
+        flags = list(receipt.get("meeting_flags") or [])
+        if not any(item.get("label") == suggestion.title for item in flags):
+            flags.append({"label": suggestion.title, "suggestion_id": suggestion.id, "status": "confirmed"})
+        receipt["meeting_flags"] = flags
+        meeting.context_receipt = receipt
+    elif suggestion_type == "strength":
+        if action == "evidence" and target_id:
+            strength = db.query(JourneyStrength).filter(
+                JourneyStrength.id == target_id, JourneyStrength.user_number == meeting.user_number
+            ).first()
+            if not strength:
+                raise HTTPException(status_code=404, detail="The suggested strength no longer exists.")
+            strength.strength = _append_confirmed_evidence(strength.strength, suggestion)
+        elif action == "create":
+            strength = JourneyStrength(
+                user_number=meeting.user_number,
+                title=suggestion.title,
+                strength=suggestion.description or suggestion.title,
+                source=f"meeting:{meeting.id}:confirmed",
+            )
+            db.add(strength)
+            db.flush()
+            suggestion.target_id = strength.id
+        else:
+            raise HTTPException(status_code=409, detail="The strength suggestion is incomplete.")
+    elif suggestion_type == "development_area":
+        if action == "evidence" and target_id:
+            area = db.query(JourneyDevelopmentArea).filter(
+                JourneyDevelopmentArea.id == target_id,
+                JourneyDevelopmentArea.user_number == meeting.user_number,
+            ).first()
+            if not area:
+                raise HTTPException(status_code=404, detail="The suggested development area no longer exists.")
+            area.skill = _append_confirmed_evidence(area.skill, suggestion)
+        elif action == "create":
+            area = JourneyDevelopmentArea(
+                user_number=meeting.user_number,
+                title=suggestion.title,
+                skill=suggestion.description or suggestion.title,
+                source=f"meeting:{meeting.id}:confirmed",
+            )
+            db.add(area)
+            db.flush()
+            suggestion.target_id = area.id
+        else:
+            raise HTTPException(status_code=409, detail="The development suggestion is incomplete.")
+    elif suggestion_type == "person_update" and action == "update" and target_id:
+        person = db.query(JourneyPerson).filter(
+            JourneyPerson.id == target_id, JourneyPerson.user_number == meeting.user_number
+        ).first()
+        if not person:
+            raise HTTPException(status_code=404, detail="The person record no longer exists.")
+        _apply_entity_enrichment(person, (suggestion.payload or {}).get("changes") or [], PERSON_ENRICHMENT_FIELDS)
+    elif suggestion_type == "project_update" and action == "update" and target_id:
+        project = db.query(JourneyProject).filter(
+            JourneyProject.id == target_id, JourneyProject.user_number == meeting.user_number
+        ).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="The project record no longer exists.")
+        _apply_entity_enrichment(
+            project,
+            (suggestion.payload or {}).get("changes") or [],
+            PROJECT_ENRICHMENT_FIELDS,
+            PROJECT_LIST_FIELDS,
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported meeting suggestion.")
+
+
+@router.post("/{meeting_id}/suggestions/{suggestion_id}/review")
+def review_meeting_suggestion(
+    meeting_id: int,
+    suggestion_id: int,
+    payload: MeetingSuggestionReview,
+    user_number: str = Depends(require_authenticated_user_identifier),
+    db: Session = Depends(get_db),
+):
+    suggestion = db.query(MeetingEnrichmentSuggestion).join(Meeting).filter(
+        MeetingEnrichmentSuggestion.id == suggestion_id,
+        MeetingEnrichmentSuggestion.meeting_id == meeting_id,
+        Meeting.user_number == user_number,
+    ).first()
+    if not suggestion:
+        raise HTTPException(status_code=404, detail="Meeting suggestion not found.")
+    if suggestion.status != "pending":
+        raise HTTPException(status_code=409, detail="This suggestion has already been reviewed.")
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
+    if payload.decision == "accepted":
+        _accept_meeting_suggestion(db, meeting, suggestion)
+    suggestion.status = payload.decision
+    suggestion.reviewed_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"id": suggestion.id, "status": suggestion.status, "target_id": suggestion.target_id}
+
+
 @router.post("/{meeting_id}/leadership-assessment", status_code=202)
-def create_leadership_assessment(meeting_id: int, background_tasks: BackgroundTasks, user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db)):
+def create_leadership_assessment(meeting_id: int, background_tasks: BackgroundTasks, user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db), scope: Literal["full", "entities"] = "full"):
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found.")
-    if meeting.processing_status != "ready":
+    if meeting.processing_status not in {"ready", "failed"} or not (meeting.transcript_text or meeting.user_notes):
         raise HTTPException(status_code=409, detail="The meeting must finish processing before it can be assessed.")
-    background_tasks.add_task(reassess_meeting_leadership, meeting.id)
-    return {"id": meeting.id, "assessment_status": "queued"}
+    claimed = db.query(Meeting).filter(
+        Meeting.id == meeting_id, Meeting.processing_status.in_(["ready", "failed"])
+    ).update({"processing_status": "analyzing", "processing_error": None}, synchronize_session=False)
+    if not claimed:
+        raise HTTPException(status_code=409, detail="This meeting is already being assessed.")
+    meeting.context_receipt = {**(meeting.context_receipt or {}), "active_assessment_scope": scope}
+    db.commit()
+    background_tasks.add_task(reassess_meeting_entities if scope == "entities" else reassess_meeting_with_context, meeting.id)
+    return {"id": meeting.id, "assessment_status": "queued", "scope": scope}
 
 
 @router.post("/upload", status_code=202)

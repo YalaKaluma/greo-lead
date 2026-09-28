@@ -20,6 +20,13 @@ const formatDate = (value) => value
   ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
   : 'Date not available';
 
+const formatListDate = (value) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
+
 const formatDuration = (seconds) => {
   if (!Number.isFinite(Number(seconds))) return '—';
   const total = Number(seconds);
@@ -43,13 +50,31 @@ const toDateTimeLocal = (value) => {
 };
 
 function Confidence({ value }) {
+  const { t } = useLanguage();
   if (value == null) return null;
-  return <span className="text-xs text-slate-500">{Math.round(value * 100)}% confidence</span>;
+  return <span className="text-xs text-slate-500">{Math.round(value * 100)}% {t('meetings.confidence')}</span>;
 }
 
 function Evidence({ children }) {
   if (!children) return null;
   return <blockquote className="mt-2 border-l-2 border-slate-300 pl-3 text-sm italic text-slate-600">“{children}”</blockquote>;
+}
+
+const contextValue = (value, emptyLabel) => {
+  if (value == null || value === '') return emptyLabel;
+  if (Array.isArray(value)) return value.join(', ');
+  return String(value);
+};
+
+function ContextSuggestionCard({ item, reviewing, onReview }) {
+  const { t } = useLanguage();
+  return <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+    <div className="flex items-start justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{t(`meetings.contextReview.type.${item.type}`)}</p><p className="mt-1 font-semibold text-slate-900">{item.title}</p></div><Confidence value={item.confidence} /></div>
+    {item.description && <p className="mt-2 text-sm text-slate-700">{item.description}</p>}
+    {item.changes?.length > 0 && <div className="mt-3 space-y-2">{item.changes.map((change, index) => <div key={`${change.field}-${index}`} className="rounded-lg bg-white/80 p-2 text-xs"><p className="font-semibold text-slate-800">{t(`meetings.contextReview.field.${change.field}`)}</p><p className="mt-1 text-slate-500">{t('meetings.contextReview.current')}: {contextValue(change.current_value, t('meetings.contextReview.empty'))}</p><p className="mt-1 text-slate-800">{t('meetings.contextReview.proposed')}: {contextValue(change.proposed_value, t('meetings.contextReview.empty'))}</p>{change.rationale && <p className="mt-1 text-slate-500">{change.rationale}</p>}<Evidence>{change.evidence_excerpt}</Evidence></div>)}</div>}
+    {item.rationale && <p className="mt-2 text-xs text-slate-500">{item.rationale}</p>}<Evidence>{item.evidence_excerpt}</Evidence>
+    <div className="mt-3 flex gap-2"><button disabled={reviewing === item.id} onClick={() => onReview(item.id, 'accepted')} className="rounded-lg bg-emerald-700 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50">{t('meetings.contextReview.yes')}</button><button disabled={reviewing === item.id} onClick={() => onReview(item.id, 'rejected')} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 disabled:opacity-50">{t('meetings.contextReview.no')}</button></div>
+  </div>;
 }
 
 function LeadershipFeedback({ feedback, fallback }) {
@@ -517,6 +542,8 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
   const [askingAlfred, setAskingAlfred] = useState(false);
   const [meetingChatError, setMeetingChatError] = useState('');
   const [assessingLeadership, setAssessingLeadership] = useState(false);
+  const [assessmentScope, setAssessmentScope] = useState(null);
+  const [reviewingSuggestion, setReviewingSuggestion] = useState(null);
   const [contextOptions, setContextOptions] = useState({ current_user: { title: 'Me' }, people: [], goals: [], projects: [] });
   const transcript = meeting.transcript_text || meeting.user_notes || '';
   const visibleTranscript = useMemo(() => {
@@ -548,6 +575,22 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_number: userNumber, target_id: Number(targetId) })
     });
     onChanged(meeting.id);
+  };
+
+  const reviewSuggestion = async (suggestionId, decision) => {
+    setReviewingSuggestion(suggestionId);
+    setActionError('');
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/${meeting.id}/suggestions/${suggestionId}/review`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision })
+      });
+      if (!response.ok) throw new Error((await response.json()).detail || t('meetings.contextReview.error'));
+      onChanged(meeting.id);
+    } catch (error) {
+      setActionError(error.message);
+    } finally {
+      setReviewingSuggestion(null);
+    }
   };
 
   const makeTask = async (actionId) => {
@@ -607,20 +650,21 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
     }
   };
 
-  const generateLeadershipAssessment = async () => {
+  const generateLeadershipAssessment = async (scope = 'full') => {
+    setAssessmentScope(scope);
     setAssessingLeadership(true);
-    const response = await fetch(`${apiUrl}/api/meetings/${meeting.id}/leadership-assessment?user_number=${encodeURIComponent(userNumber)}`, { method: 'POST' });
-    if (!response.ok) {
+    setActionError('');
+    try {
+      const response = await fetch(`${apiUrl}/api/meetings/${meeting.id}/leadership-assessment?scope=${scope}&user_number=${encodeURIComponent(userNumber)}`, { method: 'POST' });
+      if (!response.ok) throw new Error((await response.json()).detail || t('meetings.leadership.error'));
+      // The parent polls the persisted processing status and cleans up on navigation.
+      await onChanged(meeting.id);
+    } catch (error) {
+      setActionError(error.message || t('meetings.leadership.error'));
+    } finally {
       setAssessingLeadership(false);
-      window.alert((await response.json()).detail || 'Could not generate the leadership assessment.');
-      return;
+      setAssessmentScope(null);
     }
-    let checks = 0;
-    const poll = window.setInterval(() => {
-      onChanged(meeting.id);
-      checks += 1;
-      if (checks >= 8) { window.clearInterval(poll); setAssessingLeadership(false); }
-    }, 4000);
   };
 
   const deleteMeeting = async () => {
@@ -642,11 +686,26 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
     }
   };
 
+  const reassessmentBusy = assessingLeadership || ['queued', 'analyzing', 'transcribing'].includes(meeting.processing_status);
+  const entityAssessmentBusy = reassessmentBusy && (assessmentScope || meeting.context_receipt?.active_assessment_scope) === 'entities';
+  const pendingSuggestions = (meeting.enrichment_suggestions || []).filter((item) => item.status === 'pending');
+  const meetingResolution = meeting.context_receipt?.meeting_resolution || {};
+  const goalSuggestions = pendingSuggestions.filter((item) => item.type === 'goal');
+  const peopleSuggestions = pendingSuggestions.filter((item) => ['person', 'person_update'].includes(item.type));
+  const projectSuggestions = pendingSuggestions.filter((item) => ['project', 'project_update'].includes(item.type));
+  const learningSuggestions = pendingSuggestions.filter((item) => ['strength', 'development_area', 'flag'].includes(item.type));
+
+  const resolutionLabel = (item, nameField) => {
+    if (!item || item.status === 'none') return t('meetings.contextReview.noneDetected');
+    if (item.status === 'unknown') return `${item.speaker_label || t('meetings.contextReview.unknown')} — ${t('meetings.contextReview.identifyParticipant')}`;
+    return `${item[nameField] || item.speaker_label || t('meetings.contextReview.unknown')} — ${t(`meetings.contextReview.status.${item.status}`)}`;
+  };
+
   return (
     <div className="mx-auto max-w-6xl p-5 lg:p-10">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <button onClick={onBack} className="text-sm font-semibold text-blue-600">← All meetings</button>
-        <div className="flex gap-2"><button onClick={() => setEditing(true)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold hover:bg-slate-50">Edit Meeting</button><button onClick={deleteMeeting} disabled={deleting} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50">
+        <div className="flex flex-wrap gap-2"><button onClick={() => generateLeadershipAssessment('entities')} disabled={reassessmentBusy} title={t('meetings.entities.help')} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{entityAssessmentBusy ? t('meetings.entities.assessing') : t('meetings.entities.assess')}</button><button onClick={() => generateLeadershipAssessment('full')} disabled={reassessmentBusy} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{reassessmentBusy && !entityAssessmentBusy ? t('meetings.leadership.assessing') : t('meetings.entities.full')}</button><button onClick={() => setEditing(true)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold hover:bg-slate-50">Edit Meeting</button><button onClick={deleteMeeting} disabled={deleting} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50">
           {deleting ? 'Deleting…' : 'Delete Meeting'}
         </button></div>
       </div>
@@ -674,7 +733,7 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
           <Section title={`Decisions (${meeting.decisions.length})`}>{meeting.decisions.length ? <div className="space-y-4">{meeting.decisions.map((decision) => <div key={decision.id}><div className="flex justify-between gap-3"><p className="font-medium text-slate-900">{decision.description}</p><Confidence value={decision.confidence} /></div><Evidence>{decision.evidence_excerpt}</Evidence></div>)}</div> : <p className="text-slate-500">No explicit decisions detected.</p>}</Section>
           <Section title={`Action Items (${meeting.action_items.length})`}>{meeting.action_items.length ? <div className="space-y-4">{meeting.action_items.map((action) => <div key={action.id} className="rounded-xl border border-slate-200 p-4"><div className="flex justify-between gap-3"><div><p className="font-medium">{action.description}</p><p className="mt-1 text-sm text-slate-500">Owner: {action.owner_name || 'Unclear'}{action.due_date ? ` · Due ${action.due_date}` : ''}</p></div><Confidence value={action.confidence} /></div><Evidence>{action.evidence_excerpt}</Evidence>{action.created_task_id ? <div className="mt-3 flex items-center gap-3"><span className="text-sm font-medium text-green-700">Added to tasks</span><button disabled={busyAction === action.id} onClick={() => makeTask(action.id)} className="text-sm font-semibold text-blue-600 hover:underline">Move to Today</button></div> : action.ignored ? <p className="mt-3 text-sm font-medium text-slate-500">Ignored</p> : <div className="mt-3 flex flex-wrap gap-2"><button disabled={busyAction === action.id} onClick={() => makeTask(action.id)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white">Add to My Todo</button><button disabled={busyAction === action.id} onClick={() => ignoreAction(action.id)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800">Ignore</button></div>}</div>)}</div> : <p className="text-slate-500">No action items detected.</p>}</Section>
           <Section title={t('meetings.leadership.title')} privateLabel><LeadershipDomainWheel assessments={meeting.leadership_domain_assessments || []} />
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4"><p className="text-sm text-slate-500">{t('meetings.leadership.disclaimer')}</p><button onClick={generateLeadershipAssessment} disabled={assessingLeadership} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{assessingLeadership ? t('meetings.leadership.assessing') : meeting.leadership_domain_assessments?.length ? t('meetings.leadership.reassess') : t('meetings.leadership.assess')}</button></div>
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4"><p className="text-sm text-slate-500">{t('meetings.leadership.disclaimer')}</p></div>
             {meeting.leadership_observations.length > 0 && <details className="mt-5 border-t border-slate-200 pt-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">{t('meetings.leadership.additional')}</summary><div className="mt-4 space-y-4">{meeting.leadership_observations.map((item) => <div key={item.id}><p className="text-xs font-semibold uppercase tracking-wide text-amber-700">{item.category}</p><p className="mt-1 text-slate-800">{item.observation}</p><Evidence>{item.evidence_excerpt}</Evidence></div>)}</div></details>}
           </Section>
           {meeting.context_notes?.length > 0 && <Section title="Your Context Notes"><div className="space-y-3">{meeting.context_notes.map((note) => <div key={note.id} className="rounded-lg bg-amber-50 px-4 py-3"><span className="mr-3 font-mono text-xs text-amber-700">{formatTimer(note.elapsed_seconds)}</span><span className="text-slate-800">{note.note_text}</span></div>)}</div></Section>}
@@ -692,8 +751,20 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
               <button disabled={askingAlfred || !meetingQuestion.trim()} className="mt-2 w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{askingAlfred ? t('meetings.chat.thinking') : t('meetings.chat.submit')}</button>
             </form>
           </Section>
-          <Section title="Overview"><dl className="space-y-3 text-sm"><div><dt className="text-slate-500">Meeting type</dt><dd className="font-medium">{meeting.meeting_type || 'Other'}</dd></div><div><dt className="text-slate-500">Participants</dt><dd className="mt-2 space-y-2">{meeting.participants.length ? meeting.participants.map((participant) => <label key={participant.id} className="block"><span className="mb-1 block text-xs font-medium">{participant.is_current_user ? 'Me' : participant.speaker_label || participant.display_name}</span><select value={participant.is_current_user ? '__me__' : participant.person_id || ''} onChange={(event) => matchParticipant(participant.id, event.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-2"><option value="">Unmatched — {participant.speaker_label || participant.display_name}</option><option value="__me__">Me — {contextOptions.current_user?.title || 'Current user'}</option>{contextOptions.people.map((person) => <option key={person.id} value={person.id}>{person.title}</option>)}</select></label>) : <span className="font-medium">Not identified</span>}</dd></div></dl></Section>
-          <Section title="Related Work"><div className="space-y-4"><div><p className="mb-2 text-xs font-semibold uppercase text-slate-500">Goals</p>{meeting.related_goals?.map((goal) => <span key={goal.id} className="mb-2 mr-2 inline-block rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-800">{goal.title}</span>)}<select defaultValue="" onChange={(event) => { addContextLink('goals', event.target.value); event.target.value = ''; }} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"><option value="">Link a goal…</option>{contextOptions.goals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select></div><div><p className="mb-2 text-xs font-semibold uppercase text-slate-500">Projects</p>{meeting.related_projects?.map((project) => <span key={project.id} className="mb-2 mr-2 inline-block rounded-full bg-violet-50 px-3 py-1 text-xs text-violet-800">{project.title}</span>)}<select defaultValue="" onChange={(event) => { addContextLink('projects', event.target.value); event.target.value = ''; }} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"><option value="">Link a project…</option>{contextOptions.projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}</select></div></div></Section>
+          <Section title={t('meetings.contextReview.title')}>
+            <p className="text-sm leading-5 text-slate-600">{t('meetings.contextReview.intro')}</p>
+            <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm"><span className="text-slate-500">{t('meetings.contextReview.meetingType')}:</span> <span className="font-medium">{meeting.meeting_type || t('meetings.contextReview.other')}</span></div>
+            <div className="mt-4 space-y-5">
+              <div><p className="text-xs font-semibold uppercase tracking-wide text-blue-700">1. {t('meetings.contextReview.goals')}</p><p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-950">{resolutionLabel(meetingResolution.primary_goal, 'title')}</p>{goalSuggestions.length > 0 && <div className="mt-2 space-y-2">{goalSuggestions.map((item) => <ContextSuggestionCard key={item.id} item={item} reviewing={reviewingSuggestion} onReview={reviewSuggestion} />)}</div>}</div>
+              <div><p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">2. {t('meetings.contextReview.participants')}</p><div className="mt-2 space-y-1">{meetingResolution.people?.length ? meetingResolution.people.map((person, index) => <div key={`${person.speaker_label}-${index}`} className="rounded-lg bg-cyan-50 px-3 py-2 text-sm text-cyan-950"><p>{resolutionLabel(person, 'name')}</p>{person.shared_speaker_label && <p className="mt-1 text-xs text-cyan-700">{t('meetings.contextReview.sharedSpeaker')}</p>}{person.status === 'unknown' && person.rationale && <details className="mt-1 text-xs"><summary>{t('meetings.contextReview.whyReview')}</summary><p className="mt-1">{person.rationale}</p><p className="mt-1">{t(`meetings.contextReview.validation.${person.validation_reason || 'model_unknown'}`)}</p></details>}</div>) : <p className="rounded-lg bg-cyan-50 px-3 py-2 text-sm text-cyan-950">{t('meetings.contextReview.noneDetected')}</p>}</div>{meetingResolution.mentioned_people?.length > 0 && <div className="mt-3"><p className="text-xs font-semibold text-cyan-700">{t('meetings.contextReview.mentionedPeople')}</p>{meetingResolution.mentioned_people.map((person, index) => <p key={`mentioned-${index}`} className="mt-1 rounded-lg bg-slate-50 px-3 py-2 text-sm">{person.name || t('meetings.contextReview.unknown')} — {t(`meetings.contextReview.status.${person.status === 'unknown' ? 'unresolved' : person.status}`)}</p>)}</div>}{peopleSuggestions.length > 0 && <div className="mt-2 space-y-2">{peopleSuggestions.map((item) => <ContextSuggestionCard key={item.id} item={item} reviewing={reviewingSuggestion} onReview={reviewSuggestion} />)}</div>}</div>
+              <div><p className="text-xs font-semibold uppercase tracking-wide text-violet-700">3. {t('meetings.contextReview.projects')}</p>{[meetingResolution.primary_project, ...(meetingResolution.additional_projects || [])].map((project, index) => <p key={index} className="mt-2 rounded-lg bg-violet-50 px-3 py-2 text-sm text-violet-950">{resolutionLabel(project, 'name')}</p>)}{(meetingResolution.unresolved_projects || []).map((project, index) => <div key={`unresolved-${index}`} className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950"><p>{project.name} — {t('meetings.contextReview.projectUnresolved')}</p><p className="mt-1 text-xs">{t(`meetings.contextReview.projectReason.${project.reason}`, { defaultValue: t('meetings.contextReview.projectReason.review') })}</p></div>)}{projectSuggestions.length > 0 && <div className="mt-2 space-y-2">{projectSuggestions.map((item) => <ContextSuggestionCard key={item.id} item={item} reviewing={reviewingSuggestion} onReview={reviewSuggestion} />)}</div>}</div>
+            </div>
+            {learningSuggestions.length > 0 && <div className="mt-5 border-t border-slate-200 pt-4"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('meetings.contextReview.learning')}</p><div className="mt-2 space-y-2">{learningSuggestions.map((item) => <ContextSuggestionCard key={item.id} item={item} reviewing={reviewingSuggestion} onReview={reviewSuggestion} />)}</div></div>}
+            {pendingSuggestions.length === 0 && <p className="mt-4 text-sm text-slate-500">{t('meetings.contextReview.noSuggestions')}</p>}
+            <div className="mt-4 border-t border-slate-200 pt-4 text-sm text-slate-600">{t('meetings.contextReview.tasks')}: <span className="font-semibold text-slate-900">{meeting.action_items?.length || 0}</span></div>
+            {(meeting.context_receipt?.meeting_flags || []).length > 0 && <div className="mt-4"><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{t('meetings.contextReview.confirmedFlags')}</p>{meeting.context_receipt.meeting_flags.map((flag) => <span key={flag.suggestion_id || flag.label} className="mb-2 mr-2 inline-block rounded-full bg-emerald-50 px-3 py-1 text-xs text-emerald-800">{flag.label}</span>)}</div>}
+            <details className="mt-4 border-t border-slate-200 pt-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">{t('meetings.contextReview.manual')}</summary><div className="mt-3 space-y-4"><div><p className="mb-2 text-xs font-semibold uppercase text-slate-500">{t('meetings.contextReview.participants')}</p>{meeting.participants.length ? meeting.participants.map((participant) => <label key={participant.id} className="mb-2 block"><span className="mb-1 block text-xs font-medium">{participant.is_current_user ? t('meetings.contextReview.me') : participant.speaker_label || participant.display_name}</span><select value={participant.is_current_user ? '__me__' : participant.person_id || ''} onChange={(event) => matchParticipant(participant.id, event.target.value)} className="w-full rounded-lg border border-slate-300 px-2 py-2"><option value="">{t('meetings.contextReview.unmatched')} — {participant.speaker_label || participant.display_name}</option><option value="__me__">{t('meetings.contextReview.me')} — {contextOptions.current_user?.title || t('meetings.contextReview.currentUser')}</option>{contextOptions.people.map((person) => <option key={person.id} value={person.id}>{person.title}</option>)}</select></label>) : <span className="font-medium">{t('meetings.contextReview.notIdentified')}</span>}</div><div><p className="mb-2 text-xs font-semibold uppercase text-slate-500">{t('meetings.contextReview.goals')}</p>{meeting.related_goals?.map((goal) => <span key={goal.id} className="mb-2 mr-2 inline-block rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-800">{goal.title}</span>)}<select defaultValue="" onChange={(event) => { addContextLink('goals', event.target.value); event.target.value = ''; }} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"><option value="">{t('meetings.contextReview.linkGoal')}</option>{contextOptions.goals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}</select></div><div><p className="mb-2 text-xs font-semibold uppercase text-slate-500">{t('meetings.contextReview.projects')}</p>{meeting.related_projects?.map((project) => <span key={project.id} className="mb-2 mr-2 inline-block rounded-full bg-violet-50 px-3 py-1 text-xs text-violet-800">{project.title}</span>)}<select defaultValue="" onChange={(event) => { addContextLink('projects', event.target.value); event.target.value = ''; }} className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"><option value="">{t('meetings.contextReview.linkProject')}</option>{contextOptions.projects.map((project) => <option key={project.id} value={project.id}>{project.title}</option>)}</select></div></div></details>
+          </Section>
           {meeting.has_recording && <Section title="Recording"><audio controls className="w-full" src={`${apiUrl}/api/meetings/${meeting.id}/recording?user_number=${encodeURIComponent(userNumber)}`} /><button onClick={async () => { await fetch(`${apiUrl}/api/meetings/${meeting.id}/recording?user_number=${encodeURIComponent(userNumber)}`, { method: 'DELETE' }); onChanged(meeting.id); }} className="mt-3 text-sm font-medium text-red-600">Delete recording, keep transcript</button></Section>}
         </aside>
       </div>}
@@ -859,6 +930,7 @@ export default function Meetings({ apiUrl, userNumber }) {
   const { t } = useLanguage();
   const [meetings, setMeetings] = useState([]);
   const [selected, setSelected] = useState(null);
+  const detailRequest = useRef(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -890,8 +962,12 @@ export default function Meetings({ apiUrl, userNumber }) {
   };
 
   const loadDetail = async (id) => {
+    const requestId = ++detailRequest.current;
     const response = await fetch(`${apiUrl}/api/meetings/${id}?user_number=${encodeURIComponent(userNumber)}`);
-    if (response.ok) setSelected(await response.json());
+    if (response.ok) {
+      const detail = await response.json();
+      if (requestId === detailRequest.current) setSelected(detail);
+    }
   };
 
   const editFromList = async (id) => {
@@ -915,7 +991,7 @@ export default function Meetings({ apiUrl, userNumber }) {
     return () => window.clearInterval(interval);
   }, [meetings, selected?.id, selected?.processing_status]);
 
-  if (selected) return <MeetingDetail meeting={selected} apiUrl={apiUrl} userNumber={userNumber} onBack={() => setSelected(null)} onChanged={loadDetail} onDeleted={() => { setSelected(null); loadMeetings(); }} />;
+  if (selected) return <MeetingDetail meeting={selected} apiUrl={apiUrl} userNumber={userNumber} onBack={() => { detailRequest.current += 1; setSelected(null); }} onChanged={loadDetail} onDeleted={() => { detailRequest.current += 1; setSelected(null); loadMeetings(); }} />;
 
   return (
     <div className="mx-auto max-w-7xl p-5 lg:p-10">
@@ -925,7 +1001,7 @@ export default function Meetings({ apiUrl, userNumber }) {
       <div className="mt-6 flex flex-wrap gap-3 rounded-xl border border-slate-200 bg-white p-4"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search meetings and transcripts" className="min-w-[240px] flex-1 rounded-lg border border-slate-300 px-3 py-2" /><select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2"><option value="">All statuses</option><option value="processed">Processed</option><option value="ready">Ready to process</option><option value="queued">Queued</option><option value="transcribing">Transcribing</option><option value="analyzing">Analyzing</option><option value="failed">Needs attention</option></select></div>
       {error && <p className="mt-5 rounded-lg bg-red-50 p-4 text-red-700">{error}</p>}
       {loading ? <p className="mt-10 text-center text-slate-500">Loading meetings…</p> : meetings.length === 0 ? <div className="mt-10 rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center"><h2 className="text-xl font-semibold">Alfred is ready for your first meeting</h2><p className="mt-2 text-slate-600">Record a conversation, upload audio, or paste your notes.</p><button onClick={() => setShowAdd(true)} className="mt-5 rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white">Add your first meeting</button></div> : (
-        <><div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="hidden grid-cols-[2fr_1fr_1fr_100px_130px_110px] gap-4 border-b bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid"><span>Meeting</span><span>Date</span><span>Participants</span><span>Items</span><span>Status</span><span>Actions</span></div>{meetings.map((meeting) => <div key={meeting.id} role="button" tabIndex={0} onClick={() => loadDetail(meeting.id)} onKeyDown={(event) => { if (event.key === 'Enter') loadDetail(meeting.id); }} className="flex w-full cursor-pointer items-center gap-3 border-b border-slate-100 p-3 text-left hover:bg-slate-50 md:grid md:grid-cols-[2fr_1fr_1fr_100px_130px_110px] md:p-5"><div className="min-w-0 flex-1"><p className="truncate font-semibold text-slate-900">{meeting.title}</p><p className="mt-1 hidden line-clamp-2 text-sm text-slate-500 md:block">{meeting.one_line_summary || 'Alfred is preparing this meeting…'}</p></div><p className="flex-none text-xs text-slate-600 md:text-sm">{formatDate(meeting.started_at)}</p><p className="hidden truncate text-sm text-slate-600 sm:block md:block">{meeting.participants.map((p) => p.display_name).join(', ') || '—'}</p><p className="hidden text-sm text-slate-600 md:block">{meeting.action_item_count} actions<br />{meeting.decision_count} decisions</p><span className={`hidden w-fit rounded-full px-3 py-1 text-xs font-semibold md:block ${meeting.status === 'processed' ? 'bg-emerald-100 text-emerald-800' : meeting.processing_status === 'ready' ? 'bg-amber-100 text-amber-800' : meeting.processing_status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>{meeting.status === 'processed' ? 'Processed' : meeting.processing_status === 'ready' ? 'Ready to process' : STATUS_LABELS[meeting.processing_status] || meeting.processing_status}</span><div className="hidden gap-3 text-sm font-semibold md:flex"><button onClick={(event) => { event.stopPropagation(); editFromList(meeting.id); }} className="text-blue-600 hover:underline">Edit</button><button onClick={(event) => { event.stopPropagation(); deleteFromList(meeting); }} className="text-red-600 hover:underline">Delete</button></div></div>)}</div><div className="mt-4 flex items-center justify-between gap-4"><p className="text-sm text-slate-500">{pagination.total} meeting{pagination.total === 1 ? '' : 's'} · Page {page} of {pagination.total_pages}</p><div className="flex gap-2"><button type="button" disabled={page === 1} onClick={() => setPage((value) => value - 1)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Previous</button><button type="button" disabled={page >= pagination.total_pages} onClick={() => setPage((value) => value + 1)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Next</button></div></div></>
+        <><div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white"><div className="hidden grid-cols-[2fr_1fr_1fr_100px_130px_110px] gap-4 border-b bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid"><span>Meeting</span><span>Date</span><span>Participants</span><span>Items</span><span>Status</span><span>Actions</span></div>{meetings.map((meeting) => <div key={meeting.id} role="button" tabIndex={0} onClick={() => loadDetail(meeting.id)} onKeyDown={(event) => { if (event.key === 'Enter') loadDetail(meeting.id); }} className="flex w-full cursor-pointer items-center gap-3 border-b border-slate-100 p-3 text-left hover:bg-slate-50 md:grid md:grid-cols-[2fr_1fr_1fr_100px_130px_110px] md:p-5"><div className="min-w-0 flex-1"><p className="line-clamp-2 min-h-[3rem] break-words font-semibold leading-6 text-slate-900">{meeting.title}</p><p className="mt-1 hidden line-clamp-2 text-sm text-slate-500 md:block">{meeting.one_line_summary || 'Alfred is preparing this meeting…'}</p></div><p className="flex-none whitespace-nowrap text-xs tabular-nums text-slate-600 md:text-sm">{formatListDate(meeting.started_at)}</p><p className="hidden truncate text-sm text-slate-600 sm:block md:block">{(meeting.participant_names || meeting.participants.map((p) => p.display_name)).join(', ') || '—'}</p><p className="hidden text-sm text-slate-600 md:block">{meeting.action_item_count} actions<br />{meeting.decision_count} decisions</p><span className={`hidden w-fit rounded-full px-3 py-1 text-xs font-semibold md:block ${meeting.status === 'processed' ? 'bg-emerald-100 text-emerald-800' : meeting.processing_status === 'ready' ? 'bg-amber-100 text-amber-800' : meeting.processing_status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>{meeting.status === 'processed' ? 'Processed' : meeting.processing_status === 'ready' ? 'Ready to process' : STATUS_LABELS[meeting.processing_status] || meeting.processing_status}</span><div className="hidden gap-3 text-sm font-semibold md:flex"><button onClick={(event) => { event.stopPropagation(); editFromList(meeting.id); }} className="text-blue-600 hover:underline">Edit</button><button onClick={(event) => { event.stopPropagation(); deleteFromList(meeting); }} className="text-red-600 hover:underline">Delete</button></div></div>)}</div><div className="mt-4 flex items-center justify-between gap-4"><p className="text-sm text-slate-500">{pagination.total} meeting{pagination.total === 1 ? '' : 's'} · Page {page} of {pagination.total_pages}</p><div className="flex gap-2"><button type="button" disabled={page === 1} onClick={() => setPage((value) => value - 1)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Previous</button><button type="button" disabled={page >= pagination.total_pages} onClick={() => setPage((value) => value + 1)} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40">Next</button></div></div></>
       )}
       {showAdd && <AddMeetingModal apiUrl={apiUrl} userNumber={userNumber} onClose={() => setShowAdd(false)} onCreated={({ id }) => { setShowAdd(false); loadMeetings(); loadDetail(id); }} />}
       {editingMeeting && <EditMeetingModal meeting={editingMeeting} apiUrl={apiUrl} userNumber={userNumber} onClose={() => setEditingMeeting(null)} onSaved={() => { setEditingMeeting(null); loadMeetings(); }} />}
