@@ -28,8 +28,7 @@ import yaml
 import pandas as pd
 from pathlib import Path
 from typing import Optional, List, Dict, NamedTuple
-from datetime import datetime, date, timedelta, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime, date, timedelta
 
 from app.db import get_db
 from app.services.journey_context import build_journey_context
@@ -40,8 +39,6 @@ from app.models import (
     Habit,
     HabitCompletion,
     JourneyGoal,
-    Meeting,
-    MeetingLeadershipObservation,
     Message,
     User,
 )
@@ -63,6 +60,7 @@ from app.config import (
     DEFAULT_USER_NUMBER,
 )
 from app.services.twin_context_service import append_twin_context, get_twin_context
+from app.services.evening_review_context_service import build_evening_review_context
 
 # -------------------------------------------------
 # Setup
@@ -828,57 +826,8 @@ def build_evening_meeting_leadership_context(
         db: Session,
         user_number: str,
 ) -> str:
-    """Summarize today's stored coaching observations without sharing transcripts."""
-    timezone_name = get_user_timezone(db, user_number)
-    local_timezone = ZoneInfo(timezone_name)
-    local_day = datetime.now(local_timezone).date()
-    day_start = datetime.combine(local_day, datetime.min.time(), tzinfo=local_timezone).astimezone(timezone.utc)
-    next_local_day = local_day + timedelta(days=1)
-    day_end = datetime.combine(
-        next_local_day,
-        datetime.min.time(),
-        tzinfo=local_timezone,
-    ).astimezone(timezone.utc)
-
-    meetings = db.query(Meeting).filter(
-        Meeting.user_number == user_number,
-        Meeting.processing_status == "ready",
-        Meeting.started_at >= day_start,
-        Meeting.started_at < day_end,
-    ).order_by(Meeting.started_at.asc()).limit(8).all()
-    if not meetings:
-        return ""
-
-    meeting_ids = [meeting.id for meeting in meetings]
-    observations = db.query(MeetingLeadershipObservation).filter(
-        MeetingLeadershipObservation.meeting_id.in_(meeting_ids)
-    ).order_by(
-        MeetingLeadershipObservation.meeting_id,
-        MeetingLeadershipObservation.id,
-    ).all()
-    observations_by_meeting = {}
-    for observation in observations:
-        observations_by_meeting.setdefault(observation.meeting_id, []).append(observation)
-
-    meeting_lines = []
-    for meeting in meetings:
-        feedback = observations_by_meeting.get(meeting.id, [])[:5]
-        if not feedback:
-            continue
-        themes = " | ".join(
-            f"{item.category}: {item.observation[:700]}"
-            for item in feedback
-        )
-        meeting_lines.append(f"- {meeting.title}: {themes}")
-    if not meeting_lines:
-        return ""
-
-    return (
-        "\nTODAY'S MEETING LEADERSHIP FEEDBACK:\n"
-        + "\n".join(meeting_lines)[:9000]
-        + "\nUse these themes to ask one timely, evidence-based reflection question. "
-          "Do not quote transcript evidence or list every observation. Synthesize the most meaningful pattern.\n"
-    )
+    """Backward-compatible wrapper for the complete evening day review context."""
+    return build_evening_review_context(db, user_number)
 
 
 def send_nudge_for_user(
@@ -914,17 +863,17 @@ def send_nudge_for_user(
         # Build full context
         context_text, conversation_history = build_full_context(db, user_number)
         if nudge_type == "evening":
-            meeting_leadership_context = build_evening_meeting_leadership_context(db, user_number)
-            if meeting_leadership_context:
-                context_text = f"{context_text}\n{meeting_leadership_context}"
+            evening_review_context = build_evening_review_context(db, user_number)
+            if evening_review_context:
+                context_text = f"{context_text}\n{evening_review_context}"
                 logger.info(
-                    "[evening_meeting_context] user_number=%s included=true characters=%s",
+                    "[evening_review_context] user_number=%s included=true characters=%s",
                     user_number,
-                    len(meeting_leadership_context),
+                    len(evening_review_context),
                 )
             else:
                 logger.info(
-                    "[evening_meeting_context] user_number=%s included=false characters=0",
+                    "[evening_review_context] user_number=%s included=false characters=0",
                     user_number,
                 )
 
