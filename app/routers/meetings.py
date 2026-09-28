@@ -7,7 +7,7 @@ import uuid
 import base64
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
 from app.models import JourneyDevelopmentArea, JourneyGoal, JourneyPerson, JourneyProject, JourneyStrength, Meeting, MeetingActionItem, MeetingAttendee, MeetingContextNote, MeetingEnrichmentSuggestion, MeetingGoalLink, MeetingParticipant, MeetingProjectLink, Task, User
-from app.services.meeting_intelligence_service import answer_meeting_question, process_meeting, reassess_meeting_with_context
+from app.services.meeting_intelligence_service import answer_meeting_question, process_meeting, reassess_meeting_with_context, reassess_meeting_entities
 from app.services.leadership_trends_service import get_leadership_trends
 from app.services.journey_support import goal_level_variants, normalize_goal_level
 from app.services.timezone_service import get_user_timezone, today_for_timezone
@@ -662,10 +662,12 @@ def retry_meeting(meeting_id: int, background_tasks: BackgroundTasks, user_numbe
         raise HTTPException(status_code=404, detail="Meeting not found.")
     if meeting.processing_status not in {"failed", "queued"}:
         raise HTTPException(status_code=409, detail="Only queued or failed meetings can be retried.")
-    if (meeting.processing_status == "failed" and meeting.executive_summary
+    if (meeting.processing_status == "failed"
+            and (meeting.executive_summary or (meeting.context_receipt or {}).get("active_assessment_scope") == "entities")
             and (meeting.transcript_text or meeting.user_notes)):
         # Reassessing a previously processed meeting must preserve handled actions.
-        return create_leadership_assessment(meeting_id, background_tasks, user_number, db)
+        scope = "entities" if (meeting.context_receipt or {}).get("active_assessment_scope") == "entities" else "full"
+        return create_leadership_assessment(meeting_id, background_tasks, user_number, db, scope=scope)
     meeting.processing_status = "queued"
     meeting.processing_error = None
     db.commit()
@@ -935,7 +937,7 @@ def review_meeting_suggestion(
 
 
 @router.post("/{meeting_id}/leadership-assessment", status_code=202)
-def create_leadership_assessment(meeting_id: int, background_tasks: BackgroundTasks, user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db)):
+def create_leadership_assessment(meeting_id: int, background_tasks: BackgroundTasks, user_number: str = Depends(require_authenticated_user_identifier), db: Session = Depends(get_db), scope: Literal["full", "entities"] = "full"):
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found.")
@@ -946,9 +948,10 @@ def create_leadership_assessment(meeting_id: int, background_tasks: BackgroundTa
     ).update({"processing_status": "analyzing", "processing_error": None}, synchronize_session=False)
     if not claimed:
         raise HTTPException(status_code=409, detail="This meeting is already being assessed.")
+    meeting.context_receipt = {**(meeting.context_receipt or {}), "active_assessment_scope": scope}
     db.commit()
-    background_tasks.add_task(reassess_meeting_with_context, meeting.id)
-    return {"id": meeting.id, "assessment_status": "queued"}
+    background_tasks.add_task(reassess_meeting_entities if scope == "entities" else reassess_meeting_with_context, meeting.id)
+    return {"id": meeting.id, "assessment_status": "queued", "scope": scope}
 
 
 @router.post("/upload", status_code=202)

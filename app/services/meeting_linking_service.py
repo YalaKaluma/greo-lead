@@ -3,8 +3,9 @@
 No enrichment, task extraction or benchmark answers enter this process.
 """
 import json
+from copy import deepcopy
 
-from app.services.meeting_resolution_contract import numbered_transcript, resolution_schema
+from app.services.meeting_resolution_contract import numbered_transcript, resolution_schema, normalized, validate_catalog_choices
 from app.services.meeting_review_service import review_project_resolution
 from app.utils.ai_safety import UNTRUSTED_CONTEXT_POLICY, parse_bounded_json_object, wrap_untrusted_context
 
@@ -28,6 +29,34 @@ def _resolve(client, model, name, properties, instruction, context, transcript):
     if getattr(response.choices[0], "finish_reason", None) == "length":
         raise ValueError("Entity linking response exceeded its output budget; retry required")
     return parse_bounded_json_object(response.choices[0].message.content, max_characters=100000)
+
+
+def _explicit_project_goal_links(projects, catalog, transcript):
+    """Only a unique, explicit stored relationship can supply a deterministic goal link."""
+    checked = validate_catalog_choices(deepcopy(projects), catalog, transcript)
+    links = {}
+    for project in [checked.get("primary_project") or {}, *(checked.get("additional_projects") or [])]:
+        if project.get("status") != "existing" or project.get("confidence", 0) < .78:
+            continue
+        if project.get("confidence", 0) - project.get("runner_up_confidence", 0) < .12:
+            continue
+        record = next((p for p in catalog.get("projects", []) if p["id"] == project.get("id")), {})
+        stored_goal = normalized(record.get("goal"))
+        if not stored_goal:
+            continue
+        for goal in catalog.get("goals", []):
+            title = goal.get("title") or goal.get("name")
+            if stored_goal != normalized(title):
+                continue
+            links[goal["id"]] = {"status": "existing", "id": goal["id"], "title": title,
+                "description": goal.get("description") or "", "confidence": project["confidence"],
+                "runner_up_id": None, "runner_up_confidence": 0,
+                "evidence_excerpt": project["evidence_excerpt"],
+                "evidence_line_ids": project.get("evidence_line_ids"),
+                "rationale": f"The evidenced project {record.get('title') or record.get('name')} explicitly stores this goal. "
+                             "The goal title need not be repeated in the meeting.",
+                "link_basis": "stored_project_goal"}
+    return list(links.values())
 
 
 def resolve_links(client, model, transcript, catalog, labels, title=None, supplied_context=None):
@@ -62,8 +91,9 @@ def resolve_links(client, model, transcript, catalog, labels, title=None, suppli
     ), context, transcript)
     # Project-only review is the project resolver, not another full-context rewrite.
     projects = review_project_resolution(client, model, transcript, catalog,
-                                        {"primary_project": {}, "additional_projects": []})
-    goal_context = {"goals": catalog.get("goals", []), "project_catalog": catalog.get("projects", []),
+                                        {"primary_project": {}, "additional_projects": []}, supplied_context, title)
+    explicit_goal_links = _explicit_project_goal_links(projects, catalog, transcript)
+    goal_context = {"explicit_project_goal_links": explicit_goal_links,"goals": catalog.get("goals", []), "project_catalog": catalog.get("projects", []),
                     "user_supplied_context": supplied_context, "resolved_projects": projects}
     goal = _resolve(client, model, "meeting_goal_link", {"primary_goal": properties["primary_goal"]}, (
         "Resolve the GOAL after the supplied project decisions. Read the matched projects' stored goal "
@@ -71,9 +101,16 @@ def resolve_links(client, model, transcript, catalog, labels, title=None, suppli
         "repeat a strategic goal's title when the substantive project work advances that established "
         "outcome. Cite the meeting work and explain the project-to-goal relationship in rationale. "
         "Honor explicit user-provided goal linking guidance only where its stated scope applies. "
-        "General business vocabulary is insufficient. Do not attach an unrelated consulting engagement "
+        "Do not return none merely because the strategic title is absent from the transcript. "
+        "For none, explain why NONE of the resolved substantive projects advances any catalog goal, "
+        "including any applicable user guidance and stored project goal. Distinguish shared product "
+        "development from unrelated client consulting. General business vocabulary alone is insufficient. "
+        "Do not attach an unrelated consulting engagement "
         "to a product goal. Prefer supported existing strategic outcomes over inventing a goal named "
         "after the meeting. Propose new only when a distinct outcome is supported and no existing goal "
         "covers it; otherwise return none with a reason. Do not change people or project decisions."
     ), goal_context, transcript)
+    checked_goal = validate_catalog_choices(deepcopy(goal), catalog, transcript)
+    if (checked_goal.get("primary_goal") or {}).get("status") == "none" and len(explicit_goal_links) == 1:
+        goal["primary_goal"] = explicit_goal_links[0]
     return {**people, **projects, **goal}

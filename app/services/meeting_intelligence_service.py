@@ -59,7 +59,7 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
-MEETING_PROMPT_VERSION = "meeting-v16-entity-linking"
+MEETING_PROMPT_VERSION = "meeting-v17-entity-only"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4.1")
 MEETING_CONTEXT_MODEL = os.getenv("MEETING_CONTEXT_MODEL", "gpt-4.1")
 MEETING_COACHING_MODEL = os.getenv("MEETING_COACHING_MODEL", MEETING_MODEL)
@@ -791,6 +791,46 @@ def reassess_meeting_leadership(meeting_id: int) -> None:
     _with_fresh_session(lambda db: _save_leadership_assessment(db, meeting_id, coaching), "save_leadership_assessment", meeting_id=meeting_id, attempt_id=attempt_id)
 
 
+def reassess_meeting_entities(meeting_id: int) -> None:
+    """Resolve links only. Never run enrichment, summaries, tasks, coaching or memory sync."""
+    attempt_id = uuid.uuid4().hex[:8].upper()
+    try:
+        snapshot = _with_fresh_session(
+            lambda db: _start_processing(db, meeting_id, entities_only=True),
+            "load_entity_snapshot", meeting_id=meeting_id, attempt_id=attempt_id)
+        if not snapshot or not snapshot["transcript"]:
+            raise ValueError("This meeting has no transcript or notes to assess.")
+        resolution = resolve_meeting_context(snapshot["transcript"], snapshot["title"],
+                                             snapshot["supplied_context"], snapshot["matching_context"])
+        resolved = _with_fresh_session(
+            lambda db: _validated_resolution_context(db, snapshot["user_number"], resolution, snapshot["transcript"]),
+            "validate_entity_links", meeting_id=meeting_id, attempt_id=attempt_id)
+        _with_fresh_session(lambda db: _save_entity_assessment(db, meeting_id, resolved["resolution"]),
+                            "save_entity_links", meeting_id=meeting_id, attempt_id=attempt_id)
+    except Exception as exc:
+        _mark_processing_failed(meeting_id, exc, "assessing entities", attempt_id)
+        log_failure("meeting_entity_assessment", exc)
+
+
+def _save_entity_assessment(db: Session, meeting_id: int, resolution: dict) -> None:
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise ValueError("Meeting was deleted before its entity assessment could be saved.")
+    analysis = _resolution_to_analysis(resolution)
+    _replace_participant_suggestions(db, meeting, {**analysis, "meeting_resolution": resolution})
+    _store_pending_enrichment_suggestions(db, meeting, analysis, entities_only=True)
+    receipt = dict(meeting.context_receipt or {})
+    receipt["meeting_resolution"] = resolution
+    receipt["entity_assessment"] = {"model": MEETING_CONTEXT_MODEL, "version": MEETING_PROMPT_VERSION,
+                                    "assessed_at": datetime.now(timezone.utc).isoformat()}
+    # Keep previous longitudinal receipts and user-reviewed history intact.
+    receipt["provisional_context"] = [item for item in (receipt.get("provisional_context") or [])
+        if item.get("type") not in {"person", "project", "goal"}] + _context_receipt_suggestions(analysis)
+    meeting.context_receipt = receipt
+    meeting.processing_status = "ready"
+    meeting.processing_error = None
+
+
 def reassess_meeting_with_context(meeting_id: int) -> None:
     try:
         _reassess_meeting_with_context(meeting_id)
@@ -1029,15 +1069,7 @@ def answer_meeting_question(meeting_context: dict, question: str, history: list[
     return (response.choices[0].message.content or "").strip()
 
 
-def _replace_analysis(db: Session, meeting: Meeting, analysis: dict) -> None:
-    meeting.title = (analysis.get("title") or meeting.title or "Untitled meeting")[:240]
-    meeting.meeting_type = (analysis.get("meeting_type") or "Other")[:80]
-    for field in ("one_line_summary", "executive_summary"):
-        if str(analysis.get(field) or "").strip():
-            setattr(meeting, field, analysis[field])
-    meeting.prompt_version = MEETING_PROMPT_VERSION[:40]
-    meeting.model_version = MEETING_MODEL[:80]
-
+def _replace_participant_suggestions(db: Session, meeting: Meeting, analysis: dict) -> None:
     transcript_labels = {
         str(label).strip()
         for (label,) in db.query(MeetingTranscriptSegment.speaker_label).filter(
@@ -1120,6 +1152,18 @@ def _replace_analysis(db: Session, meeting: Meeting, analysis: dict) -> None:
         ).all()
         for stale_self in stale_self_rows:
             db.delete(stale_self)
+
+
+def _replace_analysis(db: Session, meeting: Meeting, analysis: dict) -> None:
+    meeting.title = (analysis.get("title") or meeting.title or "Untitled meeting")[:240]
+    meeting.meeting_type = (analysis.get("meeting_type") or "Other")[:80]
+    for field in ("one_line_summary", "executive_summary"):
+        if str(analysis.get(field) or "").strip():
+            setattr(meeting, field, analysis[field])
+    meeting.prompt_version = MEETING_PROMPT_VERSION[:40]
+    meeting.model_version = MEETING_MODEL[:80]
+
+    _replace_participant_suggestions(db, meeting, analysis)
 
     for index, topic in enumerate(analysis.get("topics") or []):
         title = str(topic.get("title") or "").strip()
@@ -1588,13 +1632,17 @@ def _validated_resolution_context(
     return {"resolution": sanitized, "retrieved_context": retrieved, "prompt_context": prompt_context}
 
 
-def _store_pending_enrichment_suggestions(db: Session, meeting: Meeting, analysis: dict) -> None:
+def _store_pending_enrichment_suggestions(db: Session, meeting: Meeting, analysis: dict, *, entities_only: bool = False) -> None:
     # A new assessment supersedes only unanswered questions. Accepted and rejected
     # items remain as the user's durable audit trail and are never silently changed.
-    db.query(MeetingEnrichmentSuggestion).filter(
+    pending = db.query(MeetingEnrichmentSuggestion).filter(
         MeetingEnrichmentSuggestion.meeting_id == meeting.id,
         MeetingEnrichmentSuggestion.status == "pending",
-    ).delete(synchronize_session=False)
+    )
+    if entities_only:
+        pending = pending.filter(MeetingEnrichmentSuggestion.suggestion_type.in_(["person", "project", "goal"]),
+                                 MeetingEnrichmentSuggestion.action.in_(["link", "create"]))
+    pending.delete(synchronize_session=False)
     existing_fingerprints = {
         value for (value,) in db.query(MeetingEnrichmentSuggestion.fingerprint).filter(
             MeetingEnrichmentSuggestion.meeting_id == meeting.id
@@ -1602,6 +1650,8 @@ def _store_pending_enrichment_suggestions(db: Session, meeting: Meeting, analysi
     }
     identifiers = _user_identifiers(db, meeting.user_number)
     for item in _analysis_suggestions(meeting, analysis):
+        if entities_only and (item.get("suggestion_type") not in {"person", "project", "goal"} or item.get("action") not in {"link", "create"}):
+            continue
         target_id = _strict_integer_id(item.get("target_id") or item.get("id"))
         if item.get("action") in {"link", "update", "evidence"} and not target_id:
             continue
@@ -1679,7 +1729,7 @@ def _bounded_catalog_items(items: list[dict], character_budget: int) -> list[dic
     return selected
 
 
-def _start_processing(db: Session, meeting_id: int) -> dict | None:
+def _start_processing(db: Session, meeting_id: int, *, entities_only: bool = False) -> dict | None:
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
         return None
@@ -1723,123 +1773,125 @@ def _start_processing(db: Session, meeting_id: int) -> dict | None:
     user_identifiers = {meeting.user_number}
     if user:
         user_identifiers.update(value for value in (user.phone_number, user.email) if value)
-        assessment = db.query(BeltAssessment).filter(
-            BeltAssessment.user_number.in_(user_identifiers)
-        ).order_by(BeltAssessment.created_at.desc()).first()
-        if assessment:
-            assessment_snapshot = {
-                "current_belt": assessment.current_belt,
-                "readiness_score": assessment.readiness_score,
-                "strengths": assessment.strengths,
-                "growth_edges": assessment.growth_edges,
-                "wheel_scores": assessment.wheel_scores or assessment.dimension_scores,
-                "wheel_feedback": assessment.wheel_feedback,
-                "priority_next_actions": assessment.priority_next_actions or assessment.required_next_actions,
-            }
+    if not entities_only:
+        if user:
+            assessment = db.query(BeltAssessment).filter(
+                BeltAssessment.user_number.in_(user_identifiers)
+            ).order_by(BeltAssessment.created_at.desc()).first()
+            if assessment:
+                assessment_snapshot = {
+                    "current_belt": assessment.current_belt,
+                    "readiness_score": assessment.readiness_score,
+                    "strengths": assessment.strengths,
+                    "growth_edges": assessment.growth_edges,
+                    "wheel_scores": assessment.wheel_scores or assessment.dimension_scores,
+                    "wheel_feedback": assessment.wheel_feedback,
+                    "priority_next_actions": assessment.priority_next_actions or assessment.required_next_actions,
+                }
+                leadership_context_parts.append(
+                    "Latest leadership wheel/assessment: " + json.dumps(assessment_snapshot, default=str)[:6000]
+                )
+            trials = db.query(JourneyBeltTrial).filter(
+                JourneyBeltTrial.user_number.in_(user_identifiers),
+                JourneyBeltTrial.status.in_(["in_progress", "submitted", "completed"]),
+            ).order_by(JourneyBeltTrial.updated_at.desc()).limit(6).all()
+            if trials:
+                trial_snapshot = [{
+                    "dimension": trial.dimension_id,
+                    "belt": trial.target_belt,
+                    "type": trial.trial_type,
+                    "status": trial.status,
+                    "prompt": (trial.prompt or "")[:500],
+                    "feedback": (trial.ai_feedback or "")[:700],
+                    "score": trial.score,
+                } for trial in trials]
+                leadership_context_parts.append(
+                    "Current/recent leadership trials: " + json.dumps(trial_snapshot, default=str)[:6000]
+                )
+            journal_entries = db.query(JournalEntry).filter(
+                JournalEntry.user_id == user.id
+            ).order_by(JournalEntry.created_at.desc()).limit(7).all()
+            if journal_entries:
+                journal_snapshot = [{
+                    "date": entry.created_at.date().isoformat() if entry.created_at else None,
+                    "reflection": (entry.text or "")[:1000],
+                    "depth_label": entry.reflection_depth_label,
+                } for entry in journal_entries]
+                leadership_context_parts.append(
+                    "Recent Growth Journal themes: " + json.dumps(journal_snapshot, default=str)[:7000]
+                )
+                context_receipt["evidence"].extend({
+                    "source_type": "journal",
+                    "source_id": str(entry.id),
+                    "occurred_at": entry.created_at.isoformat() if entry.created_at else None,
+                    "excerpt": (entry.text or "")[:280],
+                } for entry in journal_entries)
+        goals = db.query(JourneyGoal).filter(
+            JourneyGoal.user_number.in_(user_identifiers),
+            JourneyGoal.parent_goal_id.is_(None),
+        ).order_by(JourneyGoal.sort_order.asc(), JourneyGoal.updated_at.desc()).limit(5).all()
+        if goals:
             leadership_context_parts.append(
-                "Latest leadership wheel/assessment: " + json.dumps(assessment_snapshot, default=str)[:6000]
-            )
-        trials = db.query(JourneyBeltTrial).filter(
-            JourneyBeltTrial.user_number.in_(user_identifiers),
-            JourneyBeltTrial.status.in_(["in_progress", "submitted", "completed"]),
-        ).order_by(JourneyBeltTrial.updated_at.desc()).limit(6).all()
-        if trials:
-            trial_snapshot = [{
-                "dimension": trial.dimension_id,
-                "belt": trial.target_belt,
-                "type": trial.trial_type,
-                "status": trial.status,
-                "prompt": (trial.prompt or "")[:500],
-                "feedback": (trial.ai_feedback or "")[:700],
-                "score": trial.score,
-            } for trial in trials]
-            leadership_context_parts.append(
-                "Current/recent leadership trials: " + json.dumps(trial_snapshot, default=str)[:6000]
-            )
-        journal_entries = db.query(JournalEntry).filter(
-            JournalEntry.user_id == user.id
-        ).order_by(JournalEntry.created_at.desc()).limit(7).all()
-        if journal_entries:
-            journal_snapshot = [{
-                "date": entry.created_at.date().isoformat() if entry.created_at else None,
-                "reflection": (entry.text or "")[:1000],
-                "depth_label": entry.reflection_depth_label,
-            } for entry in journal_entries]
-            leadership_context_parts.append(
-                "Recent Growth Journal themes: " + json.dumps(journal_snapshot, default=str)[:7000]
+                "Current top-level goals: " + json.dumps([{
+                    "title": goal.title or goal.goal_text,
+                    "why": (goal.why or "")[:500],
+                    "horizon": goal.time_horizon,
+                } for goal in goals], default=str)[:4000]
             )
             context_receipt["evidence"].extend({
-                "source_type": "journal",
-                "source_id": str(entry.id),
-                "occurred_at": entry.created_at.isoformat() if entry.created_at else None,
-                "excerpt": (entry.text or "")[:280],
-            } for entry in journal_entries)
-    goals = db.query(JourneyGoal).filter(
-        JourneyGoal.user_number.in_(user_identifiers),
-        JourneyGoal.parent_goal_id.is_(None),
-    ).order_by(JourneyGoal.sort_order.asc(), JourneyGoal.updated_at.desc()).limit(5).all()
-    if goals:
-        leadership_context_parts.append(
-            "Current top-level goals: " + json.dumps([{
-                "title": goal.title or goal.goal_text,
-                "why": (goal.why or "")[:500],
-                "horizon": goal.time_horizon,
-            } for goal in goals], default=str)[:4000]
-        )
-        context_receipt["evidence"].extend({
-            "source_type": "goal",
-            "source_id": str(goal.id),
-            "label": goal.title or goal.goal_text,
-        } for goal in goals)
-    strengths = db.query(JourneyStrength).filter(
-        JourneyStrength.user_number.in_(user_identifiers)
-    ).order_by(JourneyStrength.updated_at.desc()).limit(20).all()
-    development_areas = db.query(JourneyDevelopmentArea).filter(
-        JourneyDevelopmentArea.user_number.in_(user_identifiers)
-    ).order_by(JourneyDevelopmentArea.updated_at.desc()).limit(20).all()
-    if strengths or development_areas:
-        leadership_context_parts.append(
-            "User-confirmed capability catalog: " + json.dumps({
-                "strengths": [{"id": item.id, "title": item.title, "description": item.strength} for item in strengths],
-                "development_areas": [{"id": item.id, "title": item.title, "description": item.skill} for item in development_areas],
-            }, default=str)[:7000]
-        )
-    accepted_meeting_learning = db.query(MeetingEnrichmentSuggestion).join(Meeting).filter(
-        Meeting.user_number == meeting.user_number,
-        MeetingEnrichmentSuggestion.status == "accepted",
-        MeetingEnrichmentSuggestion.suggestion_type.in_(["strength", "development_area", "flag"]),
-    ).order_by(MeetingEnrichmentSuggestion.reviewed_at.desc()).limit(20).all()
-    if accepted_meeting_learning:
-        leadership_context_parts.append(
-            "User-confirmed learning from prior meetings: " + json.dumps([{
-                "type": item.suggestion_type,
-                "title": item.title,
-                "description": item.description,
-            } for item in accepted_meeting_learning], default=str)[:6000]
-        )
-    if user:
-        twin_context = get_twin_context(
-            db,
-            meeting.user_number,
-            surface="meeting",
-            query=f"{meeting.title or ''}\n{meeting.meeting_type or ''}",
-            limit=8,
-        )
-        if twin_context.applied:
-            # Keep the compact Twin ahead of verbose recent-history context so
-            # the final prompt bound cannot truncate it away.
-            leadership_context_parts.insert(0,
-                "Digital Twin orientation (use to test patterns against this meeting; current transcript evidence wins):\n"
-                + twin_context.prompt_context
+                "source_type": "goal",
+                "source_id": str(goal.id),
+                "label": goal.title or goal.goal_text,
+            } for goal in goals)
+        strengths = db.query(JourneyStrength).filter(
+            JourneyStrength.user_number.in_(user_identifiers)
+        ).order_by(JourneyStrength.updated_at.desc()).limit(20).all()
+        development_areas = db.query(JourneyDevelopmentArea).filter(
+            JourneyDevelopmentArea.user_number.in_(user_identifiers)
+        ).order_by(JourneyDevelopmentArea.updated_at.desc()).limit(20).all()
+        if strengths or development_areas:
+            leadership_context_parts.append(
+                "User-confirmed capability catalog: " + json.dumps({
+                    "strengths": [{"id": item.id, "title": item.title, "description": item.strength} for item in strengths],
+                    "development_areas": [{"id": item.id, "title": item.title, "description": item.skill} for item in development_areas],
+                }, default=str)[:7000]
             )
-            context_receipt["core_twin"] = {
-                "used": twin_context.core_twin_applied,
-                "snapshot_id": twin_context.snapshot_id,
-            }
-            context_receipt["full_twin"] = {
-                "used": bool(twin_context.claim_ids),
-                "claim_ids": list(twin_context.claim_ids),
-            }
+        accepted_meeting_learning = db.query(MeetingEnrichmentSuggestion).join(Meeting).filter(
+            Meeting.user_number == meeting.user_number,
+            MeetingEnrichmentSuggestion.status == "accepted",
+            MeetingEnrichmentSuggestion.suggestion_type.in_(["strength", "development_area", "flag"]),
+        ).order_by(MeetingEnrichmentSuggestion.reviewed_at.desc()).limit(20).all()
+        if accepted_meeting_learning:
+            leadership_context_parts.append(
+                "User-confirmed learning from prior meetings: " + json.dumps([{
+                    "type": item.suggestion_type,
+                    "title": item.title,
+                    "description": item.description,
+                } for item in accepted_meeting_learning], default=str)[:6000]
+            )
+        if user:
+            twin_context = get_twin_context(
+                db,
+                meeting.user_number,
+                surface="meeting",
+                query=f"{meeting.title or ''}\n{meeting.meeting_type or ''}",
+                limit=8,
+            )
+            if twin_context.applied:
+                # Keep the compact Twin ahead of verbose recent-history context so
+                # the final prompt bound cannot truncate it away.
+                leadership_context_parts.insert(0,
+                    "Digital Twin orientation (use to test patterns against this meeting; current transcript evidence wins):\n"
+                    + twin_context.prompt_context
+                )
+                context_receipt["core_twin"] = {
+                    "used": twin_context.core_twin_applied,
+                    "snapshot_id": twin_context.snapshot_id,
+                }
+                context_receipt["full_twin"] = {
+                    "used": bool(twin_context.claim_ids),
+                    "claim_ids": list(twin_context.claim_ids),
+                }
     people = db.query(JourneyPerson).filter(
         JourneyPerson.user_number.in_(user_identifiers)
     ).order_by(JourneyPerson.updated_at.desc()).limit(150).all()

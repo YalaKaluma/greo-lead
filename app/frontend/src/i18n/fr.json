@@ -1116,5 +1116,9 @@
   "meetings.contextReview.validation.model_unknown": "Alfred n’a pas pu identifier cette personne avec suffisamment de certitude.",
   "meetings.contextReview.validation.validated_catalog_and_evidence": "Cette identité nécessite une confirmation supplémentaire.",
   "meetings.contextReview.mentionedPeople": "Personnes évoquées (non présentes)",
-  "meetings.contextReview.status.unresolved": "identité non résolue"
+  "meetings.contextReview.status.unresolved": "identité non résolue",
+  "meetings.entities.assess": "Évaluer uniquement les entités",
+  "meetings.entities.help": "Mettre à jour uniquement les liens vers les personnes, projets et objectifs. Aucun résumé, tâche, coaching ou enrichissement longitudinal.",
+  "meetings.entities.assessing": "Évaluation des entités…",
+  "meetings.entities.full": "Évaluation complète"
 }

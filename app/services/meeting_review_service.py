@@ -57,10 +57,18 @@ def review_resolution(client, model, transcript, catalog, labels, draft, supplie
     return parse_bounded_json_object(response.choices[0].message.content, max_characters=100000)
 
 
-def review_project_resolution(client, model, transcript, catalog, draft):
+def review_project_resolution(client, model, transcript, catalog, draft, supplied_context=None, supplied_title=None):
     """Review project boundaries separately from identity and goal resolution."""
     full = resolution_schema(catalog, ["Me"])
     properties = {key: full["properties"][key] for key in ("primary_project", "additional_projects")}
+    # Make every new-project decision compare the closest existing initiative.
+    for key, value in properties.items():
+        entity = value["items"] if key == "additional_projects" else value
+        entity["properties"]["initiative_scope"] = {"type": "string", "enum": ["product", "client", "internal", "unknown"]}
+        entity["properties"]["closest_existing_id"] = {"type": ["integer", "null"],
+            "enum": [None, *[p["id"] for p in catalog.get("projects", [])]]}
+        entity["properties"]["existing_candidate_rejection_reason"] = {"type": "string"}
+        entity["required"] += ["initiative_scope", "closest_existing_id", "existing_candidate_rejection_reason"]
     schema = {"type": "object", "properties": properties,
               "required": list(properties), "additionalProperties": False}
     response = client.chat.completions.create(
@@ -69,6 +77,16 @@ def review_project_resolution(client, model, transcript, catalog, draft):
             "name": "meeting_project_boundaries", "strict": True, "schema": schema}},
         messages=[{"role": "system", "content": (
             "Resolve ONLY project boundaries against the full transcript and supplied project catalog. "
+            "First distinguish reusable PRODUCT initiatives, INTERNAL work and CLIENT deployments. "
+            "A shared product initiative does not need a client. Never relabel product roadmap, reusable "
+            "onboarding capabilities or platform productization as an unknown-client project merely "
+            "because clients also occur in the discussion. A product initiative and its client "
+            "deployments may all be substantive and must retain their separate existing records. "
+            "Match equivalent work by objective, deliverable and product scope, including French/English "
+            "paraphrases; exact title wording is not required. Before proposing NEW, compare the closest "
+            "existing record and return closest_existing_id plus a concrete scope/client distinction "
+            "in existing_candidate_rejection_reason. Different wording, missing client name or a "
+            "new feature within the same initiative is NOT a reason to duplicate an existing project. "
             "The previous draft is fallible. Read the source in segments, identify the client/initiative "
             "for each substantive segment, then choose primary and secondary projects. "
             "A new opportunity mentioned at the opening is not necessarily the client whose existing "
@@ -92,7 +110,8 @@ def review_project_resolution(client, model, transcript, catalog, draft):
             "requires confidence >=.78 and margin >=.12. New/none IDs must be null. "
             "Do not change people or goals. Return the requested JSON. " + UNTRUSTED_CONTEXT_POLICY)},
             {"role": "user", "content":
-                wrap_untrusted_context("project_catalog", json.dumps(catalog.get("projects", [])), 30000)
+                wrap_untrusted_context("meeting_supplied_context", json.dumps({"title": supplied_title, "context": supplied_context}), 12000)
+                + wrap_untrusted_context("project_catalog", json.dumps(catalog.get("projects", [])), 30000)
                 + wrap_untrusted_context("previous_draft_not_truth", json.dumps({key: draft.get(key) for key in properties}), 18000)
                 + wrap_untrusted_context("transcript", numbered_transcript(transcript), 150000)}])
     result = parse_bounded_json_object(response.choices[0].message.content, max_characters=70000)
