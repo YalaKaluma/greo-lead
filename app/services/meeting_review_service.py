@@ -107,6 +107,12 @@ def review_project_resolution(client, model, transcript, catalog, draft, supplie
             "the full transcript. A literal mention nominates a review, NOT a link: reject examples, "
             "analogies and unrelated work as none with an explicit rationale and source line IDs. "
             "Substantive delivery/status updates count even when the product roadmap dominates. "
+            "Inspect ALL occurrences of a candidate and their surrounding discussion before rejecting it. "
+            "A later analogy does not cancel an earlier factual delivery update. A topic transition "
+            "can name the client of the preceding operational discussion: read both sides of it. "
+            "Resolve references using corroborating scope, people and deliverables; do not link on a "
+            "client name alone. If primary/additional_projects contains a candidate, its coverage "
+            "decision must agree; contradictory decisions will be returned for review, not linked. "
             "Use existing for a supported match, new for a distinct initiative without a catalog match, "
             "or unresolved with a reason when ambiguous. Each coverage decision is authoritative for "
             "that candidate; include all other substantive initiatives in primary/additional_projects. "
@@ -149,9 +155,16 @@ def review_project_resolution(client, model, transcript, catalog, draft, supplie
                 + wrap_untrusted_context("project_catalog", json.dumps(catalog.get("projects", [])), 30000)
                 + wrap_untrusted_context("previous_draft_not_truth", json.dumps({key: draft.get(key) for key in properties}), 18000)
                 + wrap_untrusted_context("transcript", numbered_transcript(transcript), 150000)}])
+    if getattr(response.choices[0], "finish_reason", None) == "length":
+        raise ValueError("Project resolution exceeded its output budget")
     result = parse_bounded_json_object(response.choices[0].message.content, max_characters=70000)
     if not isinstance(result.get("primary_project"), dict) or not isinstance(result.get("additional_projects"), list):
         raise ValueError("Project boundary review returned an incomplete result")
+    return reconcile_project_coverage(result, candidates, draft)
+
+
+def reconcile_project_coverage(result, candidates, draft):
+    """Keep contradictions and rejected candidates visible; never force a link."""
     raw_result = deepcopy(result)
     coverage = result.get("project_coverage") or {}
     rows = [result["primary_project"], *result["additional_projects"]]
@@ -167,6 +180,18 @@ def review_project_resolution(client, model, transcript, catalog, draft, supplie
         if not decision.get("name"):
             decision = {**decision, "name": candidate.get("title") or candidate.get("name")}
         decision = {**decision, "coverage_candidate_id": candidate["id"]}
+        prior = [r for r in rows if r.get("status") == "existing" and r.get("id") == candidate["id"]]
+        if prior and decision.get("status") != "existing":
+            decision = {**decision, "status": "unresolved", "id": None,
+                        "name": candidate.get("title") or candidate.get("name"),
+                        "validation_reason": "conflicting_project_decisions",
+                        "rationale": "Project matching and coverage review disagree. "
+                                     + str(decision.get("rationale") or ""),
+                        "conflicting_decisions": deepcopy(prior)}
+        elif decision.get("status") == "none":
+            # A negative model decision is still a reviewable result, not a
+            # reason to erase the candidate from the downstream UI.
+            decision = {**decision, "validation_reason": "model_rejected_candidate"}
         # One authoritative decision per candidate; unrelated initiatives remain separate.
         rows = [r for r in rows if not (r.get("status") == "existing" and r.get("id") == candidate["id"])]
         rows.append(decision)

@@ -1128,5 +1128,7 @@
   "meetings.contextReview.projectReason.insufficient_match_margin": "The project identity is ambiguous.",
   "meetings.contextReview.projectReason.record_not_available": "The selected record is unavailable.",
   "meetings.contextReview.projectReason.model_unresolved": "The assessment could not resolve this project.",
+  "meetings.contextReview.projectReason.conflicting_project_decisions": "The assessment gave conflicting answers about this project. Review is needed.",
+  "meetings.contextReview.projectReason.model_rejected_candidate": "The assessment reviewed this candidate and found insufficient evidence to link it.",
   "meetings.contextReview.projectReason.review": "This project needs an explicit linking decision."
 }

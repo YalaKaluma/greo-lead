@@ -78,6 +78,41 @@ def resolution_schema(catalog, speaker_labels):
             "required": list(properties), "additionalProperties": False}
 
 
+def hypothetical_only_identity_evidence(item, transcript):
+    """Reject scenario-only name anchors even when the model calls them factual.
+
+    Inspect each cited occurrence independently. A separate factual occurrence
+    prevents this narrow guard from discarding a real person. Generic conditional
+    words (if/si) and ordinary examples are deliberately not exclusion cues.
+    """
+    names = {normalized(item.get("observed_name")), normalized(item.get("name"))} - {""}
+    if not names:
+        return False
+    evidence = sourced_evidence(item, transcript).get("evidence_excerpt") or ""
+    cue = re.compile(r"\b(?:imaginons|imaginez|supposons|hypothetical|fictitious|fictional|"
+                     r"imagine (?:that |a |an |someone|somebody)|suppose (?:that |a |an |someone|somebody))", re.I)
+    occurrences = []
+    for group in evidence.split("\n[…]\n"):
+        # Keep immediately adjacent same-speaker fragments together, but never
+        # carry hypothetical scope over a different speaker or a citation gap.
+        previous, speaker = "", None
+        for line in group.splitlines():
+            match = re.match(r"^\s*([^:\n]{1,80}):\s*(.*)$", line)
+            current_speaker, spoken = match.groups() if match else (None, line)
+            local = (previous + " " if current_speaker == speaker else "") + spoken
+            for name in names:
+                words = normalized(spoken)
+                if " " + name + " " not in " " + words + " ":
+                    continue
+                # A sentence boundary ends scenario scope; a later factual
+                # sentence must not be rejected due to an earlier example.
+                for sentence in re.split(r"[.!?;]", local):
+                    if " " + name + " " in " " + normalized(sentence) + " ":
+                        occurrences.append(bool(cue.search(sentence)))
+            previous, speaker = spoken, current_speaker
+    return bool(occurrences) and all(occurrences)
+
+
 def validate_catalog_choices(resolution, catalog, transcript):
     """Reject name/ID disagreement and unsupported quotations before DB retrieval."""
     for key, kind, name_field in [("primary_goal", "goals", "title"),
@@ -88,6 +123,12 @@ def validate_catalog_choices(resolution, catalog, transcript):
         for item in rows if isinstance(rows, list) else [rows]:
             item["model_status"] = item.get("status")
             if kind == "people":
+                if (item.get("identity_basis") == "hypothetical" or
+                        hypothetical_only_identity_evidence(item, transcript)):
+                    item.update(identity_basis="hypothetical", status="unknown", id=None,
+                                validation_reason="hypothetical_only_evidence")
+                    resolution.setdefault("rejected_people", []).append(dict(item))
+                    continue
                 if item.get("identity_basis") == "uncertain_name":
                     item.update(status="unknown", id=None, validation_reason="model_unknown")
                 if item.get("attendance_basis") == "mentioned":

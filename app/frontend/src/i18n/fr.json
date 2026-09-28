@@ -1128,5 +1128,7 @@
   "meetings.contextReview.projectReason.insufficient_match_margin": "L’identité du projet est ambiguë.",
   "meetings.contextReview.projectReason.record_not_available": "La fiche sélectionnée est indisponible.",
   "meetings.contextReview.projectReason.model_unresolved": "L’évaluation n’a pas pu identifier ce projet.",
+  "meetings.contextReview.projectReason.conflicting_project_decisions": "L’évaluation a donné des réponses contradictoires pour ce projet. Une vérification est nécessaire.",
+  "meetings.contextReview.projectReason.model_rejected_candidate": "L’évaluation a examiné ce candidat sans trouver suffisamment de preuves pour le rattacher.",
   "meetings.contextReview.projectReason.review": "Ce projet nécessite une décision explicite de rattachement."
 }
