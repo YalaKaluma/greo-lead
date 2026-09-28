@@ -701,3 +701,62 @@ def test_entity_receipt_preserves_project_trace_and_unresolved_reasons(db):
     service._save_entity_assessment(db, meeting.id, resolution)
     db.commit(); db.expire_all()
     assert db.get(models.Meeting, meeting.id).context_receipt['meeting_resolution'] == resolution
+
+
+def test_m02_greeting_restores_marwan_without_displacing_adrien_or_projects(db):
+    from app.services.meeting_resolution_contract import retain_greeted_attendees
+    from copy import deepcopy
+    marwan = models.JourneyPerson(user_number='test', name='Marwan')
+    adrien = models.JourneyPerson(user_number='test', name='Adrien')
+    db.add_all([marwan, adrien]); db.flush()
+    source = "Me: Salut Marwan.\nMe: Adrien, tu es en taxi ?\nA: C'est OK."
+    resolution = {'people': [{'status': 'existing', 'id': adrien.id, 'name': 'Adrien',
+        'speaker_label': 'A', 'attendance_basis': 'direct_address', 'confidence': .98,
+        'runner_up_id': None, 'runner_up_confidence': 0, 'evidence_excerpt': source.splitlines()[1]}],
+        'primary_project': {'status': 'none'}, 'additional_projects': [], 'primary_goal': {'status': 'none'}}
+    previous = deepcopy(resolution)
+    recovered = retain_greeted_attendees(resolution, {'people': [{'id': marwan.id, 'name': 'Marwan'},
+        {'id': adrien.id, 'name': 'Adrien'}]}, source)
+    checked = service._validated_resolution_context(db, 'test', recovered, source)['resolution']
+    assert {p.get('id') for p in checked['people'] if p.get('status') == 'existing'} == {marwan.id, adrien.id}
+    assert next(p for p in checked['people'] if p.get('id') == marwan.id)['speaker_label'] == 'Unattributed attendee'
+    for key in ['primary_project', 'additional_projects', 'primary_goal']:
+        assert recovered[key] == previous[key]
+
+
+def test_m01_successful_identity_and_all_project_goal_results_are_unchanged():
+    from app.services.meeting_resolution_contract import retain_greeted_attendees
+    from copy import deepcopy
+    source = 'Me: Hey Marwan, comment ça va ?\nA: Ça va et toi ?'
+    resolution = {'people': [{'status': 'existing', 'id': 7, 'name': 'Marwan', 'speaker_label': 'A',
+        'attendance_basis': 'direct_address', 'confidence': .98, 'runner_up_confidence': 0,
+        'evidence_excerpt': source}], 'primary_project': {'id': 8, 'status': 'existing'},
+        'additional_projects': [{'id': 9, 'status': 'existing'}, {'id': 2, 'status': 'existing'}],
+        'primary_goal': {'id': 1, 'status': 'existing'}}
+    previous = deepcopy(resolution)
+    assert retain_greeted_attendees(resolution, {'people': [{'id': 7, 'name': 'Marwan'}]}, source) == previous
+
+
+@pytest.mark.parametrize('source', [
+    'Me: I invited Marwan tomorrow.', 'Me: Je dirai salut Marwan demain.',
+    'A: Salut Marwan.', 'Me: Imagine saying hello Marwan.',
+    'Me: Salut Marwan et Adrien.', 'Me: Salut Marwan is what he said.',
+])
+def test_greeting_fallback_does_not_invent_attendance(source):
+    from app.services.meeting_resolution_contract import retain_greeted_attendees
+    assert retain_greeted_attendees({'people': []}, {'people': [{'id': 7, 'name': 'Marwan'}]}, source)['people'] == []
+
+
+def test_greeting_fallback_abstains_for_duplicate_first_names():
+    from app.services.meeting_resolution_contract import retain_greeted_attendees
+    catalog = {'people': [{'id': 1, 'name': 'Alex Smith'}, {'id': 2, 'name': 'Alex Brown'}]}
+    assert retain_greeted_attendees({'people': []}, catalog, 'Me: Hi Alex.')['people'] == []
+
+
+def test_greeting_recovery_is_idempotent_and_removes_mentioned_duplicate():
+    from app.services.meeting_resolution_contract import retain_greeted_attendees
+    catalog = {'people': [{'id': 7, 'name': 'Marwan'}]}
+    result = {'people': [], 'mentioned_people': [{'id': 7, 'name': 'Marwan', 'status': 'existing'}]}
+    for _ in range(2):
+        result = retain_greeted_attendees(result, catalog, 'Me: Salut Marwan.')
+    assert len(result['people']) == 1 and result['mentioned_people'] == []

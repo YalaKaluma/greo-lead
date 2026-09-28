@@ -28,7 +28,7 @@ from app.services.meeting_task_extraction_service import extract_action_items
 from app.services.meeting_review_service import review_coaching
 from app.services.meeting_entity_intelligence_service import extract_entity_intelligence, review_entity_intelligence
 from app.services.journey_support import goal_level_variants
-from app.services.meeting_resolution_contract import resolution_schema, validate_catalog_choices, canonical_people, deduplicate_mentions, grounded, normalized, numbered_transcript, sourced_evidence
+from app.services.meeting_resolution_contract import resolution_schema, validate_catalog_choices, canonical_people, deduplicate_mentions, retain_greeted_attendees, grounded, normalized, numbered_transcript, sourced_evidence
 from app.services.meeting_task_priority_service import score_pending_meeting_action_items
 from app.services.twin_context_service import get_twin_context
 from app.utils.ai_safety import UNTRUSTED_CONTEXT_POLICY, parse_bounded_json_object, wrap_untrusted_context
@@ -59,7 +59,7 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
-MEETING_PROMPT_VERSION = "meeting-v18-project-coverage"
+MEETING_PROMPT_VERSION = "meeting-v19-greeted-attendees"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4.1")
 MEETING_CONTEXT_MODEL = os.getenv("MEETING_CONTEXT_MODEL", "gpt-4.1")
 MEETING_COACHING_MODEL = os.getenv("MEETING_COACHING_MODEL", MEETING_MODEL)
@@ -572,6 +572,7 @@ def resolve_meeting_context(
                            supplied_title, supplied_context)
     project_trace = [{**item} for item in [parsed.get("primary_project") or {}, *(parsed.get("additional_projects") or [])]]
     parsed = validate_catalog_choices(parsed, catalog, transcript)
+    parsed = retain_greeted_attendees(parsed, catalog, transcript)
     parsed["project_resolution_trace"] = project_trace
     parsed["people"] = canonical_people(parsed.get("people"), _transcript_speaker_labels(transcript))
     return parsed

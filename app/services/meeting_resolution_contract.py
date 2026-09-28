@@ -177,3 +177,48 @@ def canonical_people(people, labels):
                                       **({"name": "Me"} if normalized(label) == "me" else {})}]
         result.extend({**r, "shared_speaker_label": label == "Unattributed attendee" or len(known) > 1 or bool(r.get("shared_speaker_label"))} for r in chosen)
     return result
+
+
+def retain_greeted_attendees(resolution, catalog, transcript):
+    """Recover uniquely named direct greetings without guessing who spoke next.
+
+    Only standalone greetings spoken by the known user qualify. Invitations,
+    reported speech, hypothetical greetings and non-unique first names do not.
+    Existing accepted attendance is preserved, including shared speaker labels.
+    """
+    people = resolution.setdefault("people", [])
+    for line_id, line in enumerate(transcript.splitlines(), 1):
+        match = re.fullmatch(
+            r"\s*Me:\s*(?:hey|hi|hello|salut|bonjour|bonsoir)\s+"
+            r"([^,!?;.]+?)(?:\s*[,!?;.]+\s*(?:(?:comment [çc]a va|how are you)[\s?!.]*)?)?\s*",
+            line, re.I)
+        if not match:
+            continue
+        greeted = normalized(match.group(1))
+        candidates = [p for p in catalog.get("people", []) if greeted and
+                      (normalized(p.get("name")) == greeted or
+                       normalized(p.get("name")).split()[:1] == [greeted])]
+        if len(candidates) != 1:
+            continue
+        person = candidates[0]
+        if any(p.get("status") == "existing" and p.get("id") == person["id"]
+               and p.get("attendance_basis") in {"direct_address", "introduction"}
+               and p.get("confidence", 0) >= .78
+               and p.get("confidence", 0) - p.get("runner_up_confidence", 0) >= .12
+               and p.get("runner_up_id") != person["id"]
+               and grounded(p.get("evidence_excerpt"), transcript)
+               and p.get("speaker_label") not in {None, "", "Me"} for p in people):
+            continue
+        people[:] = [p for p in people if p.get("id") != person["id"] and
+                     not (normalized(p.get("name")) == normalized(person["name"]) and p.get("status") == "unknown")]
+        resolution["mentioned_people"] = [p for p in resolution.get("mentioned_people", [])
+                                          if p.get("id") != person["id"]]
+        people.append({"status": "existing", "id": person["id"], "name": person["name"],
+            "speaker_label": "Unattributed attendee", "shared_speaker_label": True,
+            "attendance_basis": "direct_address", "identity_basis": "named_person",
+            "observed_name": match.group(1).strip(), "confidence": .99,
+            "runner_up_id": None, "runner_up_confidence": 0,
+            "evidence_line_ids": [line_id], "evidence_excerpt": line,
+            "validation_reason": "unique_catalog_name_direct_greeting",
+            "rationale": "Directly greeted by the user; identity is established, but the speaking label remains uncertain."})
+    return resolution
