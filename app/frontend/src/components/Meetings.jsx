@@ -542,6 +542,7 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
   const [askingAlfred, setAskingAlfred] = useState(false);
   const [meetingChatError, setMeetingChatError] = useState('');
   const [assessingLeadership, setAssessingLeadership] = useState(false);
+  const [assessmentScope, setAssessmentScope] = useState(null);
   const [reviewingSuggestion, setReviewingSuggestion] = useState(null);
   const [contextOptions, setContextOptions] = useState({ current_user: { title: 'Me' }, people: [], goals: [], projects: [] });
   const transcript = meeting.transcript_text || meeting.user_notes || '';
@@ -649,11 +650,12 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
     }
   };
 
-  const generateLeadershipAssessment = async () => {
+  const generateLeadershipAssessment = async (scope = 'full') => {
+    setAssessmentScope(scope);
     setAssessingLeadership(true);
     setActionError('');
     try {
-      const response = await fetch(`${apiUrl}/api/meetings/${meeting.id}/leadership-assessment?user_number=${encodeURIComponent(userNumber)}`, { method: 'POST' });
+      const response = await fetch(`${apiUrl}/api/meetings/${meeting.id}/leadership-assessment?scope=${scope}&user_number=${encodeURIComponent(userNumber)}`, { method: 'POST' });
       if (!response.ok) throw new Error((await response.json()).detail || t('meetings.leadership.error'));
       // The parent polls the persisted processing status and cleans up on navigation.
       await onChanged(meeting.id);
@@ -661,6 +663,7 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
       setActionError(error.message || t('meetings.leadership.error'));
     } finally {
       setAssessingLeadership(false);
+      setAssessmentScope(null);
     }
   };
 
@@ -684,6 +687,7 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
   };
 
   const reassessmentBusy = assessingLeadership || ['queued', 'analyzing', 'transcribing'].includes(meeting.processing_status);
+  const entityAssessmentBusy = reassessmentBusy && (assessmentScope || meeting.context_receipt?.active_assessment_scope) === 'entities';
   const pendingSuggestions = (meeting.enrichment_suggestions || []).filter((item) => item.status === 'pending');
   const meetingResolution = meeting.context_receipt?.meeting_resolution || {};
   const goalSuggestions = pendingSuggestions.filter((item) => item.type === 'goal');
@@ -701,7 +705,7 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
     <div className="mx-auto max-w-6xl p-5 lg:p-10">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <button onClick={onBack} className="text-sm font-semibold text-blue-600">← All meetings</button>
-        <div className="flex flex-wrap gap-2"><button onClick={generateLeadershipAssessment} disabled={reassessmentBusy} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{reassessmentBusy ? t('meetings.leadership.assessing') : meeting.leadership_domain_assessments?.length ? t('meetings.leadership.reassess') : t('meetings.leadership.assess')}</button><button onClick={() => setEditing(true)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold hover:bg-slate-50">Edit Meeting</button><button onClick={deleteMeeting} disabled={deleting} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50">
+        <div className="flex flex-wrap gap-2"><button onClick={() => generateLeadershipAssessment('entities')} disabled={reassessmentBusy} title={t('meetings.entities.help')} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{entityAssessmentBusy ? t('meetings.entities.assessing') : t('meetings.entities.assess')}</button><button onClick={() => generateLeadershipAssessment('full')} disabled={reassessmentBusy} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{reassessmentBusy && !entityAssessmentBusy ? t('meetings.leadership.assessing') : t('meetings.entities.full')}</button><button onClick={() => setEditing(true)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold hover:bg-slate-50">Edit Meeting</button><button onClick={deleteMeeting} disabled={deleting} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50">
           {deleting ? 'Deleting…' : 'Delete Meeting'}
         </button></div>
       </div>

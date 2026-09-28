@@ -25,7 +25,7 @@ def db():
     names = ["User", "JourneyPerson", "JourneyGoal", "JourneyProject", "Meeting", "MeetingParticipant",
              "MeetingTranscriptSegment", "MeetingTopic", "MeetingDecision", "MeetingActionItem",
              "MeetingLeadershipObservation", "MeetingLeadershipDomainAssessment", "MeetingGoalLink",
-             "MeetingProjectLink", "MeetingEnrichmentSuggestion", "MeetingAttendee"]
+             "MeetingProjectLink", "MeetingEnrichmentSuggestion", "MeetingAttendee", "MeetingContextNote"]
     for name in names:
         getattr(models, name).__table__.create(engine)
     with Session(engine) as session:
@@ -458,3 +458,160 @@ def test_duplicate_person_suggestions_in_one_result_are_saved_once(db):
     service._store_pending_enrichment_suggestions(db, meeting, {"suggested_person_matches": [item, dict(item)]})
     db.flush()
     assert db.query(models.MeetingEnrichmentSuggestion).count() == 1
+
+
+def test_entity_only_pipeline_never_calls_full_assessment(monkeypatch):
+    from unittest.mock import Mock
+    snapshot = {'transcript': 'Me: Review the product.', 'title': 'Review',
+                'supplied_context': '', 'matching_context': '{}', 'user_number': 'test'}
+    resolution = {'people': [], 'primary_goal': {'status': 'none'}, 'primary_project': {'status': 'none'}}
+    monkeypatch.setattr(service, '_with_fresh_session', lambda fn, *args, **kwargs: fn(None))
+    start = Mock(return_value=snapshot)
+    monkeypatch.setattr(service, '_start_processing', start)
+    monkeypatch.setattr(service, 'resolve_meeting_context', Mock(return_value=resolution))
+    monkeypatch.setattr(service, '_validated_resolution_context', Mock(return_value={'resolution': resolution}))
+    save = Mock()
+    monkeypatch.setattr(service, '_save_entity_assessment', save)
+    forbidden = []
+    for name in ['analyze_transcript', 'extract_action_items', 'analyze_leadership_feedback',
+                 '_enrich_resolved_analysis', '_sync_meeting_memory', 'get_twin_context']:
+        fn = Mock(side_effect=AssertionError(name + ' must not run'))
+        forbidden.append(fn)
+        monkeypatch.setattr(service, name, fn)
+    failed = Mock()
+    monkeypatch.setattr(service, '_mark_processing_failed', failed)
+    service.reassess_meeting_entities(42)
+    start.assert_called_once_with(None, 42, entities_only=True)
+    save.assert_called_once_with(None, 42, resolution)
+    failed.assert_not_called()
+    for fn in forbidden:
+        fn.assert_not_called()
+
+
+def test_entity_only_save_preserves_other_outputs_and_review_history(db):
+    meeting = models.Meeting(user_number='test', title='Keep title', source_type='notes',
+        executive_summary='Keep summary', meeting_type='Keep type', processing_status='analyzing',
+        context_receipt={'meeting_flags': ['keep'], 'provisional_context': [{'type': 'person_update', 'title': 'Keep intelligence'}]})
+    db.add(meeting); db.flush()
+    topic = models.MeetingTopic(meeting_id=meeting.id, title='Keep topic', sequence_number=0)
+    decision = models.MeetingDecision(meeting_id=meeting.id, description='Keep decision')
+    action = models.MeetingActionItem(meeting_id=meeting.id, description='Keep action')
+    db.add_all([topic, decision, action])
+    for kind, status, fingerprint, action_type in [('project', 'pending', 'old-link', 'create'),
+            ('project_update', 'pending', 'keep-update', 'update'), ('person', 'accepted', 'keep-reviewed', 'create')]:
+        db.add(models.MeetingEnrichmentSuggestion(meeting_id=meeting.id, suggestion_type=kind,
+            action=action_type, title=fingerprint, fingerprint=fingerprint, status=status))
+    db.commit()
+    resolution = {'people': [], 'primary_goal': {'status': 'none'}, 'primary_project': {
+        'status': 'new', 'name': 'New initiative', 'description': 'New initiative scope',
+        'confidence': .95, 'evidence_excerpt': 'We will build this initiative.'}}
+    service._save_entity_assessment(db, meeting.id, resolution)
+    db.commit(); db.refresh(meeting)
+    assert (meeting.title, meeting.executive_summary, meeting.meeting_type) == ('Keep title', 'Keep summary', 'Keep type')
+    assert db.query(models.MeetingTopic).one().id == topic.id
+    assert db.query(models.MeetingDecision).one().id == decision.id
+    assert db.query(models.MeetingActionItem).one().id == action.id
+    rows = db.query(models.MeetingEnrichmentSuggestion).all()
+    assert {r.title for r in rows} == {'keep-update', 'keep-reviewed', 'New initiative'}
+    assert meeting.context_receipt['meeting_flags'] == ['keep']
+    assert meeting.context_receipt['provisional_context'][0]['title'] == 'Keep intelligence'
+    assert meeting.processing_status == 'ready'
+
+
+def test_entity_snapshot_skips_longitudinal_tables_and_twin(db, monkeypatch):
+    # Fixture intentionally has no journal/leadership/twin tables: querying them would fail.
+    from unittest.mock import Mock
+    user = models.User(name='Test', phone_number='test', email='test@example.com')
+    meeting = models.Meeting(user_number='test', title='Review', source_type='notes',
+        transcript_text='Me: Review the product.', user_notes='Use the existing product goal.')
+    db.add_all([user, meeting]); db.commit()
+    twin = Mock(side_effect=AssertionError('No twin lookup'))
+    monkeypatch.setattr(service, 'get_twin_context', twin)
+    snapshot = service._start_processing(db, meeting.id, entities_only=True)
+    assert snapshot['leadership_context'] == ''
+    assert 'Use the existing product goal.' in snapshot['supplied_context']
+    assert set(json.loads(snapshot['matching_context'])) == {'current_user', 'people', 'goals', 'projects'}
+    twin.assert_not_called()
+
+
+def test_explicit_project_goal_fallback_is_grounded_and_unambiguous():
+    from app.services.meeting_linking_service import _explicit_project_goal_links
+    source = 'Me: Let us improve the reusable onboarding module.'
+    project = {'status': 'existing', 'id': 8, 'name': 'Product onboarding', 'confidence': .95,
+               'runner_up_confidence': .1, 'evidence_line_ids': [1]}
+    catalog = {'projects': [{'id': 8, 'title': 'Product onboarding', 'goal': 'Grow the product'}],
+               'goals': [{'id': 12, 'title': 'Grow the product'}]}
+    links = _explicit_project_goal_links({'primary_project': project}, catalog, source)
+    assert len(links) == 1 and links[0]['id'] == 12
+    assert links[0]['evidence_excerpt'] == source
+    assert _explicit_project_goal_links({'primary_project': {**project, 'evidence_line_ids': [99]}}, catalog, source) == []
+    catalog['projects'][0]['goal'] = 'Unrelated consulting outcome'
+    assert _explicit_project_goal_links({'primary_project': project}, catalog, source) == []
+
+
+def test_entities_route_queues_only_entity_job_and_rejects_other_users(db):
+    from fastapi import BackgroundTasks, HTTPException
+    from app.routers.meetings import create_leadership_assessment, reassess_meeting_entities
+    meeting = models.Meeting(user_number='test', title='Review', source_type='notes',
+        processing_status='ready', transcript_text='Me: Review.')
+    db.add(meeting); db.commit()
+    with pytest.raises(HTTPException) as exc:
+        create_leadership_assessment(meeting.id, BackgroundTasks(), scope='entities', user_number='other', db=db)
+    assert exc.value.status_code == 404
+    tasks = BackgroundTasks()
+    result = create_leadership_assessment(meeting.id, tasks, scope='entities', user_number='test', db=db)
+    assert result['scope'] == 'entities'
+    assert len(tasks.tasks) == 1 and tasks.tasks[0].func is reassess_meeting_entities
+    assert meeting.context_receipt['active_assessment_scope'] == 'entities'
+    with pytest.raises(HTTPException) as exc:
+        create_leadership_assessment(meeting.id, BackgroundTasks(), scope='entities', user_number='test', db=db)
+    assert exc.value.status_code == 409
+
+
+@pytest.mark.parametrize("summary", ["Keep summary", None])
+def test_entity_failure_retry_keeps_entity_scope(db, summary):
+    from fastapi import BackgroundTasks
+    from app.routers.meetings import retry_meeting, reassess_meeting_entities
+    meeting = models.Meeting(user_number='test', title='Review', source_type='notes',
+        processing_status='failed', transcript_text='Me: Review.', executive_summary=summary,
+        context_receipt={'active_assessment_scope': 'entities'})
+    db.add(meeting); db.commit()
+    background = BackgroundTasks()
+    retry_meeting(meeting.id, background, 'test', db)
+    assert len(background.tasks) == 1 and background.tasks[0].func is reassess_meeting_entities
+
+
+def test_goal_pass_recovers_explicit_project_link_without_extra_model_call():
+    from app.services.meeting_linking_service import resolve_links
+    catalog = {'projects': [{'id': 8, 'title': 'Product onboarding', 'goal': 'Grow the product'}],
+               'goals': [{'id': 12, 'title': 'Grow the product'}]}
+    outputs = [{'people': []}, {'primary_project': {'status': 'existing', 'id': 8,
+        'name': 'Product onboarding', 'confidence': .95, 'runner_up_confidence': .1,
+        'evidence_line_ids': [1]}, 'additional_projects': []}, {'primary_goal': {'status': 'none'}}]
+    calls = []
+    def complete(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(outputs[len(calls)-1])))])
+    fake = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=complete)))
+    result = resolve_links(fake, 'test', 'Me: Improve the reusable onboarding module.', catalog, ['Me'],
+                           'Product roadmap', 'Link relevant work to the product goal.')
+    assert result['primary_goal']['id'] == 12
+    assert len(calls) == 3
+    assert 'Link relevant work to the product goal.' in calls[1]['messages'][1]['content']
+    props = calls[1]['response_format']['json_schema']['schema']['properties']['primary_project']['properties']
+    assert props['closest_existing_id']['enum'] == [None, 8]
+    assert 'existing_candidate_rejection_reason' in props
+    assert 'explicit_project_goal_links' in calls[2]['messages'][1]['content']
+
+
+def test_conflicting_explicit_project_goals_do_not_force_a_choice():
+    from app.services.meeting_linking_service import _explicit_project_goal_links
+    catalog = {'projects': [{'id': 8, 'title': 'Onboarding', 'goal': 'Grow product'},
+                            {'id': 9, 'title': 'Consulting', 'goal': 'Grow consulting'}],
+               'goals': [{'id': 12, 'title': 'Grow product'}, {'id': 13, 'title': 'Grow consulting'}]}
+    def project(i, name):
+        return {'id': i, 'name': name, 'status': 'existing', 'confidence': .95,
+                'runner_up_confidence': .1, 'evidence_line_ids': [1]}
+    links = _explicit_project_goal_links({'primary_project': project(8, 'Onboarding'),
+        'additional_projects': [project(9, 'Consulting')]}, catalog, 'Me: Review onboarding and consulting.')
+    assert {item['id'] for item in links} == {12, 13}  # no unique fallback exists
