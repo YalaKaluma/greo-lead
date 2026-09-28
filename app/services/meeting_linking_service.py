@@ -94,7 +94,8 @@ def resolve_links(client, model, transcript, catalog, labels, title=None, suppli
                                         {"primary_project": {}, "additional_projects": []}, supplied_context, title)
     explicit_goal_links = _explicit_project_goal_links(projects, catalog, transcript)
     goal_context = {"explicit_project_goal_links": explicit_goal_links,"goals": catalog.get("goals", []), "project_catalog": catalog.get("projects", []),
-                    "user_supplied_context": supplied_context, "resolved_projects": projects}
+                    "user_supplied_context": supplied_context,
+                    "resolved_projects": {key: projects.get(key) for key in ("primary_project", "additional_projects")}}
     goal = _resolve(client, model, "meeting_goal_link", {"primary_goal": properties["primary_goal"]}, (
         "Resolve the GOAL after the supplied project decisions. Read the matched projects' stored goal "
         "and objective fields, then compare against existing goal records. The transcript need not "

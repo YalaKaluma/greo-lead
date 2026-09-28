@@ -1,8 +1,9 @@
 """Independent coverage and evidence review before meeting results are persisted."""
 import json
+from copy import deepcopy
 import re
 
-from app.services.meeting_resolution_contract import grounded, numbered_transcript, sourced_evidence, resolution_schema
+from app.services.meeting_resolution_contract import grounded, numbered_transcript, sourced_evidence, resolution_schema, normalized
 from app.utils.ai_safety import UNTRUSTED_CONTEXT_POLICY, parse_bounded_json_object, wrap_untrusted_context
 
 
@@ -57,6 +58,22 @@ def review_resolution(client, model, transcript, catalog, labels, draft, supplie
     return parse_bounded_json_object(response.choices[0].message.content, max_characters=100000)
 
 
+def project_coverage_candidates(transcript, catalog):
+    """Literal mentions nominate review candidates, never automatic project links."""
+    source = " " + normalized(transcript) + " "
+    generic = {"project", "product", "platform", "data", "internal", "shared", "client", "new", "ai", "the"}
+    result = []
+    for row in catalog.get("projects", []):
+        title = row.get("title") or row.get("name") or ""
+        first = title.split()[0] if title.split() else ""
+        anchors = [row.get("client"), title]
+        if len(first) >= 4 and first[0].isupper() and normalized(first) not in generic:
+            anchors.append(first)
+        if any(len(normalized(a)) >= 4 and " " + normalized(a) + " " in source for a in anchors if a):
+            result.append(row)
+    return result
+
+
 def review_project_resolution(client, model, transcript, catalog, draft, supplied_context=None, supplied_title=None):
     """Review project boundaries separately from identity and goal resolution."""
     full = resolution_schema(catalog, ["Me"])
@@ -69,14 +86,32 @@ def review_project_resolution(client, model, transcript, catalog, draft, supplie
             "enum": [None, *[p["id"] for p in catalog.get("projects", [])]]}
         entity["properties"]["existing_candidate_rejection_reason"] = {"type": "string"}
         entity["required"] += ["initiative_scope", "closest_existing_id", "existing_candidate_rejection_reason"]
+    candidates = project_coverage_candidates(transcript, catalog)
+    if candidates:
+        decision = deepcopy(properties["primary_project"])
+        decision["properties"]["status"]["enum"] = ["existing", "new", "none", "unresolved"]
+        coverage_properties = {str(row["id"]): {"$ref": "#/$defs/coverage_decision"} for row in candidates}
+        properties["project_coverage"] = {"type": "object", "properties": coverage_properties,
+            "required": list(coverage_properties), "additionalProperties": False}
     schema = {"type": "object", "properties": properties,
               "required": list(properties), "additionalProperties": False}
+    if candidates:
+        schema["$defs"] = {"coverage_decision": decision}
     response = client.chat.completions.create(
-        model=model, temperature=0.0, max_tokens=4000,
+        model=model, temperature=0.0, max_tokens=6000,
         response_format={"type": "json_schema", "json_schema": {
             "name": "meeting_project_boundaries", "strict": True, "schema": schema}},
         messages=[{"role": "system", "content": (
             "Resolve ONLY project boundaries against the full transcript and supplied project catalog. "
+            "For EVERY key in project_coverage, independently assess that catalog candidate against "
+            "the full transcript. A literal mention nominates a review, NOT a link: reject examples, "
+            "analogies and unrelated work as none with an explicit rationale and source line IDs. "
+            "Substantive delivery/status updates count even when the product roadmap dominates. "
+            "Use existing for a supported match, new for a distinct initiative without a catalog match, "
+            "or unresolved with a reason when ambiguous. Each coverage decision is authoritative for "
+            "that candidate; include all other substantive initiatives in primary/additional_projects. "
+            "Runner-up means an alternative identity for the SAME initiative, not another valid "
+            "project discussed in this meeting. Two real projects are not competing matches. "
             "First distinguish reusable PRODUCT initiatives, INTERNAL work and CLIENT deployments. "
             "A shared product initiative does not need a client. Never relabel product roadmap, reusable "
             "onboarding capabilities or platform productization as an unknown-client project merely "
@@ -117,8 +152,33 @@ def review_project_resolution(client, model, transcript, catalog, draft, supplie
     result = parse_bounded_json_object(response.choices[0].message.content, max_characters=70000)
     if not isinstance(result.get("primary_project"), dict) or not isinstance(result.get("additional_projects"), list):
         raise ValueError("Project boundary review returned an incomplete result")
-    return {**draft, "primary_project": result["primary_project"],
-            "additional_projects": result["additional_projects"]}
+    raw_result = deepcopy(result)
+    coverage = result.get("project_coverage") or {}
+    rows = [result["primary_project"], *result["additional_projects"]]
+    for candidate in candidates:
+        decision = coverage.get(str(candidate["id"]))
+        if not isinstance(decision, dict):
+            decision = {"status": "unresolved", "name": candidate.get("title") or candidate.get("name"),
+                        "rationale": "coverage_decision_missing"}
+        if decision.get("status") == "existing" and decision.get("id") != candidate["id"]:
+            decision = {**decision, "status": "unresolved", "id": None,
+                        "name": candidate.get("title") or candidate.get("name"),
+                        "validation_reason": "catalog_identity_mismatch"}
+        if not decision.get("name"):
+            decision = {**decision, "name": candidate.get("title") or candidate.get("name")}
+        decision = {**decision, "coverage_candidate_id": candidate["id"]}
+        # One authoritative decision per candidate; unrelated initiatives remain separate.
+        rows = [r for r in rows if not (r.get("status") == "existing" and r.get("id") == candidate["id"])]
+        rows.append(decision)
+    original_primary = result["primary_project"]
+    primary = next((r for r in rows if r.get("status") in {"existing", "new"}
+                    and (r.get("id"), normalized(r.get("name"))) ==
+                        (original_primary.get("id"), normalized(original_primary.get("name")))),
+                   next((r for r in rows if r.get("status") in {"existing", "new"}), rows[0]))
+    return {**draft, "project_model_output": raw_result, "primary_project": primary,
+            "additional_projects": [r for r in rows if r is not primary],
+            "project_coverage_candidates": [{"id": r["id"], "name": r.get("title") or r.get("name")} for r in candidates]}
+
 
 
 def review_actions(client, model, transcript, analysis, candidates):

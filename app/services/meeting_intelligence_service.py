@@ -28,7 +28,7 @@ from app.services.meeting_task_extraction_service import extract_action_items
 from app.services.meeting_review_service import review_coaching
 from app.services.meeting_entity_intelligence_service import extract_entity_intelligence, review_entity_intelligence
 from app.services.journey_support import goal_level_variants
-from app.services.meeting_resolution_contract import resolution_schema, validate_catalog_choices, canonical_people, grounded, normalized, numbered_transcript, sourced_evidence
+from app.services.meeting_resolution_contract import resolution_schema, validate_catalog_choices, canonical_people, deduplicate_mentions, grounded, normalized, numbered_transcript, sourced_evidence
 from app.services.meeting_task_priority_service import score_pending_meeting_action_items
 from app.services.twin_context_service import get_twin_context
 from app.utils.ai_safety import UNTRUSTED_CONTEXT_POLICY, parse_bounded_json_object, wrap_untrusted_context
@@ -59,7 +59,7 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
-MEETING_PROMPT_VERSION = "meeting-v17-entity-only"
+MEETING_PROMPT_VERSION = "meeting-v18-project-coverage"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4.1")
 MEETING_CONTEXT_MODEL = os.getenv("MEETING_CONTEXT_MODEL", "gpt-4.1")
 MEETING_COACHING_MODEL = os.getenv("MEETING_COACHING_MODEL", MEETING_MODEL)
@@ -570,7 +570,9 @@ def resolve_meeting_context(
     from app.services.meeting_linking_service import resolve_links
     parsed = resolve_links(client, MEETING_CONTEXT_MODEL, transcript, catalog, labels,
                            supplied_title, supplied_context)
+    project_trace = [{**item} for item in [parsed.get("primary_project") or {}, *(parsed.get("additional_projects") or [])]]
     parsed = validate_catalog_choices(parsed, catalog, transcript)
+    parsed["project_resolution_trace"] = project_trace
     parsed["people"] = canonical_people(parsed.get("people"), _transcript_speaker_labels(transcript))
     return parsed
 
@@ -597,7 +599,7 @@ def _resolution_to_analysis(resolution: dict) -> dict:
         elif project.get("status") == "new" and str(project.get("name") or "").strip():
             result["new_projects"].append(project)
     participants = {}
-    for person in [*(resolution.get("people") or []), *(resolution.get("mentioned_people") or [])]:
+    for person in [*(resolution.get("people") or []), *deduplicate_mentions(resolution.get("mentioned_people"))]:
         label = person.get("speaker_label") or "Unlabelled"
         name = person.get("name") if person.get("status") in {"existing", "new", "self"} else label
         if person.get("attendance_basis") != "mentioned":
@@ -1498,6 +1500,11 @@ def _validated_resolution_context(
         "primary_project": {"status": "none"},
         "additional_projects": [],
         "suggested_flags": resolution.get("suggested_flags") or [],
+        "project_model_output": resolution.get("project_model_output") or {},
+        "project_resolution_trace": resolution.get("project_resolution_trace") or [],
+        "project_coverage_candidates": resolution.get("project_coverage_candidates") or [],
+        "project_validation_trace": [],
+        "unresolved_projects": [],
     }
     retrieved = {"goal": None, "people": [], "project": None}
 
@@ -1525,7 +1532,7 @@ def _validated_resolution_context(
         sanitized["primary_goal"] = {**goal, "status": "new", "confidence": _safe_confidence(goal.get("confidence"))}
 
     for person in [*canonical_people(resolution.get("people"), _transcript_speaker_labels(transcript)),
-                   *(resolution.get("mentioned_people") or [])]:
+                   *deduplicate_mentions(resolution.get("mentioned_people"))]:
         cleaned = {**person, "speaker_label": str(person.get("speaker_label") or "").strip()[:80]}
         person_id = _strict_integer_id(person.get("id"))
         if cleaned["speaker_label"].casefold() == "me" or person.get("status") == "self":
@@ -1614,6 +1621,25 @@ def _validated_resolution_context(
             validated_project = {
                 **project, "status": "new", "confidence": _safe_confidence(project.get("confidence")),
             }
+        if validated_project.get("status") == "none":
+            reason = project.get("validation_reason") or "model_" + str(project.get("status", "none"))
+            if project.get("status") in {"existing", "new"}:
+                if not grounded(project.get("evidence_excerpt"), transcript):
+                    reason = "unsupported_evidence"
+                elif _safe_confidence(project.get("confidence")) < CONTEXT_MATCH_MIN_CONFIDENCE:
+                    reason = "insufficient_match_confidence"
+                elif project.get("status") == "existing" and not _is_strong_context_match(project):
+                    reason = "insufficient_match_margin"
+                else:
+                    reason = "record_not_available"
+            if project.get("name") and (project.get("status") != "none" or project.get("model_status") in {"existing", "new"}):
+                sanitized["unresolved_projects"].append({"name": project["name"], "reason": reason,
+                    "rationale": project.get("rationale"), "candidate_id": project.get("coverage_candidate_id")})
+        else:
+            reason = "linked_existing" if validated_project["status"] == "existing" else "proposed_new"
+        sanitized["project_validation_trace"].append({"name": project.get("name"),
+            "id": project_id, "status": validated_project["status"], "reason": reason,
+            "rationale": project.get("rationale"), "evidence_excerpt": project.get("evidence_excerpt")})
         identity = (validated_project.get("id"), normalized(validated_project.get("name")))
         if index == 0:
             sanitized["primary_project"] = validated_project

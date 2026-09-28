@@ -615,3 +615,89 @@ def test_conflicting_explicit_project_goals_do_not_force_a_choice():
     links = _explicit_project_goal_links({'primary_project': project(8, 'Onboarding'),
         'additional_projects': [project(9, 'Consulting')]}, catalog, 'Me: Review onboarding and consulting.')
     assert {item['id'] for item in links} == {12, 13}  # no unique fallback exists
+
+
+def test_required_project_coverage_recovers_omitted_secondary_without_extra_call(db):
+    from app.services.meeting_linking_service import resolve_links
+    onboarding = models.JourneyProject(user_number='test', project_name='SKaiX data onboarding productization')
+    savencia = models.JourneyProject(user_number='test', project_name='Savencia operational go-live prep')
+    duvel = models.JourneyProject(user_number='test', project_name='Duvel deployment')
+    db.add_all([onboarding, savencia, duvel]); db.flush()
+    source = 'Me: Build the SKaiX data onboarding productization module.\nA: Savencia go-live is next week.\nB: Duvel deployment awaits data.'
+    catalog = {'projects': [{'id': p.id, 'title': p.project_name} for p in [onboarding, savencia, duvel]]}
+    def decision(p, line):
+        return {'status': 'existing', 'id': p.id, 'name': p.project_name, 'confidence': .95,
+            'runner_up_id': None, 'runner_up_confidence': 0, 'evidence_line_ids': [line]}
+    outputs = [{'people': []}, {'primary_project': decision(onboarding, 1),
+        'additional_projects': [decision(duvel, 3)], 'project_coverage': {
+            str(p.id): decision(p, i) for i, p in enumerate([onboarding, savencia, duvel], 1)}},
+        {'primary_goal': {'status': 'none'}}]
+    calls = []
+    def complete(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(outputs[len(calls)-1])))])
+    result = resolve_links(SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=complete))),
+        'test', source, catalog, ['Me', 'A', 'B'])
+    checked = service._validated_resolution_context(db, 'test', validate_catalog_choices(result, catalog, source), source)['resolution']
+    assert {p['id'] for p in [checked['primary_project'], *checked['additional_projects']]} == {onboarding.id, savencia.id, duvel.id}
+    assert not checked['unresolved_projects']
+    assert len(calls) == 3
+    coverage = calls[1]['response_format']['json_schema']['schema']['properties']['project_coverage']
+    assert set(coverage['required']) == {str(p.id) for p in [onboarding, savencia, duvel]}
+
+
+@pytest.mark.parametrize('outcome', ['none', 'unresolved', 'missing'])
+def test_coverage_never_auto_links_literal_mentions(outcome):
+    from app.services.meeting_review_service import review_project_resolution
+    payload = {'primary_project': {'status': 'none'}, 'additional_projects': [], 'project_coverage': {}}
+    if outcome != 'missing':
+        payload['project_coverage']['9'] = {'status': outcome, 'name': 'Savencia go-live',
+            'rationale': 'Historical example, not current delivery.'}
+    fake = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kw:
+        SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))]))))
+    result = review_project_resolution(fake, 'test', 'Me: Savencia is only a historical example.',
+        {'projects': [{'id': 9, 'title': 'Savencia go-live'}]}, {})
+    projects = [result['primary_project'], *result['additional_projects']]
+    assert not any(p.get('status') in {'existing', 'new'} for p in projects)
+    assert any(p.get('rationale') for p in projects)
+
+
+@pytest.mark.parametrize('confidence,runner_up,evidence,reason', [
+    (.6, .1, 'Me: Savencia go-live next week.', 'insufficient_match_confidence'),
+    (.9, .85, 'Me: Savencia go-live next week.', 'insufficient_match_margin'),
+    (.9, .1, 'invented statement', 'unsupported_evidence'),
+])
+def test_rejected_project_remains_visible_with_reason_and_does_not_create_link(db, confidence, runner_up, evidence, reason):
+    project = models.JourneyProject(user_number='test', project_name='Savencia operational go-live prep')
+    db.add(project); db.flush()
+    resolution = {'additional_projects': [{'status': 'existing', 'id': project.id, 'name': project.project_name,
+        'confidence': confidence, 'runner_up_id': 999, 'runner_up_confidence': runner_up, 'evidence_excerpt': evidence}]}
+    checked = service._validated_resolution_context(db, 'test', resolution, 'Me: Savencia go-live next week.')['resolution']
+    assert checked['additional_projects'] == []
+    assert checked['unresolved_projects'][0]['reason'] == reason
+    assert checked['project_validation_trace'][-1]['reason'] == reason
+    assert service._resolution_to_analysis(checked)['suggested_project_ids'] == []
+
+
+def test_duplicate_unresolved_mentions_collapse_but_distinct_people_remain():
+    from app.services.meeting_resolution_contract import deduplicate_mentions
+    mentions = [{'name': 'Ben Finkelstein', 'status': 'unknown', 'confidence': .5},
+                {'name': 'Ben  Finkelstein', 'status': 'unknown', 'confidence': .7},
+                {'name': 'Alex', 'status': 'existing', 'id': 1},
+                {'name': 'Alex', 'status': 'existing', 'id': 2}]
+    result = deduplicate_mentions(mentions)
+    assert len(result) == 3
+    assert result[0]['confidence'] == .7
+    assert {p['id'] for p in result if 'id' in p} == {1, 2}
+
+
+def test_entity_receipt_preserves_project_trace_and_unresolved_reasons(db):
+    meeting = models.Meeting(user_number='test', title='Review', source_type='notes')
+    db.add(meeting); db.flush()
+    resolution = {'people': [], 'primary_goal': {'status': 'none'}, 'primary_project': {'status': 'none'},
+        'project_resolution_trace': [{'name': 'Savencia', 'status': 'existing', 'confidence': .7}],
+        'project_validation_trace': [{'name': 'Savencia', 'status': 'none', 'reason': 'insufficient_match_confidence'}],
+        'unresolved_projects': [{'name': 'Savencia', 'reason': 'insufficient_match_confidence'}]}
+    service._save_entity_assessment(db, meeting.id, resolution)
+    db.commit(); db.expire_all()
+    assert db.get(models.Meeting, meeting.id).context_receipt['meeting_resolution'] == resolution
