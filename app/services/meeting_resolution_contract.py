@@ -89,7 +89,8 @@ def hypothetical_only_identity_evidence(item, transcript):
     if not names:
         return False
     evidence = sourced_evidence(item, transcript).get("evidence_excerpt") or ""
-    cue = re.compile(r"\b(?:imaginons|imaginez|supposons|hypothetical|fictitious|fictional|"
+    cue = re.compile(r"\b(?:imaginons|imaginez|supposons|"
+                     r"(?:hypothetical|fictitious|fictional) (?:person|user|colleague|character)|"
                      r"imagine (?:that |a |an |someone|somebody)|suppose (?:that |a |an |someone|somebody))", re.I)
     occurrences = []
     for group in evidence.split("\n[…]\n"):
@@ -107,8 +108,10 @@ def hypothetical_only_identity_evidence(item, transcript):
                 # A sentence boundary ends scenario scope; a later factual
                 # sentence must not be rejected due to an earlier example.
                 for sentence in re.split(r"[.!?;]", local):
-                    if " " + name + " " in " " + normalized(sentence) + " ":
-                        occurrences.append(bool(cue.search(sentence)))
+                    normalized_sentence = " " + normalized(sentence) + " "
+                    name_position = normalized_sentence.find(" " + name + " ")
+                    if name_position >= 0:
+                        occurrences.append(bool(cue.search(normalized_sentence[:name_position])))
             previous, speaker = spoken, current_speaker
     return bool(occurrences) and all(occurrences)
 

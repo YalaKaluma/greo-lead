@@ -40,7 +40,9 @@ class EvidenceConsistencyTests(unittest.TestCase):
 
     def test_conditional_and_real_examples_are_not_excluded(self):
         for source in ["A: Si Elena est disponible, on lui demande le contrat.",
-                       "A: Par exemple, Elena a livré ce projet hier."]:
+                       "A: Par exemple, Elena a livré ce projet hier.",
+                       "A: Elena reviewed hypothetical scenarios yesterday.",
+                       "A: Elena said we should imagine someone creating a scenario."]:
             self.assertEqual(self.check_person(source)["mentioned_people"][0]["id"], 17)
 
     def test_greeted_attendee_still_recovers(self):
