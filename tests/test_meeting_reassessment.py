@@ -691,6 +691,19 @@ def test_duplicate_unresolved_mentions_collapse_but_distinct_people_remain():
     assert {p['id'] for p in result if 'id' in p} == {1, 2}
 
 
+@pytest.mark.parametrize('status,reason', [('none', 'model_rejected_candidate'),
+                                        ('unresolved', 'conflicting_project_decisions')])
+def test_negative_coverage_decision_survives_db_validation_for_review(db, status, reason):
+    resolution = {'additional_projects': [{'status': status, 'id': None,
+        'name': 'Orion rollout', 'coverage_candidate_id': 23,
+        'validation_reason': reason, 'rationale': 'Source requires review.'}]}
+    checked = service._validated_resolution_context(db, 'test', resolution,
+        'Me: Orion is discussed as an example.')['resolution']
+    assert checked['unresolved_projects'][0]['reason'] == reason
+    assert checked['unresolved_projects'][0]['candidate_id'] == 23
+    assert service._resolution_to_analysis(checked)['suggested_project_ids'] == []
+
+
 def test_entity_receipt_preserves_project_trace_and_unresolved_reasons(db):
     meeting = models.Meeting(user_number='test', title='Review', source_type='notes')
     db.add(meeting); db.flush()

@@ -59,7 +59,7 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=OPENAI_API_KEY)
-MEETING_PROMPT_VERSION = "meeting-v19-greeted-attendees"
+MEETING_PROMPT_VERSION = "meeting-v20-evidence-consistency"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4.1")
 MEETING_CONTEXT_MODEL = os.getenv("MEETING_CONTEXT_MODEL", "gpt-4.1")
 MEETING_COACHING_MODEL = os.getenv("MEETING_COACHING_MODEL", MEETING_MODEL)
@@ -1498,6 +1498,7 @@ def _validated_resolution_context(
         "primary_goal": {"status": "none"},
         "people": [],
         "mentioned_people": [],
+        "rejected_people": resolution.get("rejected_people") or [],
         "primary_project": {"status": "none"},
         "additional_projects": [],
         "suggested_flags": resolution.get("suggested_flags") or [],
@@ -1633,7 +1634,7 @@ def _validated_resolution_context(
                     reason = "insufficient_match_margin"
                 else:
                     reason = "record_not_available"
-            if project.get("name") and (project.get("status") != "none" or project.get("model_status") in {"existing", "new"}):
+            if project.get("name") and (project.get("coverage_candidate_id") or project.get("status") != "none" or project.get("model_status") in {"existing", "new"}):
                 sanitized["unresolved_projects"].append({"name": project["name"], "reason": reason,
                     "rationale": project.get("rationale"), "candidate_id": project.get("coverage_candidate_id")})
         else:
