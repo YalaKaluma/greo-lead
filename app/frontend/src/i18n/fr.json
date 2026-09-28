@@ -1120,5 +1120,13 @@
   "meetings.entities.assess": "Évaluer uniquement les entités",
   "meetings.entities.help": "Mettre à jour uniquement les liens vers les personnes, projets et objectifs. Aucun résumé, tâche, coaching ou enrichissement longitudinal.",
   "meetings.entities.assessing": "Évaluation des entités…",
-  "meetings.entities.full": "Évaluation complète"
+  "meetings.entities.full": "Évaluation complète",
+  "meetings.contextReview.projectUnresolved": "Lien du projet à vérifier",
+  "meetings.contextReview.projectReason.unsupported_evidence": "La source citée n’a pas pu être vérifiée.",
+  "meetings.contextReview.projectReason.catalog_identity_mismatch": "Le nom du projet et la fiche sélectionnée ne correspondent pas.",
+  "meetings.contextReview.projectReason.insufficient_match_confidence": "La correspondance du projet est trop incertaine.",
+  "meetings.contextReview.projectReason.insufficient_match_margin": "L’identité du projet est ambiguë.",
+  "meetings.contextReview.projectReason.record_not_available": "La fiche sélectionnée est indisponible.",
+  "meetings.contextReview.projectReason.model_unresolved": "L’évaluation n’a pas pu identifier ce projet.",
+  "meetings.contextReview.projectReason.review": "Ce projet nécessite une décision explicite de rattachement."
 }

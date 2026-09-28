@@ -1120,5 +1120,13 @@
   "meetings.entities.assess": "Assess entities only",
   "meetings.entities.help": "Update people, project and goal tags only. No summaries, tasks, coaching or longitudinal enrichment.",
   "meetings.entities.assessing": "Assessing entities…",
-  "meetings.entities.full": "Full assessment"
+  "meetings.entities.full": "Full assessment",
+  "meetings.contextReview.projectUnresolved": "Project link needs review",
+  "meetings.contextReview.projectReason.unsupported_evidence": "The cited source could not be verified.",
+  "meetings.contextReview.projectReason.catalog_identity_mismatch": "The selected project name and record do not agree.",
+  "meetings.contextReview.projectReason.insufficient_match_confidence": "The project match is not confident enough.",
+  "meetings.contextReview.projectReason.insufficient_match_margin": "The project identity is ambiguous.",
+  "meetings.contextReview.projectReason.record_not_available": "The selected record is unavailable.",
+  "meetings.contextReview.projectReason.model_unresolved": "The assessment could not resolve this project.",
+  "meetings.contextReview.projectReason.review": "This project needs an explicit linking decision."
 }

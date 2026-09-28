@@ -133,8 +133,22 @@ def validate_catalog_choices(resolution, catalog, transcript):
     # Identity survives even when the person did not attend.
     mentions = [p for p in resolution.get("people", []) if p.get("attendance_basis") == "mentioned"]
     resolution["people"] = [p for p in resolution.get("people", []) if p.get("attendance_basis") != "mentioned"]
-    resolution["mentioned_people"] = mentions
+    resolution["mentioned_people"] = deduplicate_mentions(mentions)
     return resolution
+
+
+def deduplicate_mentions(people):
+    """Merge exact repeat mentions without conflating distinct catalog identities."""
+    result, positions = [], {}
+    for person in people or []:
+        name = normalized(person.get("name"))
+        key = ("id", person["id"]) if person.get("status") == "existing" and person.get("id") else ("name", name, person.get("status"))
+        if not name or key not in positions:
+            positions[key] = len(result)
+            result.append(person)
+        elif person.get("confidence", 0) > result[positions[key]].get("confidence", 0):
+            result[positions[key]] = person
+    return result
 
 
 def canonical_people(people, labels):
