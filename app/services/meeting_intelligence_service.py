@@ -354,6 +354,24 @@ def _audio_duration_seconds(path: str) -> float | None:
         return None
 
 
+def _transcribe_with_empty_retry(path, filename, content_type, voice_reference, *, meeting_id, attempt_id):
+    result = _transcribe_file(path, filename, content_type, voice_reference)
+    if (result.get("text") or "").strip():
+        return result
+    _meeting_log(logging.WARNING, "empty_transcription_retry", meeting_id=meeting_id,
+                 attempt_id=attempt_id, stage="transcription")
+    # A valid audio container does not prove silence. Retry a normalized copy
+    # without the optional voice reference; never invent a current-user label.
+    with tempfile.TemporaryDirectory(prefix="alfred-empty-audio-") as directory:
+        normalized_path = str(Path(directory) / "retry.mp3")
+        _normalize_audio(path, normalized_path)
+        result = _transcribe_file(normalized_path, "retry.mp3", "audio/mpeg", None)
+    _meeting_log(logging.INFO, "empty_transcription_retry_completed", meeting_id=meeting_id,
+                 attempt_id=attempt_id, stage="transcription",
+                 recovered=bool((result.get("text") or "").strip()))
+    return result
+
+
 def _create_audio_chunk(source_path: str, output_path: str, offset: float, duration: float) -> None:
     ffmpeg_path = shutil.which("ffmpeg")
     if not ffmpeg_path:
@@ -439,7 +457,8 @@ def transcribe_recording(
             duration_seconds=round(duration, 1) if duration is not None else None,
             chunk_count=1,
         )
-        return _transcribe_file(path, filename, content_type, voice_reference)
+        return _transcribe_with_empty_retry(path, filename, content_type, voice_reference,
+                                            meeting_id=meeting_id, attempt_id=attempt_id)
 
     chunk_count = math.ceil(duration / TRANSCRIPTION_CHUNK_SECONDS)
     _meeting_log(
@@ -471,8 +490,9 @@ def transcribe_recording(
                 chunk_duration_seconds=round(chunk_duration, 1),
             )
             _create_audio_chunk(path, chunk_path, offset, chunk_duration)
-            result = _transcribe_file(
-                chunk_path, f"{Path(filename).stem}-part-{index + 1}.mp3", "audio/mpeg", voice_reference
+            result = _transcribe_with_empty_retry(
+                chunk_path, f"{Path(filename).stem}-part-{index + 1}.mp3", "audio/mpeg", voice_reference,
+                meeting_id=meeting_id, attempt_id=attempt_id,
             )
             combined_text.append(result["text"])
             for segment in result["segments"]:
@@ -696,8 +716,10 @@ def analyze_leadership_feedback(
                 ),
             },
         ],
-        max_tokens=4000,
+        max_tokens=6000,
     )
+    if getattr(response.choices[0], "finish_reason", None) == "length":
+        raise ValueError("Leadership output was truncated")
     result = parse_bounded_json_object(response.choices[0].message.content, max_characters=140_000)
     expected_domains = [
         "Vision",
@@ -758,6 +780,8 @@ def analyze_leadership_feedback(
             ],
             max_tokens=2200,
         )
+        if getattr(completion.choices[0], "finish_reason", None) == "length":
+            raise ValueError("Leadership completion was truncated")
         completion_result = parse_bounded_json_object(
             completion.choices[0].message.content, max_characters=80_000
         )
@@ -882,36 +906,10 @@ def _reassess_meeting_with_context(meeting_id: int) -> None:
         transcript, {**analysis, "meeting_date": snapshot.get("meeting_date")}, provisional_context
     )
     analysis["action_items"] = tasks.get("action_items") or []
-    coaching = analyze_leadership_feedback(
-        transcript,
-        {
-            **analysis,
-            "meeting_resolution": resolved["resolution"],
-            "retrieved_entity_context": resolved["retrieved_context"],
-            "provisional_context": provisional_context,
-        },
-        "\n\n".join(value for value in (snapshot["leadership_context"], provisional_context) if value),
-    )
-    coaching["entity_enrichments"] = _enrich_resolved_analysis(
-        analysis, resolved["retrieved_context"], transcript, snapshot.get("meeting_date"),
-        json.loads(snapshot.get("matching_context") or "{}").get("current_user")
-    )
-    _with_fresh_session(
-        lambda db: _save_context_reassessment(db, meeting_id, analysis, coaching, snapshot.get("context_receipt")),
-        "save_context_reassessment",
-        meeting_id=meeting_id,
-        attempt_id=attempt_id,
-    )
-    try:
-        _with_fresh_session(lambda db: _sync_meeting_memory(db, meeting_id), "sync_meeting_memory",
-                            meeting_id=meeting_id, attempt_id=attempt_id)
-    except Exception as exc:
-        _meeting_log(logging.WARNING, "meeting_evidence_memory_deferred", meeting_id=meeting_id,
-                     attempt_id=attempt_id, stage="sync_meeting_memory", **_safe_error_fields(exc))
-    _meeting_log(logging.INFO, "reassessment_completed", meeting_id=meeting_id, attempt_id=attempt_id,
-                 stage="save_context_reassessment", context_model=MEETING_CONTEXT_MODEL,
-                 resolved_people_count=len(resolved["resolution"]["people"]),
-                 action_item_count=len(analysis["action_items"]))
+    checkpoint = _with_fresh_session(
+        lambda db: _save_processing_checkpoint(db, meeting_id, analysis, tasks, resolved, snapshot.get("context_receipt")),
+        "save_core_checkpoint", meeting_id=meeting_id, attempt_id=attempt_id)
+    _complete_processing_supplements(meeting_id, snapshot, checkpoint, attempt_id)
 
 
 def _load_existing_leadership_snapshot(db: Session, meeting_id: int) -> dict:
@@ -998,6 +996,8 @@ def _save_context_reassessment(
     analysis: dict,
     coaching: dict,
     context_receipt: dict | None,
+    *,
+    preserve_coaching: bool = False,
 ) -> None:
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
@@ -1007,12 +1007,13 @@ def _save_context_reassessment(
     db.query(MeetingTopic).filter(MeetingTopic.meeting_id == meeting_id).delete(synchronize_session=False)
     db.query(MeetingDecision).filter(MeetingDecision.meeting_id == meeting_id).delete(synchronize_session=False)
     fresh_actions = _reconcile_reassessed_actions(db, meeting, analysis.get("action_items") or [])
-    db.query(MeetingLeadershipObservation).filter(
-        MeetingLeadershipObservation.meeting_id == meeting_id
-    ).delete(synchronize_session=False)
-    db.query(MeetingLeadershipDomainAssessment).filter(
-        MeetingLeadershipDomainAssessment.meeting_id == meeting_id
-    ).delete(synchronize_session=False)
+    if not preserve_coaching:
+        db.query(MeetingLeadershipObservation).filter(
+            MeetingLeadershipObservation.meeting_id == meeting_id
+        ).delete(synchronize_session=False)
+        db.query(MeetingLeadershipDomainAssessment).filter(
+            MeetingLeadershipDomainAssessment.meeting_id == meeting_id
+        ).delete(synchronize_session=False)
     _replace_analysis(db, meeting, {
         **analysis,
         "title": meeting.title,
@@ -1033,7 +1034,8 @@ def _save_context_reassessment(
     receipt["provisional_context"] = _context_receipt_suggestions(analysis, coaching)
     receipt["meeting_resolution"] = analysis.get("meeting_resolution")
     meeting.context_receipt = receipt
-    meeting.leadership_assessment_version = LEADERSHIP_ASSESSMENT_VERSION
+    if not preserve_coaching:
+        meeting.leadership_assessment_version = LEADERSHIP_ASSESSMENT_VERSION
     meeting.processing_status = "ready"
     meeting.processing_error = None
     meeting.updated_at = datetime.now(timezone.utc)
@@ -1965,6 +1967,7 @@ def _start_processing(db: Session, meeting_id: int, *, entities_only: bool = Fal
         "leadership_context": "\n".join(leadership_context_parts)[:22000],
         "matching_context": json.dumps(matching_context, default=str),
         "context_receipt": context_receipt,
+        "processing_checkpoint": (meeting.context_receipt or {}).get("processing_checkpoint"),
     }
 
 
@@ -2081,7 +2084,11 @@ def _mark_processing_failed(meeting_id: int, exc: Exception, stage: str, attempt
         meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
         if meeting:
             meeting.processing_status = "failed"
-            meeting.processing_error = public_error
+            meeting.processing_error = (
+                "Your summary, decisions and actions are saved. Retry will resume the unfinished assessment. "
+                + public_error
+                if (meeting.context_receipt or {}).get("processing_checkpoint") else public_error
+            )
             meeting.updated_at = datetime.now(timezone.utc)
 
     try:
@@ -2100,6 +2107,111 @@ def _mark_processing_failed(meeting_id: int, exc: Exception, stage: str, attempt
             stage="persist_failure_status",
             **_safe_error_fields(persist_exc),
         )
+
+
+def _retry_supplement_output(operation, *, meeting_id, attempt_id, stage):
+    """Retry invalid structured output once, without accepting unreviewed drafts."""
+    for attempt in range(2):
+        try:
+            return operation()
+        except ValueError as exc:
+            if attempt:
+                raise
+            _meeting_log(logging.WARNING, "supplement_output_retry", meeting_id=meeting_id,
+                         attempt_id=attempt_id, stage=stage, **_safe_error_fields(exc))
+
+
+def _save_processing_checkpoint(db, meeting_id, analysis, tasks, resolved, context_receipt):
+    # Reuse action reconciliation so linked/handled actions survive every retry.
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    had_summary = bool(meeting and meeting.executive_summary)
+    _save_context_reassessment(db, meeting_id,
+                              {**analysis, "action_items": tasks.get("action_items") or []},
+                              {}, context_receipt, preserve_coaching=True)
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not had_summary:
+        meeting.title = (analysis.get("title") or meeting.title)[:240]
+    checkpoint = {"analysis": analysis, "resolved": resolved}
+    meeting.context_receipt = {**(meeting.context_receipt or {}), "processing_checkpoint": checkpoint}
+    meeting.processing_status = "analyzing"
+    return checkpoint
+
+
+def _save_processing_supplements(db, meeting_id, checkpoint, coaching, *, complete):
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise ValueError("Meeting was deleted before its supplements could be saved.")
+    db.query(MeetingLeadershipObservation).filter(
+        MeetingLeadershipObservation.meeting_id == meeting_id).delete(synchronize_session=False)
+    db.query(MeetingLeadershipDomainAssessment).filter(
+        MeetingLeadershipDomainAssessment.meeting_id == meeting_id).delete(synchronize_session=False)
+    # Refresh supplements only. Core row IDs, edits, task links and participant
+    # corrections must not be rewritten while coaching is being retried.
+    supplement = {key: value for key, value in checkpoint["analysis"].items()
+                  if key not in {"topics", "decisions", "action_items", "participants", "meeting_resolution"}}
+    supplement.update({key: coaching.get(key) or [] for key in (
+        "leadership_observations", "domain_assessments", "profile_suggestions", "entity_enrichments")})
+    supplement.update(title=meeting.title, meeting_type=meeting.meeting_type,
+                      one_line_summary=meeting.one_line_summary, executive_summary=meeting.executive_summary)
+    _replace_analysis(db, meeting, supplement)
+    receipt = dict(meeting.context_receipt or {})
+    receipt["provisional_context"] = _context_receipt_suggestions(checkpoint["analysis"], coaching)
+    if complete:
+        receipt.pop("processing_checkpoint", None)
+    else:
+        receipt["processing_checkpoint"] = {**checkpoint, "coaching": coaching}
+    meeting.context_receipt = receipt
+    meeting.leadership_assessment_version = LEADERSHIP_ASSESSMENT_VERSION
+    meeting.processing_status = "ready" if complete else "analyzing"
+    meeting.processing_error = None
+    meeting.updated_at = datetime.now(timezone.utc)
+
+
+def _complete_processing_supplements(meeting_id, snapshot, checkpoint, attempt_id):
+    stage = "leadership_coaching"
+    try:
+        analysis = checkpoint["analysis"]
+        resolved = checkpoint["resolved"]
+        saved_analysis = _with_fresh_session(
+            lambda db: _meeting_payload_for_coaching(db, meeting_id), "load_saved_analysis",
+            meeting_id=meeting_id, attempt_id=attempt_id)
+        coaching = checkpoint.get("coaching")
+        if coaching is None:
+            coaching = _retry_supplement_output(lambda: analyze_leadership_feedback(
+                snapshot["transcript"],
+                {**analysis, **saved_analysis, "retrieved_entity_context": resolved["retrieved_context"],
+                 "provisional_context": resolved["prompt_context"]},
+                "\n\n".join(value for value in (snapshot["leadership_context"], resolved["prompt_context"]) if value)),
+                meeting_id=meeting_id, attempt_id=attempt_id, stage=stage)
+            _with_fresh_session(
+                lambda db: _save_processing_supplements(db, meeting_id, checkpoint, coaching, complete=False),
+                "save_coaching_checkpoint", meeting_id=meeting_id, attempt_id=attempt_id)
+        stage = "entity_enrichment"
+        coaching = {**coaching, "entity_enrichments": _retry_supplement_output(
+            lambda: _enrich_resolved_analysis(analysis, resolved["retrieved_context"], snapshot["transcript"],
+                snapshot.get("meeting_date"), json.loads(snapshot.get("matching_context") or "{}").get("current_user")),
+            meeting_id=meeting_id, attempt_id=attempt_id, stage=stage)}
+        stage = "save_supplements"
+        _with_fresh_session(
+            lambda db: _save_processing_supplements(db, meeting_id, checkpoint, coaching, complete=True),
+            stage, meeting_id=meeting_id, attempt_id=attempt_id)
+    except Exception as exc:
+        _meeting_log(logging.ERROR, "processing_failed", meeting_id=meeting_id, attempt_id=attempt_id,
+                     stage=stage, core_results_saved=True, **_safe_error_fields(exc))
+        _mark_processing_failed(meeting_id, exc, stage, attempt_id)
+        return
+    for label, operation in (
+        ("sync_meeting_memory", lambda db: _sync_meeting_memory(db, meeting_id)),
+        ("score_meeting_tasks", lambda db: score_pending_meeting_action_items(
+            db, snapshot["user_number"], meeting_id=meeting_id)),
+    ):
+        try:
+            _with_fresh_session(operation, label, meeting_id=meeting_id, attempt_id=attempt_id)
+        except Exception as exc:
+            _meeting_log(logging.WARNING, "post_processing_deferred", meeting_id=meeting_id,
+                         attempt_id=attempt_id, stage=label, **_safe_error_fields(exc))
+    _meeting_log(logging.INFO, "processing_completed", meeting_id=meeting_id, attempt_id=attempt_id,
+                 stage="save_supplements")
 
 
 def process_meeting(meeting_id: int) -> None:
@@ -2188,6 +2300,12 @@ def process_meeting(meeting_id: int) -> None:
         if not transcript:
             raise ValueError("No recording, transcript, or notes were provided.")
 
+        snapshot = {**snapshot, "transcript": transcript}
+        if snapshot.get("processing_checkpoint"):
+            stage = "completing meeting supplements"
+            _complete_processing_supplements(meeting_id, snapshot, snapshot["processing_checkpoint"], attempt_id)
+            return
+
         stage = "resolving meeting context"
         stage_started = time.monotonic()
         _meeting_log(logging.INFO, "stage_started", meeting_id=meeting_id, attempt_id=attempt_id, stage="context_resolution")
@@ -2252,83 +2370,14 @@ def process_meeting(meeting_id: int) -> None:
             duration_ms=round((time.monotonic() - stage_started) * 1000),
             action_item_count=len(tasks.get("action_items") or []),
         )
-        stage = "generating leadership coaching"
-        stage_started = time.monotonic()
-        _meeting_log(logging.INFO, "stage_started", meeting_id=meeting_id, attempt_id=attempt_id, stage="leadership_coaching")
-        coaching_analysis = {
-            **analysis,
-            "action_items": tasks.get("action_items") or [],
-            "retrieved_entity_context": resolved["retrieved_context"],
-            "provisional_context": provisional_context,
-        }
-        coaching = analyze_leadership_feedback(
-            transcript,
-            coaching_analysis,
-            "\n\n".join(value for value in (snapshot["leadership_context"], provisional_context) if value),
-        )
-        coaching["entity_enrichments"] = _enrich_resolved_analysis(
-            analysis, resolved["retrieved_context"], transcript, snapshot.get("meeting_date"),
-            json.loads(snapshot.get("matching_context") or "{}").get("current_user")
-        )
-        _meeting_log(
-            logging.INFO, "stage_completed", meeting_id=meeting_id, attempt_id=attempt_id,
-            stage="leadership_coaching",
-            duration_ms=round((time.monotonic() - stage_started) * 1000),
-            leadership_observation_count=len(coaching.get("leadership_observations") or []),
-        )
-        stage = "saving analysis"
-        stage_started = time.monotonic()
-        _with_fresh_session(
-            lambda db: _save_analysis(db, meeting_id, analysis, tasks, coaching, snapshot.get("context_receipt")),
-            "save_analysis",
-            meeting_id=meeting_id,
-            attempt_id=attempt_id,
-        )
-        try:
-            _with_fresh_session(
-                lambda db: _sync_meeting_memory(db, meeting_id),
-                "sync_meeting_memory",
-                meeting_id=meeting_id,
-                attempt_id=attempt_id,
-            )
-        except Exception as memory_error:
-            _meeting_log(
-                logging.WARNING,
-                "meeting_evidence_memory_deferred",
-                meeting_id=meeting_id,
-                attempt_id=attempt_id,
-                stage="sync_meeting_memory",
-                **_safe_error_fields(memory_error),
-            )
-        try:
-            _with_fresh_session(
-                lambda db: score_pending_meeting_action_items(
-                    db,
-                    snapshot["user_number"],
-                    meeting_id=meeting_id,
-                ),
-                "score_meeting_tasks",
-                meeting_id=meeting_id,
-                attempt_id=attempt_id,
-            )
-        except Exception as scoring_error:
-            _meeting_log(
-                logging.WARNING,
-                "meeting_task_scoring_deferred",
-                meeting_id=meeting_id,
-                attempt_id=attempt_id,
-                stage="score_meeting_tasks",
-                **_safe_error_fields(scoring_error),
-            )
-        _meeting_log(
-            logging.INFO,
-            "processing_completed",
-            meeting_id=meeting_id,
-            attempt_id=attempt_id,
-            stage="save_analysis",
-            stage_duration_ms=round((time.monotonic() - stage_started) * 1000),
-            total_duration_ms=round((time.monotonic() - processing_started) * 1000),
-        )
+        stage = "saving core meeting results"
+        checkpoint = _with_fresh_session(
+            lambda db: _save_processing_checkpoint(db, meeting_id, analysis, tasks, resolved, snapshot.get("context_receipt")),
+            "save_core_checkpoint", meeting_id=meeting_id, attempt_id=attempt_id)
+        _meeting_log(logging.INFO, "core_results_saved", meeting_id=meeting_id,
+                     attempt_id=attempt_id, stage="save_core_checkpoint")
+        _complete_processing_supplements(meeting_id, snapshot, checkpoint, attempt_id)
+
     except Exception as exc:
         _meeting_log(
             logging.ERROR,

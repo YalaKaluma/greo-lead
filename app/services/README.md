@@ -18,7 +18,7 @@ This folder contains Alfred's orchestration and business logic. Services are whe
 - `people_review_orchestrator.py` and `people_review_service.py` support relationship review workflows.
 - `priority_service.py` and `priority_llm_service.py` support AI priority review, recommendations, decisions, and learning insights.
 - `task_service.py`, `task_enrichment_service.py`, and `task_mtn_trend_service.py` support task creation, enrichment, prioritization context, MTN trends, bounded completed-task history, and sorting behavior.
-- `meeting_intelligence_service.py` orchestrates meeting transcription, structured analysis, automatic high-confidence people/goal/project matching, staged persistence, retry-safe transcript reuse, and leadership observations.
+- `meeting_intelligence_service.py` orchestrates meeting transcription, structured analysis, automatic high-confidence people/goal/project matching, staged persistence, retry-safe transcript reuse, and leadership observations. Core summaries, decisions and reconciled actions are committed before coaching. A processing checkpoint in the existing context receipt lets Retry resume coaching/enrichment without rebuilding core rows; reviewed coaching is also committed before enrichment. Invalid structured supplement output is retried once and truncated coaching is rejected. Empty transcriptions receive one normalized diarization retry without the optional voice reference; an empty result remains a visible failure.
 - `meeting_task_extraction_service.py` independently extracts explicit, evidence-backed commitments so action items are not diluted by summarization.
 - `meeting_chat_service.py` answers meeting-scoped questions from the selected transcript, summary, decisions, and stored context.
 - `habits/habit_trend_service.py` and `habit_coaching_service.py` support habit analytics and coaching reviews.
@@ -67,3 +67,4 @@ Journey 2.0 depends on:
 - Service-level validation in `yellow_belt_validator.py`.
 
 The next natural service extraction would be a dedicated Journey progress service to calculate belt readiness, behavioral evidence, and AI grading consistently outside the React component and oversized router.
+

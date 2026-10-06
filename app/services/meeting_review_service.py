@@ -304,6 +304,8 @@ def review_coaching(client, model, transcript, analysis, coaching):
                 wrap_untrusted_context("draft_coaching", json.dumps(coaching), 45000)
                 + wrap_untrusted_context("draft_extracted_actions", json.dumps(analysis.get('action_items') or []), 16000)
                 + wrap_untrusted_context("transcript", numbered_transcript(transcript), 150000)}])
+    if getattr(response.choices[0], "finish_reason", None) == "length":
+        raise ValueError("Leadership review was truncated")
     result = parse_bounded_json_object(response.choices[0].message.content, max_characters=140000)
     for key in ("domain_assessments", "leadership_observations", "profile_suggestions"):
         kept = []
