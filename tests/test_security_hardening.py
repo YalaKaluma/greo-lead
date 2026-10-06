@@ -901,9 +901,9 @@ def test_frontend_manifest_and_lockfile_pin_mobile_dependencies():
     lockfile = (frontend / "pnpm-lock.yaml").read_text(encoding="utf-8")
 
     assert '"packageManager": "pnpm@10.34.5"' in manifest
-    assert "'@capacitor/ios':\n        specifier: ^8.4.1" in lockfile
+    assert "'@capacitor/ios':\n        specifier: ^8.4.3" in lockfile
     assert "'@capacitor/push-notifications':\n        specifier: ^8.0.0" in lockfile
-    assert "'@capacitor/ios@8.4.1':" in lockfile
+    assert "'@capacitor/ios@8.4.3':" in lockfile
     assert "'@capacitor/push-notifications@8.1.2':" in lockfile
 
 
@@ -1704,7 +1704,7 @@ def test_supply_chain_inputs_are_immutable_and_hash_locked():
     assert "pip uninstall -y pip setuptools wheel" in dockerfile
 
     frontend_manifest = Path("app/frontend/package.json").read_text(encoding="utf-8")
-    assert '"axios": "^1.18.0"' in frontend_manifest
+    assert '"axios": "^1.20.0"' in frontend_manifest
 
     dependabot = Path(".github/dependabot.yml").read_text(encoding="utf-8")
     for ecosystem in ("pip", "npm", "docker", "github-actions"):

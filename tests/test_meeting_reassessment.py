@@ -70,6 +70,112 @@ def test_empty_reassessment_cannot_erase_existing_summary(db):
     assert meeting.executive_summary == "Keep me"
 
 
+def test_checkpoint_and_supplements_preserve_core_rows_and_participant_corrections(db):
+    meeting = models.Meeting(user_number="test", title="Review", source_type="notes")
+    db.add(meeting)
+    db.commit()
+    analysis = {"title": "Review", "executive_summary": "Saved core summary",
+                "decisions": [{"description": "Use a pilot", "confidence": .9}],
+                "meeting_resolution": {"people": []}}
+    tasks = {"action_items": [{"description": "Send the brief", "confidence": .9}]}
+    checkpoint = service._save_processing_checkpoint(db, meeting.id, analysis, tasks,
+        {"resolution": {"people": []}, "prompt_context": "", "retrieved_context": {}}, {})
+    db.commit()
+    db.expire_all()
+    meeting = db.get(models.Meeting, meeting.id)
+    assert meeting.executive_summary == "Saved core summary"
+    assert meeting.processing_status == "analyzing"
+    assert meeting.leadership_assessment_version is None
+    assert meeting.context_receipt["processing_checkpoint"]["analysis"] == analysis
+    action = db.query(models.MeetingActionItem).one()
+    action.created_task_id = 123
+    action.notes = "User edit during processing"
+    action_id = action.id
+    decision_id = db.query(models.MeetingDecision).one().id
+    # A manual self-speaker correction must survive the supplemental save even
+    # when the transcript contains an outdated "Me" diarization label.
+    participant = models.MeetingParticipant(meeting_id=meeting.id, speaker_label="A",
+        display_name="Corrected self", is_current_user=True, match_status="current_user")
+    db.add_all([participant, models.MeetingTranscriptSegment(meeting_id=meeting.id,
+        sequence_number=0, speaker_label="Me", text="An incorrectly attributed turn")])
+    db.flush()
+    participant_id = participant.id
+    coaching = {"leadership_observations": [{"observation": "Clear decision", "confidence": .8}],
+                "domain_assessments": [{"domain": "Vision", "score": 4, "feedback": "Clear purpose"}]}
+    service._save_processing_supplements(db, meeting.id, checkpoint, coaching, complete=False)
+    db.commit()
+    db.expire_all()
+    meeting = db.get(models.Meeting, meeting.id)
+    assert meeting.context_receipt["processing_checkpoint"]["coaching"] == coaching
+    for _ in range(2):
+        service._save_processing_supplements(db, meeting.id, checkpoint, coaching, complete=True)
+        db.commit()
+        db.expire_all()
+    assert db.get(models.MeetingActionItem, action_id).created_task_id == 123
+    assert db.get(models.MeetingActionItem, action_id).notes == "User edit during processing"
+    assert db.query(models.MeetingActionItem).count() == 1
+    assert db.query(models.MeetingDecision).one().id == decision_id
+    assert db.query(models.MeetingLeadershipObservation).count() == 1
+    assert db.query(models.MeetingLeadershipDomainAssessment).count() == 1
+    participant = db.get(models.MeetingParticipant, participant_id)
+    assert participant.is_current_user
+    assert participant.display_name == "Corrected self"
+    meeting = db.get(models.Meeting, meeting.id)
+    assert meeting.processing_status == "ready"
+    assert "processing_checkpoint" not in meeting.context_receipt
+
+
+def test_supplement_retry_resumes_after_saved_coaching(monkeypatch):
+    checkpoint = {"analysis": {}, "resolved": {"prompt_context": "", "retrieved_context": {}},
+                  "coaching": {"leadership_observations": []}}
+    snapshot = {"transcript": "Me: We will use a pilot.", "leadership_context": "",
+                "user_number": "test", "matching_context": "{}"}
+    calls = []
+    def transaction(operation, label, **kwargs):
+        calls.append(label)
+        if label == "load_saved_analysis":
+            return {"action_items": []}
+    monkeypatch.setattr(service, "_with_fresh_session", transaction)
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Completed stage must not run again")
+    for name in ("transcribe_recording", "resolve_meeting_context", "analyze_transcript",
+                 "extract_action_items", "analyze_leadership_feedback"):
+        monkeypatch.setattr(service, name, forbidden)
+    monkeypatch.setattr(service, "_enrich_resolved_analysis", lambda *a: [])
+    monkeypatch.setattr(service, "_mark_processing_failed", forbidden)
+    service._complete_processing_supplements(1, snapshot, checkpoint, "TEST")
+    assert "save_supplements" in calls
+    assert "save_coaching_checkpoint" not in calls
+
+
+def test_persistent_coaching_error_leaves_core_checkpoint_for_retry(monkeypatch):
+    checkpoint = {"analysis": {}, "resolved": {"prompt_context": "", "retrieved_context": {}}}
+    snapshot = {"transcript": "Me: Hello", "leadership_context": ""}
+    calls = []
+    monkeypatch.setattr(service, "_with_fresh_session", lambda *a, **k: {"action_items": []})
+    def invalid(*args):
+        calls.append("coaching")
+        raise json.JSONDecodeError("invalid", "", 0)
+    monkeypatch.setattr(service, "analyze_leadership_feedback", invalid)
+    monkeypatch.setattr(service, "_mark_processing_failed", lambda *a: calls.append(a[2]))
+    service._complete_processing_supplements(1, snapshot, checkpoint, "TEST")
+    assert calls == ["coaching", "coaching", "leadership_coaching"]
+    assert "coaching" not in checkpoint
+
+
+def test_retry_endpoint_uses_checkpoint_instead_of_full_reassessment(db):
+    from fastapi import BackgroundTasks
+    from app.routers.meetings import retry_meeting
+    meeting = models.Meeting(user_number="test", title="Review", source_type="notes",
+        processing_status="failed", transcript_text="Me: Hello", executive_summary="Saved",
+        context_receipt={"processing_checkpoint": {"analysis": {}}})
+    db.add(meeting)
+    db.commit()
+    background = BackgroundTasks()
+    retry_meeting(meeting.id, background, "test", db)
+    assert background.tasks[0].func is service.process_meeting
+
+
 def test_only_actual_speaker_labels_survive_and_self_is_unique():
     people = [{"speaker_label": "self", "status": "self"}, {"speaker_label": "unknown", "status": "unknown"},
               {"speaker_label": "Speaker A", "status": "existing", "name": "Matt", "id": 7},
