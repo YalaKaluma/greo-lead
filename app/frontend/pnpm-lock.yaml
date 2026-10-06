@@ -9,23 +9,23 @@ importers:
   .:
     dependencies:
       '@capacitor/android':
-        specifier: ^8.4.1
-        version: 8.4.1(@capacitor/core@8.4.1)
+        specifier: ^8.4.3
+        version: 8.4.3(@capacitor/core@8.4.3)
       '@capacitor/core':
-        specifier: ^8.4.1
-        version: 8.4.1
+        specifier: ^8.4.3
+        version: 8.4.3
       '@capacitor/ios':
-        specifier: ^8.4.1
-        version: 8.4.1(@capacitor/core@8.4.1)
+        specifier: ^8.4.3
+        version: 8.4.3(@capacitor/core@8.4.3)
       '@capacitor/push-notifications':
         specifier: ^8.0.0
-        version: 8.1.2(@capacitor/core@8.4.1)
+        version: 8.1.2(@capacitor/core@8.4.3)
       alfred-session-credentials:
         specifier: file:plugins/session-credentials
         version: link:plugins/session-credentials
       axios:
-        specifier: ^1.18.0
-        version: 1.18.0(debug@4.4.3)
+        specifier: ^1.20.0
+        version: 1.20.0(debug@4.4.3)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -37,8 +37,8 @@ importers:
         version: 18.3.1(react@18.3.1)
     devDependencies:
       '@capacitor/cli':
-        specifier: ^8.4.1
-        version: 8.4.1
+        specifier: ^8.4.3
+        version: 8.4.3
       '@playwright/test':
         specifier: 1.55.0
         version: 1.55.0
@@ -178,21 +178,21 @@ packages:
     resolution: {integrity: sha512-4zBIxpPzowiZpusoFkyGVwakdRJUyuH5PxQ/PrqghfdFWWasvnCdPfQXHrenDai+gyLARulZjZowCOj6fjT4pA==}
     engines: {node: '>=6.9.0'}
 
-  '@capacitor/android@8.4.1':
-    resolution: {integrity: sha512-igtDCJ7QQn0P2qHFD9p4KXaa6V1b2PRNt+MxjVwtjTm/BJvqmiazOJq6rPjwFSZnfHm6iFoZk8TfzHd44pyBGw==}
+  '@capacitor/android@8.4.3':
+    resolution: {integrity: sha512-VICd1+E2u5uPvCb5hseoZr84u7/wi334BqayKyXvSLeqURn/iw7nCFEWK29RQNW2rxiW5l1vTVHQ2K6tAJkpTQ==}
     peerDependencies:
       '@capacitor/core': ^8.4.0
 
-  '@capacitor/cli@8.4.1':
-    resolution: {integrity: sha512-t7F2s7fFHCq113xgrggrmK6ctV0/8E5YfLNVLfPHp4GCTDO+tly9fZvWPf2/sOI8lMm18dLT43qbXLRTz/OZgw==}
+  '@capacitor/cli@8.4.3':
+    resolution: {integrity: sha512-E3J7F6gdZSBMIwB0/WVnHZ5S+UXJPgvdnyqtwryccCGRRkIZ34b5sgYYMa2Ij4agimkUcMoScAk+K/grTtL1Xg==}
     engines: {node: '>=22.0.0'}
     hasBin: true
 
-  '@capacitor/core@8.4.1':
-    resolution: {integrity: sha512-xqhOGLbTAYeOWK+IDUNSjQJAPapQjRHrIcgk9PYp52or9zFTaaMko31uNi16N6W+CRJ8VrRram6fOYILkBG2Hg==}
+  '@capacitor/core@8.4.3':
+    resolution: {integrity: sha512-5S04bZa2I9RabRaqhmwynR54Xkj9x/cKW8R6nXT5ZYg/3JkuOzyIEijIrb18Jra5bMT+f6HX7KonCyvNob6+0g==}
 
-  '@capacitor/ios@8.4.1':
-    resolution: {integrity: sha512-EgcAk7NYheHMTyP3CUrA65qKs4D2UEAKgw44HI6Uk3dTw6KjLQkdLOQWvbeRncHaZ2gklfOojUoc5DlSw2lhYg==}
+  '@capacitor/ios@8.4.3':
+    resolution: {integrity: sha512-ziFt4WskFjUFgwCcudhxklcCFMCPNTUk1yVuwutw6xxCvUZzmiOJjVLjDrZ+3A1G02nV+oizUiGPff97htPRIg==}
     peerDependencies:
       '@capacitor/core': ^8.4.0
 
@@ -683,6 +683,7 @@ packages:
   '@xmldom/xmldom@0.9.10':
     resolution: {integrity: sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==}
     engines: {node: '>=14.6'}
+    deprecated: this version has critical issues, please update to the latest version
 
   acorn-walk@8.3.5:
     resolution: {integrity: sha512-HEHNfbars9v4pgpW6SO1KSPkfoS0xVOM/9UzkJltjlsHZmJasxg8aXkuZa7SMf8vKGIBhpUsPluQSqhJFCqebw==}
@@ -751,8 +752,8 @@ packages:
     peerDependencies:
       postcss: ^8.1.0
 
-  axios@1.18.0:
-    resolution: {integrity: sha512-E32NzpYKp++W7XRe52rHiXV2ehxmh3wbdgO7MHeFM+vqxLBYHzt0ElkiImtOBxtOmyp0yoC8C6uESVV84Y2/hw==}
+  axios@1.20.0:
+    resolution: {integrity: sha512-r8aOh8j9cGKpgQAqpzrUHnSIc6a59Y3Xf/cv8sy1DrHCkZHzQGEuoq1tARk6qSyDdtQGSDgpb9kFlruzPvrgwg==}
 
   balanced-match@4.0.4:
     resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
@@ -2049,11 +2050,11 @@ snapshots:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
 
-  '@capacitor/android@8.4.1(@capacitor/core@8.4.1)':
+  '@capacitor/android@8.4.3(@capacitor/core@8.4.3)':
     dependencies:
-      '@capacitor/core': 8.4.1
+      '@capacitor/core': 8.4.3
 
-  '@capacitor/cli@8.4.1':
+  '@capacitor/cli@8.4.3':
     dependencies:
       '@ionic/cli-framework-output': 2.2.8
       '@ionic/utils-subprocess': 3.0.1
@@ -2075,17 +2076,17 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@capacitor/core@8.4.1':
+  '@capacitor/core@8.4.3':
     dependencies:
       tslib: 2.8.1
 
-  '@capacitor/ios@8.4.1(@capacitor/core@8.4.1)':
+  '@capacitor/ios@8.4.3(@capacitor/core@8.4.3)':
     dependencies:
-      '@capacitor/core': 8.4.1
+      '@capacitor/core': 8.4.3
 
-  '@capacitor/push-notifications@8.1.2(@capacitor/core@8.4.1)':
+  '@capacitor/push-notifications@8.1.2(@capacitor/core@8.4.3)':
     dependencies:
-      '@capacitor/core': 8.4.1
+      '@capacitor/core': 8.4.3
 
   '@csstools/color-helpers@5.1.0': {}
 
@@ -2563,7 +2564,7 @@ snapshots:
       postcss: 8.5.15
       postcss-value-parser: 4.2.0
 
-  axios@1.18.0(debug@4.4.3):
+  axios@1.20.0(debug@4.4.3):
     dependencies:
       follow-redirects: 1.16.0(debug@4.4.3)
       form-data: 4.0.6
