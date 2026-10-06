@@ -70,7 +70,7 @@ def test_empty_reassessment_cannot_erase_existing_summary(db):
     assert meeting.executive_summary == "Keep me"
 
 
-def test_checkpoint_and_supplements_preserve_core_rows_and_reviewed_suggestions(db):
+def test_checkpoint_and_supplements_preserve_core_rows_and_participant_corrections(db):
     meeting = models.Meeting(user_number="test", title="Review", source_type="notes")
     db.add(meeting)
     db.commit()
@@ -92,6 +92,14 @@ def test_checkpoint_and_supplements_preserve_core_rows_and_reviewed_suggestions(
     action.notes = "User edit during processing"
     action_id = action.id
     decision_id = db.query(models.MeetingDecision).one().id
+    # A manual self-speaker correction must survive the supplemental save even
+    # when the transcript contains an outdated "Me" diarization label.
+    participant = models.MeetingParticipant(meeting_id=meeting.id, speaker_label="A",
+        display_name="Corrected self", is_current_user=True, match_status="current_user")
+    db.add_all([participant, models.MeetingTranscriptSegment(meeting_id=meeting.id,
+        sequence_number=0, speaker_label="Me", text="An incorrectly attributed turn")])
+    db.flush()
+    participant_id = participant.id
     coaching = {"leadership_observations": [{"observation": "Clear decision", "confidence": .8}],
                 "domain_assessments": [{"domain": "Vision", "score": 4, "feedback": "Clear purpose"}]}
     service._save_processing_supplements(db, meeting.id, checkpoint, coaching, complete=False)
@@ -109,6 +117,9 @@ def test_checkpoint_and_supplements_preserve_core_rows_and_reviewed_suggestions(
     assert db.query(models.MeetingDecision).one().id == decision_id
     assert db.query(models.MeetingLeadershipObservation).count() == 1
     assert db.query(models.MeetingLeadershipDomainAssessment).count() == 1
+    participant = db.get(models.MeetingParticipant, participant_id)
+    assert participant.is_current_user
+    assert participant.display_name == "Corrected self"
     meeting = db.get(models.Meeting, meeting.id)
     assert meeting.processing_status == "ready"
     assert "processing_checkpoint" not in meeting.context_receipt

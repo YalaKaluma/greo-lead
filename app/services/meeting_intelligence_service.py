@@ -1159,7 +1159,7 @@ def _replace_participant_suggestions(db: Session, meeting: Meeting, analysis: di
             db.delete(stale_self)
 
 
-def _replace_analysis(db: Session, meeting: Meeting, analysis: dict) -> None:
+def _replace_analysis(db: Session, meeting: Meeting, analysis: dict, *, preserve_participants: bool = False) -> None:
     meeting.title = (analysis.get("title") or meeting.title or "Untitled meeting")[:240]
     meeting.meeting_type = (analysis.get("meeting_type") or "Other")[:80]
     for field in ("one_line_summary", "executive_summary"):
@@ -1168,7 +1168,8 @@ def _replace_analysis(db: Session, meeting: Meeting, analysis: dict) -> None:
     meeting.prompt_version = MEETING_PROMPT_VERSION[:40]
     meeting.model_version = MEETING_MODEL[:80]
 
-    _replace_participant_suggestions(db, meeting, analysis)
+    if not preserve_participants:
+        _replace_participant_suggestions(db, meeting, analysis)
 
     for index, topic in enumerate(analysis.get("topics") or []):
         title = str(topic.get("title") or "").strip()
@@ -2153,7 +2154,7 @@ def _save_processing_supplements(db, meeting_id, checkpoint, coaching, *, comple
         "leadership_observations", "domain_assessments", "profile_suggestions", "entity_enrichments")})
     supplement.update(title=meeting.title, meeting_type=meeting.meeting_type,
                       one_line_summary=meeting.one_line_summary, executive_summary=meeting.executive_summary)
-    _replace_analysis(db, meeting, supplement)
+    _replace_analysis(db, meeting, supplement, preserve_participants=True)
     receipt = dict(meeting.context_receipt or {})
     receipt["provisional_context"] = _context_receipt_suggestions(checkpoint["analysis"], coaching)
     if complete:
