@@ -1130,5 +1130,8 @@
   "meetings.contextReview.projectReason.model_unresolved": "L’évaluation n’a pas pu identifier ce projet.",
   "meetings.contextReview.projectReason.conflicting_project_decisions": "L’évaluation a donné des réponses contradictoires pour ce projet. Une vérification est nécessaire.",
   "meetings.contextReview.projectReason.model_rejected_candidate": "L’évaluation a examiné ce candidat sans trouver suffisamment de preuves pour le rattacher.",
-  "meetings.contextReview.projectReason.review": "Ce projet nécessite une décision explicite de rattachement."
+  "meetings.contextReview.projectReason.review": "Ce projet nécessite une décision explicite de rattachement.",
+  "meetings.recording.starting": "Démarrage de la réunion…",
+  "meetings.recording.newMeeting": "Nouvelle réunion",
+  "meetings.recording.newMeetingHint": "Enregistrer cette réunion et démarrer un nouvel enregistrement. Les participants et les notes sont réinitialisés."
 }
