@@ -1130,5 +1130,8 @@
   "meetings.contextReview.projectReason.model_unresolved": "The assessment could not resolve this project.",
   "meetings.contextReview.projectReason.conflicting_project_decisions": "The assessment gave conflicting answers about this project. Review is needed.",
   "meetings.contextReview.projectReason.model_rejected_candidate": "The assessment reviewed this candidate and found insufficient evidence to link it.",
-  "meetings.contextReview.projectReason.review": "This project needs an explicit linking decision."
+  "meetings.contextReview.projectReason.review": "This project needs an explicit linking decision.",
+  "meetings.recording.starting": "Starting meeting…",
+  "meetings.recording.newMeeting": "New meeting",
+  "meetings.recording.newMeetingHint": "Save this meeting and start a new recording. Participants and notes reset."
 }
