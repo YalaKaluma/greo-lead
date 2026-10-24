@@ -663,6 +663,7 @@ def retry_meeting(meeting_id: int, background_tasks: BackgroundTasks, user_numbe
     if meeting.processing_status not in {"failed", "queued"}:
         raise HTTPException(status_code=409, detail="Only queued or failed meetings can be retried.")
     if (meeting.processing_status == "failed"
+            and not (meeting.context_receipt or {}).get("processing_checkpoint")
             and (meeting.executive_summary or (meeting.context_receipt or {}).get("active_assessment_scope") == "entities")
             and (meeting.transcript_text or meeting.user_notes)):
         # Reassessing a previously processed meeting must preserve handled actions.
@@ -948,7 +949,9 @@ def create_leadership_assessment(meeting_id: int, background_tasks: BackgroundTa
     ).update({"processing_status": "analyzing", "processing_error": None}, synchronize_session=False)
     if not claimed:
         raise HTTPException(status_code=409, detail="This meeting is already being assessed.")
-    meeting.context_receipt = {**(meeting.context_receipt or {}), "active_assessment_scope": scope}
+    receipt = dict(meeting.context_receipt or {})
+    receipt.pop("processing_checkpoint", None)
+    meeting.context_receipt = {**receipt, "active_assessment_scope": scope}
     db.commit()
     background_tasks.add_task(reassess_meeting_entities if scope == "entities" else reassess_meeting_with_context, meeting.id)
     return {"id": meeting.id, "assessment_status": "queued", "scope": scope}
