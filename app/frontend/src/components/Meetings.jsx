@@ -274,6 +274,10 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
   const startedAtRef = useRef(null);
+  const transitionRef = useRef(false);
+  const continueRecordingRef = useRef(false);
+  const secondsRef = useRef(0);
+  secondsRef.current = seconds;
   const nativePlatform = Capacitor.getPlatform();
   const usesNativeRecorder = nativePlatform === 'android';
   const isIosApp = nativePlatform === 'ios';
@@ -294,6 +298,7 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
   useEffect(() => () => streamRef.current?.getTracks().forEach((track) => track.stop()), []);
 
   const start = async () => {
+    setStatus('starting');
     try {
       setError('');
       const startedAt = new Date();
@@ -305,13 +310,20 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
       const draft = await draftResponse.json();
       setDraftId(draft.id);
       draftIdRef.current = draft.id;
+      setSeconds(0);
+      secondsRef.current = 0;
+      setSelectedPeople([]);
+      setContextNotes([]);
+      setNoteText('');
       if (usesNativeRecorder) {
         await NativeMeetingRecorder.start();
-        startedAtRef.current = startedAt.getTime();
+        startedAtRef.current = Date.now();
         setStatus('recording');
         return;
       }
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = streamRef.current?.getAudioTracks().some((track) => track.readyState === 'live')
+        ? streamRef.current
+        : await navigator.mediaDevices.getUserMedia({ audio: true });
       const preferredType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) => window.MediaRecorder?.isTypeSupported(type));
       const recorder = new MediaRecorder(stream, preferredType ? { mimeType: preferredType, audioBitsPerSecond: 48000 } : { audioBitsPerSecond: 48000 });
       chunksRef.current = [];
@@ -320,16 +332,28 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
       recorder.ondataavailable = (event) => event.data?.size && chunksRef.current.push(event.data);
       recorder.onstop = upload;
       recorder.start(1000);
-      startedAtRef.current = startedAt.getTime();
+      startedAtRef.current = Date.now();
       setStatus('recording');
     } catch (err) {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      setStatus('idle');
       setError(err?.name === 'NotAllowedError' ? 'Microphone permission was denied.' : 'Alfred could not start the microphone.');
     }
   };
 
+  const finishSave = async (meeting) => {
+    if (continueRecordingRef.current) {
+      continueRecordingRef.current = false;
+      await start();
+    } else {
+      onCreated(meeting);
+    }
+    transitionRef.current = false;
+  };
+
   const upload = async () => {
     setStatus('uploading');
-    streamRef.current?.getTracks().forEach((track) => track.stop());
+    if (!continueRecordingRef.current) streamRef.current?.getTracks().forEach((track) => track.stop());
     const type = recorderRef.current?.mimeType || 'audio/webm';
     const extension = type.includes('mp4') ? 'm4a' : 'webm';
     const blob = new Blob(chunksRef.current, { type });
@@ -339,20 +363,30 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
       if (projectId) body.append('project_id', String(projectId));
       body.append('consent_acknowledged', 'true');
       body.append('source_type', 'recording');
-      body.append('duration_seconds', String(seconds));
+      body.append('duration_seconds', String(secondsRef.current));
       body.append('started_at', new Date(startedAtRef.current).toISOString());
       if (draftIdRef.current) body.append('meeting_id', String(draftIdRef.current));
       body.append('file', blob, `meeting-${Date.now()}.${extension}`);
       const response = await fetch(`${apiUrl}/api/meetings/upload`, { method: 'POST', body });
       if (!response.ok) throw new Error((await response.json()).detail || 'Upload failed.');
-      onCreated(await response.json());
+      await finishSave(await response.json());
     } catch (err) {
+      transitionRef.current = false;
+      streamRef.current?.getTracks().forEach((track) => track.stop());
       setStatus('failed');
       setError(err.message);
     }
   };
 
-  const stop = async () => {
+  const stop = async (nextMeeting = false) => {
+    if (transitionRef.current || savingContext) return;
+    transitionRef.current = true;
+    continueRecordingRef.current = nextMeeting;
+    if (noteText.trim() && !(await addContextNote())) {
+      transitionRef.current = false;
+      return;
+    }
+    setStatus('uploading');
     if (!usesNativeRecorder) {
       recorderRef.current?.stop();
       return;
@@ -369,15 +403,17 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
       if (projectId) body.append('project_id', String(projectId));
       body.append('consent_acknowledged', 'true');
       body.append('source_type', 'recording');
-      body.append('duration_seconds', String(seconds));
+      body.append('duration_seconds', String(secondsRef.current));
       body.append('started_at', new Date(startedAtRef.current).toISOString());
       if (draftIdRef.current) body.append('meeting_id', String(draftIdRef.current));
       body.append('file', blob, `meeting-${Date.now()}.m4a`);
       const uploadResponse = await fetch(`${apiUrl}/api/meetings/upload`, { method: 'POST', body });
       if (!uploadResponse.ok) throw new Error((await uploadResponse.json()).detail || 'Upload failed.');
-      await NativeMeetingRecorder.removeFile({ path: result.path });
-      onCreated(await uploadResponse.json());
+      await NativeMeetingRecorder.removeFile({ path: result.path }).catch(() => {});
+      await finishSave(await uploadResponse.json());
     } catch (err) {
+      transitionRef.current = false;
+      streamRef.current?.getTracks().forEach((track) => track.stop());
       setStatus('failed');
       setError(err.message || 'Could not save the native recording.');
     }
@@ -440,7 +476,8 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
       const savedNote = await response.json();
       setContextNotes((current) => [...current, savedNote]);
       setNoteText('');
-    } catch (err) { setError(err.message); } finally { setSavingContext(false); }
+      return true;
+    } catch (err) { setError(err.message); return false; } finally { setSavingContext(false); }
   };
 
   return (
@@ -452,7 +489,7 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
         alt="Alfred"
         className="mb-5 h-24 w-24 rounded-full border border-amber-300/40 object-cover"
       />
-      <h2 className="text-3xl font-semibold">{status === 'idle' ? 'Ready to Record' : status === 'uploading' ? 'Saving Meeting' : 'Alfred is listening'}</h2>
+      <h2 className="text-3xl font-semibold">{status === 'starting' ? t('meetings.recording.starting') : status === 'idle' ? 'Ready to Record' : status === 'uploading' ? 'Saving Meeting' : 'Alfred is listening'}</h2>
       <p className="mt-3 font-mono text-5xl tracking-wider">{formatTimer(seconds)}</p>
       {status === 'idle' && <div className="mt-7 max-w-xl"><ConsentCheck checked={consent} onChange={setConsent} /></div>}
       {(status === 'recording' || status === 'paused') && (
@@ -466,7 +503,7 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
         <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
           <div className="flex items-center justify-between"><h3 className="font-semibold">People in this meeting</h3>{savingContext && <span className="text-xs text-slate-400">Saving…</span>}</div>
           <p className="mt-1 text-sm text-slate-400">Select people from My Team.</p>
-          <div className="mt-4 max-h-48 space-y-2 overflow-y-auto">{people.length ? people.map((person) => <label key={person.id} className="flex cursor-pointer items-center gap-3 rounded-lg bg-white/5 px-3 py-2 hover:bg-white/10"><input type="checkbox" checked={selectedPeople.includes(person.id)} onChange={() => togglePerson(person.id)} /><span>{person.title}</span></label>) : <p className="text-sm text-slate-400">No people have been added to My Team yet.</p>}</div>
+          <div className="mt-4 max-h-48 space-y-2 overflow-y-auto">{people.length ? people.map((person) => <label key={person.id} className="flex cursor-pointer items-center gap-3 rounded-lg bg-white/5 px-3 py-2 hover:bg-white/10"><input type="checkbox" disabled={savingContext} checked={selectedPeople.includes(person.id)} onChange={() => togglePerson(person.id)} /><span>{person.title}</span></label>) : <p className="text-sm text-slate-400">No people have been added to My Team yet.</p>}</div>
         </section>
         <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
           <h3 className="font-semibold">Context notes for Alfred</h3><p className="mt-1 text-sm text-slate-400">Notes are timestamped and treated as context, not spoken dialogue.</p>
@@ -474,12 +511,13 @@ function RecordingExperience({ apiUrl, userNumber, projectId, onCancel, onCreate
           <div className="mt-3 max-h-32 space-y-2 overflow-y-auto">{contextNotes.map((note) => <div key={note.id} className="rounded-lg bg-white/5 px-3 py-2 text-sm"><span className="mr-2 font-mono text-xs text-slate-400">{formatTimer(note.elapsed_seconds)}</span>{note.note_text}</div>)}</div>
         </section>
       </div>}
-      <div className="mt-7 flex gap-4">
+      <div className="mt-7 flex flex-wrap justify-center gap-4">
         {status === 'idle' && <button disabled={!consent} onClick={start} className="rounded-full bg-red-600 px-8 py-4 font-semibold hover:bg-red-500 disabled:bg-slate-700">Start Recording</button>}
         {(status === 'recording' || status === 'paused') && (
           <>
             <button onClick={pauseResume} className="rounded-full bg-white/10 px-8 py-4 font-semibold hover:bg-white/20">{status === 'paused' ? 'Resume' : 'Pause'}</button>
-            <button onClick={stop} className="rounded-full bg-red-600 px-8 py-4 font-semibold hover:bg-red-500">Stop & Process</button>
+            <button disabled={savingContext} onClick={() => stop(true)} title={t('meetings.recording.newMeetingHint')} className="rounded-full bg-blue-600 px-8 py-4 font-semibold hover:bg-blue-500 disabled:opacity-40">{t('meetings.recording.newMeeting')}</button>
+            <button disabled={savingContext} onClick={() => stop(false)} className="rounded-full bg-red-600 px-8 py-4 font-semibold hover:bg-red-500">Stop & Process</button>
           </>
         )}
       </div>
