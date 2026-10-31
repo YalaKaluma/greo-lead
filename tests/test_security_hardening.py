@@ -405,7 +405,7 @@ def test_admin_dependency_uses_authenticated_user_role_not_query_identity(monkey
 
 def test_expired_admin_session_requires_fresh_sign_in(monkeypatch):
     from app.models import User
-    from app.routers import admin as admin_router
+    from app.routers import auth as auth_router
     from app.routers.admin import require_admin
     from app.utils import security
 
@@ -419,14 +419,15 @@ def test_expired_admin_session_requires_fresh_sign_in(monkeypatch):
     ])
 
     monkeypatch.setattr(
-        admin_router.time,
+        auth_router.time,
         "time",
         lambda: issued_at + security.ADMIN_SESSION_TOKEN_TTL_SECONDS + 1,
     )
     with pytest.raises(HTTPException) as exc_info:
         require_admin(request=request, user=user)
 
-    assert exc_info.value.status_code == 401
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["code"] == "admin_reauthentication_required"
 
 
 def test_account_erasure_removes_only_files_inside_managed_storage(tmp_path):
@@ -729,6 +730,7 @@ def test_every_api_route_has_an_explicit_access_boundary():
         "/api/auth/register",
         "/api/auth/password-recovery/request",
         "/api/auth/password-recovery/reset",
+        "/api/auth/refresh",  # authenticates a rotating refresh credential
         "/api/onboarding/login",
         "/api/onboarding/set-permanent-password",
     }
@@ -1088,6 +1090,9 @@ def test_stale_cookie_does_not_block_public_login():
 
 
 class SingleUserDb:
+    def get(self, model, key):
+        return None
+
     def __init__(self, user):
         self.user = user
 

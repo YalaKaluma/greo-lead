@@ -5,6 +5,8 @@ import { clearSessionCredentials } from '../sessionCredentials';
 export default function Sidebar({ apiUrl, userNumber, currentPage, onNavigate, isOpen, isMobile, onClose }) {
 
   const { t } = useLanguage();
+  const [logoutError, setLogoutError] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [counts, setCounts] = useState({ tasks: 0, habits: 0, meetings: 0, journal: 0 });
   const [isAboutOpen, setIsAboutOpen] = useState(
     currentPage === 'alfred-story' || currentPage === 'trust-security'
@@ -200,12 +202,20 @@ export default function Sidebar({ apiUrl, userNumber, currentPage, onNavigate, i
 
         {/* Logout stays visible while leaving room for the Alfred launcher. */}
         <div className="shrink-0 border-t border-slate-800 p-4 pr-24">
-          <button
+          {logoutError && <p role="alert" className="text-sm text-rose-300">{t('auth.logoutFailed')}</p>}
+          <button disabled={loggingOut}
             onClick={async () => {
-              await fetch(`${apiUrl}/api/auth/logout`, { method: 'POST' }).catch(() => null);
-              clearSessionCredentials();
-              localStorage.removeItem('user_number');
-              window.location.reload();
+              setLoggingOut(true);
+              setLogoutError(false);
+              try {
+                const response = await fetch(`${apiUrl}/api/auth/logout`, { method: 'POST' });
+                if (!response.ok && response.status !== 401) throw new Error('Logout failed');
+                await clearSessionCredentials();
+                localStorage.removeItem('user_number');
+                localStorage.removeItem('user_name');
+                localStorage.removeItem('must_change_password');
+                window.location.reload();
+              } catch { setLogoutError(true); setLoggingOut(false); }
             }}
             className="w-full rounded-lg px-4 py-3 text-left text-slate-400 transition-all duration-200 hover:bg-slate-800 hover:text-white"
           >

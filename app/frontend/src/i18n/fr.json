@@ -1150,5 +1150,20 @@
   "meetings.pipeline.status.pending": "En attente",
   "meetings.pipeline.status.running": "En cours",
   "meetings.pipeline.status.complete": "Enregistré",
-  "meetings.pipeline.status.failed": "À réessayer"
+  "meetings.pipeline.status.failed": "À réessayer",
+  "auth.rememberDevice": "Se souvenir de cet appareil pendant 30 jours",
+  "auth.connectionTitle": "Connexion à Alfred indisponible",
+  "auth.connectionRetry": "Votre connexion enregistrée a été conservée. Vérifiez votre réseau et réessayez.",
+  "auth.retry": "Réessayer",
+  "auth.checkingSession": "Vérification de l’accès…",
+  "auth.adminUnlockTitle": "Confirmer l’accès administrateur",
+  "auth.adminUnlockDescription": "Confirmez votre mot de passe pour utiliser les outils administrateur pendant 15 minutes. Votre session Alfred habituelle reste ouverte.",
+  "auth.confirmPassword": "Votre mot de passe",
+  "auth.adminUnlock": "Déverrouiller les outils administrateur",
+  "auth.adminUnlockFailed": "Impossible de confirmer l’accès. Vérifiez votre mot de passe et votre connexion, puis réessayez.",
+  "auth.logoutFailed": "La déconnexion n’a pas abouti. Veuillez réessayer.",
+  "auth.logoutAll": "Se déconnecter de tous les appareils",
+  "auth.logoutAllConfirm": "Se déconnecter de tous les appareils, y compris celui-ci ?",
+  "auth.devicesTitle": "Appareils connectés",
+  "auth.devicesDescription": "La déconnexion dans le menu concerne uniquement cet appareil. Utilisez le bouton ci-dessous pour fermer toutes vos sessions Alfred."
 }

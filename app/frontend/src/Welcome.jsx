@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { API_URL } from "./config";
-import { storeSessionToken } from './sessionCredentials';
+import { storeSessionResponse } from './sessionCredentials';
 
 /**
  * Welcome Page - First-time login for new users
@@ -35,7 +35,9 @@ export default function Welcome({ onLogin }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           user_id: userId, 
-          password: password.trim().toUpperCase() 
+          password,
+          session_protocol: "device-v1",
+          remember_device: false
         })
       });
 
@@ -50,7 +52,7 @@ export default function Welcome({ onLogin }) {
       // Store user info and trigger login
       localStorage.setItem("user_number", data.user_number);
       localStorage.setItem("user_name", data.user_name);
-      await storeSessionToken(data.access_token);
+      await storeSessionResponse(data, { replace: true });
       localStorage.setItem("needs_tour", data.needs_tour.toString());
       
       // ✅ NOTE: Onboarding data is now processed automatically during WhatsApp onboarding

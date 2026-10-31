@@ -7,7 +7,7 @@ Onboarding Router - API endpoints for user onboarding, authentication, and tour
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 import secrets
 
@@ -21,8 +21,8 @@ from app.services.onboarding_service import (
 )
 from app.services import journey_service
 from app.routers.tasks import Task as TaskModel
-from app.utils.security import create_session_token, hash_password, verify_password
-from app.utils.session_cookie import set_session_cookie
+from app.utils.security import hash_password, verify_password
+from app.routers.auth import _session_response
 from app.services.in_app_onboarding_service import get_session, respond
 from app.utils.safe_errors import internal_error, log_failure
 
@@ -39,6 +39,8 @@ def _find_user_by_number_or_email(db: Session, user_number: str) -> Optional[Use
 class LoginRequest(BaseModel):
     user_id: int
     password: str
+    remember_device: bool = True
+    session_protocol: Literal["legacy", "device-v1"] = "legacy"
 
 
 class LoginResponse(BaseModel):
@@ -51,6 +53,9 @@ class LoginResponse(BaseModel):
     access_token: Optional[str] = None
     token_type: Optional[str] = None
     expires_in: Optional[int] = None
+    refresh_token: Optional[str] = None
+    refresh_expires_in: Optional[int] = None
+    remember_device: bool = True
     must_change_password: bool = False
 
 
@@ -101,7 +106,7 @@ class EmailVerifyRequest(BaseModel):
 # ============== AUTHENTICATION ENDPOINTS ==============
 
 @public_router.post("/login", response_model=LoginResponse)
-async def login(request: LoginRequest, response: Response, db: Session = Depends(get_db)):
+async def login(request: LoginRequest, response: Response, http_request: Request, db: Session = Depends(get_db)):
     """
     Login endpoint for first-time access via temp password.
     After successful login, users enter the app directly.
@@ -126,8 +131,6 @@ async def login(request: LoginRequest, response: Response, db: Session = Depends
             user.last_login_at = datetime.utcnow()
             user.last_active_at = user.last_login_at
             db.commit()
-            access_token = create_session_token(user.id, user.phone_number, user.session_version)
-            set_session_cookie(response, access_token)
             return LoginResponse(
                 success=True,
                 message="Welcome back!",
@@ -136,9 +139,9 @@ async def login(request: LoginRequest, response: Response, db: Session = Depends
                 trial_days_left=user.days_left_in_trial(),
                 needs_tour=False,
                 must_change_password=False,
-                access_token=access_token,
-                token_type="bearer",  # nosec B106 - OAuth token type, not a password
-                expires_in=60 * 60 * 24 * 30,
+                **_session_response(user, response, db, remember=request.remember_device,
+                    modern=request.session_protocol == "device-v1",
+                    native=http_request.headers.get("x-alfred-client") == "native"),
             )
         else:
             pass
@@ -149,8 +152,6 @@ async def login(request: LoginRequest, response: Response, db: Session = Depends
 
     # First-time login with temp password
     if not user.temp_password:
-        access_token = create_session_token(user.id, user.phone_number, user.session_version)
-        set_session_cookie(response, access_token)
         return LoginResponse(
             success=False,
             message="No temporary password set. Please contact support."
@@ -187,9 +188,9 @@ async def login(request: LoginRequest, response: Response, db: Session = Depends
             trial_days_left=user.days_left_in_trial(),
             needs_tour=False,
             must_change_password=True,
-            access_token=access_token,
-            token_type="bearer",  # nosec B106 - OAuth token type, not a password
-            expires_in=60 * 60 * 24 * 30,
+            **_session_response(user, response, db, remember=False,
+                modern=request.session_protocol == "device-v1",
+                native=http_request.headers.get("x-alfred-client") == "native"),
         )
     else:
         return LoginResponse(

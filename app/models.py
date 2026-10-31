@@ -20,6 +20,24 @@ class RateLimitBucket(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
+class DeviceSession(Base):
+    __tablename__ = "device_sessions"
+
+    id = Column(String(96), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    session_version = Column(Integer, nullable=False)
+    refresh_hash = Column(String(64), nullable=False)
+    previous_refresh_hash = Column(String(64), nullable=True)
+    refresh_generation = Column(Integer, nullable=False, default=0)
+    rotated_at = Column(Integer, nullable=False)
+    created_at = Column(Integer, nullable=False)
+    expires_at = Column(Integer, nullable=False)
+    authenticated_at = Column(Integer, nullable=False)
+    revoked_at = Column(Integer, nullable=True)
+    remember_device = Column(Boolean, nullable=False)
+    modern_client = Column(Boolean, nullable=False)
+
+
 # from app.database import Base
 # from database import Base
 
