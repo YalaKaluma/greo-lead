@@ -19,7 +19,7 @@ concurrency:
 jobs:
   dev-ci:
     name: Lightweight checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # Supported by the pinned Playwright browser toolchain.
     timeout-minutes: 30
     env:
       PYTHONPATH: ${{ github.workspace }}

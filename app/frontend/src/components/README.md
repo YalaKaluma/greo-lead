@@ -76,3 +76,7 @@ Focused TodoList support modules currently own:
 - Avoid duplicating product logic in multiple components when a shared helper can keep behavior aligned.
 - For Journey progression, remember that belts are domain-level, while subdomains are evidence/navigation surfaces.
 - Use the language/timezone context rather than duplicating local preference state.
+
+### Back-to-back meeting capture
+
+The active recording screen offers **New meeting** alongside Pause and Stop & Process. It saves any pending context note, uploads the completed recording to its existing draft, then starts a separate draft and recording without leaving the screen. Participants, notes and elapsed time reset. The browser microphone stream is reused; Android uses its native stop/start flow. There is an upload/start gap between recordings, but transcription and analysis run in the background. Failed saves do not start another meeting. Transition clicks are guarded against duplicates.

@@ -19,18 +19,18 @@
     "mobile:open:ios": "cap open ios"
   },
   "dependencies": {
-    "@capacitor/android": "^8.4.1",
-    "@capacitor/core": "^8.4.1",
-    "@capacitor/ios": "^8.4.1",
+    "@capacitor/android": "^8.4.3",
+    "@capacitor/core": "^8.4.3",
+    "@capacitor/ios": "^8.4.3",
     "@capacitor/push-notifications": "^8.0.0",
     "alfred-session-credentials": "file:plugins/session-credentials",
-    "axios": "^1.18.0",
+    "axios": "^1.20.0",
     "react": "^18.2.0",
     "react-beautiful-dnd": "^13.1.1",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.4.1",
+    "@capacitor/cli": "^8.4.3",
     "@playwright/test": "1.55.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
