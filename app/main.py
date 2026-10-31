@@ -528,6 +528,8 @@ def start_email():
     if os.getenv("SKIP_STARTUP_TASKS", "").lower() in {"1", "true", "yes"}:
         logger.info("Startup background tasks skipped by SKIP_STARTUP_TASKS")
         return
+    from app.services.meeting_job_service import start_meeting_workers
+    start_meeting_workers()
     thread = threading.Thread(target=run_email_loop, daemon=True)
     thread.start()
 
@@ -545,3 +547,9 @@ logger.info("   • Journey:     /api/journey")
 logger.info("=" * 70)
 logger.info("🎯 Ready to serve requests!")
 logger.info("=" * 70)
+
+
+@app.on_event("shutdown")
+def stop_meeting_queue():
+    from app.services.meeting_job_service import stop_meeting_workers
+    stop_meeting_workers()

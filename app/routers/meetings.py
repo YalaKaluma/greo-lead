@@ -16,6 +16,8 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
+from app.services.meeting_job_service import wake_meeting_workers
+from app.services.meeting_pipeline_state import public_progress
 from app.models import JourneyDevelopmentArea, JourneyGoal, JourneyPerson, JourneyProject, JourneyStrength, Meeting, MeetingActionItem, MeetingAttendee, MeetingContextNote, MeetingEnrichmentSuggestion, MeetingGoalLink, MeetingParticipant, MeetingProjectLink, Task, User
 from app.services.meeting_intelligence_service import answer_meeting_question, process_meeting, reassess_meeting_with_context, reassess_meeting_entities
 from app.services.leadership_trends_service import get_leadership_trends
@@ -31,7 +33,8 @@ ALLOWED_AUDIO_TYPES = {"audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "a
 MAX_AUDIO_BYTES = int(os.getenv("MEETING_MAX_AUDIO_BYTES", str(250 * 1024 * 1024)))
 STORAGE_ROOT = Path(
     os.getenv("MEETING_STORAGE_DIR")
-    or Path(tempfile.gettempdir()) / "alfred-meetings"
+    or (Path(os.environ["RAILWAY_VOLUME_MOUNT_PATH"]) / "meetings"
+        if os.getenv("RAILWAY_VOLUME_MOUNT_PATH") else Path(tempfile.gettempdir()) / "alfred-meetings")
 )
 
 
@@ -188,6 +191,7 @@ def _meeting_payload(meeting: Meeting, detail: bool = False):
         "status": "processed" if is_processed else meeting.processing_status,
         "is_processed": is_processed,
         "processing_error": meeting.processing_error,
+        "processing_progress": public_progress(meeting),
         "meeting_type": meeting.meeting_type,
         "started_at": meeting.started_at,
         "duration_seconds": meeting.duration_seconds,
@@ -651,7 +655,7 @@ def create_notes_meeting(payload: NotesMeetingCreate, background_tasks: Backgrou
     if project:
         db.add(MeetingProjectLink(meeting_id=meeting.id, project_id=project.id))
         db.commit()
-    background_tasks.add_task(process_meeting, meeting.id)
+    background_tasks.add_task(wake_meeting_workers)
     return {"id": meeting.id, "processing_status": meeting.processing_status}
 
 
@@ -664,6 +668,7 @@ def retry_meeting(meeting_id: int, background_tasks: BackgroundTasks, user_numbe
         raise HTTPException(status_code=409, detail="Only queued or failed meetings can be retried.")
     if (meeting.processing_status == "failed"
             and not (meeting.context_receipt or {}).get("processing_checkpoint")
+            and not (meeting.context_receipt or {}).get("processing_pipeline", {}).get("stages")
             and (meeting.executive_summary or (meeting.context_receipt or {}).get("active_assessment_scope") == "entities")
             and (meeting.transcript_text or meeting.user_notes)):
         # Reassessing a previously processed meeting must preserve handled actions.
@@ -672,7 +677,7 @@ def retry_meeting(meeting_id: int, background_tasks: BackgroundTasks, user_numbe
     meeting.processing_status = "queued"
     meeting.processing_error = None
     db.commit()
-    background_tasks.add_task(process_meeting, meeting.id)
+    background_tasks.add_task(wake_meeting_workers)
     return {"id": meeting.id, "processing_status": "queued"}
 
 
@@ -951,9 +956,11 @@ def create_leadership_assessment(meeting_id: int, background_tasks: BackgroundTa
         raise HTTPException(status_code=409, detail="This meeting is already being assessed.")
     receipt = dict(meeting.context_receipt or {})
     receipt.pop("processing_checkpoint", None)
+    receipt.pop("processing_pipeline", None)
+    receipt.pop("partial_resolution", None)
     meeting.context_receipt = {**receipt, "active_assessment_scope": scope}
     db.commit()
-    background_tasks.add_task(reassess_meeting_entities if scope == "entities" else reassess_meeting_with_context, meeting.id)
+    background_tasks.add_task(wake_meeting_workers)
     return {"id": meeting.id, "assessment_status": "queued", "scope": scope}
 
 
@@ -1027,13 +1034,18 @@ async def upload_meeting(
     meeting.recording_filename = safe_name
     meeting.recording_content_type = "audio/mp4" if generic_m4a else file.content_type
     meeting.recording_storage_key = str(storage_path)
+    receipt = dict(meeting.context_receipt or {})
+    for key in ("processing_pipeline", "processing_checkpoint", "partial_resolution", "active_assessment_scope"):
+        receipt.pop(key, None)
+    meeting.context_receipt = receipt
+    meeting.transcript_text = None
     meeting.consent_acknowledged_at = meeting.consent_acknowledged_at or datetime.now(timezone.utc)
     db.commit()
     db.refresh(meeting)
     if project and not db.query(MeetingProjectLink).filter(MeetingProjectLink.meeting_id == meeting.id, MeetingProjectLink.project_id == project.id).first():
         db.add(MeetingProjectLink(meeting_id=meeting.id, project_id=project.id))
         db.commit()
-    background_tasks.add_task(process_meeting, meeting.id)
+    background_tasks.add_task(wake_meeting_workers)
     return {"id": meeting.id, "processing_status": meeting.processing_status}
 
 

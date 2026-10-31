@@ -1133,5 +1133,22 @@
   "meetings.contextReview.projectReason.review": "Ce projet nécessite une décision explicite de rattachement.",
   "meetings.recording.starting": "Démarrage de la réunion…",
   "meetings.recording.newMeeting": "Nouvelle réunion",
-  "meetings.recording.newMeetingHint": "Enregistrer cette réunion et démarrer un nouvel enregistrement. Les participants et les notes sont réinitialisés."
+  "meetings.recording.newMeetingHint": "Enregistrer cette réunion et démarrer un nouvel enregistrement. Les participants et les notes sont réinitialisés.",
+  "meetings.pipeline.title": "Progression du traitement",
+  "meetings.pipeline.saved": "Les étapes terminées sont enregistrées. Réessayer reprend le travail inachevé.",
+  "meetings.pipeline.chunks": "Extraits audio enregistrés :",
+  "meetings.pipeline.partial": "Cette transcription est incomplète. Il reste de l’audio à transcrire.",
+  "meetings.pipeline.speakers": "Certains extraits ont été transcrits sans attribution des voix. Ces intervenants restent non identifiés.",
+  "meetings.pipeline.transcription": "Transcription",
+  "meetings.pipeline.participants": "Participants",
+  "meetings.pipeline.projects": "Projets et clients",
+  "meetings.pipeline.goals": "Objectifs",
+  "meetings.pipeline.summary": "Synthèse et décisions",
+  "meetings.pipeline.actions": "Actions",
+  "meetings.pipeline.coaching": "Coaching",
+  "meetings.pipeline.enrichment": "Enrichissement",
+  "meetings.pipeline.status.pending": "En attente",
+  "meetings.pipeline.status.running": "En cours",
+  "meetings.pipeline.status.complete": "Enregistré",
+  "meetings.pipeline.status.failed": "À réessayer"
 }
