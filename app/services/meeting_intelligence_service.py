@@ -2367,7 +2367,8 @@ def _save_summary_progress(db, meeting_id, analysis):
     db.query(MeetingTopic).filter_by(meeting_id=meeting_id).delete(synchronize_session=False)
     db.query(MeetingDecision).filter_by(meeting_id=meeting_id).delete(synchronize_session=False)
     # Do not reconcile/delete actions until the action stage has succeeded.
-    _replace_analysis(db, meeting, {**analysis, "action_items": []}, preserve_participants=True)
+    title = meeting.title if meeting.executive_summary else analysis.get("title")
+    _replace_analysis(db, meeting, {**analysis, "title": title, "action_items": []}, preserve_participants=True)
 
 
 def _process_core_stages(meeting_id, snapshot, attempt_id):

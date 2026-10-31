@@ -947,7 +947,9 @@ def create_leadership_assessment(meeting_id: int, background_tasks: BackgroundTa
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_number == user_number).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found.")
-    if meeting.processing_status not in {"ready", "failed"} or not (meeting.transcript_text or meeting.user_notes):
+    if ((meeting.context_receipt or {}).get("processing_pipeline", {}).get("transcript_complete") is False
+            or meeting.processing_status not in {"ready", "failed"}
+            or not (meeting.transcript_text or meeting.user_notes)):
         raise HTTPException(status_code=409, detail="The meeting must finish processing before it can be assessed.")
     claimed = db.query(Meeting).filter(
         Meeting.id == meeting_id, Meeting.processing_status.in_(["ready", "failed"])

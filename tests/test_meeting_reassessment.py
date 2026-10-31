@@ -1075,3 +1075,16 @@ def test_busy_local_job_lock_is_not_released_by_a_second_worker(db, monkeypatch)
     jobs.run_meeting_job(999)
     assert lock.locked()
     lock.release()
+
+
+def test_reassessment_cannot_treat_partial_transcript_as_complete(db):
+    from fastapi import BackgroundTasks, HTTPException
+    from app.routers.meetings import create_leadership_assessment
+    meeting = models.Meeting(user_number='test', title='Partial', source_type='recording',
+        processing_status='failed', transcript_text='Part 1 / A: Only the beginning',
+        context_receipt={'processing_pipeline': {'transcript_complete': False, 'stages': {}, 'chunks': {}}})
+    db.add(meeting); db.commit()
+    with pytest.raises(HTTPException) as exc:
+        create_leadership_assessment(meeting.id, BackgroundTasks(), user_number='test', db=db)
+    assert exc.value.status_code == 409
+    assert meeting.context_receipt['processing_pipeline']['transcript_complete'] is False
