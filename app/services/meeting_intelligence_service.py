@@ -17,12 +17,15 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Callable, TypeVar
 
-from openai import OpenAI
+from openai import OpenAI, APITimeoutError, APIConnectionError, InternalServerError
 from sqlalchemy.exc import DBAPIError, InterfaceError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.config import OPENAI_API_KEY
 from app.db import SessionLocal
+from app.services.meeting_pipeline_state import pipeline, save_pipeline
+from app.services.meeting_stage_service import run_stage, prepare as prepare_stages
+from app.services.meeting_job_service import ensure_job_lock, JobLockLost
 from app.utils.safe_errors import log_failure
 from app.services.meeting_task_extraction_service import extract_action_items
 from app.services.meeting_review_service import review_coaching
@@ -58,7 +61,7 @@ from app.models import (
 )
 
 logger = logging.getLogger(__name__)
-client = OpenAI(api_key=OPENAI_API_KEY)
+client = OpenAI(api_key=OPENAI_API_KEY, timeout=180, max_retries=1)
 MEETING_PROMPT_VERSION = "meeting-v20-evidence-consistency"
 MEETING_MODEL = os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4.1")
 MEETING_CONTEXT_MODEL = os.getenv("MEETING_CONTEXT_MODEL", "gpt-4.1")
@@ -79,7 +82,7 @@ CONTEXT_MATCH_MIN_CONFIDENCE = 0.78
 CONTEXT_MATCH_MIN_MARGIN = 0.12
 DB_WRITE_ATTEMPTS = max(1, int(os.getenv("MEETING_DB_WRITE_ATTEMPTS", "3")))
 TRANSCRIPTION_CHUNK_SECONDS = min(
-    1200, max(300, int(os.getenv("MEETING_TRANSCRIPTION_CHUNK_SECONDS", "1200")))
+    600, max(60, int(os.getenv("MEETING_TRANSCRIPTION_CHUNK_SECONDS", "300")))
 )
 T = TypeVar("T")
 
@@ -146,7 +149,9 @@ def _with_fresh_session(
     for attempt in range(1, DB_WRITE_ATTEMPTS + 1):
         db = SessionLocal()
         try:
+            ensure_job_lock()
             result = operation(db)
+            ensure_job_lock()
             db.commit()
             return result
         except (OperationalError, DBAPIError) as exc:
@@ -312,7 +317,7 @@ def _transcribe_file(path: str, filename: str, content_type: str | None, voice_r
                 "known_speaker_names": ["Me"],
                 "known_speaker_references": [voice_reference],
             }
-        transcript = client.audio.transcriptions.create(
+        transcript = client.with_options(timeout=180, max_retries=0).audio.transcriptions.create(
             model="gpt-4o-transcribe-diarize",
             file=(filename, audio_file, content_type or "application/octet-stream"),
             response_format="diarized_json",
@@ -402,117 +407,141 @@ def _normalize_audio(source_path: str, output_path: str) -> None:
     )  # nosec B603 - argument list is passed directly with shell=False
 
 
-def transcribe_recording(
-    path: str,
-    filename: str,
-    content_type: str | None,
-    voice_reference: str | None = None,
-    *,
-    meeting_id: int,
-    attempt_id: str,
-    _already_normalized: bool = False,
-) -> dict:
-    duration = _audio_duration_seconds(path)
-    if duration is None and not _already_normalized:
-        _meeting_log(
-            logging.WARNING,
-            "audio_normalization_started",
-            meeting_id=meeting_id,
-            attempt_id=attempt_id,
-            stage="transcription",
-            reason="duration_metadata_unavailable",
-        )
-        normalization_started = time.monotonic()
-        with tempfile.TemporaryDirectory(prefix="alfred-normalized-audio-") as normalization_dir:
-            normalized_path = str(Path(normalization_dir) / "normalized-recording.mp3")
-            _normalize_audio(path, normalized_path)
-            normalized_duration = _audio_duration_seconds(normalized_path)
-            _meeting_log(
-                logging.INFO,
-                "audio_normalization_completed",
-                meeting_id=meeting_id,
-                attempt_id=attempt_id,
-                stage="transcription",
-                duration_ms=round((time.monotonic() - normalization_started) * 1000),
-                normalized_duration_seconds=(
-                    round(normalized_duration, 1) if normalized_duration is not None else None
-                ),
-            )
-            return transcribe_recording(
-                normalized_path,
-                "normalized-recording.mp3",
-                "audio/mpeg",
-                voice_reference,
-                meeting_id=meeting_id,
-                attempt_id=attempt_id,
-                _already_normalized=True,
-            )
-    if duration is None or duration <= TRANSCRIPTION_CHUNK_SECONDS:
-        _meeting_log(
-            logging.INFO,
-            "transcription_plan",
-            meeting_id=meeting_id,
-            attempt_id=attempt_id,
-            stage="transcription",
-            duration_seconds=round(duration, 1) if duration is not None else None,
-            chunk_count=1,
-        )
+def _recording_fingerprint(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as recording:
+        for block in iter(lambda: recording.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _transcribe_resilient(path, filename, content_type, voice_reference, *, meeting_id, attempt_id):
+    try:
         return _transcribe_with_empty_retry(path, filename, content_type, voice_reference,
                                             meeting_id=meeting_id, attempt_id=attempt_id)
+    except (APITimeoutError, APIConnectionError, InternalServerError):
+        _meeting_log(logging.WARNING, "transcription_fallback", meeting_id=meeting_id,
+                     attempt_id=attempt_id, stage="transcription")
+        # Preserve words when diarization is unavailable. Never invent identities.
+        with open(path, "rb") as audio:
+            response = client.with_options(timeout=180, max_retries=1).audio.transcriptions.create(
+                model="gpt-4o-transcribe", file=(filename, audio, content_type or "audio/mpeg"),
+                response_format="json")
+        words = (response.text or "").strip()
+        return {"text": "Unknown: " + words if words else "", "segments": [], "degraded": True}
 
-    chunk_count = math.ceil(duration / TRANSCRIPTION_CHUNK_SECONDS)
-    _meeting_log(
-        logging.INFO,
-        "transcription_plan",
-        meeting_id=meeting_id,
-        attempt_id=attempt_id,
-        stage="transcription",
-        duration_seconds=round(duration, 1),
-        chunk_count=chunk_count,
-        maximum_chunk_seconds=TRANSCRIPTION_CHUNK_SECONDS,
-    )
-    combined_segments = []
-    combined_text = []
-    with tempfile.TemporaryDirectory(prefix="alfred-meeting-chunks-") as chunk_dir:
-        for index in range(chunk_count):
-            chunk_started = time.monotonic()
+
+def _load_chunk_state(db, meeting_id, fingerprint, chunk_seconds, chunk_count):
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting:
+        raise ValueError("Meeting was deleted")
+    state = pipeline(meeting)
+    if state.get("audio_fingerprint") != fingerprint or state.get("chunk_seconds") != chunk_seconds:
+        state = {"version": 1, "stages": {}, "chunks": {}, "audio_fingerprint": fingerprint,
+                 "chunk_seconds": chunk_seconds}
+    state.update(chunk_count=chunk_count, transcript_complete=False, current_stage="transcription")
+    state["stages"]["transcription"] = {"status": "running"}
+    save_pipeline(meeting, state)
+    meeting.processing_status = "transcribing"
+    return state["chunks"]
+
+
+def _save_chunk(db, meeting_id, index, result, assembled):
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting:
+        raise ValueError("Meeting was deleted")
+    state = pipeline(meeting)
+    state["chunks"][str(index)] = result
+    if result.get("degraded"):
+        state["speaker_attribution_degraded"] = True
+    save_pipeline(meeting, state)
+    # Partial text/segments are immediately usable, but NOT a complete transcript.
+    _save_transcription(db, meeting_id, assembled)
+    meeting.processing_status = "transcribing"
+
+
+def _complete_transcript(db, meeting_id, result):
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting:
+        raise ValueError("Meeting was deleted")
+    state = pipeline(meeting)
+    state["transcript_complete"] = True
+    state["stages"]["transcription"] = {"status": "complete"}
+    save_pipeline(meeting, state)
+    return _save_transcription(db, meeting_id, result)
+
+
+def transcribe_recording(path, filename, content_type, voice_reference=None, *, meeting_id, attempt_id,
+                         _already_normalized=False, _source_fingerprint=None):
+    fingerprint = _source_fingerprint or _recording_fingerprint(path)
+    duration = _audio_duration_seconds(path)
+    if duration is None and not _already_normalized:
+        with tempfile.TemporaryDirectory(prefix="alfred-normalized-audio-") as directory:
+            normalized_path = str(Path(directory) / "recording.mp3")
+            _normalize_audio(path, normalized_path)
+            return transcribe_recording(normalized_path, "recording.mp3", "audio/mpeg", voice_reference,
+                meeting_id=meeting_id, attempt_id=attempt_id, _already_normalized=True,
+                _source_fingerprint=fingerprint)
+    if duration is None or duration <= 0:
+        raise ValueError("Audio duration is unreadable; the original recording is preserved")
+    count = math.ceil(duration / TRANSCRIPTION_CHUNK_SECONDS)
+    cache = _with_fresh_session(lambda db: _load_chunk_state(
+        db, meeting_id, fingerprint, TRANSCRIPTION_CHUNK_SECONDS, count),
+        "load_transcription_chunks", meeting_id=meeting_id, attempt_id=attempt_id)
+    _meeting_log(logging.INFO, "transcription_plan", meeting_id=meeting_id, attempt_id=attempt_id,
+                 stage="transcription", chunk_count=count, duration_seconds=round(duration, 1),
+                 maximum_chunk_seconds=TRANSCRIPTION_CHUNK_SECONDS)
+    segments, texts = [], []
+    with tempfile.TemporaryDirectory(prefix="alfred-meeting-chunks-") as directory:
+        for index in range(count):
+            ensure_job_lock()
             offset = index * TRANSCRIPTION_CHUNK_SECONDS
-            chunk_duration = min(TRANSCRIPTION_CHUNK_SECONDS, duration - offset)
-            chunk_path = str(Path(chunk_dir) / f"chunk-{index + 1:03d}.mp3")
-            _meeting_log(
-                logging.INFO,
-                "transcription_chunk_started",
-                meeting_id=meeting_id,
-                attempt_id=attempt_id,
-                stage="transcription",
-                chunk_number=index + 1,
-                chunk_count=chunk_count,
-                chunk_duration_seconds=round(chunk_duration, 1),
-            )
-            _create_audio_chunk(path, chunk_path, offset, chunk_duration)
-            result = _transcribe_with_empty_retry(
-                chunk_path, f"{Path(filename).stem}-part-{index + 1}.mp3", "audio/mpeg", voice_reference,
-                meeting_id=meeting_id, attempt_id=attempt_id,
-            )
-            combined_text.append(result["text"])
-            for segment in result["segments"]:
-                combined_segments.append({
-                    **segment,
-                    "start": segment["start"] + offset,
-                    "end": segment["end"] + offset,
-                })
-            _meeting_log(
-                logging.INFO,
-                "transcription_chunk_completed",
-                meeting_id=meeting_id,
-                attempt_id=attempt_id,
-                stage="transcription",
-                chunk_number=index + 1,
-                chunk_count=chunk_count,
-                segment_count=len(result.get("segments") or []),
-                duration_ms=round((time.monotonic() - chunk_started) * 1000),
-            )
-    return {"text": "\n".join(combined_text).strip(), "segments": combined_segments}
+            result = cache.get(str(index))
+            if result is None:
+                chunk_path = str(Path(directory) / f"chunk-{index}.mp3")
+                _create_audio_chunk(path, chunk_path, offset, min(TRANSCRIPTION_CHUNK_SECONDS, duration - offset))
+                _meeting_log(logging.INFO, "transcription_chunk_started", meeting_id=meeting_id,
+                             attempt_id=attempt_id, stage="transcription", chunk_number=index + 1,
+                             chunk_count=count)
+                result = _transcribe_resilient(chunk_path, f"part-{index + 1}.mp3", "audio/mpeg",
+                                               voice_reference, meeting_id=meeting_id, attempt_id=attempt_id)
+                # Diarized A/B labels are local to each request, not stable identities.
+                adjusted = []
+                for segment in result.get("segments") or []:
+                    label = segment["speaker"]
+                    if count > 1 and label != "Me":
+                        label = f"Part {index + 1} / {label}"[:80]
+                    adjusted.append({**segment, "speaker": label,
+                                     "start": segment["start"] + offset, "end": segment["end"] + offset})
+                if adjusted:
+                    text_value = "\n".join(f"{s['speaker']}: {s['text']}" for s in adjusted)
+                else:
+                    raw_text = (result.get("text") or "").strip()
+                    words = raw_text.removeprefix("Unknown: ").strip()
+                    label = f"Part {index + 1} / Unknown" if count > 1 else "Unknown"
+                    text_value = f"{label}: {words}" if words else ""
+                    if words:
+                        adjusted = [{"speaker": label, "start": offset,
+                                     "end": min(duration, offset + TRANSCRIPTION_CHUNK_SECONDS), "text": words}]
+                result = {"text": text_value, "segments": adjusted, "degraded": bool(result.get("degraded"))}
+                texts.append(result["text"])
+                segments.extend(result["segments"])
+                _with_fresh_session(lambda db: _save_chunk(db, meeting_id, index, result,
+                    {"text": "\n".join(t for t in texts if t), "segments": segments}),
+                    "save_transcription_chunk", meeting_id=meeting_id, attempt_id=attempt_id)
+                _meeting_log(logging.INFO, "transcription_chunk_saved", meeting_id=meeting_id,
+                             attempt_id=attempt_id, stage="transcription", chunk_number=index + 1, chunk_count=count)
+            else:
+                texts.append(result["text"])
+                segments.extend(result["segments"])
+                _meeting_log(logging.INFO, "transcription_chunk_reused", meeting_id=meeting_id,
+                             attempt_id=attempt_id, stage="transcription", chunk_number=index + 1)
+    result = {"text": "\n".join(t for t in texts if t).strip(), "segments": segments}
+    if not result["text"]:
+        raise NoIntelligibleSpeechError()
+    _with_fresh_session(lambda db: _complete_transcript(db, meeting_id, result),
+                        "complete_transcription", meeting_id=meeting_id, attempt_id=attempt_id)
+    return result
 
 
 def analyze_transcript(
@@ -583,13 +612,15 @@ def resolve_meeting_context(
     supplied_title: str | None,
     supplied_context: str | None,
     matching_context: str | None,
+    stage_runner=None,
 ) -> dict:
     """Systematically resolve goal, people, and project before meeting assessment."""
     catalog = json.loads(matching_context or "{}")
     labels = _transcript_speaker_labels(transcript) or ["Unlabelled"]
     from app.services.meeting_linking_service import resolve_links
+    options = {"stage_runner": stage_runner} if stage_runner else {}
     parsed = resolve_links(client, MEETING_CONTEXT_MODEL, transcript, catalog, labels,
-                           supplied_title, supplied_context)
+                           supplied_title, supplied_context, **options)
     project_trace = [{**item} for item in [parsed.get("primary_project") or {}, *(parsed.get("additional_projects") or [])]]
     parsed = validate_catalog_choices(parsed, catalog, transcript)
     parsed = retain_greeted_attendees(parsed, catalog, transcript)
@@ -827,8 +858,7 @@ def reassess_meeting_entities(meeting_id: int) -> None:
             "load_entity_snapshot", meeting_id=meeting_id, attempt_id=attempt_id)
         if not snapshot or not snapshot["transcript"]:
             raise ValueError("This meeting has no transcript or notes to assess.")
-        resolution = resolve_meeting_context(snapshot["transcript"], snapshot["title"],
-                                             snapshot["supplied_context"], snapshot["matching_context"])
+        resolution = _resolve_staged_links(meeting_id, snapshot, attempt_id)
         resolved = _with_fresh_session(
             lambda db: _validated_resolution_context(db, snapshot["user_number"], resolution, snapshot["transcript"]),
             "validate_entity_links", meeting_id=meeting_id, attempt_id=attempt_id)
@@ -878,37 +908,7 @@ def _reassess_meeting_with_context(meeting_id: int) -> None:
     transcript = snapshot["transcript"]
     if not transcript:
         raise ValueError("This meeting has no transcript or notes to assess.")
-    raw_resolution = resolve_meeting_context(
-        transcript,
-        snapshot["title"],
-        snapshot["supplied_context"],
-        snapshot["matching_context"],
-    )
-    resolved = _with_fresh_session(
-        lambda db: _validated_resolution_context(db, snapshot["user_number"], raw_resolution, transcript),
-        "validate_meeting_context",
-        meeting_id=meeting_id,
-        attempt_id=attempt_id,
-    )
-    analysis = analyze_transcript(
-        transcript,
-        snapshot["title"],
-        "\n\n".join(value for value in (snapshot["supplied_context"], resolved["prompt_context"]) if value),
-        snapshot["matching_context"],
-    )
-    analysis = {
-        **analysis,
-        **_resolution_to_analysis(resolved["resolution"]),
-        "meeting_resolution": resolved["resolution"],
-    }
-    provisional_context = resolved["prompt_context"]
-    tasks = extract_action_items(
-        transcript, {**analysis, "meeting_date": snapshot.get("meeting_date")}, provisional_context
-    )
-    analysis["action_items"] = tasks.get("action_items") or []
-    checkpoint = _with_fresh_session(
-        lambda db: _save_processing_checkpoint(db, meeting_id, analysis, tasks, resolved, snapshot.get("context_receipt")),
-        "save_core_checkpoint", meeting_id=meeting_id, attempt_id=attempt_id)
+    checkpoint = _process_core_stages(meeting_id, snapshot, attempt_id)
     _complete_processing_supplements(meeting_id, snapshot, checkpoint, attempt_id)
 
 
@@ -1030,7 +1030,8 @@ def _save_context_reassessment(
         "leadership_observations": coaching.get("leadership_observations") or [],
         "domain_assessments": coaching.get("domain_assessments") or [],
     })
-    receipt = dict(context_receipt or {})
+    receipt = {**(meeting.context_receipt or {}), **(context_receipt or {})}
+    receipt["processing_pipeline"] = pipeline(meeting)
     receipt["provisional_context"] = _context_receipt_suggestions(analysis, coaching)
     receipt["meeting_resolution"] = analysis.get("meeting_resolution")
     meeting.context_receipt = receipt
@@ -1791,6 +1792,7 @@ def _start_processing(db: Session, meeting_id: int, *, entities_only: bool = Fal
     )
     leadership_context_parts = []
     context_receipt = {
+        "processing_pipeline": pipeline(meeting),
         "version": 1,
         "core_twin": {"used": False, "snapshot_id": None},
         "full_twin": {"used": False, "claim_ids": []},
@@ -2043,7 +2045,8 @@ def _save_analysis(
     meeting.processing_status = "ready"
     meeting.processing_error = None
     meeting.updated_at = datetime.now(timezone.utc)
-    receipt = dict(context_receipt or {})
+    receipt = {**(meeting.context_receipt or {}), **(context_receipt or {})}
+    receipt["processing_pipeline"] = pipeline(meeting)
     receipt["provisional_context"] = _context_receipt_suggestions(analysis, coaching)
     receipt["meeting_resolution"] = analysis.get("meeting_resolution")
     meeting.context_receipt = receipt
@@ -2061,6 +2064,8 @@ def _sync_meeting_memory(db: Session, meeting_id: int) -> None:
 
 
 def _mark_processing_failed(meeting_id: int, exc: Exception, stage: str, attempt_id: str) -> None:
+    if isinstance(exc, JobLockLost):
+        return
     reference = f"MTG-{meeting_id}-{attempt_id}"
     stage_label = stage.replace("_", " ")
     if isinstance(exc, NoIntelligibleSpeechError):
@@ -2085,6 +2090,11 @@ def _mark_processing_failed(meeting_id: int, exc: Exception, stage: str, attempt
         meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
         if meeting:
             meeting.processing_status = "failed"
+            if (meeting.context_receipt or {}).get("processing_pipeline"):
+                state = pipeline(meeting)
+                name = state.get("current_stage") or stage
+                state["stages"][name] = {"status": "failed"}
+                save_pipeline(meeting, state)
             meeting.processing_error = (
                 "Your summary, decisions and actions are saved. Retry will resume the unfinished assessment. "
                 + public_error
@@ -2163,6 +2173,12 @@ def _save_processing_supplements(db, meeting_id, checkpoint, coaching, *, comple
         receipt["processing_checkpoint"] = {**checkpoint, "coaching": coaching}
     meeting.context_receipt = receipt
     meeting.leadership_assessment_version = LEADERSHIP_ASSESSMENT_VERSION
+    state = pipeline(meeting)
+    state["current_stage"] = "complete" if complete else "coaching"
+    state["stages"]["coaching"] = {"status": "complete"}
+    if complete:
+        state["stages"]["enrichment"] = {"status": "complete"}
+    save_pipeline(meeting, state)
     meeting.processing_status = "ready" if complete else "analyzing"
     meeting.processing_error = None
     meeting.updated_at = datetime.now(timezone.utc)
@@ -2178,6 +2194,8 @@ def _complete_processing_supplements(meeting_id, snapshot, checkpoint, attempt_i
             meeting_id=meeting_id, attempt_id=attempt_id)
         coaching = checkpoint.get("coaching")
         if coaching is None:
+            _with_fresh_session(lambda db: _set_current_stage(db, meeting_id, "coaching"),
+                "start_coaching", meeting_id=meeting_id, attempt_id=attempt_id)
             coaching = _retry_supplement_output(lambda: analyze_leadership_feedback(
                 snapshot["transcript"],
                 {**analysis, **saved_analysis, "retrieved_entity_context": resolved["retrieved_context"],
@@ -2188,6 +2206,8 @@ def _complete_processing_supplements(meeting_id, snapshot, checkpoint, attempt_i
                 lambda db: _save_processing_supplements(db, meeting_id, checkpoint, coaching, complete=False),
                 "save_coaching_checkpoint", meeting_id=meeting_id, attempt_id=attempt_id)
         stage = "entity_enrichment"
+        _with_fresh_session(lambda db: _set_current_stage(db, meeting_id, "enrichment"),
+            "start_enrichment", meeting_id=meeting_id, attempt_id=attempt_id)
         coaching = {**coaching, "entity_enrichments": _retry_supplement_output(
             lambda: _enrich_resolved_analysis(analysis, resolved["retrieved_context"], snapshot["transcript"],
                 snapshot.get("meeting_date"), json.loads(snapshot.get("matching_context") or "{}").get("current_user")),
@@ -2256,7 +2276,9 @@ def process_meeting(meeting_id: int) -> None:
         )
 
         transcript = snapshot["transcript"]
-        if not transcript and snapshot["recording_storage_key"]:
+        transcription_state = (snapshot.get("context_receipt") or {}).get("processing_pipeline") or {}
+        incomplete_audio = transcription_state.get("transcript_complete") is False
+        if (not transcript or incomplete_audio) and snapshot["recording_storage_key"]:
             stage = "transcribing recording"
             stage_started = time.monotonic()
             _meeting_log(logging.INFO, "stage_started", meeting_id=meeting_id, attempt_id=attempt_id, stage="transcription")
@@ -2307,76 +2329,8 @@ def process_meeting(meeting_id: int) -> None:
             _complete_processing_supplements(meeting_id, snapshot, snapshot["processing_checkpoint"], attempt_id)
             return
 
-        stage = "resolving meeting context"
-        stage_started = time.monotonic()
-        _meeting_log(logging.INFO, "stage_started", meeting_id=meeting_id, attempt_id=attempt_id, stage="context_resolution")
-        raw_resolution = resolve_meeting_context(
-            transcript,
-            snapshot["title"],
-            snapshot["supplied_context"],
-            snapshot["matching_context"],
-        )
-        resolved = _with_fresh_session(
-            lambda db: _validated_resolution_context(db, snapshot["user_number"], raw_resolution, transcript),
-            "validate_meeting_context",
-            meeting_id=meeting_id,
-            attempt_id=attempt_id,
-        )
-        _meeting_log(
-            logging.INFO,
-            "stage_completed",
-            meeting_id=meeting_id,
-            attempt_id=attempt_id,
-            stage="context_resolution",
-            duration_ms=round((time.monotonic() - stage_started) * 1000),
-            resolved_people_count=len(resolved["resolution"].get("people") or []),
-        )
-        stage = "analyzing meeting"
-        stage_started = time.monotonic()
-        _meeting_log(logging.INFO, "stage_started", meeting_id=meeting_id, attempt_id=attempt_id, stage="analysis")
-        analysis = analyze_transcript(
-            transcript,
-            snapshot["title"],
-            "\n\n".join(value for value in (snapshot["supplied_context"], resolved["prompt_context"]) if value),
-            snapshot["matching_context"],
-        )
-        analysis = {
-            **analysis,
-            **_resolution_to_analysis(resolved["resolution"]),
-            "meeting_resolution": resolved["resolution"],
-        }
-        _meeting_log(
-            logging.INFO,
-            "stage_completed",
-            meeting_id=meeting_id,
-            attempt_id=attempt_id,
-            stage="analysis",
-            duration_ms=round((time.monotonic() - stage_started) * 1000),
-            participant_count=len(analysis.get("participants") or []),
-            topic_count=len(analysis.get("topics") or []),
-            decision_count=len(analysis.get("decisions") or []),
-        )
-        provisional_context = resolved["prompt_context"]
-        stage = "extracting action items"
-        stage_started = time.monotonic()
-        _meeting_log(logging.INFO, "stage_started", meeting_id=meeting_id, attempt_id=attempt_id, stage="task_extraction")
-        tasks = extract_action_items(
-            transcript,
-            {**analysis, "provisional_context": provisional_context, "meeting_date": snapshot.get("meeting_date")},
-            "\n\n".join(value for value in (snapshot["supplied_context"], provisional_context) if value),
-        )
-        _meeting_log(
-            logging.INFO, "stage_completed", meeting_id=meeting_id, attempt_id=attempt_id,
-            stage="task_extraction",
-            duration_ms=round((time.monotonic() - stage_started) * 1000),
-            action_item_count=len(tasks.get("action_items") or []),
-        )
-        stage = "saving core meeting results"
-        checkpoint = _with_fresh_session(
-            lambda db: _save_processing_checkpoint(db, meeting_id, analysis, tasks, resolved, snapshot.get("context_receipt")),
-            "save_core_checkpoint", meeting_id=meeting_id, attempt_id=attempt_id)
-        _meeting_log(logging.INFO, "core_results_saved", meeting_id=meeting_id,
-                     attempt_id=attempt_id, stage="save_core_checkpoint")
+        stage = "meeting_stages"
+        checkpoint = _process_core_stages(meeting_id, snapshot, attempt_id)
         _complete_processing_supplements(meeting_id, snapshot, checkpoint, attempt_id)
 
     except Exception as exc:
@@ -2390,3 +2344,76 @@ def process_meeting(meeting_id: int) -> None:
             **_safe_error_fields(exc),
         )
         _mark_processing_failed(meeting_id, exc, stage, attempt_id)
+
+
+def _save_link_progress(db, meeting_id, output):
+    meeting = db.get(Meeting, meeting_id)
+    receipt = dict(meeting.context_receipt or {})
+    raw = {**receipt.get("partial_resolution", {}), **output}
+    checked = _validated_resolution_context(db, meeting.user_number, raw,
+                                          meeting.transcript_text or meeting.user_notes or "")
+    analysis = {**_resolution_to_analysis(checked["resolution"]),
+                "meeting_resolution": checked["resolution"]}
+    _replace_participant_suggestions(db, meeting, analysis)
+    _store_pending_enrichment_suggestions(db, meeting, analysis, entities_only=True)
+    meeting.context_receipt = {**receipt, "partial_resolution": raw,
+                              "meeting_resolution": checked["resolution"]}
+
+
+def _save_summary_progress(db, meeting_id, analysis):
+    if not str(analysis.get("executive_summary") or "").strip():
+        raise ValueError("Analysis returned no executive summary; existing results preserved")
+    meeting = db.get(Meeting, meeting_id)
+    db.query(MeetingTopic).filter_by(meeting_id=meeting_id).delete(synchronize_session=False)
+    db.query(MeetingDecision).filter_by(meeting_id=meeting_id).delete(synchronize_session=False)
+    # Do not reconcile/delete actions until the action stage has succeeded.
+    title = meeting.title if meeting.executive_summary else analysis.get("title")
+    _replace_analysis(db, meeting, {**analysis, "title": title, "action_items": []}, preserve_participants=True)
+
+
+def _process_core_stages(meeting_id, snapshot, attempt_id):
+    transcript = snapshot["transcript"]
+    raw_resolution = _resolve_staged_links(meeting_id, snapshot, attempt_id)
+    resolved = run_stage(_with_fresh_session, meeting_id, attempt_id, "context_resolution",
+        lambda: _with_fresh_session(
+            lambda db: _validated_resolution_context(db, snapshot["user_number"], raw_resolution, transcript),
+            "validate_meeting_context", meeting_id=meeting_id, attempt_id=attempt_id))
+    def generate_analysis():
+        result = analyze_transcript(transcript, snapshot["title"],
+            "\n\n".join(v for v in (snapshot["supplied_context"], resolved["prompt_context"]) if v),
+            snapshot["matching_context"])
+        return {**result, **_resolution_to_analysis(resolved["resolution"]),
+                "meeting_resolution": resolved["resolution"]}
+    analysis = run_stage(_with_fresh_session, meeting_id, attempt_id, "summary", generate_analysis,
+                        lambda db, result: _save_summary_progress(db, meeting_id, result))
+    run_stage(_with_fresh_session, meeting_id, attempt_id, "actions",
+        lambda: extract_action_items(transcript,
+            {**analysis, "provisional_context": resolved["prompt_context"],
+             "meeting_date": snapshot.get("meeting_date")},
+            "\n\n".join(v for v in (snapshot["supplied_context"], resolved["prompt_context"]) if v)),
+        lambda db, tasks: _save_processing_checkpoint(db, meeting_id, analysis, tasks, resolved,
+                                                      snapshot.get("context_receipt")))
+    return _with_fresh_session(lambda db: (db.get(Meeting, meeting_id).context_receipt or {})["processing_checkpoint"],
+                               "load_core_checkpoint", meeting_id=meeting_id, attempt_id=attempt_id)
+
+
+def _resolve_staged_links(meeting_id, snapshot, attempt_id):
+    transcript = snapshot["transcript"]
+    _with_fresh_session(lambda db: prepare_stages(db.get(Meeting, meeting_id), transcript,
+                                                 snapshot["supplied_context"]),
+                        "prepare_stages", meeting_id=meeting_id, attempt_id=attempt_id)
+    def linking_stage(name, operation):
+        return run_stage(_with_fresh_session, meeting_id, attempt_id, name, operation,
+                         lambda db, result: _save_link_progress(db, meeting_id, result))
+    return resolve_meeting_context(transcript, snapshot["title"], snapshot["supplied_context"],
+                                             snapshot["matching_context"], stage_runner=linking_stage)
+
+
+def _set_current_stage(db, meeting_id, name):
+    meeting = db.get(Meeting, meeting_id)
+    if not meeting:
+        raise ValueError("Meeting was deleted")
+    state = pipeline(meeting)
+    state["current_stage"] = name
+    state["stages"][name] = {"status": "running"}
+    save_pipeline(meeting, state)

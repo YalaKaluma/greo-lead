@@ -59,10 +59,11 @@ def _explicit_project_goal_links(projects, catalog, transcript):
     return list(links.values())
 
 
-def resolve_links(client, model, transcript, catalog, labels, title=None, supplied_context=None):
+def resolve_links(client, model, transcript, catalog, labels, title=None, supplied_context=None, stage_runner=None):
+    stage = stage_runner or (lambda name, operation: operation())
     properties = resolution_schema(catalog, labels)["properties"]
     context = {"catalog": catalog, "title": title, "user_supplied_context": supplied_context}
-    people = _resolve(client, model, "meeting_people_links", {"people": properties["people"]}, (
+    people = stage("participants", lambda: _resolve(client, model, "meeting_people_links", {"people": properties["people"]}, (
         "Resolve PEOPLE only. First inventory names throughout the source, then compare each against "
         "existing people using name, role, organization and established project context. "
         "Resolve identity independently from attendance. Include substantively discussed people with "
@@ -88,15 +89,15 @@ def resolve_links(client, model, transcript, catalog, labels, title=None, suppli
         "compare nearby spelling variants and the whole conversation: an awaited colleague greeted later "
         "may be one person, not two. A noisy isolated name with no distinguishing context is uncertain_name "
         "and unknown, not a new record. Do not treat products, organizations or tools as people."
-    ), context, transcript)
+    ), context, transcript))
     # Project-only review is the project resolver, not another full-context rewrite.
-    projects = review_project_resolution(client, model, transcript, catalog,
-                                        {"primary_project": {}, "additional_projects": []}, supplied_context, title)
+    projects = stage("projects", lambda: review_project_resolution(client, model, transcript, catalog,
+                                        {"primary_project": {}, "additional_projects": []}, supplied_context, title))
     explicit_goal_links = _explicit_project_goal_links(projects, catalog, transcript)
     goal_context = {"explicit_project_goal_links": explicit_goal_links,"goals": catalog.get("goals", []), "project_catalog": catalog.get("projects", []),
                     "user_supplied_context": supplied_context,
                     "resolved_projects": {key: projects.get(key) for key in ("primary_project", "additional_projects")}}
-    goal = _resolve(client, model, "meeting_goal_link", {"primary_goal": properties["primary_goal"]}, (
+    goal = stage("goals", lambda: _resolve(client, model, "meeting_goal_link", {"primary_goal": properties["primary_goal"]}, (
         "Resolve the GOAL after the supplied project decisions. Read the matched projects' stored goal "
         "and objective fields, then compare against existing goal records. The transcript need not "
         "repeat a strategic goal's title when the substantive project work advances that established "
@@ -110,7 +111,7 @@ def resolve_links(client, model, transcript, catalog, labels, title=None, suppli
         "to a product goal. Prefer supported existing strategic outcomes over inventing a goal named "
         "after the meeting. Propose new only when a distinct outcome is supported and no existing goal "
         "covers it; otherwise return none with a reason. Do not change people or project decisions."
-    ), goal_context, transcript)
+    ), goal_context, transcript))
     checked_goal = validate_catalog_choices(deepcopy(goal), catalog, transcript)
     if (checked_goal.get("primary_goal") or {}).get("status") == "none" and len(explicit_goal_links) == 1:
         goal["primary_goal"] = explicit_goal_links[0]

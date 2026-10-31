@@ -94,3 +94,17 @@ def test_invalid_supplement_retries_but_database_errors_do_not(monkeypatch):
     with pytest.raises(RuntimeError):
         service._retry_supplement_output(fail, meeting_id=1, attempt_id="TEST", stage="coaching")
     assert len(calls) == 1
+
+
+def test_transcription_timeout_falls_back_without_inventing_speakers(monkeypatch, tmp_path):
+    import httpx
+    from types import SimpleNamespace
+    recording = tmp_path / 'part.mp3'; recording.write_bytes(b'audio')
+    def timeout(*a, **kw):
+        raise service.APITimeoutError(request=httpx.Request('POST', 'https://example.com'))
+    monkeypatch.setattr(service, '_transcribe_with_empty_retry', timeout)
+    fake = SimpleNamespace(with_options=lambda **kw: SimpleNamespace(audio=SimpleNamespace(
+        transcriptions=SimpleNamespace(create=lambda **kw: SimpleNamespace(text='Preserved words')))))
+    monkeypatch.setattr(service, 'client', fake)
+    result = service._transcribe_resilient(str(recording), 'part.mp3', 'audio/mpeg', None, meeting_id=1, attempt_id='test')
+    assert result == {'text': 'Unknown: Preserved words', 'segments': [], 'degraded': True}

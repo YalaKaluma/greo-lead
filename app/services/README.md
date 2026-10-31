@@ -68,3 +68,35 @@ Journey 2.0 depends on:
 
 The next natural service extraction would be a dedicated Journey progress service to calculate belt readiness, behavioral evidence, and AI grading consistently outside the React component and oversized router.
 
+
+### Resumable meeting processing
+
+`meeting_pipeline_state.py` stores chunk and stage checkpoints in the existing
+`Meeting.context_receipt.processing_pipeline` JSON. `meeting_stage_service.py`
+commits each participant/project/goal/summary/action stage before advancing.
+`meeting_job_service.py` polls queued/transcribing/analyzing meetings on startup
+and every 15 seconds; failed jobs require an explicit Retry. Two workers run by
+default (`MEETING_WORKERS`, bounded 1–4). PostgreSQL transaction advisory locks
+serialize each meeting across workers and pooled Neon connections. A separate
+lock-only transaction is kept alive; business data uses short transactions.
+Lock loss prevents the old worker from writing further stage results.
+
+Transcription defaults to five-minute chunks (`MEETING_TRANSCRIPTION_CHUNK_SECONDS`,
+60–600 seconds). Completed chunks and partial transcript segments are committed
+immediately, keyed by the original audio SHA-256 and chunk size. Partial transcripts
+are displayed but never sent to analysis as complete. Per-request speaker labels
+are namespaced by chunk; only explicit voice-reference `Me` labels span chunks.
+Transient diarization failures fall back to plain transcription, marking speakers
+unknown and showing a user-facing warning. Calls use bounded timeouts/retries.
+
+Retries reuse saved stages and preserve reviewed suggestions, manual participant
+matches, and handled/linked actions. Explicit reassessment starts new stage outputs.
+Changing transcript/context invalidates downstream stage caches. Replacing audio
+invalidates transcription and downstream checkpoints. No Alembic migration is needed.
+
+Recordings must live on persistent storage. Set `MEETING_STORAGE_DIR=/data/meetings`
+and mount a Railway volume at `/data`; the volume mount path is also recognized
+automatically. Temporary local storage remains a local fallback; Railway environments must
+configure a persistent mount before relying on restart recovery. A local volume requires a single application replica; use shared object
+storage before scaling replicas. Missing historical audio cannot be reconstructed
+from its old storage path; completed saved transcripts remain usable.

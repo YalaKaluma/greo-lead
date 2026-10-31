@@ -173,7 +173,7 @@ def test_retry_endpoint_uses_checkpoint_instead_of_full_reassessment(db):
     db.commit()
     background = BackgroundTasks()
     retry_meeting(meeting.id, background, "test", db)
-    assert background.tasks[0].func is service.process_meeting
+    assert background.tasks[0].func.__name__ == "wake_meeting_workers"
 
 
 def test_only_actual_speaker_labels_survive_and_self_is_unique():
@@ -332,7 +332,7 @@ def test_retry_existing_analysis_uses_preserving_reassessment(db):
     db.add(meeting); db.commit()
     background = BackgroundTasks()
     retry_meeting(meeting.id, background, "test", db)
-    assert background.tasks[0].func is service.reassess_meeting_with_context
+    assert background.tasks[0].func.__name__ == "wake_meeting_workers"
     assert db.get(models.Meeting, meeting.id).executive_summary == "Existing summary"
 
 
@@ -574,7 +574,7 @@ def test_entity_only_pipeline_never_calls_full_assessment(monkeypatch):
     monkeypatch.setattr(service, '_with_fresh_session', lambda fn, *args, **kwargs: fn(None))
     start = Mock(return_value=snapshot)
     monkeypatch.setattr(service, '_start_processing', start)
-    monkeypatch.setattr(service, 'resolve_meeting_context', Mock(return_value=resolution))
+    monkeypatch.setattr(service, '_resolve_staged_links', Mock(return_value=resolution))
     monkeypatch.setattr(service, '_validated_resolution_context', Mock(return_value={'resolution': resolution}))
     save = Mock()
     monkeypatch.setattr(service, '_save_entity_assessment', save)
@@ -667,7 +667,7 @@ def test_entities_route_queues_only_entity_job_and_rejects_other_users(db):
     tasks = BackgroundTasks()
     result = create_leadership_assessment(meeting.id, tasks, scope='entities', user_number='test', db=db)
     assert result['scope'] == 'entities'
-    assert len(tasks.tasks) == 1 and tasks.tasks[0].func is reassess_meeting_entities
+    assert len(tasks.tasks) == 1 and tasks.tasks[0].func.__name__ == "wake_meeting_workers"
     assert meeting.context_receipt['active_assessment_scope'] == 'entities'
     with pytest.raises(HTTPException) as exc:
         create_leadership_assessment(meeting.id, BackgroundTasks(), scope='entities', user_number='test', db=db)
@@ -684,7 +684,7 @@ def test_entity_failure_retry_keeps_entity_scope(db, summary):
     db.add(meeting); db.commit()
     background = BackgroundTasks()
     retry_meeting(meeting.id, background, 'test', db)
-    assert len(background.tasks) == 1 and background.tasks[0].func is reassess_meeting_entities
+    assert len(background.tasks) == 1 and background.tasks[0].func.__name__ == "wake_meeting_workers"
 
 
 def test_goal_pass_recovers_explicit_project_link_without_extra_model_call():
@@ -879,3 +879,212 @@ def test_greeting_recovery_is_idempotent_and_removes_mentioned_duplicate():
     for _ in range(2):
         result = retain_greeted_attendees(result, catalog, 'Me: Salut Marwan.')
     assert len(result['people']) == 1 and result['mentioned_people'] == []
+
+
+def test_pipeline_resumes_failed_stage_without_repeating_completed_work(db):
+    from app.services.meeting_stage_service import run_stage
+    from app.services.meeting_pipeline_state import public_progress
+    meeting = models.Meeting(user_number='test', title='Review', source_type='notes')
+    db.add(meeting); db.commit()
+    calls = []
+    def transaction(operation, label, **kwargs):
+        try:
+            result = operation(db); db.commit(); return result
+        except Exception:
+            db.rollback(); raise
+    def participants():
+        calls.append('participants'); return {'people': []}
+    def fail():
+        calls.append('projects'); raise RuntimeError('temporary model failure')
+    run_stage(transaction, meeting.id, 'one', 'participants', participants)
+    with pytest.raises(RuntimeError):
+        run_stage(transaction, meeting.id, 'one', 'projects', fail)
+    db.expire_all()
+    assert public_progress(db.get(models.Meeting, meeting.id))['stages']['projects']['status'] == 'failed'
+    run_stage(transaction, meeting.id, 'two', 'participants', participants)
+    run_stage(transaction, meeting.id, 'two', 'projects', lambda: {'primary_project': {'status': 'none'}})
+    assert calls == ['participants', 'projects']
+    progress = public_progress(db.get(models.Meeting, meeting.id))
+    assert progress['stages']['participants']['status'] == 'complete'
+    assert 'output' not in progress['stages']['participants']
+
+
+def test_stage_output_and_side_effect_commit_atomically(db):
+    from app.services.meeting_stage_service import run_stage
+    meeting = models.Meeting(user_number='test', title='Review', source_type='notes')
+    db.add(meeting); db.commit()
+    def transaction(operation, label, **kwargs):
+        try:
+            result = operation(db); db.commit(); return result
+        except Exception:
+            db.rollback(); raise
+    def persist(session, output):
+        session.get(models.Meeting, meeting.id).executive_summary = 'Should roll back'
+        session.flush()
+        raise RuntimeError('save failed')
+    with pytest.raises(RuntimeError):
+        run_stage(transaction, meeting.id, 'one', 'summary', lambda: {'summary': 'value'}, persist)
+    db.expire_all()
+    row = db.get(models.Meeting, meeting.id)
+    assert row.executive_summary is None
+    assert row.context_receipt['processing_pipeline']['stages']['summary']['status'] == 'failed'
+
+
+def test_transcription_chunks_survive_later_failure_and_resume(db, monkeypatch, tmp_path):
+    from app.services.meeting_pipeline_state import public_progress
+    recording = tmp_path / 'meeting.webm'; recording.write_bytes(b'original audio')
+    meeting = models.Meeting(user_number='test', title='Review', source_type='recording')
+    db.add(meeting); db.commit()
+    def transaction(operation, label, **kwargs):
+        try:
+            result = operation(db); db.commit(); return result
+        except Exception:
+            db.rollback(); raise
+    monkeypatch.setattr(service, '_with_fresh_session', transaction)
+    monkeypatch.setattr(service, '_audio_duration_seconds', lambda path: 750)
+    monkeypatch.setattr(service, 'TRANSCRIPTION_CHUNK_SECONDS', 300)
+    monkeypatch.setattr(service, '_create_audio_chunk', lambda *a: None)
+    calls = []
+    def transcribe(path, *args, **kwargs):
+        index = int(path.rsplit('chunk-', 1)[1].split('.')[0])
+        calls.append(index)
+        if calls == [0, 1]:
+            raise RuntimeError('interrupted second chunk')
+        return {'text': 'A: Words', 'segments': [{'speaker': 'A', 'start': 0, 'end': 5, 'text': f'Words {index}'}]}
+    monkeypatch.setattr(service, '_transcribe_resilient', transcribe)
+    with pytest.raises(RuntimeError):
+        service.transcribe_recording(str(recording), 'meeting.webm', 'audio/webm', meeting_id=meeting.id, attempt_id='one')
+    db.expire_all()
+    row = db.get(models.Meeting, meeting.id)
+    assert 'Words 0' in row.transcript_text
+    assert public_progress(row)['completed_chunks'] == 1
+    assert public_progress(row)['transcript_complete'] is False
+    result = service.transcribe_recording(str(recording), 'meeting.webm', 'audio/webm', meeting_id=meeting.id, attempt_id='two')
+    assert calls == [0, 1, 1, 2]
+    assert [s['speaker'] for s in result['segments']] == ['Part 1 / A', 'Part 2 / A', 'Part 3 / A']
+    assert [s['start'] for s in result['segments']] == [0, 300, 600]
+    assert db.query(models.MeetingTranscriptSegment).filter_by(meeting_id=meeting.id).count() == 3
+    assert public_progress(db.get(models.Meeting, meeting.id))['transcript_complete'] is True
+
+
+def test_summary_stage_leaves_existing_actions_and_corrections_intact(db):
+    meeting = models.Meeting(user_number='test', title='Review', source_type='notes')
+    db.add(meeting); db.flush()
+    action = models.MeetingActionItem(meeting_id=meeting.id, description='User action', created_task_id=123, notes='Manual edit')
+    participant = models.MeetingParticipant(meeting_id=meeting.id, speaker_label='A', display_name='User correction', person_id=42)
+    db.add_all([action, participant]); db.commit()
+    action_id, participant_id = action.id, participant.id
+    service._save_summary_progress(db, meeting.id, {'executive_summary': 'Early saved summary', 'decisions': []})
+    db.commit(); db.expire_all()
+    assert db.get(models.MeetingActionItem, action_id).notes == 'Manual edit'
+    assert db.get(models.MeetingParticipant, participant_id).display_name == 'User correction'
+    assert db.get(models.Meeting, meeting.id).executive_summary == 'Early saved summary'
+
+
+def test_job_lock_loss_prevents_further_database_writes():
+    import threading
+    from app.services import meeting_job_service as jobs
+    lost = threading.Event(); lost.set()
+    token = jobs._lock_lost.set(lost)
+    try:
+        with pytest.raises(jobs.JobLockLost):
+            jobs.ensure_job_lock()
+    finally:
+        jobs._lock_lost.reset(token)
+
+
+def test_input_change_invalidates_stage_cache_but_preserves_transcript_chunks(db):
+    from app.services.meeting_stage_service import prepare
+    from app.services.meeting_pipeline_state import complete_stage
+    meeting = models.Meeting(user_number='test', title='Review', source_type='notes')
+    db.add(meeting); db.commit()
+    prepare(meeting, 'A: first version', '')
+    complete_stage(meeting, 'participants', {'people': []})
+    prepare(meeting, 'A: corrected version', '')
+    assert meeting.context_receipt['processing_pipeline']['stages'] == {}
+
+
+def test_full_core_pipeline_retries_only_actions_after_late_failure(db, monkeypatch):
+    meeting = models.Meeting(user_number='test', title='Review', source_type='notes',
+                             transcript_text='A: I will send the brief.')
+    db.add(meeting); db.commit()
+    calls = []
+    def transaction(operation, label, **kwargs):
+        try:
+            result = operation(db); db.commit(); return result
+        except Exception:
+            db.rollback(); raise
+    monkeypatch.setattr(service, '_with_fresh_session', transaction)
+    def resolve(transcript, title, supplied, catalog, stage_runner=None):
+        def result(name, value):
+            calls.append(name); return value
+        people = stage_runner('participants', lambda: result('participants', {'people': []}))
+        projects = stage_runner('projects', lambda: result('projects', {'primary_project': {'status': 'none'}, 'additional_projects': []}))
+        goal = stage_runner('goals', lambda: result('goals', {'primary_goal': {'status': 'none'}}))
+        return {**people, **projects, **goal}
+    monkeypatch.setattr(service, 'resolve_meeting_context', resolve)
+    def analyze(*args):
+        calls.append('summary'); return {'executive_summary': 'A useful saved summary', 'decisions': []}
+    monkeypatch.setattr(service, 'analyze_transcript', analyze)
+    def tasks(*args):
+        calls.append('actions')
+        if calls.count('actions') == 1:
+            raise RuntimeError('provider interrupted')
+        return {'action_items': [{'description': 'Send the brief', 'confidence': .9}]}
+    monkeypatch.setattr(service, 'extract_action_items', tasks)
+    snapshot = {'transcript': meeting.transcript_text, 'title': 'Review', 'supplied_context': '',
+                'matching_context': '{}', 'user_number': 'test', 'context_receipt': {}}
+    with pytest.raises(RuntimeError):
+        service._process_core_stages(meeting.id, snapshot, 'one')
+    db.expire_all()
+    assert db.get(models.Meeting, meeting.id).executive_summary == 'A useful saved summary'
+    checkpoint = service._process_core_stages(meeting.id, snapshot, 'two')
+    assert calls == ['participants', 'projects', 'goals', 'summary', 'actions', 'actions']
+    assert checkpoint['analysis']['executive_summary'] == 'A useful saved summary'
+    assert db.query(models.MeetingActionItem).filter_by(meeting_id=meeting.id).count() == 1
+
+
+def test_durable_job_can_be_claimed_from_fresh_database_session(db, monkeypatch):
+    from sqlalchemy.orm import sessionmaker
+    from app.services import meeting_job_service as jobs
+    meeting = models.Meeting(user_number='test', title='Interrupted', source_type='notes',
+                             processing_status='analyzing', transcript_text='A: Hello')
+    db.add(meeting); db.commit()
+    identifier = meeting.id
+    factory = sessionmaker(bind=db.get_bind())
+    monkeypatch.setattr(jobs, 'engine', db.get_bind())
+    monkeypatch.setattr(jobs, 'SessionLocal', factory)
+    calls = []
+    def finish(meeting_id):
+        calls.append(meeting_id)
+        with factory() as resumed:
+            resumed.get(models.Meeting, meeting_id).processing_status = 'ready'
+            resumed.commit()
+    monkeypatch.setattr(service, 'process_meeting', finish)
+    jobs.run_meeting_job(identifier)
+    jobs.run_meeting_job(identifier)
+    assert calls == [identifier]
+
+
+def test_busy_local_job_lock_is_not_released_by_a_second_worker(db, monkeypatch):
+    import threading
+    from app.services import meeting_job_service as jobs
+    lock = threading.Lock(); lock.acquire()
+    monkeypatch.setattr(jobs, 'engine', db.get_bind())
+    monkeypatch.setitem(jobs._local_locks, 999, lock)
+    jobs.run_meeting_job(999)
+    assert lock.locked()
+    lock.release()
+
+
+def test_reassessment_cannot_treat_partial_transcript_as_complete(db):
+    from fastapi import BackgroundTasks, HTTPException
+    from app.routers.meetings import create_leadership_assessment
+    meeting = models.Meeting(user_number='test', title='Partial', source_type='recording',
+        processing_status='failed', transcript_text='Part 1 / A: Only the beginning',
+        context_receipt={'processing_pipeline': {'transcript_complete': False, 'stages': {}, 'chunks': {}}})
+    db.add(meeting); db.commit()
+    with pytest.raises(HTTPException) as exc:
+        create_leadership_assessment(meeting.id, BackgroundTasks(), user_number='test', db=db)
+    assert exc.value.status_code == 409
+    assert meeting.context_receipt['processing_pipeline']['transcript_complete'] is False

@@ -18,7 +18,7 @@ from app.utils.ai_safety import (
 )
 
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+client = OpenAI(api_key=OPENAI_API_KEY, timeout=180, max_retries=1)
 MEETING_TASK_MODEL = os.getenv(
     "MEETING_TASK_MODEL",
     os.getenv("MEETING_INTELLIGENCE_MODEL", "gpt-4.1"),
