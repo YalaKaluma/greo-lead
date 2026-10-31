@@ -26,11 +26,14 @@ def complete_stage(meeting, name, output):
 
 def public_progress(meeting):
     state = pipeline(meeting)
+    complete = state.get("transcript_complete", bool(meeting.transcript_text or meeting.user_notes))
+    if complete:
+        state["stages"].setdefault("transcription", {"status": "complete"})
     # Never expose prompts, catalogs, or raw provider outputs in progress metadata.
     return {"current_stage": state.get("current_stage"),
             "stages": {key: {k: v for k, v in value.items() if k != "output"}
                        for key, value in state["stages"].items()},
             "completed_chunks": len(state.get("chunks", {})),
             "total_chunks": state.get("chunk_count"),
-            "transcript_complete": state.get("transcript_complete", bool(meeting.transcript_text)),
+            "transcript_complete": complete,
             "speaker_attribution_degraded": state.get("speaker_attribution_degraded", False)}

@@ -13,7 +13,7 @@ def prepare(meeting, transcript, context):
         receipt = dict(meeting.context_receipt or {})
         receipt.pop("partial_resolution", None)
         meeting.context_receipt = receipt
-        state["stages"] = {}
+        state["stages"] = {key: value for key, value in state["stages"].items() if key == "transcription"}
         state["input_signature"] = signature
         save_pipeline(meeting, state)
 
