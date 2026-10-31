@@ -75,3 +75,16 @@ Fallback local command:
 ```bash
 DIRECT_DATABASE_URL="postgresql://..." alembic upgrade head
 ```
+
+## Resumable Meeting Pipeline Storage Prerequisite
+
+Before promoting the resumable meeting pipeline, attach a persistent volume to the
+production service at `/data` and set `MEETING_STORAGE_DIR=/data/meetings`. Verify
+production remains at one replica while recordings use local-volume storage. This
+code requires no schema migration, but database checkpoints alone do not preserve
+temporary audio files through redeployments. Preserve any surviving legacy audio
+before changing paths. Test a long recording, interruption after a completed chunk,
+retry after action/coaching failure, partial-result visibility, and worker restart.
+Development received a dedicated 1 GiB volume on October 31, 2026; production storage
+must be configured independently before promotion. Failed historical jobs are not
+automatically rerun; use Retry after confirming the recording or transcript exists.

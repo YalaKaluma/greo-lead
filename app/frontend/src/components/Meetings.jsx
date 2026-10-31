@@ -757,13 +757,31 @@ export function MeetingDetail({ meeting, apiUrl, userNumber, onBack, onChanged, 
 
       {actionError && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{actionError}</p>}
 
+      {meeting.processing_progress?.current_stage && (
+        <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5" aria-label={t('meetings.pipeline.title')}>
+          <h3 className="font-semibold text-slate-900">{t('meetings.pipeline.title')}</h3>
+          <p className="mt-2 text-sm text-slate-600">{t('meetings.pipeline.saved')}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {['transcription', 'participants', 'projects', 'goals', 'summary', 'actions', 'coaching', 'enrichment'].map((stage) => {
+              const state = meeting.processing_progress.stages?.[stage]?.status || 'pending';
+              return <span key={stage} className={`rounded-full px-3 py-1 text-xs ${state === 'complete' ? 'bg-emerald-100 text-emerald-800' : state === 'failed' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-700'}`}>
+                {t(`meetings.pipeline.${stage}`)}: {t(`meetings.pipeline.status.${state}`)}
+              </span>;
+            })}
+          </div>
+          {!!meeting.processing_progress.total_chunks && <p className="mt-3 text-sm text-slate-600">{t('meetings.pipeline.chunks')} {meeting.processing_progress.completed_chunks}/{meeting.processing_progress.total_chunks}</p>}
+          {transcript && !meeting.processing_progress.transcript_complete && <p className="mt-3 text-sm text-amber-800">{t('meetings.pipeline.partial')}</p>}
+          {meeting.processing_progress.speaker_attribution_degraded && <p className="mt-3 text-sm text-amber-800">{t('meetings.pipeline.speakers')}</p>}
+        </section>
+      )}
+
       {meeting.processing_status !== 'ready' && (
         <div className={`mt-6 rounded-xl p-5 ${meeting.processing_status === 'failed' ? 'bg-red-50 text-red-800' : 'bg-blue-50 text-blue-800'}`}>
           {meeting.processing_status === 'failed' ? <div><p>{meeting.processing_error || 'Processing failed.'}</p><button onClick={async () => { await fetch(`${apiUrl}/api/meetings/${meeting.id}/retry?user_number=${encodeURIComponent(userNumber)}`, { method: 'POST' }); onChanged(meeting.id); }} className="mt-3 rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white">Retry processing</button></div> : 'Alfred is processing this meeting. This page will update automatically.'}
         </div>
       )}
 
-      {meeting.processing_status === 'ready' && <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_320px]">
+      {(meeting.processing_status === 'ready' || transcript || meeting.executive_summary) && <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="space-y-6">
           <Section title="Discussion Topics"><div className="grid gap-3 sm:grid-cols-2">{meeting.topics.map((topic) => <div key={topic.id} className="rounded-lg bg-slate-50 p-4"><h3 className="font-semibold">{topic.title}</h3><p className="mt-1 text-sm text-slate-600">{topic.summary}</p></div>)}</div></Section>
           <Section title="Executive Summary"><div className="whitespace-pre-line text-slate-700">{meeting.executive_summary || 'No summary available.'}</div></Section>
