@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { API_URL } from "./config";
 import { useLanguage } from './i18n/LanguageContext';
-import { storeSessionToken } from './sessionCredentials';
+import { storeSessionResponse } from './sessionCredentials';
 
 export default function Login({ onLogin }) {
   const { t } = useLanguage();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberDevice, setRememberDevice] = useState(true);
   const [mode, setMode] = useState("login");
   const [error, setError] = useState("");
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -27,7 +28,7 @@ export default function Login({ onLogin }) {
       const res = await fetch(`${API_URL}/api/auth/${mode}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username, password, remember_device: rememberDevice, session_protocol: "device-v1" })
       });
 
       if (!res.ok) throw new Error("Auth failed");
@@ -38,7 +39,7 @@ export default function Login({ onLogin }) {
       }
       localStorage.setItem("user_number", data.user_number);
       localStorage.setItem("user_name", data.user_name);
-      await storeSessionToken(data.access_token);
+      await storeSessionResponse(data, { replace: true });
       if (data.must_change_password) localStorage.setItem("must_change_password", "true");
       else localStorage.removeItem("must_change_password");
       onLogin(data.user_number, Boolean(data.must_change_password));
@@ -185,6 +186,11 @@ export default function Login({ onLogin }) {
               />
               {mode === 'register' && <p className="mt-2 text-xs text-slate-500">{t('auth.passwordHint')}</p>}
             </div>
+
+            <label className="flex items-center gap-3 text-sm text-slate-700">
+              <input type="checkbox" checked={rememberDevice} onChange={event => setRememberDevice(event.target.checked)} />
+              {t('auth.rememberDevice')}
+            </label>
 
             {error && (
               <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start">

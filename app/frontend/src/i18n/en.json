@@ -1150,5 +1150,22 @@
   "meetings.pipeline.status.pending": "Pending",
   "meetings.pipeline.status.running": "In progress",
   "meetings.pipeline.status.complete": "Saved",
-  "meetings.pipeline.status.failed": "Needs retry"
+  "meetings.pipeline.status.failed": "Needs retry",
+  "auth": {
+    "rememberDevice": "Remember this device for 30 days",
+    "connectionTitle": "Unable to connect to Alfred",
+    "connectionRetry": "Your saved sign-in has been kept. Check your connection and try again.",
+    "retry": "Try again",
+    "checkingSession": "Checking access…",
+    "adminUnlockTitle": "Confirm administrator access",
+    "adminUnlockDescription": "Confirm your password to use administrator tools for the next 15 minutes. Your everyday Alfred session stays signed in.",
+    "confirmPassword": "Your password",
+    "adminUnlock": "Unlock administrator tools",
+    "adminUnlockFailed": "Could not confirm access. Check your password and connection, then try again.",
+    "logoutFailed": "Sign-out could not be completed. Please try again.",
+    "logoutAll": "Sign out everywhere",
+    "logoutAllConfirm": "Sign out on every device, including this one?",
+    "devicesTitle": "Signed-in devices",
+    "devicesDescription": "The sidebar sign-out affects this device only. Use the button below to end all your Alfred sessions."
+  }
 }

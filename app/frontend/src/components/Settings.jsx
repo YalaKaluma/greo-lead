@@ -3,6 +3,8 @@ import axios from 'axios';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { useLanguage } from '../i18n/LanguageContext';
 import { clearSessionCredentials } from '../sessionCredentials';
+import AdminSessionGate from './AdminSessionGate';
+import SignOutEverywhere from './SignOutEverywhere';
 import DigitalTwinPipeline from './DigitalTwinPipeline';
 import {
   disableNotifications,
@@ -286,6 +288,7 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
             <div className="max-w-2xl">
               <h2 className="text-sm font-semibold text-slate-900">Privacy & Data</h2>
               <p className="mt-2 text-sm leading-6 text-slate-500">{t('settings.privacy.description')}</p>
+              <SignOutEverywhere apiUrl={apiUrl} />
               <PasswordChangePanel apiUrl={apiUrl} t={t} />
               <VoiceEnrollmentPanel apiUrl={apiUrl} userNumber={userNumber} />
               <AccountDeletionPanel apiUrl={apiUrl} t={t} />
@@ -294,7 +297,7 @@ export default function Settings({ apiUrl, userNumber, onBack }) {
         )}
 
         {activeTab === 'admin' && currentUser?.is_admin && (
-          <AdminUserManagement apiUrl={apiUrl} userNumber={userNumber} />
+          <AdminSessionGate apiUrl={apiUrl}><AdminUserManagement apiUrl={apiUrl} userNumber={userNumber} /></AdminSessionGate>
         )}
       </div>
     </div>
@@ -783,7 +786,7 @@ function PasswordChangePanel({ apiUrl, t }) {
         body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
       });
       if (!response.ok) throw new Error(t('settings.privacy.password.error'));
-      clearSessionCredentials();
+      await clearSessionCredentials();
       localStorage.removeItem('user_number');
       localStorage.removeItem('user_name');
       localStorage.removeItem('must_change_password');
@@ -840,7 +843,7 @@ function AccountDeletionPanel({ apiUrl, t }) {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload.detail || t('settings.privacy.delete.error'));
       }
-      clearSessionCredentials();
+      await clearSessionCredentials();
       localStorage.removeItem('user_number');
       localStorage.removeItem('user_name');
       localStorage.removeItem('must_change_password');
