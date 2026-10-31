@@ -1140,7 +1140,7 @@
   "meetings.pipeline.partial": "Cette transcription est incomplète. Il reste de l’audio à transcrire.",
   "meetings.pipeline.speakers": "Certains extraits ont été transcrits sans attribution des voix. Ces intervenants restent non identifiés.",
   "meetings.pipeline.transcription": "Transcription",
-  "meetings.pipeline.participants": "Participants",
+  "meetings.pipeline.participants": "Identification des participants",
   "meetings.pipeline.projects": "Projets et clients",
   "meetings.pipeline.goals": "Objectifs",
   "meetings.pipeline.summary": "Synthèse et décisions",
