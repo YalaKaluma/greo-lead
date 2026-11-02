@@ -60,5 +60,5 @@ if __name__ == "__main__":
     try:
         main()
     except (OSError, RuntimeError) as error:
-        print(f"Recording storage startup check failed: {error}", file=sys.stderr, flush=True)
+        print(f"Recording storage startup check failed ({type(error).__name__})", file=sys.stderr, flush=True)
         raise SystemExit(1) from error
