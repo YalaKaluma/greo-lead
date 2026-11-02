@@ -47,6 +47,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Verify root-owned recording volume permissions
+        run: sudo "$(command -v python)" -m unittest discover -s tests -p test_container_start.py -v
+
       - name: Install backend dependencies
         run: |
           pip install --require-hashes -r requirements.txt
