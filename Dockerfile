@@ -33,4 +33,4 @@ COPY --from=frontend-builder --chown=alfred:alfred /static/ ./static/
 
 USER alfred
 EXPOSE 8080
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+CMD ["python", "-m", "app.container_start"]
