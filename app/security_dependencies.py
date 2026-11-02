@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import User
-from app.routers.auth import require_authenticated_user, user_requires_password_change
+from app.routers.auth import require_authenticated_user, require_recent_admin_auth, user_requires_password_change
 from app.utils.session_cookie import SESSION_COOKIE_NAME
 
 
@@ -107,7 +107,8 @@ def require_scheduler_or_admin(
         if user_requires_password_change(user):
             raise HTTPException(status_code=403, detail="Password change required")
         if getattr(user, "is_admin", False):
-            return user
+            token = authorization.split(" ", 1)[1].strip() if authorization and authorization.lower().startswith("bearer ") else session_cookie
+            return require_recent_admin_auth(user, token)
         raise HTTPException(status_code=403, detail="Administrator access required")
 
     raise HTTPException(status_code=401, detail="Scheduler or administrator authentication required")

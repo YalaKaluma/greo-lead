@@ -12,7 +12,7 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
-from app.utils.session_cookie import SESSION_COOKIE_NAME
+from app.utils.session_cookie import REFRESH_COOKIE_NAME, SESSION_COOKIE_NAME
 from app.utils.security import decode_session_token
 
 
@@ -126,6 +126,8 @@ def apply_security_headers(response: Response) -> Response:
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
+        if request.url.path.startswith("/api/auth/"):
+            response.headers["Cache-Control"] = "no-store"
         return apply_security_headers(response)
 
 
@@ -179,7 +181,7 @@ class CsrfProtectionMiddleware(BaseHTTPMiddleware):
             # These endpoints authenticate only from their request body. An old
             # session cookie must not prevent a user from signing in again.
             return await call_next(request)
-        cookie_authenticated = bool(request.cookies.get(SESSION_COOKIE_NAME))
+        cookie_authenticated = bool(request.cookies.get(SESSION_COOKIE_NAME) or request.cookies.get(REFRESH_COOKIE_NAME))
         bearer_authenticated = request.headers.get("authorization", "").lower().startswith("bearer ")
         if unsafe_method and cookie_authenticated and not bearer_authenticated:
             origin = request.headers.get("origin", "").rstrip("/")
@@ -258,6 +260,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             "/api/auth/login",
             "/api/auth/register",
             "/api/auth/change-password",
+            "/api/auth/reauthenticate",
             "/api/onboarding/login",
             "/api/onboarding/verify-email",
             "/api/auth/password-recovery/request",

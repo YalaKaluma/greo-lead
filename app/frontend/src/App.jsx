@@ -26,7 +26,7 @@ import PasswordRecovery from "./PasswordRecovery";
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { API_URL } from './config';
 import { initializeNotificationRouting, refreshNativeNotificationRegistration } from './services/notifications';
-import { clearSessionCredentials } from './sessionCredentials';
+import { clearSessionCredentials, credentialStorageUnavailable, hydrateSessionCredentials } from './sessionCredentials';
 
 const HOME_PAGE = 'home';
 const TRUST_SECURITY_PAGE = 'trust-security';
@@ -48,42 +48,71 @@ const VALID_PAGE_IDS = new Set([
   'settings'
 ]);
 
+function SessionRecovery({ onRetry }) {
+  const { t } = useLanguage();
+  return <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
+    <div className="max-w-md rounded-xl bg-white p-8 shadow-sm">
+      <h1 className="text-xl font-semibold text-slate-900">{t('auth.connectionTitle')}</h1>
+      <p role="alert" className="my-4 text-slate-600">{t('auth.connectionRetry')}</p>
+      <button onClick={onRetry} className="rounded-lg bg-slate-900 px-5 py-3 text-white">{t('auth.retry')}</button>
+    </div>
+  </main>;
+}
+
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
+  const [authError, setAuthError] = useState(false);
+  const [authAttempt, setAuthAttempt] = useState(0);
   const [userNumber, setUserNumber] = useState(null);
   const [currentPage, setCurrentPage] = useState(DEFAULT_PAGE);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const hasDeepLinkedRef = useRef(false);
 
-  // 🔍 Check login on app load
+  // Only a definitive authentication rejection clears credentials. Offline,
+  // server, and secure-storage failures leave the remembered session intact.
   useEffect(() => {
-    const storedUser = localStorage.getItem("user_number");
-
-    if (!storedUser) {
-      clearSessionCredentials();
-      setAuthChecked(true);
-      return;
-    }
-
-    fetch(`${API_URL}/api/auth/me`)
-      .then(async (response) => {
-        if (!response.ok) throw new Error('Unauthenticated');
+    let cancelled = false;
+    setAuthError(false);
+    setAuthChecked(false);
+    const checkSession = async () => {
+      try {
+        if (credentialStorageUnavailable()) await hydrateSessionCredentials();
+        if (credentialStorageUnavailable()) throw new Error('Credential storage unavailable');
+        const response = await fetch(`${API_URL}/api/auth/me`);
+        if (cancelled) return;
+        if (response.status === 401) {
+          await clearSessionCredentials();
+          localStorage.removeItem('user_number');
+          localStorage.removeItem('user_name');
+          localStorage.removeItem('must_change_password');
+          setIsLoggedIn(false);
+          return;
+        }
+        if (!response.ok) throw new Error('Session check temporarily unavailable');
         const data = await response.json();
-        const authenticatedUser = data?.user?.phone_number || storedUser;
-        localStorage.setItem("user_number", authenticatedUser);
+        if (cancelled) return;
+        const authenticatedUser = data?.user?.phone_number;
+        if (!authenticatedUser) throw new Error('Invalid session response');
+        localStorage.setItem('user_number', authenticatedUser);
         setUserNumber(authenticatedUser);
         setIsLoggedIn(true);
-      })
-      .catch(() => {
-        clearSessionCredentials();
-        localStorage.removeItem("user_number");
-        localStorage.removeItem("user_name");
-        localStorage.removeItem("must_change_password");
-      })
-      .finally(() => setAuthChecked(true));
-  }, []);
+      } catch {
+        if (!cancelled) setAuthError(true);
+      } finally {
+        if (!cancelled) setAuthChecked(true);
+      }
+    };
+    checkSession();
+    return () => { cancelled = true; };
+  }, [authAttempt]);
+
+  useEffect(() => {
+    const retry = () => { if (authError) setAuthAttempt(value => value + 1); };
+    window.addEventListener('online', retry);
+    return () => window.removeEventListener('online', retry);
+  }, [authError]);
 
   useEffect(() => {
     initializeNotificationRouting().catch((error) => {
@@ -235,6 +264,12 @@ function App() {
   
   if (isNumericUser && !isLoggedIn) {
     return <Welcome onLogin={handleLogin} />;
+  }
+
+  if (authError && !isLoggedIn) {
+    return <LanguageProvider apiUrl={API_URL} userNumber={null}>
+      <SessionRecovery onRetry={() => setAuthAttempt(value => value + 1)} />
+    </LanguageProvider>;
   }
 
   // 🔒 AUTH GATE (existing users)

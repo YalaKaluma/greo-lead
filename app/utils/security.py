@@ -11,6 +11,8 @@ PASSWORD_HASH_PREFIX = "pbkdf2_sha256"  # nosec B105 - algorithm marker, not a p
 PASSWORD_HASH_ITERATIONS = 260000
 SESSION_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30
 ADMIN_SESSION_TOKEN_TTL_SECONDS = 60 * 60 * 8
+ACCESS_TOKEN_TTL_SECONDS = 60 * 15
+ADMIN_REAUTH_TTL_SECONDS = 60 * 15
 
 
 def hash_password(password: str) -> str:
@@ -89,6 +91,8 @@ def create_session_token(
     session_version: int = 0,
     *,
     ttl_seconds: int = SESSION_TOKEN_TTL_SECONDS,
+    session_id: str | None = None,
+    auth_time: int | None = None,
 ) -> str:
     now = int(time.time())
     payload = {
@@ -99,6 +103,10 @@ def create_session_token(
         "exp": now + int(ttl_seconds),
         "nonce": secrets.token_urlsafe(12),
     }
+    if session_id is not None:
+        payload["sid"] = session_id
+    if auth_time is not None:
+        payload["auth_time"] = int(auth_time)
     payload_text = _encode_token_part(
         json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
     )
@@ -130,3 +138,13 @@ def generate_password_reset_token() -> tuple[str, str]:
 
 def hash_password_reset_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+
+def next_refresh_secret(session_id: str, generation: int, previous_secret: str) -> str:
+    """Derive a rotation reproducibly for a brief lost-response/race grace period.
+
+    Neither current nor previous plaintext refresh credentials are stored in DB.
+    The application signing key is required to derive the successor.
+    """
+    message = f"alfred-refresh:{session_id}:{generation}:{previous_secret}".encode("utf-8")
+    return _encode_token_part(hmac.new(_session_secret(), message, hashlib.sha256).digest())

@@ -9,14 +9,16 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime, timedelta, timezone
 import logging
+import time
+from typing import Literal
 from app.db import get_db
-from app.models import PasswordResetToken, PushSubscription, User
+from app.models import DeviceSession, PasswordResetToken, PushSubscription, User
 from app.config import PUBLIC_APP_URL
 from app.services.audit_log_service import write_audit_log
 from app.services.onboarding_seed_service import ensure_starter_examples_seeded
 from app.utils.security import (
+    ADMIN_REAUTH_TTL_SECONDS,
     ADMIN_SESSION_TOKEN_TTL_SECONDS,
-    create_session_token,
     decode_session_token,
     generate_password_reset_token,
     hash_password,
@@ -26,7 +28,11 @@ from app.utils.security import (
 )
 from app.utils.safe_errors import log_failure
 from app.utils.password_policy import password_policy_error
-from app.utils.session_cookie import SESSION_COOKIE_NAME, clear_session_cookie, set_session_cookie
+from app.utils.session_cookie import REFRESH_COOKIE_NAME, SESSION_COOKIE_NAME, clear_session_cookie
+from app.services.device_session_service import (
+    create_device_session, revoke_token_session, rotate_session, session_is_valid,
+    session_response, token_hash,
+)
 
 router = APIRouter(tags=["auth"])
 logger = logging.getLogger(__name__)
@@ -36,11 +42,15 @@ DUMMY_PASSWORD_HASH = hash_password("not-a-real-account-password")
 class LoginRequest(BaseModel):
     username: str  # Could be name, email, or phone
     password: str
+    remember_device: bool = True
+    session_protocol: Literal["legacy", "device-v1"] = "legacy"
 
 
 class RegisterRequest(BaseModel):
     username: EmailStr
     password: str
+    remember_device: bool = True
+    session_protocol: Literal["legacy", "device-v1"] = "legacy"
 
 
 class PasswordRecoveryRequest(BaseModel):
@@ -62,25 +72,32 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
-def _session_response(user: User, response: Response) -> dict:
-    ttl_seconds = (
-        ADMIN_SESSION_TOKEN_TTL_SECONDS
-        if bool(getattr(user, "is_admin", False))
-        else None
-    )
-    token_kwargs = {"ttl_seconds": ttl_seconds} if ttl_seconds is not None else {}
-    token = create_session_token(
-        user.id,
-        user.phone_number,
-        user.session_version,
-        **token_kwargs,
-    )
-    set_session_cookie(response, token)
-    return {
-        "access_token": token,
-        "token_type": "bearer",  # nosec B105 - OAuth token type, not a password
-        "expires_in": 60 * 60 * 24 * 30,
-    }
+def _session_response(user: User, response: Response, db: Session, *,
+                      remember: bool = True, modern: bool = False, native: bool = False) -> dict:
+    return create_device_session(db, user, response, remember=remember, modern=modern, native=native)
+
+
+def request_session_token(request: Request | None) -> str | None:
+    if request is None:
+        return None
+    authorization = request.headers.get("authorization", "")
+    if authorization.lower().startswith("bearer "):
+        return authorization.split(" ", 1)[1].strip()
+    return request.cookies.get(SESSION_COOKIE_NAME)
+
+
+def require_recent_admin_auth(user: User, token: str | None) -> User:
+    if user_requires_password_change(user):
+        raise HTTPException(status_code=403, detail="Password change required")
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    payload = decode_session_token(token) if token else None
+    authenticated_at = int(payload.get("auth_time", payload.get("iat", 0))) if payload else 0
+    window = ADMIN_REAUTH_TTL_SECONDS if payload and payload.get("sid") else ADMIN_SESSION_TOKEN_TTL_SECONDS
+    if (not payload or payload.get("sub") != user.id
+            or authenticated_at <= int(time.time()) - window):
+        raise HTTPException(status_code=403, detail={"code": "admin_reauthentication_required"})
+    return user
 
 
 def user_requires_password_change(user: User) -> bool:
@@ -108,6 +125,12 @@ def require_authenticated_user(
         or int(user.session_version or 0) != int(payload.get("ver", 0))
     ):
         raise HTTPException(status_code=401, detail="Account is unavailable")
+    if payload.get("sid"):
+        session = db.get(DeviceSession, payload["sid"])
+        if not session_is_valid(session, user, int(time.time())):
+            raise HTTPException(status_code=401, detail="Session expired or invalid")
+    elif db.get(DeviceSession, "legacy:" + token_hash(token)) is not None:
+        raise HTTPException(status_code=401, detail="Session expired or invalid")
     return user
 
 
@@ -188,7 +211,9 @@ async def login(credentials: LoginRequest, request: Request, response: Response,
             "needs_tour": False,
             "must_change_password": True,  # nosec B105 - Boolean session state, not a password value.
             "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 21,
-            **_session_response(user, response),
+            **_session_response(user, response, db,
+                remember=credentials.remember_device, modern=credentials.session_protocol == "device-v1",
+                native=request.headers.get("x-alfred-client") == "native"),
         }
 
     # Check permanent password (returning users)
@@ -219,7 +244,9 @@ async def login(credentials: LoginRequest, request: Request, response: Response,
             "needs_tour": False,
             "must_change_password": False,  # nosec B105 - Boolean session state, not a password value.
             "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 0,
-            **_session_response(user, response),
+            **_session_response(user, response, db,
+                remember=credentials.remember_device, modern=credentials.session_protocol == "device-v1",
+                native=request.headers.get("x-alfred-client") == "native"),
         }
 
     # Neither password matched
@@ -299,7 +326,9 @@ async def register(payload: RegisterRequest, request: Request, response: Respons
         "is_admin": bool(getattr(user, "is_admin", False)),
         "needs_tour": True,
         "trial_days_left": user.days_left_in_trial() if hasattr(user, 'days_left_in_trial') else 21,
-        **_session_response(user, response),
+        **_session_response(user, response, db,
+            remember=payload.remember_device, modern=payload.session_protocol == "device-v1",
+            native=request.headers.get("x-alfred-client") == "native"),
     }
 
 
@@ -497,8 +526,9 @@ async def logout(
     current_user: User = Depends(require_authenticated_user),
     db: Session = Depends(get_db),
 ):
-    """Invalidate all existing sessions for the authenticated account."""
-    current_user.session_version = int(current_user.session_version or 0) + 1
+    """Invalidate this device, including its outstanding access tokens."""
+    token = request_session_token(request)
+    revoke_token_session(db, current_user, decode_session_token(token), token)
     write_audit_log(
         db,
         user_id=current_user.id,
@@ -534,3 +564,58 @@ async def get_current_user(current_user: User = Depends(require_authenticated_us
             "tour_completed": current_user.tour_completed
         }
     }
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str | None = Field(default=None, max_length=256)
+
+
+@router.post("/refresh")
+def refresh_session(payload: RefreshRequest, request: Request, response: Response,
+                    db: Session = Depends(get_db)):
+    raw = payload.refresh_token or request.cookies.get(REFRESH_COOKIE_NAME)
+    if not raw:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return rotate_session(db, raw, response, native=request.headers.get("x-alfred-client") == "native")
+
+
+@router.post("/logout-all")
+def logout_everywhere(request: Request, response: Response,
+                      current_user: User = Depends(require_authenticated_user), db: Session = Depends(get_db)):
+    current_user.session_version = int(current_user.session_version or 0) + 1
+    db.commit()
+    clear_session_cookie(response)
+    write_audit_log(db, current_user.id, "user_logout_all", object_type="user",
+                    object_id=current_user.id, request=request)
+    return {"success": True}
+
+
+@router.get("/admin-session")
+def admin_session(request: Request, current_user: User = Depends(require_authenticated_user)):
+    require_recent_admin_auth(current_user, request_session_token(request))
+    return {"success": True}
+
+
+class ReauthenticateRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=128)
+
+
+@router.post("/reauthenticate")
+def reauthenticate(payload: ReauthenticateRequest, request: Request, response: Response,
+                   current_user: User = Depends(require_authenticated_user), db: Session = Depends(get_db)):
+    if user_requires_password_change(current_user) or not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Administrator access required")
+    if not verify_password(payload.password, current_user.password_hash):
+        write_audit_log(db, current_user.id, "admin_reauthentication_failure", request=request)
+        raise HTTPException(status_code=403, detail="Invalid credentials")
+    token = request_session_token(request)
+    claims = decode_session_token(token)
+    if not claims.get("sid"):
+        raise HTTPException(status_code=401, detail="Sign in again to upgrade this session")
+    session = db.query(DeviceSession).filter(DeviceSession.id == claims["sid"]).with_for_update().first()
+    if not session_is_valid(session, current_user, int(time.time())):
+        raise HTTPException(status_code=401, detail="Session expired or invalid")
+    session.authenticated_at = int(time.time())
+    db.commit()
+    write_audit_log(db, current_user.id, "admin_reauthentication_success", request=request)
+    return {"success": True, **session_response(current_user, session, response)}

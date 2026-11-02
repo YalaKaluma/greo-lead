@@ -37,7 +37,7 @@ export default function PasswordRecovery() {
       if (!response.ok) throw new Error(t(token ? 'recovery.invalidToken' : 'recovery.requestError'));
       setMessage(t(token ? 'recovery.resetSuccess' : 'recovery.requestSuccess'));
       if (token) {
-        clearSessionCredentials();
+        await clearSessionCredentials();
         localStorage.removeItem('user_number');
         localStorage.removeItem('user_name');
         localStorage.removeItem('must_change_password');
