@@ -52,8 +52,11 @@ def main() -> None:
         probe.write(b"storage-ready")
         probe.flush()
     print(f"Recording storage ready; running Alfred as uid={os.geteuid()}", flush=True)
-    os.execvp("uvicorn", ["uvicorn", "app.main:app", "--host", "0.0.0.0",
-                          "--port", os.getenv("PORT", "8080")])
+    import uvicorn
+
+    # Bind on the container network for Railway\'s HTTP proxy.
+    uvicorn.run("app.main:app", host="0.0.0.0",  # nosec B104 - container HTTP listener
+                port=int(os.getenv("PORT", "8080")))
 
 
 if __name__ == "__main__":
